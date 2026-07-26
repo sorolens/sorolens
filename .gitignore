@@ -1,0 +1,25 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+dist/
+.next/
+.turbo/
+
+# Temporary
+tmp/
+coverage/
+
+# Rust
+target/
+
+# Go
+*.exe
+*.test
+sorolens-bin
+
+# Misc
+.DS_Store
