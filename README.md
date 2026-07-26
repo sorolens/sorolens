@@ -14,14 +14,8 @@ Soroban's public RPC retains events for 24 hours and transaction data for up to 
 - Alerts when persistent storage entries are within a configurable number of ledgers of expiry.
 ---
 ## Screenshots
-<!-- SCREENSHOT PLACEHOLDER: dashboard home page showing tracked contracts, global event volume chart, and failure rate -->
-> `docs/screenshots/dashboard-home.png`
-<!-- SCREENSHOT PLACEHOLDER: contract detail page, Events tab, with decoded transfer events -->
-> `docs/screenshots/contract-events.png`
-<!-- SCREENSHOT PLACEHOLDER: contract detail page, Storage tab, with TTL health panel and expiring-soon highlight -->
-> `docs/screenshots/contract-storage.png`
-<!-- SCREENSHOT PLACEHOLDER: CLI output of `sorolens tail <contract-id>` showing a live event stream -->
-> `docs/screenshots/cli-tail.png`
+<!-- Screenshots will be added after v0.1.0 deployment. 
+     See docs/img/ after running make screenshots -->
 ---
 ## Quickstart
 ### Prerequisites
