@@ -1,0 +1,155 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  # ------------------------------------------------------------
+  # Go: API, indexer, CLI
+  # ------------------------------------------------------------
+  go:
+    name: Go (${{ matrix.module }}) - ${{ matrix.go-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.23"]
+        module:
+          - apps/api
+          - services/indexer
+          - cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: false
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ matrix.go-version }}-${{ matrix.module }}-${{ hashFiles(format('{0}/go.sum', matrix.module)) }}
+          restore-keys: |
+            go-${{ matrix.go-version }}-${{ matrix.module }}-
+            go-${{ matrix.go-version }}-
+      - name: go vet
+        working-directory: ${{ matrix.module }}
+        run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.59
+          working-directory: ${{ matrix.module }}
+          args: --timeout=5m
+      - name: go test
+        working-directory: ${{ matrix.module }}
+        run: go test -race -timeout 120s ./...
+  # ------------------------------------------------------------
+  # Node: XDR decoder package and shared packages
+  # ------------------------------------------------------------
+  node:
+    name: Node (packages)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 9
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "store=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.store }}
+          key: pnpm-node22-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-node22-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm --filter "./packages/**" lint
+      - name: Build packages
+        run: pnpm --filter "./packages/**" build
+      - name: Test (vitest)
+        run: pnpm --filter "./packages/**" vitest run
+  # ------------------------------------------------------------
+  # Next.js dashboard build
+  # ------------------------------------------------------------
+  next-build:
+    name: Next.js build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 9
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "store=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.store }}
+          key: pnpm-node22-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-node22-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build dashboard
+        working-directory: apps/web
+        env:
+          # Provide a placeholder so Next.js does not fail on missing env vars
+          # at build time. Real values are set in Vercel project settings.
+          NEXT_PUBLIC_API_URL: http://localhost:8080
+        run: pnpm build
+  # ------------------------------------------------------------
+  # Rust: fixture contract
+  # ------------------------------------------------------------
+  rust:
+    name: Rust (contracts/counter)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            contracts/counter/target/
+          key: cargo-${{ hashFiles('contracts/counter/Cargo.lock') }}
+          restore-keys: |
+            cargo-
+      - name: cargo check (native)
+        working-directory: contracts/counter
+        run: cargo check
+      - name: cargo check (wasm32)
+        working-directory: contracts/counter
+        run: cargo check --target wasm32-unknown-unknown
+      - name: cargo test
+        working-directory: contracts/counter
+        run: cargo test
