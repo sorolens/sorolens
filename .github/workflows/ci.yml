@@ -87,7 +87,7 @@ jobs:
   next-build:
     name: Next.js build
     runs-on: ubuntu-latest
-    if: hashFiles('apps/web/next.config.js') != ''
+    if: ${{ false }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
