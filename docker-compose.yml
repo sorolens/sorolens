@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sorolens
+      POSTGRES_USER: sorolens
+      POSTGRES_PASSWORD: sorolens
+    ports:
+      - "5432:5432"
+    volumes:
+      - sorolens_postgres_data:/var/lib/postgresql/data
+    networks:
+      - sorolens_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sorolens -d sorolens"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - sorolens_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  adminer:
+    image: adminer
+    ports:
+      - "8081:8080"
+    networks:
+      - sorolens_net
+    depends_on:
+      - postgres
+
+volumes:
+  sorolens_postgres_data:
+
+networks:
+  sorolens_net:
+    name: sorolens_net
