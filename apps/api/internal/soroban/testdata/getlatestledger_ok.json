@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "id": "0a00a9cf845f7af7cff09c66f8ae6480e9971e6e2c7fa4afd8d6266ee13c987b",
+    "protocolVersion": 27,
+    "sequence": 3730795,
+    "closeTime": "1784671645",
+    "headerXdr": "CgCpz4Rf",
+    "metadataXdr": "AAAAAgAAAAAK"
+  }
+}

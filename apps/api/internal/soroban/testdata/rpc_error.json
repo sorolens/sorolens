@@ -1,0 +1,8 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32602,
+    "message": "startLedger must be within the ledger retention window"
+  }
+}
