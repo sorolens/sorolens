@@ -1,0 +1,67 @@
+name: Good first issue
+description: A well-scoped task for a first-time contributor.
+labels: ["good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue template is for maintainers to file pre-scoped tasks for newcomers. If you are a contributor looking to claim this issue, leave a comment and a maintainer will assign it to you.
+  - type: textarea
+    id: what_to_do
+    attributes:
+      label: What to do
+      description: A plain-language description of the task. Should be completable in a few hours by someone unfamiliar with the codebase.
+      placeholder: |
+        Add a decoder for the `scvTimePoint` ScVal type to the XDR decoder package.
+        `scvTimePoint` represents a Unix timestamp as a u64. It should decode to a JavaScript `number` (milliseconds since epoch).
+    validations:
+      required: true
+  - type: input
+    id: file_to_edit
+    attributes:
+      label: File to edit
+      description: The primary file you need to change. Link to it if possible.
+      placeholder: "packages/xdr/src/decode.ts"
+    validations:
+      required: true
+  - type: checkboxes
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: The PR will be merged when all of these are checked.
+      options:
+        - label: The new ScVal arm is handled in the `decodeScVal` switch statement.
+          required: false
+        - label: At least two tests are added in `decode.test.ts` (one for a valid value, one for a zero value or edge case).
+          required: false
+        - label: "`pnpm vitest run` passes in `packages/xdr`."
+          required: false
+        - label: "`pnpm build` passes in `packages/xdr` with no TypeScript errors."
+          required: false
+        - label: The PR title follows the format `feat(xdr): add decoder for <type> type`.
+          required: false
+  - type: textarea
+    id: how_to_test
+    attributes:
+      label: How to test
+      description: Step-by-step instructions for verifying the change works.
+      placeholder: |
+        1. `cd packages/xdr`
+        2. `pnpm install`
+        3. Add the `scvTimePoint` case to `src/decode.ts` (see CONTRIBUTING.md walkthrough for the pattern).
+        4. Add tests in `src/decode.test.ts` using `xdr.ScVal.scvTimePoint(xdr.TimePoint.fromString("1700000000"))`.
+        5. Run `pnpm vitest run` and confirm all tests pass.
+        6. Run `pnpm build` and confirm no TypeScript errors.
+    validations:
+      required: true
+  - type: textarea
+    id: resources
+    attributes:
+      label: Useful resources
+      description: Links to documentation, SDK types, or related code that will help.
+      placeholder: |
+        - CONTRIBUTING.md walkthrough: "Walkthrough: adding a new XDR type decoder"
+        - ScVal XDR definition: https://github.com/stellar/stellar-xdr
+        - @stellar/stellar-sdk xdr types: node_modules/@stellar/stellar-sdk/src/xdr/
+    validations:
+      required: false

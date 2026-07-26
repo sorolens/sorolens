@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose a new capability or improvement.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening a feature request, check the existing issues to see if it has already been proposed. If it has, add a reaction or a comment rather than opening a duplicate.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: |
+        What problem does this feature solve? Be specific about who is affected and in what situation.
+        "As a protocol developer, I want to..." is a useful framing.
+      placeholder: "As a protocol developer, I want to filter the invocations list by function name so I can quickly see how often the `transfer` function was called without scrolling through unrelated invocations."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the change you would like to see. Be as specific as you can about the API, UI, or CLI surface.
+      placeholder: |
+        Add a `function_name` query parameter to GET /api/v1/contracts/:id/invocations.
+        The API should filter rows by the `function_name` column in the invocations table.
+        The dashboard Invocations tab should expose a text input to filter by function name.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider? Why do you prefer the proposed solution?
+      placeholder: |
+        I considered downloading all invocations and filtering client-side, but that does not scale for contracts with thousands of invocations and makes the dashboard unusable on slow connections.
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, mockups, related issues, or any other information that would help evaluate this request.
+    validations:
+      required: false
