@@ -1,4 +1,2 @@
-// UI component library placeholder.
-// Full implementation added in a later session.
-
-export {};
+export { MonoId } from "./MonoId";
+export type { MonoIdProps } from "./MonoId";

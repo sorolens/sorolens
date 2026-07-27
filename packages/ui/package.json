@@ -7,10 +7,20 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc",
-    "test": "echo \"No tests yet\"",
+    "test": "vitest run --environment jsdom",
     "lint": "echo \"No lint yet\""
   },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.4.8",
+    "@testing-library/react": "^16.0.1",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "jsdom": "^26.1.0",
+    "vitest": "^2.1.9",
     "typescript": "^5.5.0"
   }
 }
