@@ -83,6 +83,7 @@ type TransactionResult struct {
 type Contract struct {
 	ID     string
 	Status string
+	Network string
 }
 
 // Event mirrors store.Event.
