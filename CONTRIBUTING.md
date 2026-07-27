@@ -309,3 +309,43 @@ git push origin feat/xdr-decode-map-type
 ```
 Open a PR against `main`. Title: `feat(xdr): add decoder for scvMap type`. Body: `Closes #<issue-number>`.
 That is the full cycle. Most XDR decoder contributions follow exactly this pattern.
+---
+## Troubleshooting
+If setup fails, the quickest fixes are usually environment variables or services not running.
+### `go: command not found` after installing Go
+The Go binary is often installed under `/usr/local/go/bin` or `$HOME/go/bin`, which may not be on your `PATH`.
+```bash
+export PATH=$PATH:/usr/local/go/bin
+# or
+export PATH=$PATH:$HOME/go/bin
+```
+Verify the change with:
+```bash
+go version
+```
+Windows-specific: add the Go install directory (typically `C:\Program Files\Go\bin`) and your user Go bin directory (for example `C:\Users\<you>\go\bin`) to `PATH`, then restart your terminal.
+### Docker daemon is not running
+If `docker compose up -d` fails or `docker ps` returns an error, the Docker daemon is usually the issue.
+- Start Docker Desktop on macOS or Windows.
+- On Linux, start the service and ensure your user can access it:
+```bash
+sudo systemctl start docker
+sudo usermod -aG docker "$USER"
+```
+Then verify the daemon is responsive:
+```bash
+docker info
+```
+### `pnpm: command not found`
+Node may be installed, but pnpm is not yet available on your `PATH`.
+```bash
+npm install -g pnpm@9
+pnpm --version
+```
+If `npm` itself is missing, install Node first and then rerun the command above.
+### `psql: command not found` (Windows)
+The PostgreSQL client tools are not installed or their `bin` directory is not on `PATH`.
+Install PostgreSQL or add the PostgreSQL `bin` folder (for example `C:\Program Files\PostgreSQL\<version>\bin`) to `PATH`, then restart the terminal and verify:
+```powershell
+psql --version
+```

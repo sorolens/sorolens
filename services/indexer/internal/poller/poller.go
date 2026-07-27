@@ -42,16 +42,25 @@ type Config struct {
 
 // Poller fetches and persists events and invocations for all tracked contracts.
 type Poller struct {
-	rpc   RPCClient
-	store Store
-	redis RedisClient
-	cfg   Config
-	log   *slog.Logger
+	rpcClients map[string]RPCClient
+	store      Store
+	redis      RedisClient
+	cfg        Config
+	log        *slog.Logger
 }
 
 // New returns a Poller wired with the given dependencies.
+// It preserves the existing single-client behavior by using the provided RPC
+// client for all contracts when no network-specific map is needed.
 func New(rpc RPCClient, store Store, redis RedisClient, cfg Config, log *slog.Logger) *Poller {
-	return &Poller{rpc: rpc, store: store, redis: redis, cfg: cfg, log: log}
+	return NewWithRPCClients(map[string]RPCClient{"": rpc}, store, redis, cfg, log)
+}
+
+// NewWithRPCClients returns a Poller that routes each contract to the RPC
+// client matching its network. Contracts with an unconfigured network are
+// skipped with a warning.
+func NewWithRPCClients(rpcClients map[string]RPCClient, store Store, redis RedisClient, cfg Config, log *slog.Logger) *Poller {
+	return &Poller{rpcClients: rpcClients, store: store, redis: redis, cfg: cfg, log: log}
 }
 
 // Run starts the poller in the given mode.
@@ -129,7 +138,7 @@ func (p *Poller) processAll(ctx context.Context) error {
 			if c.Status != "active" && c.Status != "backfilling" {
 				continue
 			}
-			if err := p.processContract(ctx, c.ID); err != nil {
+			if err := p.processContract(ctx, c.ID, c.Network); err != nil {
 				// Log and continue; one failing contract must not block others.
 				p.log.Error("failed to index contract",
 					"contract_id", c.ID,
@@ -147,7 +156,16 @@ func (p *Poller) processAll(ctx context.Context) error {
 }
 
 // processContract indexes all new events for one contract.
-func (p *Poller) processContract(ctx context.Context, contractID string) error {
+func (p *Poller) processContract(ctx context.Context, contractID, network string) error {
+	rpc, ok := p.selectRPCClient(network)
+	if !ok {
+		p.log.Warn("skipping contract with unconfigured network",
+			"contract_id", contractID,
+			"network", network,
+		)
+		return nil
+	}
+
 	// Acquire per-contract advisory lock to prevent concurrent runs.
 	lockKey := lockKeyPrefix + contractID
 	acquired, err := p.redis.SetNX(ctx, lockKey, "1", lockTTL)
@@ -161,7 +179,7 @@ func (p *Poller) processContract(ctx context.Context, contractID string) error {
 	}
 	defer p.redis.Del(ctx, lockKey) //nolint:errcheck
 
-	latest, err := p.rpc.GetLatestLedger(ctx)
+	latest, err := rpc.GetLatestLedger(ctx)
 	if err != nil {
 		return fmt.Errorf("get latest ledger: %w", err)
 	}
@@ -207,7 +225,7 @@ func (p *Poller) processContract(ctx context.Context, contractID string) error {
 	log.Info("indexing contract")
 
 	runStart := time.Now()
-	events, invocations, err := p.fetchWindow(ctx, contractID, startLedger, endLedger)
+	events, invocations, err := p.fetchWindow(ctx, rpc, contractID, startLedger, endLedger)
 	if err != nil {
 		return err
 	}
@@ -238,13 +256,13 @@ func (p *Poller) processContract(ctx context.Context, contractID string) error {
 
 // fetchWindow calls getEvents for [startLedger, endLedger] and fetches the
 // corresponding transactions for each unique tx hash.
-func (p *Poller) fetchWindow(ctx context.Context, contractID string, startLedger, endLedger uint32) ([]Event, []Invocation, error) {
+func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID string, startLedger, endLedger uint32) ([]Event, []Invocation, error) {
 	filters := []EventFilter{{
 		Type:        "contract",
 		ContractIDs: []string{contractID},
 	}}
 
-	result, err := p.rpc.GetEvents(ctx, startLedger, endLedger, filters)
+	result, err := rpc.GetEvents(ctx, startLedger, endLedger, filters)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get events [%d,%d]: %w", startLedger, endLedger, err)
 	}
@@ -271,7 +289,7 @@ func (p *Poller) fetchWindow(ctx context.Context, contractID string, startLedger
 	// Fetch one transaction record per unique tx hash.
 	var invocations []Invocation
 	for txHash := range seenTx {
-		tx, err := p.rpc.GetTransaction(ctx, txHash)
+		tx, err := rpc.GetTransaction(ctx, txHash)
 		if err != nil {
 			p.log.Warn("failed to fetch transaction, skipping",
 				"tx_hash", txHash,
@@ -291,6 +309,25 @@ func (p *Poller) fetchWindow(ctx context.Context, contractID string, startLedger
 	}
 
 	return events, invocations, nil
+}
+
+func (p *Poller) selectRPCClient(network string) (RPCClient, bool) {
+	if p.rpcClients == nil {
+		return nil, false
+	}
+	if network == "" {
+		if rpc, ok := p.rpcClients[""]; ok {
+			return rpc, true
+		}
+		if len(p.rpcClients) == 1 {
+			for _, rpc := range p.rpcClients {
+				return rpc, true
+			}
+		}
+		return nil, false
+	}
+	rpc, ok := p.rpcClients[network]
+	return rpc, ok
 }
 
 func min32(a, b uint32) uint32 {

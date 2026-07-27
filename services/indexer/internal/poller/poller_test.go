@@ -312,6 +312,51 @@ func TestPoller_RPCErrorDoesNotPanic(t *testing.T) {
 	}
 }
 
+func TestPoller_UsesContractNetworkRPCClient(t *testing.T) {
+	t.Parallel()
+
+	contractID := "CNETWORK"
+	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: "testnet"}})
+	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
+
+	testnetRPC := &fakeRPC{latestLedger: &LatestLedger{Sequence: 500000}}
+	mainnetRPC := &fakeRPC{latestLedger: &LatestLedger{Sequence: 500000}}
+	p := NewWithRPCClients(map[string]RPCClient{
+		"testnet": testnetRPC,
+		"mainnet": mainnetRPC,
+	}, store, newFakeRedis(), testConfig(), testLogger())
+
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(testnetRPC.eventsCalls) != 1 {
+		t.Fatalf("expected one GetEvents call on testnet RPC, got %d", len(testnetRPC.eventsCalls))
+	}
+	if len(mainnetRPC.eventsCalls) != 0 {
+		t.Fatalf("expected no GetEvents call on mainnet RPC, got %d", len(mainnetRPC.eventsCalls))
+	}
+}
+
+func TestPoller_SkipsUnconfiguredNetwork(t *testing.T) {
+	t.Parallel()
+
+	contractID := "CUNCONFIGURED"
+	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: "mainnet"}})
+	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
+
+	testnetRPC := &fakeRPC{latestLedger: &LatestLedger{Sequence: 500000}}
+	p := NewWithRPCClients(map[string]RPCClient{"testnet": testnetRPC}, store, newFakeRedis(), testConfig(), testLogger())
+
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(testnetRPC.eventsCalls) != 0 {
+		t.Fatalf("expected no RPC calls for unconfigured network, got %d", len(testnetRPC.eventsCalls))
+	}
+}
+
 func TestPoller_ListContractsErrorPropagates(t *testing.T) {
 	t.Parallel()
 
