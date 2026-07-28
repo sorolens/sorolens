@@ -1,14 +1,5 @@
 package soroban
 
-// Package soroban provides a typed JSON-RPC 2.0 client for the Stellar Soroban RPC.
-//
-// Retention window: the public SDF endpoints retain events for approximately
-// 24 hours. The maximum queryable range is roughly 7 days (about 100,000
-// ledgers at 5-6 seconds per ledger). A newly tracked contract must start its
-// backfill from max(latestLedger - 100_000, 1), not from ledger 0. The
-// getEvents startLedger must be >= oldestLedger returned by the RPC, or the
-// call will return an error. See RESEARCH.md section 1.2 for the full spec.
-
 // ---- JSON-RPC 2.0 envelope ------------------------------------------------
 
 type rpcRequest struct {
