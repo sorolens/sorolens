@@ -38,25 +38,41 @@ pub struct CounterContract;
 #[contractimpl]
 impl CounterContract {
     pub fn increment(env: Env, by: u32) -> u32 {
-        let mut count: u32 = env.storage().persistent().get(&DataKey::Counter).unwrap_or(0);
+        let mut count: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Counter)
+            .unwrap_or(0);
         count = count.saturating_add(by);
         env.storage().persistent().set(&DataKey::Counter, &count);
-        IncrementEvent { by, new_count: count }.publish(&env);
+        IncrementEvent {
+            by,
+            new_count: count,
+        }
+        .publish(&env);
         count
     }
 
     pub fn get(env: Env) -> u32 {
-        env.storage().persistent().get(&DataKey::Counter).unwrap_or(0)
+        env.storage()
+            .persistent()
+            .get(&DataKey::Counter)
+            .unwrap_or(0)
     }
 
     pub fn reset(env: Env) {
         env.storage().persistent().set(&DataKey::Counter, &0u32);
-        ResetEvent { reason: symbol_short!("cleared") }.publish(&env);
+        ResetEvent {
+            reason: symbol_short!("cleared"),
+        }
+        .publish(&env);
     }
 
     pub fn set_label(env: Env, label: Symbol) {
         env.storage().temporary().set(&DataKey::Label, &label);
-        env.storage().temporary().extend_ttl(&DataKey::Label, 1, 1000);
+        env.storage()
+            .temporary()
+            .extend_ttl(&DataKey::Label, 1, 1000);
         SetLabelEvent {
             label: label.clone(),
             note: symbol_short!("label_set"),
@@ -83,7 +99,11 @@ mod test {
         assert_eq!(events.events().len(), 1);
         assert_eq!(
             events.events()[0],
-            IncrementEvent { by: 3, new_count: 3 }.to_xdr(&env, &contract_id)
+            IncrementEvent {
+                by: 3,
+                new_count: 3
+            }
+            .to_xdr(&env, &contract_id)
         );
 
         assert_eq!(client.get(), 3u32);
@@ -93,7 +113,10 @@ mod test {
         assert_eq!(events.events().len(), 1);
         assert_eq!(
             events.events()[0],
-            ResetEvent { reason: symbol_short!("cleared") }.to_xdr(&env, &contract_id)
+            ResetEvent {
+                reason: symbol_short!("cleared")
+            }
+            .to_xdr(&env, &contract_id)
         );
         assert_eq!(client.get(), 0u32);
 
