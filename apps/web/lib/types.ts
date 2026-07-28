@@ -106,6 +106,14 @@ export interface ContractSummary {
 
 export interface ContractsListResponse {
   contracts: ContractSummary[];
+  cursor: string | null;
+  has_more: boolean;
+}
+
+export interface TrackContractRequest {
+  id: string;
+  label?: string;
 }
 
 export type TimeWindow = "24h" | "7d" | "30d" | "all";
+
