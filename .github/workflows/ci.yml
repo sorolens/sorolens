@@ -121,6 +121,9 @@ jobs:
   # ------------------------------------------------------------
   # Rust: fixture contract
   # ------------------------------------------------------------
+    # ------------------------------------------------------------
+  # Rust: fixture contract
+  # ------------------------------------------------------------
   rust:
     name: Rust (contracts/counter)
     runs-on: ubuntu-latest
@@ -131,6 +134,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: rustfmt
       - name: Cache cargo registry and build
         uses: actions/cache@v4
         with:
@@ -142,6 +146,9 @@ jobs:
           key: cargo-${{ hashFiles('contracts/counter/Cargo.lock') }}
           restore-keys: |
             cargo-
+      - name: cargo fmt --check
+        working-directory: contracts/counter
+        run: cargo fmt --check
       - name: cargo check (native)
         working-directory: contracts/counter
         run: cargo check
@@ -151,3 +158,4 @@ jobs:
       - name: cargo test
         working-directory: contracts/counter
         run: cargo test
+        
