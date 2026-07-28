@@ -21,9 +21,9 @@ if ! command -v soroban >/dev/null 2>&1; then
   exit 1
 fi
 
-cargo build --target wasm32-unknown-unknown --release
+cargo build --target wasm32v1-none --release
 
-WASM_PATH="$CONTRACT_DIR/target/wasm32-unknown-unknown/release/sorolens_counter.wasm"
+WASM_PATH="$CONTRACT_DIR/target/wasm32v1-none/release/sorolens_counter.wasm"
 if [[ ! -f "$WASM_PATH" ]]; then
   echo "Expected Wasm artifact at $WASM_PATH" >&2
   exit 1

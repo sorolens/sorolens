@@ -86,7 +86,7 @@ cd contracts/counter
 cargo check
 cargo test
 # To build the WASM:
-cargo build --target wasm32-unknown-unknown --release
+cargo build --target wasm32v1-none --release
 ```
 ---
 ## How to claim an issue
@@ -193,7 +193,7 @@ pnpm build             # verifies the Next.js build succeeds
 ```bash
 cd contracts/counter
 cargo test
-cargo check --target wasm32-unknown-unknown
+cargo check --target wasm32v1-none
 ```
 ---
 ## Walkthrough: adding a new XDR type decoder
