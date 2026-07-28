@@ -78,7 +78,7 @@ jobs:
           restore-keys: |
             pnpm-node22-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Lint
         run: pnpm --filter "./packages/**" lint
   # ------------------------------------------------------------
@@ -110,7 +110,7 @@ jobs:
           restore-keys: |
             pnpm-node22-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build dashboard
         working-directory: apps/web
         env:
