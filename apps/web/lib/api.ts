@@ -1,12 +1,15 @@
 import type {
   ContractDetail,
+  ContractSummary,
   ContractsListResponse,
   EventsResponse,
   InvocationsResponse,
   StatsResponse,
   StorageResponse,
   TimeWindow,
+  TrackContractRequest,
 } from "./types";
+
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -44,15 +47,26 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export function listContracts(
-  params?: { network?: string; status?: string },
+  params?: { cursor?: string; limit?: number; network?: string; status?: string },
 ): Promise<ContractsListResponse> {
   const search = new URLSearchParams();
+  if (params?.cursor) search.set("cursor", params.cursor);
+  if (params?.limit) search.set("limit", String(params.limit));
   if (params?.network) search.set("network", params.network);
   if (params?.status) search.set("status", params.status);
   const qs = search.toString();
   return fetchJson<ContractsListResponse>(
     `${API_URL}/api/v1/contracts${qs ? "?" + qs : ""}`,
   );
+}
+
+export function trackContract(
+  req: TrackContractRequest,
+): Promise<ContractSummary> {
+  return fetchJson<ContractSummary>(`${API_URL}/api/v1/contracts`, {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
 }
 
 export function getContract(id: string): Promise<ContractDetail> {
