@@ -81,6 +81,8 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Lint
         run: pnpm --filter "./packages/**" lint
+      - name: Test
+        run: pnpm --filter "./packages/**" test
   # ------------------------------------------------------------
   # Next.js dashboard build
   # ------------------------------------------------------------
