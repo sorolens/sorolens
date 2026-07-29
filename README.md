@@ -12,11 +12,7 @@ Soroban's public RPC retains events for 24 hours and transaction data for up to 
 - Exposes a REST API (`/api/v1`) queryable by your backend or CI pipeline.
 - Shows decoded event topics and values, per-invocation resource metrics (CPU instructions, memory, ledger bytes, fee charged), and storage TTL health in a Next.js dashboard.
 - Alerts when persistent storage entries are within a configurable number of ledgers of expiry.
----
-## Screenshots
-<!-- Screenshots will be added after v0.1.0 deployment. 
-     See docs/img/ after running make screenshots -->
----
+
 ## Quickstart
 ### Prerequisites
 - Docker and Docker Compose
