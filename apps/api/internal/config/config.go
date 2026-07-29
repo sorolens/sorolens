@@ -1,3 +1,17 @@
+// Package config loads runtime configuration for the API from environment
+// variables. It provides a Config struct with database, Redis, Soroban RPC,
+// and indexer settings, and a Load function that validates required variables
+// and applies defaults.
+//
+// # Environment variables
+//
+// Required: DATABASE_URL, REDIS_URL.
+// Optional with defaults: SOROBAN_RPC_URL (testnet), STELLAR_NETWORK (testnet),
+// PORT (8080), LOG_LEVEL (info), INDEXER_POLL_INTERVAL (5m),
+// INDEXER_LEDGER_WINDOW (120960 ledgers ≈ 7 days), INDEXER_MAX_DURATION (270s).
+//
+// Load collects every missing required variable into a single error message
+// so the process fails fast with actionable output.
 package config
 
 import (
