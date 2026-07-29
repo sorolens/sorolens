@@ -65,16 +65,21 @@ function readI128(bytes: Uint8Array, offset: number): [bigint, number] {
   return [val, newOffset];
 }
 
+// XDR pads variable-length data to a 4-byte boundary
+function padded(len: number): number {
+  return len + ((4 - (len % 4)) % 4);
+}
+
 function readString(bytes: Uint8Array, offset: number): [string, number] {
   const [len, off1] = readU32(bytes, offset);
   const decoder = new TextDecoder();
   const str = decoder.decode(bytes.slice(off1, off1 + len));
-  return [str, off1 + len];
+  return [str, off1 + padded(len)];
 }
 
 function readBytes(bytes: Uint8Array, offset: number): [Uint8Array, number] {
   const [len, off1] = readU32(bytes, offset);
-  return [bytes.slice(off1, off1 + len), off1 + len];
+  return [bytes.slice(off1, off1 + len), off1 + padded(len)];
 }
 
 function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
@@ -226,6 +231,12 @@ export function decode(base64Str: string): DecodedScVal {
       const [flag] = readU32(bytes, off);
       const value = flag !== 0;
       return { type: "bool", value, human: value ? "true" : "false" };
+    }
+
+    case 10: {
+      // SCV_SYMBOL
+      const [value] = readString(bytes, off);
+      return { type: "symbol", value, human: value };
     }
 
     default: {

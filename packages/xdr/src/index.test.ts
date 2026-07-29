@@ -31,6 +31,38 @@ describe("decode - bool", () => {
   });
 });
 
+// ScVal symbol: i32 discriminant 10 (SCV_SYMBOL) followed by a length-prefixed,
+// 4-byte-padded string.
+const SYMBOL_TRANSFER = "AAAACgAAAAhUcmFuc2Zlcg==";
+const SYMBOL_MINT = "AAAACgAAAARtaW50";
+const SYMBOL_EMPTY = "AAAACgAAAAA=";
+
+describe("decode - symbol", () => {
+  it("decodes a symbol", () => {
+    expect(decode(SYMBOL_TRANSFER)).toEqual({
+      type: "symbol",
+      value: "Transfer",
+      human: "Transfer",
+    });
+  });
+
+  it("decodes a symbol whose length needs padding", () => {
+    expect(decode(SYMBOL_MINT)).toEqual({
+      type: "symbol",
+      value: "mint",
+      human: "mint",
+    });
+  });
+
+  it("decodes an empty symbol without error", () => {
+    expect(decode(SYMBOL_EMPTY)).toEqual({
+      type: "symbol",
+      value: "",
+      human: "",
+    });
+  });
+});
+
 describe("decodeScVal - bool", () => {
   it("decodes bool values to raw booleans", () => {
     expect(decodeScVal(BOOL_TRUE)).toBe(true);
