@@ -81,7 +81,10 @@ function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
 
   switch (discriminant) {
     case 0: // SCV_BOOL
-      return [bytes[off] !== 0, off + 1];
+      {
+        const [val, newOff] = readU32(bytes, off);
+        return [val !== 0, newOff];
+      }
 
     case 1: // SCV_VOID
       return [null, off];
