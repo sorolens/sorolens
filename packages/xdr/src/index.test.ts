@@ -69,3 +69,25 @@ describe("decodeScVal - bool", () => {
     expect(decodeScVal(BOOL_FALSE)).toBe(false);
   });
 });
+
+// ScVal u64: i32 discriminant 5 (SCV_U64) followed by an 8-byte big-endian u64.
+const U64_SMALL = "AAAABQAAAAAAAAAq"; // 42
+const U64_MAX = "AAAABf//////////"; // 18446744073709551615 (u64 max)
+
+describe("decode - u64", () => {
+  it("decodes a small u64 value", () => {
+    expect(decode(U64_SMALL)).toEqual({
+      type: "u64",
+      value: "42",
+      human: "42",
+    });
+  });
+
+  it("decodes a u64 value near max without precision loss", () => {
+    expect(decode(U64_MAX)).toEqual({
+      type: "u64",
+      value: "18446744073709551615",
+      human: "18446744073709551615",
+    });
+  });
+});

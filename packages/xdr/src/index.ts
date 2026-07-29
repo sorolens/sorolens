@@ -233,6 +233,12 @@ export function decode(base64Str: string): DecodedScVal {
       return { type: "bool", value, human: value ? "true" : "false" };
     }
 
+    case 5: {
+      // SCV_U64
+      const [value] = readU64(bytes, off);
+      return { type: "u64", value: value.toString(), human: value.toString() };
+    }
+
     case 10: {
       // SCV_SYMBOL
       const [value] = readString(bytes, off);
