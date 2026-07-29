@@ -1,3 +1,19 @@
+// Package store defines the data-access layer for indexed Soroban contract
+// data. It provides a Store interface backed by PostgreSQL (pgxpool) for
+// persisting and querying contracts, events, invocations, storage entries,
+// sync state, and global statistics.
+//
+// # Data model
+//
+// The Store manages five tables — contracts, events, invocations,
+// storage_entries, and sync_state — that together form the indexed
+// observability backend for Sorolens. Contracts are tracked by network and
+// status; events carry decoded XDR values; invocations include per-call
+// resource metrics (CPU, memory, ledger I/O, fees); storage entries track
+// durability and TTL health; and sync state records the last-polled ledger
+// per contract for incremental indexing.
+//
+// See internal/db/migrations/ for the full schema DDL.
 package store
 
 import (
