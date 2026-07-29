@@ -91,3 +91,25 @@ describe("decode - u64", () => {
     });
   });
 });
+
+// ScVal u32: i32 discriminant 3 (SCV_U32) followed by a 4-byte big-endian u32.
+const U32_ZERO = "AAAAAwAAAAA=";
+const U32_MAX = "AAAAA/////8="; // 4294967295 (u32 max)
+
+describe("decode - u32", () => {
+  it("decodes u32 value 0", () => {
+    expect(decode(U32_ZERO)).toEqual({
+      type: "u32",
+      value: 0,
+      human: "0",
+    });
+  });
+
+  it("decodes u32 max value 4294967295", () => {
+    expect(decode(U32_MAX)).toEqual({
+      type: "u32",
+      value: 4294967295,
+      human: "4294967295",
+    });
+  });
+});
