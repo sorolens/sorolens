@@ -13,7 +13,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
-
+	// Print the configuration values to the console for debugging purposes
 	fmt.Println("sorolens/api starting")
 	fmt.Printf("  port:                  %s\n", cfg.Port)
 	fmt.Printf("  database_url:          %s\n", maskPassword(cfg.DatabaseURL))

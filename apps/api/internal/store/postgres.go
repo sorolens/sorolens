@@ -20,6 +20,7 @@ type postgresStore struct {
 
 // ---- contracts ------------------------------------------------------------
 
+// UpsertContract inserts or updates a contract in the database. It uses the contract ID as the unique constraint for upserting.
 func (s *postgresStore) UpsertContract(ctx context.Context, c Contract) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO contracts
@@ -38,6 +39,7 @@ func (s *postgresStore) UpsertContract(ctx context.Context, c Contract) error {
 	return err
 }
 
+// GetContract retrieves a contract by its ID. Returns ErrNotFound if no contract exists.
 func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Contract, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT id, network, label, wasm_hash, created_at_ledger,
@@ -54,6 +56,7 @@ func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Con
 	return c, err
 }
 
+// ListContracts returns a list of contracts, ordered by ID. The cursor is the last-seen contract ID (lexicographic order).
 func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit int) ([]Contract, string, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -96,6 +99,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 
 // ---- events ---------------------------------------------------------------
 
+// BatchInsertEvents inserts multiple events in a single batch operation. It ignores duplicate events based on the primary key (id).
 func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) error {
 	if len(events) == 0 {
 		return nil
@@ -134,6 +138,7 @@ func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) e
 
 // ---- invocations ----------------------------------------------------------
 
+// BatchInsertInvocations inserts multiple invocations in a single batch operation. It ignores duplicate invocations based on the primary key (tx_hash).
 func (s *postgresStore) BatchInsertInvocations(ctx context.Context, invocations []Invocation) error {
 	if len(invocations) == 0 {
 		return nil
@@ -170,6 +175,7 @@ func (s *postgresStore) BatchInsertInvocations(ctx context.Context, invocations 
 
 // ---- storage entries ------------------------------------------------------
 
+// UpsertStorageEntries inserts or updates multiple storage entries in a single batch operation. It uses the contract_id and key_xdr as the unique constraint for upserting.
 func (s *postgresStore) UpsertStorageEntries(ctx context.Context, entries []StorageEntry) error {
 	if len(entries) == 0 {
 		return nil
@@ -209,6 +215,7 @@ func (s *postgresStore) UpsertStorageEntries(ctx context.Context, entries []Stor
 
 // ---- sync state -----------------------------------------------------------
 
+// GetSyncState retrieves the sync state for a given contract ID. If no sync state exists, it returns a default SyncState with the contract ID set.
 func (s *postgresStore) GetSyncState(ctx context.Context, contractID string) (SyncState, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT contract_id, last_ledger, last_run_at, error_message, updated_at
@@ -238,6 +245,7 @@ func (s *postgresStore) UpsertSyncState(ctx context.Context, ss SyncState) error
 
 // ---- global stats ---------------------------------------------------------
 
+// GetGlobalStats retrieves aggregated statistics about the tracked contracts, events, invocations, and storage entries.
 func (s *postgresStore) GetGlobalStats(ctx context.Context) (GlobalStats, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT

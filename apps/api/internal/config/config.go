@@ -81,6 +81,8 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
+// getEnvDefault returns the value of the environment variable named by the key.
+// If the variable is not present, it returns the provided default value.
 func getEnvDefault(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
