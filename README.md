@@ -37,6 +37,14 @@ go run ./cmd/sorolens index --once
 ```
 The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
 ---
+## How to contribute
+
+1. **Find an issue** – Browse the [open issues](https://github.com/sorolens/sorolens/issues) and pick one that interests you. Look for labels like `good first issue` or `help wanted`.
+2. **Claim it** – Comment "I'd like to work on this" on the issue. A maintainer will assign it to you.
+3. **Open a PR** – Follow the branch naming and commit conventions in [CONTRIBUTING.md](./CONTRIBUTING.md) and open a pull request against `main`.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full walkthrough, including local setup, running tests, and the PR checklist.
+---
 ## Architecture
 <!-- ARCHITECTURE DIAGRAM PLACEHOLDER: Mermaid system diagram showing browser, Next.js on Vercel, Go API as Vercel serverless functions, Redis on Upstash, Postgres on Neon, Go indexer on GitHub Actions cron, and Soroban RPC -->
 > See `ARCHITECTURE.md` for the full system diagram, data flows, schema DDL, and REST API reference.
