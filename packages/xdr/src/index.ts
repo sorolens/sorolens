@@ -233,16 +233,133 @@ export function decode(base64Str: string): DecodedScVal {
       return { type: "bool", value, human: value ? "true" : "false" };
     }
 
+    case 1: // SCV_VOID
+      return { type: "void", value: null, human: "void" };
+
+    case 2: // SCV_ERROR
+      return { type: "sc_error", value: "<error>", human: "<error>" };
+
+    case 3: {
+      // SCV_U32
+      const [value] = readU32(bytes, off);
+      return { type: "u32", value, human: value.toString() };
+    }
+
+    case 4: {
+      // SCV_I32
+      const [value] = readI32(bytes, off);
+      return { type: "i32", value, human: value.toString() };
+    }
+
     case 5: {
       // SCV_U64
       const [value] = readU64(bytes, off);
       return { type: "u64", value: value.toString(), human: value.toString() };
     }
 
+    case 6: {
+      // SCV_I64
+      const [value] = readI64(bytes, off);
+      return { type: "i64", value: value.toString(), human: value.toString() };
+    }
+
+    case 7: {
+      // SCV_U128
+      const [value] = readU128(bytes, off);
+      return { type: "u128", value: value.toString(), human: value.toString() };
+    }
+
+    case 8: {
+      // SCV_I128
+      const [value] = readI128(bytes, off);
+      return { type: "i128", value: value.toString(), human: value.toString() };
+    }
+
     case 10: {
       // SCV_SYMBOL
       const [value] = readString(bytes, off);
       return { type: "symbol", value, human: value };
+    }
+
+    case 11: {
+      // SCV_BITSET
+      const [value] = readU128(bytes, off);
+      return { type: "bitset", value: value.toString(), human: value.toString() };
+    }
+
+    case 12: {
+      // SCV_STRING
+      const [value] = readString(bytes, off);
+      return { type: "string", value, human: value };
+    }
+
+    case 13: {
+      // SCV_VEC
+      const [len, off1] = readU32(bytes, off);
+      const vec: unknown[] = [];
+      let currentOff = off1;
+      for (let i = 0; i < len; i++) {
+        const [val, newOff] = readScVal(bytes, currentOff);
+        vec.push(val);
+        currentOff = newOff;
+      }
+      return { type: "vec", value: vec, human: JSON.stringify(vec) };
+    }
+
+    case 14: {
+      // SCV_MAP
+      const [len, off1] = readU32(bytes, off);
+      const map: Record<string, unknown> = {};
+      let currentOff = off1;
+      for (let i = 0; i < len; i++) {
+        const [key, offKey] = readScVal(bytes, currentOff);
+        const [val, offVal] = readScVal(bytes, offKey);
+        map[String(key)] = val;
+        currentOff = offVal;
+      }
+      return { type: "map", value: map, human: JSON.stringify(map) };
+    }
+
+    case 15: {
+      // SCV_BYTES
+      const [data] = readBytes(bytes, off);
+      const hex = "0x" + bytesToHex(data);
+      return { type: "bytes", value: hex, human: hex };
+    }
+
+    case 16: {
+      // SCV_ADDRESS
+      const addrType = bytes[off];
+      const addrBytes = bytes.slice(off + 1, off + 33);
+      const hex = bytesToHex(addrBytes);
+      const addrStr = addrType === 0
+        ? "<account:" + hex + ">"
+        : "<contract:" + hex + ">";
+      return { type: "address", value: addrStr, human: addrStr };
+    }
+
+    case 17: // SCV_CONTRACT_INSTANCE
+      return { type: "contract_instance", value: "<contract_instance>", human: "<contract_instance>" };
+
+    case 18: // SCV_LEDGER_KEY_CONTRACT_INSTANCE
+      return { type: "ledger_key_instance", value: "<ledger_key_instance>", human: "<ledger_key_instance>" };
+
+    case 19: {
+      // SCV_LEDGER_KEY_NONCE
+      const [value] = readI64(bytes, off);
+      return { type: "nonce", value: value.toString(), human: value.toString() };
+    }
+
+    case 20: {
+      // SCV_TIME_POINT
+      const [value] = readU64(bytes, off);
+      return { type: "time_point", value: value.toString(), human: value.toString() };
+    }
+
+    case 21: {
+      // SCV_DURATION
+      const [value] = readU64(bytes, off);
+      return { type: "duration", value: value.toString(), human: value.toString() };
     }
 
     default: {
