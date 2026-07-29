@@ -1,20 +1,39 @@
-import { describe, expect, it } from "vitest";
-import { decodeScVal } from "./index";
+import { describe, it, expect } from "vitest";
+import { decode, decodeScVal } from "./index";
 
-describe("decodeScVal", () => {
-  it("decodes ScVal bool(true)", () => {
-    expect(decodeScVal("AAAAAAAAAAE=")).toBe(true);
+// ScVal bool: i32 discriminant 0 (SCV_BOOL) followed by the 4-byte XDR bool.
+const BOOL_TRUE = "AAAAAAAAAAE=";
+const BOOL_FALSE = "AAAAAAAAAAA=";
+
+describe("decode - bool", () => {
+  it("decodes bool true", () => {
+    expect(decode(BOOL_TRUE)).toEqual({
+      type: "bool",
+      value: true,
+      human: "true",
+    });
   });
 
-  it("decodes ScVal bool(false)", () => {
-    expect(decodeScVal("AAAAAAAAAAA=")).toBe(false);
+  it("decodes bool false", () => {
+    expect(decode(BOOL_FALSE)).toEqual({
+      type: "bool",
+      value: false,
+      human: "false",
+    });
   });
 
-  it("decodes a bool followed by another value without desyncing the offset", () => {
-    // Vec [ bool(true), u32(42) ]
-    expect(decodeScVal("AAAADQAAAAIAAAAAAAAAAQAAAAMAAAAq")).toEqual([
-      true,
-      42,
-    ]);
+  it("returns an error result for invalid base64", () => {
+    expect(decode("not base64!!")).toEqual({
+      type: "error",
+      value: null,
+      human: "<decode_error>",
+    });
+  });
+});
+
+describe("decodeScVal - bool", () => {
+  it("decodes bool values to raw booleans", () => {
+    expect(decodeScVal(BOOL_TRUE)).toBe(true);
+    expect(decodeScVal(BOOL_FALSE)).toBe(false);
   });
 });

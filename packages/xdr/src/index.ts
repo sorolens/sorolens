@@ -1,6 +1,7 @@
 export interface DecodedScVal {
   type: string;
   value: unknown;
+  human: string;
 }
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -80,11 +81,11 @@ function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
   const [discriminant, off] = readI32(bytes, offset);
 
   switch (discriminant) {
-    case 0: // SCV_BOOL
-      {
-        const [val, newOff] = readU32(bytes, off);
-        return [val !== 0, newOff];
-      }
+    case 0: {
+      // SCV_BOOL - XDR encodes bool as a 4-byte integer
+      const [flag, newOff] = readU32(bytes, off);
+      return [flag !== 0, newOff];
+    }
 
     case 1: // SCV_VOID
       return [null, off];
@@ -198,6 +199,39 @@ export function decodeScVal(base64Str: string): unknown {
     return result;
   } catch {
     return "<decode_error>";
+  }
+}
+
+/**
+ * Decode a base64 ScVal into a normalized `{ type, value, human }` object.
+ * Types without a dedicated case yet fall back to the raw decoded value.
+ */
+export function decode(base64Str: string): DecodedScVal {
+  let bytes: Uint8Array;
+  try {
+    const binaryStr = atob(base64Str);
+    bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+  } catch {
+    return { type: "error", value: null, human: "<decode_error>" };
+  }
+
+  const [discriminant, off] = readI32(bytes, 0);
+
+  switch (discriminant) {
+    case 0: {
+      // SCV_BOOL - XDR encodes bool as a 4-byte integer
+      const [flag] = readU32(bytes, off);
+      const value = flag !== 0;
+      return { type: "bool", value, human: value ? "true" : "false" };
+    }
+
+    default: {
+      const value = decodeScVal(base64Str);
+      return { type: "unknown", value, human: String(value) };
+    }
   }
 }
 
