@@ -1,29 +1,20 @@
+# Implement Contracts Dashboard List Page
+
 ## Summary
-Adds full ScVal decode support to the `decode()` function in `@sorolens/xdr`, covering all XDR discriminant values (0–21). Previously, only `bool`, `u64`, and `symbol` had dedicated cases — all other types fell through to `"unknown"`.
+Implements the contracts list dashboard page at `/contracts` with API integration, cursor pagination, real-time search filtering, a Track Contract modal with validation, and a reusable `DataTable` component.
 
-## Related issue
-Closes #[TBD]
+## What changed
+- **Contracts List Page (`apps/web/app/(app)/contracts/page.tsx`)**:
+  - Fetches tracked contracts via `listContracts` API endpoint with cursor pagination.
+  - Supports client-side search filtering by contract ID and alias/label.
+  - Built interactive Track Contract modal with 56-character Soroban contract ID validation (`^C[A-Z0-9]{55}$`), inline API error state handling, keyboard shortcuts (Escape key listener), backdrop dismiss, and post-success table refresh.
+  - Added loading skeleton states (`TableSkeleton`) and styled empty state views.
+- **Reusable Component (`packages/ui/src/DataTable.tsx`)**:
+  - Added shared generic `DataTable<T>` component with custom accessors, column sorting with directional indicators (`▲` / `▼` / `↕`), row click navigation, and loading pulse states.
+- **Testing & Vitest Config**:
+  - Configured `@sorolens/ui` and `@sorolens/xdr` workspace path aliases in `apps/web/vitest.config.ts`.
+  - Added comprehensive test suites in `apps/web/app/(app)/contracts/page.test.tsx` (15 tests) and `packages/ui/src/DataTable.test.tsx` (10 tests).
 
-## Changes made
-- **`packages/xdr/src/index.ts`** — Extended the `decode()` switch with 14 new cases:
-  - `void` (1), `sc_error` (2), `u32` (3), `i32` (4), `i64` (6), `u128` (7), `i128` (8), `bitset` (11), `string` (12), `vec` (13), `map` (14), `bytes` (15), `address` (16), `contract_instance` (17), `ledger_key_instance` (18), `nonce` (19), `time_point` (20), `duration` (21)
-  - `vec` and `map` use recursive `readScVal` calls to decode nested elements
-  - Wide integer types (i64, u128, i128, bitset, nonce, time_point, duration) store values as strings to avoid precision loss
-- **`packages/xdr/src/index.test.ts`** — Added 28 new test cases covering all new types (including edge cases: min/max, negative/zero/positive, empty collections). Total tests: 42 (up from 8).
-- **`.github/workflows/ci.yml`** — Added `pnpm test` step to the Node packages CI job so decoder tests actually run in CI (only lint was running before).
-
-## How to test
-```
-cd packages/xdr
-pnpm test
-```
-All 42 tests should pass.
-
-## Checklist
-- [x] Tests added or updated for every new or changed behavior.
-- [x] `pnpm vitest run` passes locally for any TypeScript changes.
-- [x] `pnpm --filter "./packages/**" lint` passes.
-- [ ] CI is passing on this branch.
-
-## PR link
-https://github.com/adewolescott/sorolens/compare/main...feat/scval-decode-all-types?expand=1
+## Testing
+- `npx vitest run` in `apps/web` (15/15 passing)
+- `npx vitest run --environment jsdom` in `packages/ui` (12/12 passing)
