@@ -20,6 +20,8 @@ target/
 *.exe
 *.test
 sorolens-bin
+/cli/cli
+/services/indexer/indexer
 
 # Misc
 .DS_Store
