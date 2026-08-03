@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"mime"
 	"net/http"
+	"strings"
 )
 
 // RequireJSONContentType returns middleware that rejects POST and PUT
