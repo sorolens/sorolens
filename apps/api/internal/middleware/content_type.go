@@ -42,7 +42,6 @@ func writeUnsupportedMediaType(w http.ResponseWriter) {
 		"code":  "UNSUPPORTED_MEDIA_TYPE",
 	})
 }
-	"net/http"
 	"strings"
 )
 
