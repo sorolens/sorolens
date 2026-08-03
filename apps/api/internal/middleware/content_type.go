@@ -36,7 +36,7 @@ func RequireJSONContentType(next http.Handler) http.Handler {
 func writeUnsupportedMediaType(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnsupportedMediaType)
-	// Encoding a static map into a ResponseWriter cannot fail in practice.
+	// Ignore encode errors (e.g., client disconnect while writing the response); there's no meaningful recovery here.
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"error": "Content-Type header must be application/json",
 		"code":  "UNSUPPORTED_MEDIA_TYPE",
