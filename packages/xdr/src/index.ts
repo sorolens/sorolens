@@ -180,14 +180,15 @@ function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
 
     case 18: // SCV_ADDRESS
       {
-        const addrType = bytes[off];
-        const addrBytes = bytes.slice(off + 1, off + 33);
+        // XDR union SCAddress: 4-byte ScAddressType discriminant + 32-byte payload.
+        const [addrType, typeOff] = readI32(bytes, off);
+        const addrBytes = bytes.slice(typeOff, typeOff + 32);
         if (addrType === 0) {
           // ScAddressType::SC_ADDRESS_TYPE_ACCOUNT - G... address
-          return ["<account:" + bytesToHex(addrBytes) + ">", off + 33];
+          return ["<account:" + bytesToHex(addrBytes) + ">", typeOff + 32];
         }
         // ScAddressType::SC_ADDRESS_TYPE_CONTRACT - C... address
-        return ["<contract:" + bytesToHex(addrBytes) + ">", off + 33];
+        return ["<contract:" + bytesToHex(addrBytes) + ">", typeOff + 32];
       }
 
     case 19: // SCV_CONTRACT_INSTANCE

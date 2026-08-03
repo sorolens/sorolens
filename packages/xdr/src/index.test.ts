@@ -123,3 +123,88 @@ describe("decode - u32", () => {
     });
   });
 });
+
+// ScVal 128/256-bit numerics: i32 discriminant (9=U128, 10=I128, 11=U256, 12=I256)
+// followed by the big-endian value bytes.
+const U128_ONE = "AAAACQAAAAAAAAAAAAAAAAAAAAE=";
+const I128_NEG = "AAAACv////////////////////8=";
+const U256_ONE = "AAAACwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB";
+const I256_NEG = "AAAADP//////////////////////////////////////////";
+
+// ScVal timepoint/duration: i32 discriminant (7/8) followed by an 8-byte u64.
+const TIMEPOINT = "AAAABwAAAAAAAAAq";
+const DURATION = "AAAACAAAAAAAAAAq";
+
+// ScVal bytes/string: i32 discriminant (13/14) followed by a length-prefixed,
+// 4-byte-padded payload.
+const BYTES_DEAD = "AAAADQAAAALerQAA"; // 0xdead
+const STRING_ABC = "AAAADgAAAANhYmMA"; // "abc"
+
+// ScVal vec/map: i32 discriminant (16/17) followed by a count and entries.
+const VEC_U32 = "AAAAEAAAAAIAAAADAAAABQAAAAMAAAAG"; // [5, 6]
+const MAP_ONE = "AAAAEQAAAAEAAAAPAAAAAWsAAAAAAAADAAAABw=="; // { k: 7 }
+
+// ScVal address: i32 discriminant 18 (SCV_ADDRESS) followed by the SCAddress
+// union (4-byte ScAddressType discriminant + 32-byte payload).
+const ADDR_ACCOUNT = "AAAAEgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+const ADDR_CONTRACT = "AAAAEgAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+
+const ZERO_HEX_32 = "0".repeat(64);
+
+describe("decodeScVal - 128/256-bit numerics", () => {
+  it("decodes u128", () => {
+    expect(decodeScVal(U128_ONE)).toBe(1n);
+  });
+
+  it("decodes i128 (negative)", () => {
+    expect(decodeScVal(I128_NEG)).toBe(-1n);
+  });
+
+  it("decodes u256", () => {
+    expect(decodeScVal(U256_ONE)).toBe(1n);
+  });
+
+  it("decodes i256 (negative)", () => {
+    expect(decodeScVal(I256_NEG)).toBe(-1n);
+  });
+});
+
+describe("decodeScVal - timepoint and duration", () => {
+  it("decodes a timepoint as u64", () => {
+    expect(decodeScVal(TIMEPOINT)).toBe(42n);
+  });
+
+  it("decodes a duration as u64", () => {
+    expect(decodeScVal(DURATION)).toBe(42n);
+  });
+});
+
+describe("decodeScVal - bytes and string", () => {
+  it("decodes bytes as hex", () => {
+    expect(decodeScVal(BYTES_DEAD)).toBe("0xdead");
+  });
+
+  it("decodes a string", () => {
+    expect(decodeScVal(STRING_ABC)).toBe("abc");
+  });
+});
+
+describe("decodeScVal - collections", () => {
+  it("decodes a vec", () => {
+    expect(decodeScVal(VEC_U32)).toEqual([5, 6]);
+  });
+
+  it("decodes a map", () => {
+    expect(decodeScVal(MAP_ONE)).toEqual({ k: 7 });
+  });
+});
+
+describe("decodeScVal - address", () => {
+  it("decodes an account address", () => {
+    expect(decodeScVal(ADDR_ACCOUNT)).toBe("<account:" + ZERO_HEX_32 + ">");
+  });
+
+  it("decodes a contract address", () => {
+    expect(decodeScVal(ADDR_CONTRACT)).toBe("<contract:" + ZERO_HEX_32 + ">");
+  });
+});
