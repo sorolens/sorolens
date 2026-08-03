@@ -65,6 +65,20 @@ function readI128(bytes: Uint8Array, offset: number): [bigint, number] {
   return [val, newOffset];
 }
 
+function readU256(bytes: Uint8Array, offset: number): [bigint, number] {
+  const [hi, off1] = readU128(bytes, offset);
+  const [lo, off2] = readU128(bytes, off1);
+  return [(hi << 128n) | lo, off2];
+}
+
+function readI256(bytes: Uint8Array, offset: number): [bigint, number] {
+  const [val, newOffset] = readU256(bytes, offset);
+  if (val & (1n << 255n)) {
+    return [val - (1n << 256n), newOffset];
+  }
+  return [val, newOffset];
+}
+
 // XDR pads variable-length data to a 4-byte boundary
 function padded(len: number): number {
   return len + ((4 - (len % 4)) % 4);
@@ -95,8 +109,8 @@ function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
     case 1: // SCV_VOID
       return [null, off];
 
-    case 2: // SCV_ERROR
-      return ["<error>", off + 4];
+    case 2: // SCV_ERROR - union ScError { ScErrorType type; uint32 code } = 8 bytes
+      return ["<error>", off + 8];
 
     case 3: // SCV_U32
       return readU32(bytes, off);
@@ -110,24 +124,37 @@ function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
     case 6: // SCV_I64
       return readI64(bytes, off);
 
-    case 7: // SCV_U128
+    case 7: // SCV_TIMEPOINT
+    case 8: // SCV_DURATION
+      return readU64(bytes, off);
+
+    case 9: // SCV_U128
       return readU128(bytes, off);
 
-    case 8: // SCV_I128
+    case 10: // SCV_I128
       return readI128(bytes, off);
 
-    case 10: // SCV_SYMBOL
-    case 12: // SCV_STRING
+    case 11: // SCV_U256
+      return readU256(bytes, off);
+
+    case 12: // SCV_I256
+      return readI256(bytes, off);
+
+    case 13: // SCV_BYTES
+      {
+        const [data, newOff] = readBytes(bytes, off);
+        return ["0x" + bytesToHex(data), newOff];
+      }
+
+    case 14: // SCV_STRING
+    case 15: // SCV_SYMBOL
       return readString(bytes, off);
 
-    case 11: // SCV_BITSET
-      return readU128(bytes, off);
-
-    case 13: // SCV_VEC
-    case 14: // SCV_MAP
+    case 16: // SCV_VEC
+    case 17: // SCV_MAP
       {
         const [len, off1] = readU32(bytes, off);
-        if (discriminant === 13) {
+        if (discriminant === 16) {
           // Vec
           const vec: unknown[] = [];
           let currentOff = off1;
@@ -151,13 +178,7 @@ function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
         }
       }
 
-    case 15: // SCV_BYTES
-      {
-        const [data, newOff] = readBytes(bytes, off);
-        return ["0x" + bytesToHex(data), newOff];
-      }
-
-    case 16: // SCV_ADDRESS
+    case 18: // SCV_ADDRESS
       {
         const addrType = bytes[off];
         const addrBytes = bytes.slice(off + 1, off + 33);
@@ -169,24 +190,20 @@ function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
         return ["<contract:" + bytesToHex(addrBytes) + ">", off + 33];
       }
 
-    case 17: // SCV_CONTRACT_INSTANCE
+    case 19: // SCV_CONTRACT_INSTANCE
       {
         // Skip contract instance for now
         return ["<contract_instance>", bytes.length];
       }
 
-    case 18: // SCV_LEDGER_KEY_CONTRACT_INSTANCE
+    case 20: // SCV_LEDGER_KEY_CONTRACT_INSTANCE
       return ["<ledger_key_instance>", bytes.length];
 
-    case 19: // SCV_LEDGER_KEY_NONCE
+    case 21: // SCV_LEDGER_KEY_NONCE
       {
         const [val, newOff] = readI64(bytes, off);
         return [val, newOff];
       }
-
-    case 20: // SCV_TIME_POINT
-    case 21: // SCV_DURATION
-      return readU64(bytes, off);
 
     default:
       return [`<unknown_type:${discriminant}>`, bytes.length];
@@ -245,7 +262,7 @@ export function decode(base64Str: string): DecodedScVal {
       return { type: "u64", value: value.toString(), human: value.toString() };
     }
 
-    case 10: {
+    case 15: {
       // SCV_SYMBOL
       const [value] = readString(bytes, off);
       return { type: "symbol", value, human: value };

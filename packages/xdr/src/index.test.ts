@@ -31,11 +31,11 @@ describe("decode - bool", () => {
   });
 });
 
-// ScVal symbol: i32 discriminant 10 (SCV_SYMBOL) followed by a length-prefixed,
+// ScVal symbol: i32 discriminant 15 (SCV_SYMBOL) followed by a length-prefixed,
 // 4-byte-padded string.
-const SYMBOL_TRANSFER = "AAAACgAAAAhUcmFuc2Zlcg==";
-const SYMBOL_MINT = "AAAACgAAAARtaW50";
-const SYMBOL_EMPTY = "AAAACgAAAAA=";
+const SYMBOL_TRANSFER = "AAAADwAAAAhUcmFuc2Zlcg==";
+const SYMBOL_MINT = "AAAADwAAAARtaW50";
+const SYMBOL_EMPTY = "AAAADwAAAAA=";
 
 describe("decode - symbol", () => {
   it("decodes a symbol", () => {
@@ -67,6 +67,16 @@ describe("decodeScVal - bool", () => {
   it("decodes bool values to raw booleans", () => {
     expect(decodeScVal(BOOL_TRUE)).toBe(true);
     expect(decodeScVal(BOOL_FALSE)).toBe(false);
+  });
+});
+
+// ScVal error: i32 discriminant 2 (SCV_ERROR) followed by the 8-byte ScError
+// union (ScErrorType type + uint32 code).
+const ERROR_SCVAL = "AAAAAgAAAAAAAAAA";
+
+describe("decodeScVal - error", () => {
+  it("decodes an error ScVal", () => {
+    expect(decodeScVal(ERROR_SCVAL)).toBe("<error>");
   });
 });
 
