@@ -1,0 +1,11 @@
+{
+  "rootDirectory": "apps/api",
+  "functions": {
+    "api/index.go": {
+      "runtime": "vercel-go@3.x"
+    }
+  },
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/index.go" }
+  ]
+}
