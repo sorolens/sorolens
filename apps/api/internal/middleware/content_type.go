@@ -42,7 +42,6 @@ func writeUnsupportedMediaType(w http.ResponseWriter) {
 		"code":  "UNSUPPORTED_MEDIA_TYPE",
 	})
 }
-)
 
 // ContentTypeJSON rejects POST and PUT requests whose Content-Type is not application/json.
 func ContentTypeJSON(next http.Handler) http.Handler {
