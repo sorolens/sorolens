@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"mime"
 	"net/http"
+	"strings"
 )
 
 // RequireJSONContentType returns middleware that rejects POST and PUT
@@ -42,9 +43,6 @@ func writeUnsupportedMediaType(w http.ResponseWriter) {
 		"code":  "UNSUPPORTED_MEDIA_TYPE",
 	})
 }
-	"net/http"
-	"strings"
-)
 
 // ContentTypeJSON rejects POST and PUT requests whose Content-Type is not application/json.
 func ContentTypeJSON(next http.Handler) http.Handler {
