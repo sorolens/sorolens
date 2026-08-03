@@ -84,5 +84,12 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for local setup, branch conventions, co
 ## Code of conduct
 See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 ---
+
+## Contributors
+
+Thanks to everyone who has contributed to Sorolens!
+
+[![Contributors](https://contrib.rocks/image?repo=sorolens/sorolens)](https://github.com/sorolens/sorolens/graphs/contributors)
+
 ## License
 MIT. See [LICENSE](./LICENSE).
