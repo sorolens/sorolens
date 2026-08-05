@@ -90,9 +90,7 @@ See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 Thanks to everyone who has contributed to Sorolens!
 
 [![Contributors](https://contrib.rocks/image?repo=sorolens/sorolens)](https://github.com/sorolens/sorolens/graphs/contributors)
-<a href="https://github.com/sorolens/sorolens/graphs/contributors">
-<img src="https://contrib.rocks/image?repo=sorolens/sorolens" />
-</a>
+
 
 ## License
 MIT. See [LICENSE](./LICENSE).
