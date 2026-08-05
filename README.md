@@ -5,7 +5,7 @@
 Indexed observability for Soroban smart contracts: events, invocations, resource metrics, and storage TTL health in one place.
 ---
 ## The problem
-Soroban's public RPC retains events for 24 hours and transaction data for up to 7 days. There is no persistent index of what your contract did, what it cost, or which storage entries are close to expiring. The Stellar Lab contract explorer is excellent for point-in-time inspection but has no history, no API, and no alerting. Sorolens fills that gap.
+### Soroban's public RPC retains events for 24 hours and transaction data for up to 7 days. There is no persistent index of what your contract did, what it cost, or which storage entries are close to expiring. The Stellar Lab contract explorer is excellent for point-in-time inspection but has no history, no API, and no alerting. Sorolens fills that gap.
 ---
 ## What it does
 - Indexes events, invocations, and storage entries for any tracked Soroban contract into Postgres.
@@ -79,10 +79,10 @@ sorolens/
 ```
 ---
 ## Contributing
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for local setup, branch conventions, commit format, and a full walkthrough of adding a new XDR type decoder.
+### See [CONTRIBUTING.md](./CONTRIBUTING.md) for local setup, branch conventions, commit format, and a full walkthrough of adding a new XDR type decoder.
 ---
 ## Code of conduct
-See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
+### See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 ---
 
 ## Contributors
