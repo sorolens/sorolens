@@ -124,6 +124,13 @@ describe("decode - u32", () => {
   });
 });
 
+describe("decodeScVal - u32", () => {
+  it("decodes u32 values to raw numbers", () => {
+    expect(decodeScVal(U32_ZERO)).toBe(0);
+    expect(decodeScVal(U32_MAX)).toBe(4294967295);
+  });
+});
+
 // ScVal 128/256-bit numerics: i32 discriminant (9=U128, 10=I128, 11=U256, 12=I256)
 // followed by the big-endian value bytes.
 const U128_ONE = "AAAACQAAAAAAAAAAAAAAAAAAAAE=";
