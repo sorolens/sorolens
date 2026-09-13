@@ -117,3 +117,66 @@ export interface TrackContractRequest {
 
 export type TimeWindow = "24h" | "7d" | "30d" | "all";
 
+// ---- watchdog --------------------------------------------------------------
+
+export type HealthStatus = "Healthy" | "Degraded" | "Unresponsive" | string;
+export type AlertSeverity = "Info" | "Warning" | "Critical";
+
+export interface MonitoredContract {
+  contract_id: string;
+  name: string;
+  owner: string;
+  status: HealthStatus;
+  last_check: string | null;
+  check_interval: number;
+  registered_at: string;
+  updated_at: string;
+}
+
+export interface MonitoredContractsResponse {
+  contracts: MonitoredContract[];
+  next_cursor: string;
+}
+
+export interface HealthCheck {
+  contract_id: string;
+  status: HealthStatus;
+  metadata: string;
+  ledger: number;
+  tx_hash: string;
+  timestamp: string;
+}
+
+export interface HealthChecksResponse {
+  health_checks: HealthCheck[];
+}
+
+export interface ContractAlert {
+  contract_id: string;
+  severity: AlertSeverity;
+  message: string;
+  ledger: number;
+  tx_hash: string;
+  timestamp: string;
+}
+
+export interface AlertsResponse {
+  alerts: ContractAlert[];
+}
+
+export interface WatchdogStats {
+  total_monitored: number;
+  healthy: number;
+  degraded: number;
+  unresponsive: number;
+  total_alerts: number;
+  critical_alerts: number;
+}
+
+export interface GlobalStats {
+  tracked_contracts: number;
+  total_events: number;
+  total_invocations: number;
+  total_storage_entries: number;
+}
+

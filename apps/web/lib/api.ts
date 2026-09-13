@@ -1,13 +1,19 @@
 import type {
+  AlertsResponse,
   ContractDetail,
   ContractSummary,
   ContractsListResponse,
   EventsResponse,
+  GlobalStats,
+  HealthChecksResponse,
   InvocationsResponse,
+  MonitoredContract,
+  MonitoredContractsResponse,
   StatsResponse,
   StorageResponse,
   TimeWindow,
   TrackContractRequest,
+  WatchdogStats,
 } from "./types";
 
 
@@ -151,4 +157,59 @@ export function getContractStats(
   return fetchJson<StatsResponse>(
     `${API_URL}/api/v1/contracts/${id}/stats?window=${window}`,
   );
+}
+
+// ---- global stats ----------------------------------------------------------
+
+export function getGlobalStats(): Promise<GlobalStats> {
+  return fetchJson<GlobalStats>(`${API_URL}/api/v1/stats/global`);
+}
+
+// ---- watchdog --------------------------------------------------------------
+
+export function getWatchdogStats(): Promise<WatchdogStats> {
+  return fetchJson<WatchdogStats>(`${API_URL}/api/v1/watchdog/stats`);
+}
+
+export function listMonitoredContracts(
+  params?: { cursor?: string; limit?: number },
+): Promise<MonitoredContractsResponse> {
+  const search = new URLSearchParams();
+  if (params?.cursor) search.set("cursor", params.cursor);
+  if (params?.limit) search.set("limit", String(params.limit));
+  const qs = search.toString();
+  return fetchJson<MonitoredContractsResponse>(
+    `${API_URL}/api/v1/watchdog/contracts${qs ? "?" + qs : ""}`,
+  );
+}
+
+export function getMonitoredContract(
+  contractId: string,
+): Promise<MonitoredContract> {
+  return fetchJson<MonitoredContract>(
+    `${API_URL}/api/v1/watchdog/contracts/${contractId}`,
+  );
+}
+
+export function listHealthChecks(
+  contractId: string,
+  limit = 100,
+): Promise<HealthChecksResponse> {
+  return fetchJson<HealthChecksResponse>(
+    `${API_URL}/api/v1/watchdog/contracts/${contractId}/health?limit=${limit}`,
+  );
+}
+
+export function listAlerts(
+  contractId?: string,
+  params?: { severity?: string; limit?: number },
+): Promise<AlertsResponse> {
+  const search = new URLSearchParams();
+  if (params?.severity) search.set("severity", params.severity);
+  if (params?.limit) search.set("limit", String(params.limit));
+  const qs = search.toString();
+  const path = contractId
+    ? `/api/v1/watchdog/contracts/${contractId}/alerts`
+    : `/api/v1/watchdog/alerts`;
+  return fetchJson<AlertsResponse>(`${API_URL}${path}${qs ? "?" + qs : ""}`);
 }

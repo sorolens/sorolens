@@ -363,8 +363,8 @@ export default function ContractsPage() {
   });
 
   const sorted = [...filtered].sort((a, b) => {
-    const av = (a as Record<string, unknown>)[sortColumn];
-    const bv = (b as Record<string, unknown>)[sortColumn];
+    const av = (a as unknown as Record<string, unknown>)[sortColumn];
+    const bv = (b as unknown as Record<string, unknown>)[sortColumn];
     const cmp = String(av ?? "").localeCompare(String(bv ?? ""));
     return sortDirection === "asc" ? cmp : -cmp;
   });

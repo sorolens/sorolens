@@ -1,0 +1,566 @@
+#![no_std]
+
+//! Sorolens Watchdog contract.
+//!
+//! On-chain health tracking for other Soroban contracts. Contract owners
+//! register a contract they operate, then periodically push health status
+//! updates or alerts. The Sorolens indexer subscribes to the events emitted
+//! here and materialises them into the dashboard.
+
+use soroban_sdk::{
+    contract, contractevent, contractimpl, contracttype, symbol_short, Address, Env, String,
+    Symbol, Vec,
+};
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum HealthStatus {
+    Healthy,
+    Degraded,
+    Unresponsive,
+    Custom(String),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AlertSeverity {
+    Info,
+    Warning,
+    Critical,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractHealth {
+    pub contract_id: Address,
+    pub name: Symbol,
+    pub owner: Address,
+    pub status: HealthStatus,
+    pub last_check: u64,
+    pub check_interval: u64,
+    pub registered_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Alert {
+    pub contract_id: Address,
+    pub severity: AlertSeverity,
+    pub message: String,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone)]
+enum DataKey {
+    Admin,
+    Registry,               // Vec<Address> — list of monitored contract ids
+    Health(Address),        // ContractHealth by contract id
+    Alerts(Address),        // Vec<Alert> by contract id
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractRegistered {
+    #[topic]
+    pub contract_id: Address,
+    pub name: Symbol,
+    pub owner: Address,
+    pub timestamp: u64,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractDeregistered {
+    #[topic]
+    pub contract_id: Address,
+    pub timestamp: u64,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HealthCheckEvent {
+    #[topic]
+    pub contract_id: Address,
+    pub status: HealthStatus,
+    pub timestamp: u64,
+    pub metadata: String,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractAlert {
+    #[topic]
+    pub contract_id: Address,
+    #[topic]
+    pub severity: AlertSeverity,
+    pub message: String,
+    pub timestamp: u64,
+}
+
+// ---------------------------------------------------------------------------
+// Contract
+// ---------------------------------------------------------------------------
+
+#[contract]
+pub struct WatchdogContract;
+
+const MAX_ALERTS_PER_CONTRACT: u32 = 100;
+
+#[contractimpl]
+impl WatchdogContract {
+    /// Initialise the watchdog with a single administrator. Must be called
+    /// exactly once immediately after deployment.
+    pub fn initialize(env: Env, admin: Address) {
+        if env.storage().instance().has(&DataKey::Admin) {
+            panic!("already initialized");
+        }
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Registry, &Vec::<Address>::new(&env));
+    }
+
+    /// Register a contract for monitoring. Only the admin, or the account
+    /// that will own the record, can register it.
+    pub fn register_contract(
+        env: Env,
+        caller: Address,
+        contract_id: Address,
+        name: Symbol,
+        check_interval: u64,
+    ) {
+        caller.require_auth();
+        Self::require_admin_or(&env, &caller);
+
+        let health_key = DataKey::Health(contract_id.clone());
+        if env.storage().persistent().has(&health_key) {
+            panic!("contract already registered");
+        }
+
+        let now = env.ledger().timestamp();
+        let record = ContractHealth {
+            contract_id: contract_id.clone(),
+            name: name.clone(),
+            owner: caller.clone(),
+            status: HealthStatus::Healthy,
+            last_check: now,
+            check_interval,
+            registered_at: now,
+        };
+        env.storage().persistent().set(&health_key, &record);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Alerts(contract_id.clone()), &Vec::<Alert>::new(&env));
+
+        let mut registry: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Registry)
+            .unwrap_or_else(|| Vec::new(&env));
+        registry.push_back(contract_id.clone());
+        env.storage().instance().set(&DataKey::Registry, &registry);
+
+        ContractRegistered {
+            contract_id,
+            name,
+            owner: caller,
+            timestamp: now,
+        }
+        .publish(&env);
+    }
+
+    /// Deregister a contract. Only the owner (recorded at registration) or
+    /// the admin can deregister.
+    pub fn deregister_contract(env: Env, caller: Address, contract_id: Address) {
+        caller.require_auth();
+
+        let health_key = DataKey::Health(contract_id.clone());
+        let record: ContractHealth = env
+            .storage()
+            .persistent()
+            .get(&health_key)
+            .unwrap_or_else(|| panic!("contract not registered"));
+
+        if caller != record.owner {
+            Self::require_admin_only(&env, &caller);
+        }
+
+        env.storage().persistent().remove(&health_key);
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Alerts(contract_id.clone()));
+
+        let registry: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Registry)
+            .unwrap_or_else(|| Vec::new(&env));
+        let mut updated: Vec<Address> = Vec::new(&env);
+        for entry in registry.iter() {
+            if entry != contract_id {
+                updated.push_back(entry);
+            }
+        }
+        env.storage().instance().set(&DataKey::Registry, &updated);
+
+        ContractDeregistered {
+            contract_id,
+            timestamp: env.ledger().timestamp(),
+        }
+        .publish(&env);
+    }
+
+    /// Push a new health status for a monitored contract. Only the recorded
+    /// owner or the admin may push status updates for that contract.
+    pub fn report_status(
+        env: Env,
+        caller: Address,
+        contract_id: Address,
+        status: HealthStatus,
+        metadata: String,
+    ) {
+        caller.require_auth();
+
+        let health_key = DataKey::Health(contract_id.clone());
+        let mut record: ContractHealth = env
+            .storage()
+            .persistent()
+            .get(&health_key)
+            .unwrap_or_else(|| panic!("contract not registered"));
+
+        if caller != record.owner {
+            Self::require_admin_only(&env, &caller);
+        }
+
+        let now = env.ledger().timestamp();
+        record.status = status.clone();
+        record.last_check = now;
+        env.storage().persistent().set(&health_key, &record);
+
+        HealthCheckEvent {
+            contract_id,
+            status,
+            timestamp: now,
+            metadata,
+        }
+        .publish(&env);
+    }
+
+    /// Emit an alert against a monitored contract. Auth model matches
+    /// `report_status`.
+    pub fn report_alert(
+        env: Env,
+        caller: Address,
+        contract_id: Address,
+        severity: AlertSeverity,
+        message: String,
+    ) {
+        caller.require_auth();
+
+        let health_key = DataKey::Health(contract_id.clone());
+        let record: ContractHealth = env
+            .storage()
+            .persistent()
+            .get(&health_key)
+            .unwrap_or_else(|| panic!("contract not registered"));
+
+        if caller != record.owner {
+            Self::require_admin_only(&env, &caller);
+        }
+
+        let now = env.ledger().timestamp();
+        let alert = Alert {
+            contract_id: contract_id.clone(),
+            severity: severity.clone(),
+            message: message.clone(),
+            timestamp: now,
+        };
+
+        let alerts_key = DataKey::Alerts(contract_id.clone());
+        let mut alerts: Vec<Alert> = env
+            .storage()
+            .persistent()
+            .get(&alerts_key)
+            .unwrap_or_else(|| Vec::new(&env));
+        alerts.push_back(alert);
+        while alerts.len() > MAX_ALERTS_PER_CONTRACT {
+            alerts.pop_front();
+        }
+        env.storage().persistent().set(&alerts_key, &alerts);
+
+        ContractAlert {
+            contract_id,
+            severity,
+            message,
+            timestamp: now,
+        }
+        .publish(&env);
+    }
+
+    // ---- read-only queries -------------------------------------------------
+
+    pub fn get_status(env: Env, contract_id: Address) -> ContractHealth {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Health(contract_id))
+            .unwrap_or_else(|| panic!("contract not registered"))
+    }
+
+    pub fn get_all_monitored(env: Env) -> Vec<ContractHealth> {
+        let registry: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Registry)
+            .unwrap_or_else(|| Vec::new(&env));
+        let mut out: Vec<ContractHealth> = Vec::new(&env);
+        for id in registry.iter() {
+            if let Some(record) = env.storage().persistent().get(&DataKey::Health(id)) {
+                out.push_back(record);
+            }
+        }
+        out
+    }
+
+    pub fn get_alerts(env: Env, contract_id: Address) -> Vec<Alert> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Alerts(contract_id))
+            .unwrap_or_else(|| Vec::new(&env))
+    }
+
+    pub fn get_monitored_count(env: Env) -> u32 {
+        let registry: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Registry)
+            .unwrap_or_else(|| Vec::new(&env));
+        registry.len()
+    }
+
+    pub fn admin(env: Env) -> Address {
+        env.storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic!("not initialized"))
+    }
+
+    // ---- helpers -----------------------------------------------------------
+
+    fn require_admin_or(env: &Env, caller: &Address) {
+        // Any authenticated caller can self-register a contract they own;
+        // this hook exists so that in future we can gate registration
+        // behind admin-only enrolment without touching call sites.
+        let _ = env
+            .storage()
+            .instance()
+            .get::<_, Address>(&DataKey::Admin)
+            .unwrap_or_else(|| panic!("not initialized"));
+        let _ = caller;
+    }
+
+    fn require_admin_only(env: &Env, caller: &Address) {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic!("not initialized"));
+        if caller != &admin {
+            panic!("only admin or owner may perform this action");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use soroban_sdk::{
+        symbol_short,
+        testutils::{Address as _, Ledger},
+        Env, String as SString,
+    };
+
+    fn setup(env: &Env) -> (Address, WatchdogContractClient<'_>) {
+        let contract_id = env.register(WatchdogContract {}, ());
+        let client = WatchdogContractClient::new(env, &contract_id);
+        let admin = Address::generate(env);
+        env.mock_all_auths();
+        client.initialize(&admin);
+        (admin, client)
+    }
+
+    fn set_timestamp(env: &Env, ts: u64) {
+        env.ledger().with_mut(|li| {
+            li.timestamp = ts;
+        });
+    }
+
+    #[test]
+    fn initialize_stores_admin_and_empty_registry() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        assert_eq!(client.admin(), admin);
+        assert_eq!(client.get_monitored_count(), 0);
+        assert_eq!(client.get_all_monitored().len(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "already initialized")]
+    fn initialize_twice_panics() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let other = Address::generate(&env);
+        client.initialize(&other);
+    }
+
+    #[test]
+    fn register_and_query_flow() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+
+        client.register_contract(&owner, &monitored, &symbol_short!("app_v1"), &300u64);
+
+        assert_eq!(client.get_monitored_count(), 1);
+        let record = client.get_status(&monitored);
+        assert_eq!(record.contract_id, monitored);
+        assert_eq!(record.owner, owner);
+        assert_eq!(record.name, symbol_short!("app_v1"));
+        assert_eq!(record.status, HealthStatus::Healthy);
+        assert_eq!(record.check_interval, 300);
+        assert_eq!(record.registered_at, 1_700_000_000);
+    }
+
+    #[test]
+    #[should_panic(expected = "contract already registered")]
+    fn duplicate_registration_panics() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("app"), &60u64);
+        client.register_contract(&owner, &monitored, &symbol_short!("app"), &60u64);
+    }
+
+    #[test]
+    fn report_status_updates_record_and_emits_event() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        set_timestamp(&env, 1_700_000_500);
+        let metadata = SString::from_str(&env, "cpu=42");
+        client.report_status(&owner, &monitored, &HealthStatus::Degraded, &metadata);
+
+        let record = client.get_status(&monitored);
+        assert_eq!(record.status, HealthStatus::Degraded);
+        assert_eq!(record.last_check, 1_700_000_500);
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner")]
+    fn non_owner_cannot_report_status() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let stranger = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        let metadata = SString::from_str(&env, "x");
+        client.report_status(&stranger, &monitored, &HealthStatus::Unresponsive, &metadata);
+    }
+
+    #[test]
+    fn admin_can_report_status_for_any_contract() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        let metadata = SString::from_str(&env, "admin override");
+        client.report_status(&admin, &monitored, &HealthStatus::Unresponsive, &metadata);
+        assert_eq!(client.get_status(&monitored).status, HealthStatus::Unresponsive);
+    }
+
+    #[test]
+    fn report_alert_appends_and_returns_history() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        let msg1 = SString::from_str(&env, "queue backing up");
+        let msg2 = SString::from_str(&env, "queue drained");
+        client.report_alert(&owner, &monitored, &AlertSeverity::Warning, &msg1);
+        set_timestamp(&env, 1_700_000_120);
+        client.report_alert(&owner, &monitored, &AlertSeverity::Info, &msg2);
+
+        let alerts = client.get_alerts(&monitored);
+        assert_eq!(alerts.len(), 2);
+        assert_eq!(alerts.get(0).unwrap().severity, AlertSeverity::Warning);
+        assert_eq!(alerts.get(1).unwrap().severity, AlertSeverity::Info);
+    }
+
+    #[test]
+    fn deregister_removes_from_registry_and_state() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let a = Address::generate(&env);
+        let b = Address::generate(&env);
+        client.register_contract(&owner, &a, &symbol_short!("a"), &60u64);
+        client.register_contract(&owner, &b, &symbol_short!("b"), &60u64);
+
+        client.deregister_contract(&owner, &a);
+        assert_eq!(client.get_monitored_count(), 1);
+        let remaining = client.get_all_monitored();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining.get(0).unwrap().contract_id, b);
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner")]
+    fn stranger_cannot_deregister() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let stranger = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("s"), &60u64);
+        client.deregister_contract(&stranger, &monitored);
+    }
+
+    #[test]
+    fn get_all_monitored_returns_every_registered_contract() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        for i in 0u32..5u32 {
+            let id = Address::generate(&env);
+            let name = if i % 2 == 0 { symbol_short!("even") } else { symbol_short!("odd") };
+            client.register_contract(&owner, &id, &name, &60u64);
+        }
+        assert_eq!(client.get_all_monitored().len(), 5);
+        assert_eq!(client.get_monitored_count(), 5);
+    }
+}

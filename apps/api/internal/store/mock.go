@@ -14,6 +14,9 @@ type MockStore struct {
 	storageEntries []StorageEntry
 	syncStates     map[string]SyncState
 	globalStats    GlobalStats
+	monitored      map[string]MonitoredContract
+	healthChecks   []HealthCheck
+	alerts         []ContractAlert
 
 	// Error injection
 	UpsertContractErr   error
@@ -32,6 +35,7 @@ func NewMockStore() *MockStore {
 	return &MockStore{
 		contracts:  make(map[string]Contract),
 		syncStates: make(map[string]SyncState),
+		monitored:  make(map[string]MonitoredContract),
 	}
 }
 
