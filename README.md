@@ -8,11 +8,11 @@ Real-time monitoring, alerting, and on-chain health checks for Soroban smart con
 Soroban's public RPC retains events for 24 hours and transaction data for up to 7 days. There is no persistent index of what your contract did, what it cost, or which storage entries are close to expiring. The Stellar Lab contract explorer is excellent for point-in-time inspection but has no history, no API, and no way to know when a contract you depend on is unhealthy. Sorolens fills that gap.
 ---
 ## What it does
-- **Contract event indexing** — every event your contract emits, with decoded topics and values, indexed into Postgres and queryable via REST.
-- **Invocation tracing** — per-transaction CPU instructions, memory, ledger I/O bytes, and fees charged.
-- **Storage tracking** — snapshot of every temporary, persistent, and instance storage entry, with TTL health.
-- **Watchdog monitoring** *(new)* — the on-chain `sorolens-watchdog` Soroban contract lets any contract owner register a contract, push health status, and raise alerts. Sorolens indexes those events and materialises them into a dashboard, giving you the only proactive-monitoring path on Stellar without a centralised heartbeat service.
-- **Alerting** — when persistent storage entries are within a configurable number of ledgers of expiry, or when a monitored contract goes `Unresponsive`.
+- **Contract event indexing**: every event your contract emits, with decoded topics and values, indexed into Postgres and queryable via REST.
+- **Invocation tracing**: per-transaction CPU instructions, memory, ledger I/O bytes, and fees charged.
+- **Storage tracking**: snapshot of every temporary, persistent, and instance storage entry, with TTL health.
+- **Watchdog monitoring** *(new)*: the on-chain `sorolens-watchdog` Soroban contract lets any contract owner register a contract, push health status, and raise alerts. Sorolens indexes those events and materialises them into a dashboard, giving you the only proactive-monitoring path on Stellar without a centralised heartbeat service.
+- **Alerting**: when persistent storage entries are within a configurable number of ledgers of expiry, or when a monitored contract goes `Unresponsive`.
 
 ## Quickstart
 ### Prerequisites
@@ -94,7 +94,7 @@ Admin: `GAZ3HN2QNDKWLOI2OQEG65KBJEAUP4PROR3FJNXNDY34UH547MN4CJUI`
 | XDR decoder | TypeScript package (`packages/xdr`), wraps `@stellar/stellar-sdk` |
 | CLI | Go 1.23, cobra |
 | Fixture contract | Rust (stable), Soroban SDK, deployed to Stellar testnet |
-| Watchdog contract | Rust (stable), Soroban SDK — on-chain health tracking (`contracts/watchdog`) |
+| Watchdog contract | Rust (stable), Soroban SDK, on-chain health tracking (`contracts/watchdog`) |
 ---
 ## Monorepo layout
 ```
@@ -119,10 +119,10 @@ sorolens/
 
 | Layer | Location |
 |---|---|
-| On-chain contract | `contracts/watchdog/src/lib.rs` — `register_contract`, `report_status`, `report_alert`, `get_all_monitored`, … |
+| On-chain contract | `contracts/watchdog/src/lib.rs` (`register_contract`, `report_status`, `report_alert`, `get_all_monitored`, ...) |
 | Deploy script | `contracts/watchdog/scripts/deploy-testnet.sh` |
 | Event classifier | `services/indexer/internal/watchdog/classifier.go` |
-| Postgres schema | `apps/api/internal/db/migrations/000002_watchdog.up.sql` — `monitored_contracts`, `health_checks`, `contract_alerts` |
+| Postgres schema | `apps/api/internal/db/migrations/000002_watchdog.up.sql` (`monitored_contracts`, `health_checks`, `contract_alerts`) |
 | Store methods | `apps/api/internal/store/watchdog.go` |
 | REST endpoints | `GET /api/v1/watchdog/{stats,contracts,alerts,contracts/{id}/{health,alerts}}` |
 | Dashboard pages | `apps/web/app/(app)/watchdog/*` |

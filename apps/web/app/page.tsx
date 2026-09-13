@@ -5,7 +5,7 @@ const features = [
   {
     title: "Contract Event Indexing",
     body:
-      "Every event your contract emits — decoded topics, decoded values, ledger and transaction context — indexed into Postgres and queryable via REST or the dashboard.",
+      "Every event your contract emits (decoded topics, decoded values, ledger and transaction context) indexed into Postgres and queryable via REST or the dashboard.",
   },
   {
     title: "Storage Tracking",
@@ -15,7 +15,7 @@ const features = [
   {
     title: "Invocation Tracing",
     body:
-      "Per-transaction CPU instructions, memory, ledger I/O bytes, and fee charged — the numbers you need to catch a regression before mainnet.",
+      "Per-transaction CPU instructions, memory, ledger I/O bytes, and fee charged: the numbers you need to catch a regression before mainnet.",
   },
   {
     title: "Watchdog Monitoring",
@@ -36,7 +36,7 @@ const steps = [
     n: "2",
     title: "Watch it live",
     body:
-      "Events, invocations, and storage state land in the dashboard as the indexer pulls them from RPC — with a REST API in front for CI, alerts, or your own tooling.",
+      "Events, invocations, and storage state land in the dashboard as the indexer pulls them from RPC, with a REST API in front for CI, alerts, or your own tooling.",
   },
   {
     n: "3",
@@ -52,7 +52,10 @@ export default function HomePage() {
       {/* Top nav */}
       <nav className="border-b border-[var(--color-border)]">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <span className="text-xl font-bold tracking-tight">Sorolens</span>
+          <Link href="/" className="flex items-center gap-2 text-xl font-bold tracking-tight">
+            <img src="/logo.svg" alt="" className="h-7 w-7" aria-hidden />
+            Sorolens
+          </Link>
           <div className="flex items-center gap-4 text-sm">
             <Link
               href="/contracts"
@@ -83,7 +86,7 @@ export default function HomePage() {
           <p className="mb-8 text-lg text-[var(--color-text-secondary)]">
             The only Stellar observability tool with a deployed Soroban{" "}
             <em>watchdog</em> contract for proactive contract monitoring. Events,
-            invocations, storage TTLs, and health status — indexed, queryable,
+            invocations, storage TTLs, and health status: indexed, queryable,
             and alertable.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
@@ -158,7 +161,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t border-[var(--color-border)]">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm text-[var(--color-text-secondary)] sm:px-6 lg:px-8">
-          <span>MIT licensed — built for the Stellar developer community</span>
+          <span>MIT licensed. Built for the Stellar developer community.</span>
           <div className="flex flex-wrap gap-4">
             <a href="https://github.com/sorolens/sorolens" rel="noopener noreferrer">
               Monorepo

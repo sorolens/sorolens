@@ -104,7 +104,7 @@ func TestProjectHealthFallsBackToLedgerCloseTime(t *testing.T) {
 }
 
 func TestProjectAlertReadsSeverityFromTopicOrValue(t *testing.T) {
-	// Topic form (as emitted by the contract — severity is #[topic]).
+	// Topic form (as emitted by the contract; severity is #[topic]).
 	e := RawEvent{
 		Topics: []string{TopicContractAlert, "CABC", "Critical"},
 		Value:  map[string]any{"message": "queue backing up"},

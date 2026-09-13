@@ -5,8 +5,8 @@
 //
 // # Data model
 //
-// The Store manages five tables — contracts, events, invocations,
-// storage_entries, and sync_state — that together form the indexed
+// The Store manages five tables (contracts, events, invocations,
+// storage_entries, and sync_state) that together form the indexed
 // observability backend for Sorolens. Contracts are tracked by network and
 // status; events carry decoded XDR values; invocations include per-call
 // resource metrics (CPU, memory, ledger I/O, fees); storage entries track

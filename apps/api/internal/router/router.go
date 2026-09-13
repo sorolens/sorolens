@@ -44,7 +44,7 @@ func New(h *handler.Handler) http.Handler {
 			r.Get("/stream", h.StreamEvents)
 		})
 
-		// Watchdog — data from the on-chain sorolens-watchdog contract.
+		// Watchdog: data from the on-chain sorolens-watchdog contract.
 		r.Route("/watchdog", func(r chi.Router) {
 			r.Get("/stats", h.WatchdogStats)
 			r.Get("/alerts", h.ListWatchdogAlerts)

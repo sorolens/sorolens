@@ -4,7 +4,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <Link href="/" className="text-2xl font-bold tracking-tight">
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-2xl font-bold tracking-tight"
+        >
+          <img src="/logo.svg" alt="" className="h-8 w-8" aria-hidden />
           Sorolens
         </Link>
         <nav className="flex gap-4 text-sm">

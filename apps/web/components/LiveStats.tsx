@@ -43,19 +43,19 @@ export function LiveStats({ className }: Props) {
   const items: Array<{ label: string; value: string | number }> = [
     {
       label: "Contracts indexed",
-      value: data.global ? formatNum(data.global.tracked_contracts) : "—",
+      value: data.global ? formatNum(data.global.tracked_contracts) : "--",
     },
     {
       label: "Events tracked",
-      value: data.global ? formatNum(data.global.total_events) : "—",
+      value: data.global ? formatNum(data.global.total_events) : "--",
     },
     {
       label: "Invocations traced",
-      value: data.global ? formatNum(data.global.total_invocations) : "—",
+      value: data.global ? formatNum(data.global.total_invocations) : "--",
     },
     {
       label: "Contracts monitored",
-      value: data.watchdog ? formatNum(data.watchdog.total_monitored) : "—",
+      value: data.watchdog ? formatNum(data.watchdog.total_monitored) : "--",
     },
   ];
 
@@ -76,7 +76,7 @@ export function LiveStats({ className }: Props) {
       </div>
       {error && (
         <p className="mt-2 text-center text-xs text-[var(--color-text-secondary)]">
-          Live stats unavailable — start the API to see them here.
+          Live stats unavailable. Start the API to see them here.
         </p>
       )}
     </div>

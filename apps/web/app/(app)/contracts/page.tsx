@@ -233,7 +233,7 @@ const COLUMNS: Column<ContractSummary>[] = [
       c.label ? (
         <span className="text-[var(--color-text-primary)]">{c.label}</span>
       ) : (
-        <span className="text-[var(--color-text-secondary)]">—</span>
+        <span className="text-[var(--color-text-secondary)]">--</span>
       ),
   },
   {
@@ -274,7 +274,7 @@ export default function ContractsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Pagination state — stack of cursors, index 0 = first page
+  // Pagination state: stack of cursors, index 0 = first page
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const [cursorIndex, setCursorIndex] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -373,7 +373,7 @@ export default function ContractsPage() {
   const isLastPage = !hasMore;
 
   // ---------------------------------------------------------------------------
-  // Track success — refresh first page
+  // Track success: refresh first page
   // ---------------------------------------------------------------------------
 
   const handleTrackSuccess = () => {

@@ -8,7 +8,7 @@
 // The public SDF RPC endpoints retain events for approximately 24 hours
 // and transaction data for up to 7 days (about 100,000 ledgers at 5-6
 // seconds per ledger). Because of this 7-day retention window, a newly
-// tracked contract cannot backfill its full history — the earliest
+// tracked contract cannot backfill its full history; the earliest
 // queryable startLedger is max(latestLedger - 100_000, 1). Passing a
 // startLedger below the oldestLedger returned by the RPC will result in
 // an error.

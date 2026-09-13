@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// FullStore combines Store, QueryStore, and WatchdogStore — all three
+// FullStore combines Store, QueryStore, and WatchdogStore: all three
 // implemented by the postgres backend and the in-memory MockStore.
 type FullStore interface {
 	Store

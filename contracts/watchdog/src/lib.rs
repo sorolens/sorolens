@@ -58,7 +58,7 @@ pub struct Alert {
 #[derive(Clone)]
 enum DataKey {
     Admin,
-    Registry,               // Vec<Address> — list of monitored contract ids
+    Registry,               // Vec<Address>: list of monitored contract ids
     Health(Address),        // ContractHealth by contract id
     Alerts(Address),        // Vec<Alert> by contract id
 }
