@@ -25,3 +25,4 @@ sorolens-bin
 
 # Misc
 .DS_Store
+.env
