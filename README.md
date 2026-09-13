@@ -72,6 +72,17 @@ The **watchdog contract** at `contracts/watchdog/` is the piece that makes Sorol
 
 > See `ARCHITECTURE.md` for the full system diagram, data flows, schema DDL, and REST API reference.
 ---
+## Deployed contracts
+
+### Testnet
+
+| Contract | ID | Explorer |
+|----------|----|----------|
+| Watchdog | `CACXRL67WL5KRD6HKWGYADHEUF6RQOCODUN26UQE7MGFZEMIR7PAX6R7` | [Stellar Expert](https://stellar.expert/explorer/testnet/contract/CACXRL67WL5KRD6HKWGYADHEUF6RQOCODUN26UQE7MGFZEMIR7PAX6R7) |
+
+Admin: `GAZ3HN2QNDKWLOI2OQEG65KBJEAUP4PROR3FJNXNDY34UH547MN4CJUI`
+
+---
 ## Tech stack
 | Layer | Technology |
 |---|---|
