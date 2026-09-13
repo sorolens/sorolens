@@ -15,23 +15,16 @@ interface Combined {
 
 export function LiveStats({ className }: Props) {
   const [data, setData] = useState<Combined>({ global: null, watchdog: null });
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      try {
-        const [g, w] = await Promise.all([
-          getGlobalStats().catch(() => null),
-          getWatchdogStats().catch(() => null),
-        ]);
-        if (!cancelled) {
-          setData({ global: g, watchdog: w });
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "failed to load stats");
-        }
+      const [g, w] = await Promise.all([
+        getGlobalStats().catch(() => null),
+        getWatchdogStats().catch(() => null),
+      ]);
+      if (!cancelled) {
+        setData({ global: g, watchdog: w });
       }
     }
     load();
@@ -43,19 +36,19 @@ export function LiveStats({ className }: Props) {
   const items: Array<{ label: string; value: string | number }> = [
     {
       label: "Contracts indexed",
-      value: data.global ? formatNum(data.global.tracked_contracts) : "--",
+      value: formatNum(data.global?.tracked_contracts ?? 0),
     },
     {
       label: "Events tracked",
-      value: data.global ? formatNum(data.global.total_events) : "--",
+      value: formatNum(data.global?.total_events ?? 0),
     },
     {
       label: "Invocations traced",
-      value: data.global ? formatNum(data.global.total_invocations) : "--",
+      value: formatNum(data.global?.total_invocations ?? 0),
     },
     {
       label: "Contracts monitored",
-      value: data.watchdog ? formatNum(data.watchdog.total_monitored) : "--",
+      value: formatNum(data.watchdog?.total_monitored ?? 0),
     },
   ];
 
@@ -74,11 +67,6 @@ export function LiveStats({ className }: Props) {
           </div>
         ))}
       </div>
-      {error && (
-        <p className="mt-2 text-center text-xs text-[var(--color-text-secondary)]">
-          Live stats unavailable. Start the API to see them here.
-        </p>
-      )}
     </div>
   );
 }

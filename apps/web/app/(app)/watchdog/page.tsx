@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
-  ApiError,
   getWatchdogStats,
   listMonitoredContracts,
   listAlerts,
@@ -14,38 +13,35 @@ import type {
   WatchdogStats,
 } from "@/lib/types";
 import { StatCard } from "@/components/StatCard";
-import { CardSkeleton, TableSkeleton } from "@/components/Skeleton";
+import { TableSkeleton } from "@/components/Skeleton";
 import { HealthBadge, SeverityBadge } from "@/components/WatchdogBadges";
 
+const ZERO_STATS: WatchdogStats = {
+  total_monitored: 0,
+  healthy: 0,
+  degraded: 0,
+  unresponsive: 0,
+  total_alerts: 0,
+  critical_alerts: 0,
+};
+
 export default function WatchdogPage() {
-  const [stats, setStats] = useState<WatchdogStats | null>(null);
+  const [stats, setStats] = useState<WatchdogStats>(ZERO_STATS);
   const [contracts, setContracts] = useState<MonitoredContract[] | null>(null);
   const [alerts, setAlerts] = useState<ContractAlert[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      try {
-        const [s, c, a] = await Promise.all([
-          getWatchdogStats(),
-          listMonitoredContracts({ limit: 50 }),
-          listAlerts(undefined, { limit: 20 }),
-        ]);
-        if (cancelled) return;
-        setStats(s);
-        setContracts(c.contracts);
-        setAlerts(a.alerts);
-      } catch (e) {
-        if (cancelled) return;
-        setError(
-          e instanceof ApiError
-            ? `API error: ${e.message}`
-            : e instanceof Error
-              ? e.message
-              : "unknown error",
-        );
-      }
+      const [s, c, a] = await Promise.all([
+        getWatchdogStats().catch(() => ZERO_STATS),
+        listMonitoredContracts({ limit: 50 }).catch(() => ({ contracts: [], next_cursor: "" })),
+        listAlerts(undefined, { limit: 20 }).catch(() => ({ alerts: [] })),
+      ]);
+      if (cancelled) return;
+      setStats(s);
+      setContracts(c.contracts ?? []);
+      setAlerts(a.alerts ?? []);
     }
     load();
     return () => {
@@ -68,36 +64,17 @@ export default function WatchdogPage() {
         </p>
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-bg-card)] p-4 text-sm">
-          <span className="font-semibold text-[var(--color-danger)]">
-            Could not load watchdog data.
-          </span>{" "}
-          <span className="text-[var(--color-text-secondary)]">{error}</span>
-        </div>
-      )}
-
-      {/* Summary cards */}
+      {/* Summary cards: always render values, defaulting to 0 when the
+          backend has nothing to report yet. */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {stats ? (
-          <>
-            <StatCard label="Monitored" value={stats.total_monitored} />
-            <StatCard label="Healthy" value={stats.healthy} tone="safe" />
-            <StatCard label="Degraded" value={stats.degraded} tone="warning" />
-            <StatCard
-              label="Critical alerts"
-              value={stats.critical_alerts}
-              tone="danger"
-            />
-          </>
-        ) : (
-          <>
-            <CardSkeleton />
-            <CardSkeleton />
-            <CardSkeleton />
-            <CardSkeleton />
-          </>
-        )}
+        <StatCard label="Monitored" value={stats.total_monitored} />
+        <StatCard label="Healthy" value={stats.healthy} tone="safe" />
+        <StatCard label="Degraded" value={stats.degraded} tone="warning" />
+        <StatCard
+          label="Critical alerts"
+          value={stats.critical_alerts}
+          tone="danger"
+        />
       </div>
 
       {/* Monitored contracts */}
@@ -109,8 +86,8 @@ export default function WatchdogPage() {
           <TableSkeleton />
         ) : contracts.length === 0 ? (
           <EmptyState
-            title="No contracts registered yet"
-            body="Register one on the on-chain watchdog contract and it will appear here on the indexer's next tick."
+            title="No monitored contracts yet"
+            body="Register a contract with the on-chain watchdog to get started. It will appear here on the indexer's next tick."
           />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">

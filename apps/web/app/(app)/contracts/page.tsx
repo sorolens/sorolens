@@ -272,7 +272,6 @@ export default function ContractsPage() {
   // Data state
   const [contracts, setContracts] = useState<ContractSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Pagination state: stack of cursors, index 0 = first page
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
@@ -295,7 +294,6 @@ export default function ContractsPage() {
 
   const load = useCallback(async (cursor: string | null) => {
     setLoading(true);
-    setError(null);
     try {
       const data = await listContracts({
         cursor: cursor ?? undefined,
@@ -303,13 +301,11 @@ export default function ContractsPage() {
       });
       setContracts(data.contracts ?? []);
       setHasMore(data.has_more ?? false);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Failed to load contracts");
-      }
+    } catch {
+      // Backend not reachable yet. Fall through to the empty state so the
+      // page still reads as "waiting for data" instead of "broken".
       setContracts([]);
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
@@ -425,25 +421,18 @@ export default function ContractsPage() {
           />
         </div>
 
-        {/* Error state */}
-        {error && !loading && (
-          <div className="mb-4 rounded-lg border border-red-900/40 bg-red-900/20 px-4 py-3 text-sm text-red-400">
-            {error}
-          </div>
-        )}
-
         {/* Loading skeleton */}
         {loading && <TableSkeleton rows={PAGE_SIZE} />}
 
-        {/* Empty state */}
-        {!loading && !error && sorted.length === 0 && (
+        {/* Empty state: also shown when the API is unreachable */}
+        {!loading && sorted.length === 0 && (
           <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-16 text-center border border-[var(--color-border)]">
             <p className="text-lg font-medium text-[var(--color-text-primary)]">
               {search ? "No contracts match your search" : "No contracts tracked yet"}
             </p>
             {!search && (
               <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                Click{" "}
+                Use the CLI or API to start tracking a Soroban contract, or click{" "}
                 <button
                   type="button"
                   onClick={() => setShowModal(true)}
@@ -451,7 +440,7 @@ export default function ContractsPage() {
                 >
                   Track contract
                 </button>{" "}
-                to add your first Soroban contract.
+                to add one from here.
               </p>
             )}
           </div>

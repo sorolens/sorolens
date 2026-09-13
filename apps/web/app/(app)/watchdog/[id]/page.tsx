@@ -31,7 +31,7 @@ function Content({ id }: { id: string }) {
   const [history, setHistory] = useState<HealthCheck[] | null>(null);
   const [alerts, setAlerts] = useState<ContractAlert[] | null>(null);
   const [notFoundError, setNotFoundError] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,21 +46,21 @@ function Content({ id }: { id: string }) {
           setNotFoundError(true);
           return;
         }
-        setError(e instanceof Error ? e.message : String(e));
+        // Backend unreachable. Surface a friendly panel rather than a red
+        // error box, since the visitor cannot act on a raw error string.
+        setUnavailable(true);
+        setHistory([]);
+        setAlerts([]);
+        return;
       }
 
-      try {
-        const [h, a] = await Promise.all([
-          listHealthChecks(id, 50),
-          listAlerts(id, { limit: 50 }),
-        ]);
-        if (cancelled) return;
-        setHistory(h.health_checks);
-        setAlerts(a.alerts);
-      } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
-      }
+      const [h, a] = await Promise.all([
+        listHealthChecks(id, 50).catch(() => ({ health_checks: [] })),
+        listAlerts(id, { limit: 50 }).catch(() => ({ alerts: [] })),
+      ]);
+      if (cancelled) return;
+      setHistory(h.health_checks ?? []);
+      setAlerts(a.alerts ?? []);
     }
     load();
     return () => {
@@ -117,15 +117,25 @@ function Content({ id }: { id: string }) {
             </div>
           </dl>
         </div>
+      ) : unavailable ? (
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
+          <p className="text-lg font-medium text-[var(--color-text-primary)]">
+            Watchdog data not available for this contract.
+          </p>
+          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+            The contract may not be registered yet, or the indexer has not
+            picked it up. Return to the{" "}
+            <Link
+              href="/watchdog"
+              className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
+            >
+              watchdog overview
+            </Link>
+            .
+          </p>
+        </div>
       ) : (
         <CardSkeleton />
-      )}
-
-      {error && (
-        <div className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-bg-card)] p-4 text-sm">
-          <span className="font-semibold text-[var(--color-danger)]">Error:</span>{" "}
-          <span className="text-[var(--color-text-secondary)]">{error}</span>
-        </div>
       )}
 
       <section>

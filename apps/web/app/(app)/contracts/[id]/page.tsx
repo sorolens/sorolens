@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MonoId } from "@sorolens/ui";
 import {
@@ -66,7 +67,10 @@ function ContractDetailContent({ id }: { id: string }) {
           if (err instanceof ApiError && err.status === 404) {
             notFound();
           }
-          setContractError(err instanceof Error ? err.message : "Failed to load contract");
+          // Backend not reachable. Surface a friendly not-found panel
+          // rather than a red error, since the user cannot distinguish
+          // "we do not have this contract" from "the API is down."
+          setContractError("Contract not found");
         }
       } finally {
         if (!cancelled) setContractLoading(false);
@@ -198,8 +202,20 @@ function ContractDetailContent({ id }: { id: string }) {
 
   if (contractError) {
     return (
-      <div className="flex flex-col items-center justify-center py-24">
-        <p className="mb-2 text-lg text-[var(--color-danger)]">{contractError}</p>
+      <div className="mx-auto max-w-xl rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
+        <p className="text-lg font-medium text-[var(--color-text-primary)]">
+          {contractError}
+        </p>
+        <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+          Check the contract ID and try again, or return to the{" "}
+          <Link
+            href="/contracts"
+            className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
+          >
+            contracts list
+          </Link>
+          .
+        </p>
       </div>
     );
   }
