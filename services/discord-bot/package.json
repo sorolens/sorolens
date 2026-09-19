@@ -8,8 +8,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts",
-    "register": "tsx src/register-commands.ts",
+    "dev": "dotenv -e .env -- tsx watch src/index.ts",
+    "register": "dotenv -e .env -- tsx src/register-commands.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -24,6 +24,7 @@
     "@types/better-sqlite3": "^7.6.11",
     "@types/express": "^5.0.0",
     "@types/node": "^22.5.0",
+    "dotenv-cli": "^7.4.2",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0",
     "vitest": "^2.1.0"

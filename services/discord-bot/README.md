@@ -5,7 +5,7 @@ Contributor bot for the [Sorolens Discord](https://discord.gg/D9jATUezYX). Two r
 1. Lets contributors link their Discord identity to their GitHub username via a slash command.
 2. Watches merged PRs on `sorolens/sorolens` and auto-grants **Contributor** or **Core Contributor** roles based on merge count.
 
-Runs as a single Node.js process. Deploys to Railway (Docker), Fly, or any container platform.
+Runs as a single Node.js process. Deploys to Render's free tier (Docker) with an UptimeRobot ping to prevent sleep. Any other container platform works too - only the deploy instructions differ.
 
 ## Slash commands
 
@@ -38,19 +38,63 @@ npm run dev             # tsx watch mode
 
 The bot serves the webhook receiver on `http://localhost:8080/webhook`. Use `smee.io` or `ngrok` to tunnel that publicly and point a test GitHub webhook at it.
 
-## Production deploy (Railway)
+## Production deploy (Render, free tier)
 
-1. Create a new Railway project. Point it at `services/discord-bot` in the monorepo.
-2. Attach a **Volume** at `/data` so the SQLite link mappings survive redeploys.
-3. Set every variable from `.env.example` in Railway's environment tab.
-4. Deploy. The health check hits `/healthz` and the bot logs in on startup.
-5. Copy the deployed public URL (e.g. `https://sorolens-discord-bot.up.railway.app`).
-6. In GitHub: **Repo Settings > Webhooks > Add webhook**.
-   - Payload URL: `https://<railway-url>/webhook`
-   - Content type: `application/json`
-   - Secret: same value as `GITHUB_WEBHOOK_SECRET`.
-   - Events: **Pull requests** only.
-7. Save. GitHub sends a `ping` immediately - the delivery should show 202 in Recent Deliveries.
+Render's free tier sleeps after 15 minutes of inactivity, which breaks the Discord gateway connection. We paper over that with an external ping (see the UptimeRobot step below).
+
+### 1. Create the web service
+
+1. Sign in at https://render.com with GitHub. Grant access to `sorolens/sorolens`.
+2. Dashboard: **New +** > **Web Service** > pick `sorolens/sorolens`.
+3. Fields:
+
+   | Field | Value |
+   |---|---|
+   | Name | `sorolens-discord-bot` |
+   | Region | Oregon or Ohio |
+   | Branch | `main` |
+   | **Root Directory** | `services/discord-bot` |
+   | Runtime | **Docker** |
+   | Dockerfile Path | `./Dockerfile` |
+   | Instance Type | **Free** |
+
+4. Under **Environment Variables**, add every entry from `.env.example`. Set `DATABASE_PATH=/tmp/mappings.db` (Render's free tier has no persistent disk; contributors can `/link` again after each redeploy).
+5. Click **Create Web Service** and wait for the green **Live** badge (~4-6 minutes).
+6. Copy the public URL (e.g. `https://sorolens-discord-bot.onrender.com`).
+
+### 2. Register slash commands
+
+Render Dashboard > your service > **Shell** tab:
+
+```bash
+npm run register
+```
+
+Slash commands appear in Discord instantly.
+
+### 3. Keep the service warm with UptimeRobot
+
+1. Sign up at https://uptimerobot.com (free).
+2. **Add New Monitor**:
+   - Monitor Type: HTTP(s)
+   - Friendly Name: `Sorolens bot keepalive`
+   - URL: `https://<your-render-url>/healthz`
+   - Monitoring Interval: 5 minutes
+3. Create monitor.
+
+UptimeRobot doubles as an alerting layer - it will email you if the bot goes down.
+
+### 4. Point the GitHub webhook
+
+`sorolens/sorolens` > Settings > Webhooks > **Add webhook**:
+
+- Payload URL: `https://<render-url>/webhook`
+- Content type: `application/json`
+- Secret: same value as `GITHUB_WEBHOOK_SECRET`
+- Events: **Pull requests** only
+- Active: on
+
+Save. GitHub fires a `ping` immediately; the delivery should show **202 Accepted** in Recent Deliveries.
 
 ## How it verifies signatures
 
@@ -63,7 +107,7 @@ The webhook receiver uses `@octokit/webhooks` which validates the HMAC-SHA256 si
 | PR merged by contributor who has not run `/link` | Bot logs and skips. Contributor can `/link` any time; roles sync immediately. |
 | Contributor tries to `/link` a GitHub name already linked to another Discord user | Command replies with an error; no state changes. |
 | GitHub API rate limit | Command replies with the error message. Retry manually or wait ~1 min. |
-| Bot crashes / redeploys | Slash commands stay registered; mappings persist in the volume; no data loss. |
+| Bot crashes / redeploys | Slash commands stay registered. On Render's free tier `DATABASE_PATH` points at `/tmp` and mappings reset on redeploy - contributors just run `/link` again. Move to a paid disk if that gets annoying. |
 
 ## Security notes
 
