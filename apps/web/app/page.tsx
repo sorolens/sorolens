@@ -178,6 +178,9 @@ export default function HomePage() {
             <a href="https://discord.gg/D9jATUezYX" rel="noopener noreferrer">
               Discord
             </a>
+            <a href="https://t.me/sorolens_community" rel="noopener noreferrer">
+              Telegram
+            </a>
           </div>
         </div>
       </footer>
