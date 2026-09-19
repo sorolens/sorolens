@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sorolens",
+  title: {
+    default: "Sorolens",
+    template: "%s | Sorolens",
+  },
   description: "Indexed observability for Soroban smart contracts",
   icons: {
     icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
