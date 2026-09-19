@@ -8,38 +8,16 @@
  */
 
 import type { ChatInputCommandInteraction, Client, Interaction, Guild } from "discord.js";
-import { SlashCommandBuilder } from "discord.js";
 import { getByDiscord, unlink, upsertLink } from "./db.js";
 import { countMergedPRs, getUser } from "./github.js";
 import { syncRoles, type Tiers } from "./roles.js";
 import { buildConnectUrl } from "./oauth.js";
 import type { Config } from "./config.js";
 
-export const commandDefinitions = [
-  new SlashCommandBuilder()
-    .setName("connect")
-    .setDescription("Auto-link your GitHub via one-click OAuth (no typing needed)"),
-  new SlashCommandBuilder()
-    .setName("link")
-    .setDescription("Link your GitHub account manually (advanced; most users want /connect)")
-    .addStringOption((o) =>
-      o
-        .setName("github")
-        .setDescription("Your GitHub username (case-insensitive)")
-        .setRequired(true)
-        .setMinLength(1)
-        .setMaxLength(39),
-    ),
-  new SlashCommandBuilder()
-    .setName("unlink")
-    .setDescription("Remove the GitHub link on your Discord account"),
-  new SlashCommandBuilder()
-    .setName("whoami")
-    .setDescription("Show your current linked GitHub account, if any"),
-  new SlashCommandBuilder()
-    .setName("mypr")
-    .setDescription("Show your merged PR count and current tier for sorolens/sorolens"),
-].map((c) => c.toJSON());
+// Re-exported from command-definitions.ts so callers that only import
+// commands.ts still get the definitions; the split lets the register
+// script skip loading the runtime config.
+export { commandDefinitions } from "./command-definitions.js";
 
 
 // ---- runtime handlers ------------------------------------------------------
