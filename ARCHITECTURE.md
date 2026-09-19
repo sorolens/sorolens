@@ -1,4 +1,4 @@
-# ARCHITECTURE.md
+# Architecture
 ## Sorolens System Architecture
 
 ---
@@ -55,7 +55,7 @@ This flow runs when a contract ID is first submitted to the system (either via t
    - Calls RPC getLedgerEntries for the contract instance entry
      - If not found: return 404 (contract does not exist on-chain)
    - Inserts row into `contracts` table with status = "backfilling"
-   - Returns 201 Accepted
+   - Returns 201 Created
 
 2. On next cron run (at most 5 minutes later), the indexer sees
    the contract in "backfilling" status.
@@ -79,12 +79,12 @@ This flow runs when a contract ID is first submitted to the system (either via t
    Repeats with cursor until no more pages.
 
 6. For each event batch:
-   - Decode XDR ScVal topics and value (via local XDR lib)
+   - Decode XDR ScVal topics and value (via a local XDR library)
    - Upsert into `events` table (on conflict: skip duplicate by event `id`)
 
 7. For each unique txHash seen in events:
    - Call RPC getTransaction for any txHash not already in `invocations`
-   - Parse status, result_xdr, resource fees from resultXdr.feeCharged
+   - Parse status, result_xdr, and resource fees from resultXdr.feeCharged
    - Upsert into `invocations` table
 
 8. Call RPC getLedgerEntries for the contract instance + any known
@@ -108,7 +108,10 @@ This flow runs for all contracts in "active" status on every 5-minute cron tick.
    If lock is already held: exit immediately (previous run still in progress).
 
 2. Indexer queries `sync_state` for each tracked contract:
-   SELECT contract_id, last_ledger FROM sync_state WHERE status = 'active'
+   SELECT s.contract_id, s.last_ledger
+   FROM sync_state s
+   JOIN contracts c ON c.id = s.contract_id
+   WHERE c.status = 'active'
 
 3. Calls RPC getLatestLedger -> current_ledger
 
@@ -123,12 +126,12 @@ This flow runs for all contracts in "active" status on every 5-minute cron tick.
 
 5. Same upsert logic as backfill steps 6-8.
 
-6. Refreshes storage_entries for all keys belonging to active contracts
+6. Refresh `storage_entries` for all keys belonging to active contracts
    by calling getLedgerEntries in batches of 100 keys.
 
-7. Updates sync_state.last_ledger = current_ledger for each contract.
+7. Update `sync_state.last_ledger = current_ledger` for each contract.
 
-8. Releases global Redis lock.
+8. Release the global Redis lock.
 ```
 
 ---
@@ -176,7 +179,7 @@ CREATE TABLE events (
 -- Primary query pattern: all events for a contract, newest first.
 CREATE INDEX idx_events_contract_ledger ON events (contract_id, ledger DESC);
 
--- Support filtering by transaction hash (e.g. "show all events in this tx").
+-- Support filtering by transaction hash (e.g., "show all events in this tx").
 CREATE INDEX idx_events_tx_hash ON events (tx_hash);
 
 -- Time-range queries from the dashboard.
@@ -535,7 +538,7 @@ Network-wide summary across all tracked contracts.
 **Tradeoffs:**
 - 5-minute minimum latency for new events. For an observability tool (not a trading system), this is acceptable.
 - Cold start on each run adds a few seconds of overhead.
-- Cannot hold long-running TCP connections to Soroban RPC (not needed; RPC is HTTP).
+- Cannot hold long-running TCP connections to Soroban RPC (unnecessary; RPC is HTTP).
 
 **Migration path to a persistent worker:** When event volume or contract count makes 5-minute cron latency unacceptable, extract the indexer binary and run it as a Fly.io Machine (free tier) or a Railway worker. The indexer already exposes a `Run()` function with a configurable poll interval; no structural change is required. The Redis advisory lock mechanism is already in place to prevent duplicate runs regardless of how the indexer is deployed.
 
@@ -547,7 +550,7 @@ Network-wide summary across all tracked contracts.
 
 **Rationale:** Vercel serverless functions have a maximum execution time (approximately 60 seconds for Pro, 10 seconds for free). Long-lived SSE connections are not supported on Vercel serverless. HTTP polling with a 5-second interval and a cursor is the only viable approach without a separate persistent WebSocket server.
 
-**Tradeoffs:** 5-second polling is slightly higher latency than SSE and uses more requests. For an observability tool where data is already indexed with 5-minute granularity, this is acceptable. Clients deduplicate by event `id`.
+**Tradeoffs:** Five-second polling has slightly higher latency than SSE and uses more requests. For an observability tool where data is already indexed with 5-minute granularity, this is acceptable. Clients deduplicate by event `id`.
 
 **Migration path:** If Sorolens is ever deployed with a persistent server, replace the polling client code with an SSE or WebSocket endpoint backed by a Go `net/http` SSE handler. The API contract (cursor-based event list) does not change.
 
