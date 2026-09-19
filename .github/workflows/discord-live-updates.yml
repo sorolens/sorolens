@@ -82,11 +82,17 @@ jobs:
           avatar = os.environ["PR_AVATAR"]
 
           total_pts = sum((it.get("points") or 0) for it in items)
-          issue_lines = [
-              f"• [#{it['number']}]({it['url']}) - {it['title']} "
-              f"({it['tier']}{f' - {it[\"points\"]}pts' if it.get('points') else ''})"
-              for it in items
-          ]
+
+          def format_item(it):
+              n     = it["number"]
+              url   = it["url"]
+              title = it["title"]
+              tier  = it["tier"]
+              pts   = it.get("points")
+              pts_suffix = " - {}pts".format(pts) if pts else ""
+              return "• [#{}]({}) - {} ({}{})".format(n, url, title, tier, pts_suffix)
+
+          issue_lines = [format_item(it) for it in items]
 
           embed = {
               "title": "✅ Issue Resolved!" if len(items) == 1 else f"✅ {len(items)} Issues Resolved!",
