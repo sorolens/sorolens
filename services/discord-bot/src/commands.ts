@@ -35,10 +35,17 @@ export function registerHandlers(client: Client, ctx: CommandContext) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("command failed:", interaction.commandName, msg);
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: `Something went wrong: ${msg}` });
-      } else {
-        await interaction.reply({ content: `Something went wrong: ${msg}`, ephemeral: true });
+      // Swallow secondary errors: the interaction may already be
+      // acknowledged, or have expired past the 3s window.
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({ content: `Something went wrong: ${msg}` });
+        } else {
+          // MessageFlags.Ephemeral === 1 << 6 (64).
+          await interaction.reply({ content: `Something went wrong: ${msg}`, flags: 64 });
+        }
+      } catch (reportErr) {
+        console.warn("command failed to report error:", reportErr);
       }
     }
   });
@@ -58,7 +65,7 @@ async function handle(interaction: ChatInputCommandInteraction, ctx: CommandCont
     case "mypr":
       return handleMyPR(interaction, ctx);
     default:
-      await interaction.reply({ content: "Unknown command.", ephemeral: true });
+      await interaction.reply({ content: "Unknown command.", flags: 64 });
   }
 }
 
@@ -69,14 +76,14 @@ async function handleConnect(interaction: ChatInputCommandInteraction, ctx: Comm
     content:
       `Click here to link your GitHub in one step (link is personal to you, do not share):\n${url}\n\n` +
       `Expires in 10 minutes. Run \`/connect\` again if it expires. Prefer manual typing? Use \`/link github <username>\`.`,
-    ephemeral: true,
+    flags: 64,
   });
 }
 
 
 async function handleLink(interaction: ChatInputCommandInteraction, ctx: CommandContext) {
   const gh = interaction.options.getString("github", true).trim();
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: 64 });
 
   const user = await getUser(gh);
   if (!user) {
@@ -120,7 +127,7 @@ async function handleUnlink(interaction: ChatInputCommandInteraction) {
     content: existed
       ? "Your GitHub link has been removed. Your Discord roles were left as-is; a maintainer can adjust them if needed."
       : "You did not have a GitHub link on file.",
-    ephemeral: true,
+    flags: 64,
   });
 }
 
@@ -131,7 +138,7 @@ async function handleWhoAmI(interaction: ChatInputCommandInteraction) {
     content: link
       ? `Discord \`${interaction.user.tag}\` -> GitHub \`${link.githubLogin}\` (linked ${link.linkedAt} UTC).`
       : "No GitHub account linked. Use `/link github <your-username>`.",
-    ephemeral: true,
+    flags: 64,
   });
 }
 
@@ -141,11 +148,11 @@ async function handleMyPR(interaction: ChatInputCommandInteraction, ctx: Command
   if (!link) {
     await interaction.reply({
       content: "You have not linked a GitHub account yet. Run `/link github <your-username>` first.",
-      ephemeral: true,
+      flags: 64,
     });
     return;
   }
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: 64 });
   const count = await countMergedPRs(link.githubLogin, ctx.config.githubRepo);
   const tier = tierFor(count, ctx.tiers);
   await interaction.editReply({
