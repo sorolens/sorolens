@@ -1,6 +1,9 @@
 {
   "name": "sorolens",
   "version": "0.1.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "private": true,
   "scripts": {
     "lint": "pnpm -r --if-present lint",
