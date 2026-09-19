@@ -2,15 +2,73 @@
 Thank you for your interest. This document covers everything you need to make a contribution: local setup, how to claim an issue, branch naming, commit format, PR requirements, and a full walkthrough of the most common first contribution (adding an XDR type decoder).
 ---
 ## Table of contents
-1. [Prerequisite versions](#prerequisite-versions)
-2. [Local setup per package](#local-setup-per-package)
-3. [How to claim an issue](#how-to-claim-an-issue)
-4. [Branch naming](#branch-naming)
-5. [Commit format](#commit-format)
-6. [PR checklist](#pr-checklist)
-7. [Running tests](#running-tests)
-8. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
+1. [Quickstart: your first PR in 15 minutes](#quickstart-your-first-pr-in-15-minutes)
+2. [Prerequisite versions](#prerequisite-versions)
+3. [Local setup per package](#local-setup-per-package)
+4. [How to claim an issue](#how-to-claim-an-issue)
+5. [Branch naming](#branch-naming)
+6. [Commit format](#commit-format)
+7. [PR checklist](#pr-checklist)
+8. [Running tests](#running-tests)
+9. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
+
 ---
+
+## Quickstart: your first PR in 15 minutes
+
+Follow these steps for a streamlined first contribution workflow:
+
+### 1. Fork & Clone
+Fork the repository on GitHub, then clone your fork locally:
+```bash
+git clone https://github.com/<your-username>/sorolens.git
+cd sorolens
+```
+
+### 2. Pick & Claim an Issue
+- Browse open issues labeled [`good first issue`](https://github.com/sorolens/sorolens/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) or [`help wanted`](https://github.com/sorolens/sorolens/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22).
+- Comment on the issue to get assigned before starting work.
+
+### 3. Install & Start Local Services
+Start background services (PostgreSQL & Redis) and install project dependencies:
+```bash
+# Start Postgres and Redis in Docker
+make up
+# or: docker compose up -d
+
+# Install dependencies across all monorepo workspaces
+pnpm install
+```
+
+### 4. Create a Working Branch
+Create a branch adhering to our [Branch naming](#branch-naming) conventions:
+```bash
+git checkout -b <type>/<short-description>
+# Example: git checkout -b fix/indexer-duplicate-events
+```
+
+### 5. Make Changes & Run Tests
+Make your changes, then verify all tests and linters pass:
+```bash
+# Run all Go and TypeScript tests
+make test
+
+# Run linters across the repo
+make lint
+```
+
+### 6. Commit & Open a Pull Request
+Commit your changes using [Conventional Commits](#commit-format) and push to your fork:
+```bash
+git add .
+git commit -m "<type>(<scope>): <short description>"
+# Example: git commit -m "fix(indexer): prevent duplicate event upsert on cursor retry"
+git push origin <type>/<short-description>
+```
+Open a Pull Request on GitHub against `main`. Include `Closes #<issue-number>` in the PR body and verify against the [PR checklist](#pr-checklist).
+
+---
+
 ## Prerequisite versions
 | Tool | Required version | Install |
 |---|---|---|
