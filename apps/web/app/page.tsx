@@ -175,6 +175,9 @@ export default function HomePage() {
             <a href="https://github.com/sorolens/sorolens/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">
               Contribute
             </a>
+            <a href="https://discord.gg/D9jATUezYX" rel="noopener noreferrer">
+              Discord
+            </a>
           </div>
         </div>
       </footer>

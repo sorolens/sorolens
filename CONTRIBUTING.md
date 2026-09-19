@@ -96,6 +96,19 @@ cargo build --target wasm32v1-none --release
 4. Do not open a PR for an issue assigned to someone else without first checking with them.
 If you want to work on something not yet tracked as an issue, open an issue first and describe what you plan to do. This avoids duplicate work.
 ---
+## Getting help
+Stuck on setup, unsure how to scope your PR, or waiting on a review? The fastest way to reach the maintainers and other contributors is the Sorolens Discord:
+
+**[Join the Sorolens Discord](https://discord.gg/D9jATUezYX)**
+
+Once you're in:
+- Ask setup and code questions in `#help`.
+- Post PRs that need eyes in `#reviews-wanted`.
+- Follow the live GitHub feed in `#activity`.
+- Weekly voice office hours are announced in `#announcements`.
+
+For everything asynchronous, the GitHub issue thread is still the source of truth. Discord is for real-time conversation only.
+---
 ## Branch naming
 Format: `<type>/<short-description>`
 The `<type>` must be one of the Conventional Commits types listed below.

@@ -1,6 +1,7 @@
 [![CI](https://github.com/sorolens/sorolens/actions/workflows/ci.yml/badge.svg)](https://github.com/sorolens/sorolens/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Release](https://img.shields.io/github/v/release/sorolens/sorolens)](https://github.com/sorolens/sorolens/releases)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/D9jATUezYX)
 # Sorolens
 Real-time monitoring, alerting, and on-chain health checks for Soroban smart contracts on Stellar. The only observability tool in the Stellar ecosystem with a deployed Soroban **watchdog** contract for proactive contract monitoring.
 ---
@@ -45,6 +46,9 @@ The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
 3. **Open a PR** – Follow the branch naming and commit conventions in [CONTRIBUTING.md](./CONTRIBUTING.md) and open a pull request against `main`.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full walkthrough, including local setup, running tests, and the PR checklist.
+
+Real-time chat with maintainers and other contributors: [**join the Sorolens Discord**](https://discord.gg/D9jATUezYX). Announcements, PR reviews, weekly office hours, and a live GitHub activity feed all live there.
+
 ---
 ## Architecture
 
