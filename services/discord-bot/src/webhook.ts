@@ -10,7 +10,7 @@
  * simply do not get an auto-role until they do.
  */
 
-import express, { type Request, type Response } from "express";
+import express, { type Application, type Request, type Response } from "express";
 import { Webhooks } from "@octokit/webhooks";
 import type { Client } from "discord.js";
 import { getByGithub } from "./db.js";
@@ -24,8 +24,8 @@ interface Deps {
   tiers: Tiers;
 }
 
-export function makeWebhookApp(deps: Deps): express.Application {
-  const app = express();
+/** Mount `/healthz` and `/webhook` onto an existing Express app. */
+export function mountWebhookRoutes(app: Application, deps: Deps): void {
   const webhooks = new Webhooks({ secret: deps.config.githubWebhookSecret });
 
   webhooks.on("pull_request.closed", async ({ payload }) => {
@@ -80,6 +80,4 @@ export function makeWebhookApp(deps: Deps): express.Application {
       }
     },
   );
-
-  return app;
 }

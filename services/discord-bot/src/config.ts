@@ -43,6 +43,12 @@ export const config = {
   githubRepo: optional("GITHUB_REPO", "sorolens/sorolens"),
   githubWebhookSecret: required("GITHUB_WEBHOOK_SECRET"),
 
+  // GitHub OAuth (for zero-typing account linking)
+  githubOauthClientId: required("GITHUB_OAUTH_CLIENT_ID"),
+  githubOauthClientSecret: required("GITHUB_OAUTH_CLIENT_SECRET"),
+  oauthStateSecret: required("OAUTH_STATE_SECRET"),
+  publicBaseUrl: required("PUBLIC_BASE_URL"),
+
   // HTTP server
   port: intOpt("PORT", 8080),
 

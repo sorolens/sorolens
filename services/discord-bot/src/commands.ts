@@ -12,12 +12,16 @@ import { SlashCommandBuilder } from "discord.js";
 import { getByDiscord, unlink, upsertLink } from "./db.js";
 import { countMergedPRs, getUser } from "./github.js";
 import { syncRoles, type Tiers } from "./roles.js";
+import { buildConnectUrl } from "./oauth.js";
 import type { Config } from "./config.js";
 
 export const commandDefinitions = [
   new SlashCommandBuilder()
+    .setName("connect")
+    .setDescription("Auto-link your GitHub via one-click OAuth (no typing needed)"),
+  new SlashCommandBuilder()
     .setName("link")
-    .setDescription("Link your GitHub account so the bot can grant you contributor roles")
+    .setDescription("Link your GitHub account manually (advanced; most users want /connect)")
     .addStringOption((o) =>
       o
         .setName("github")
@@ -65,6 +69,8 @@ export function registerHandlers(client: Client, ctx: CommandContext) {
 
 async function handle(interaction: ChatInputCommandInteraction, ctx: CommandContext) {
   switch (interaction.commandName) {
+    case "connect":
+      return handleConnect(interaction, ctx);
     case "link":
       return handleLink(interaction, ctx);
     case "unlink":
@@ -76,6 +82,17 @@ async function handle(interaction: ChatInputCommandInteraction, ctx: CommandCont
     default:
       await interaction.reply({ content: "Unknown command.", ephemeral: true });
   }
+}
+
+
+async function handleConnect(interaction: ChatInputCommandInteraction, ctx: CommandContext) {
+  const url = buildConnectUrl(interaction.user.id, ctx.config);
+  await interaction.reply({
+    content:
+      `Click here to link your GitHub in one step (link is personal to you, do not share):\n${url}\n\n` +
+      `Expires in 10 minutes. Run \`/connect\` again if it expires. Prefer manual typing? Use \`/link github <username>\`.`,
+    ephemeral: true,
+  });
 }
 
 

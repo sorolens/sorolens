@@ -11,10 +11,13 @@ Runs as a single Node.js process. Deploys to Render's free tier (Docker) with an
 
 | Command | What it does |
 |---|---|
-| `/link github <username>` | Link your GitHub account. The bot verifies the username exists, saves the mapping, and immediately syncs your Discord role. |
-| `/unlink` | Remove the GitHub link. Roles are left in place; a maintainer can adjust. |
+| `/connect` | **Recommended.** Auto-links your GitHub via one-click OAuth. No typing. |
+| `/link github <username>` | Manual fallback if you cannot use OAuth. |
+| `/unlink` | Remove the GitHub link on your Discord account. |
 | `/whoami` | Show your current linked GitHub account, if any. |
 | `/mypr` | Show your merged PR count and current tier. |
+
+New members are also DM'd a personal `/connect` link automatically when they join, so most contributors never need to type anything.
 
 ## Role tiers
 
@@ -41,6 +44,15 @@ The bot serves the webhook receiver on `http://localhost:8080/webhook`. Use `sme
 ## Production deploy (Render, free tier)
 
 Render's free tier sleeps after 15 minutes of inactivity, which breaks the Discord gateway connection. We paper over that with an external ping (see the UptimeRobot step below).
+
+### 0. Create a GitHub OAuth App (for `/connect`)
+
+1. https://github.com/settings/developers > **New OAuth App**.
+2. Fill in:
+   - **Application name:** `Sorolens Contributor Bot`
+   - **Homepage URL:** `https://sorolens.onrender.com` (or whatever your PUBLIC_BASE_URL will be)
+   - **Authorization callback URL:** `${PUBLIC_BASE_URL}/oauth/callback` - **must match exactly**
+3. Register. Copy the **Client ID** and generate a **Client Secret**; both go into env vars.
 
 ### 1. Create the web service
 
