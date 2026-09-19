@@ -34,6 +34,12 @@ export const config = {
   roleContributor: required("DISCORD_ROLE_CONTRIBUTOR_ID"),
   roleCoreContributor: required("DISCORD_ROLE_CORE_CONTRIBUTOR_ID"),
 
+  // Optional. If set, the bot grants this role whenever /connect (or the
+  // guildMemberAdd DM link) completes successfully. Unlike the tier roles
+  // it is never revoked - it is a persistent "linked" marker used to
+  // gate channel access behind the OAuth flow.
+  roleVerified: optional("DISCORD_ROLE_VERIFIED_ID", ""),
+
   // Thresholds (proxying "PR merged" via merged PR count from GitHub API)
   contributorThreshold: intOpt("CONTRIBUTOR_THRESHOLD", 1),
   coreContributorThreshold: intOpt("CORE_CONTRIBUTOR_THRESHOLD", 3),

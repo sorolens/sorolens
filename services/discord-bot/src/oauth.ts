@@ -191,6 +191,21 @@ export function mountOauthRoutes(app: Application, deps: OauthDeps): void {
 
     try {
       const guild = await deps.client.guilds.fetch(deps.config.discordGuildId);
+
+      // Grant the Verified marker role if configured. This is the gate
+      // that unlocks community channels for members who have proven
+      // ownership of a GitHub account via OAuth. Never revoked.
+      if (deps.config.roleVerified) {
+        const member = await guild.members
+          .fetch(parsed.discordId)
+          .catch(() => null);
+        if (member && !member.roles.cache.has(deps.config.roleVerified)) {
+          await member.roles
+            .add(deps.config.roleVerified, "sorolens-bot: OAuth linked")
+            .catch((e) => console.warn("oauth: could not grant Verified", e));
+        }
+      }
+
       const result = await syncOnMerge(guild, parsed.discordId, login, {
         config: deps.config,
         tiers: deps.tiers,

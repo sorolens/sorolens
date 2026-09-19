@@ -8,6 +8,7 @@ const cfg: Config = {
   discordGuildId: "guild",
   roleContributor: "rc",
   roleCoreContributor: "rcc",
+  roleVerified: "rv",
   contributorThreshold: 1,
   coreContributorThreshold: 3,
   githubToken: "x",
