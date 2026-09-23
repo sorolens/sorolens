@@ -9,16 +9,18 @@ import (
 
 // MockStore is an in-memory Store + QueryStore implementation for unit tests.
 type MockStore struct {
-	contracts      map[string]Contract
-	events         []Event
-	invocations    []Invocation
-	storageEntries []StorageEntry
-	syncStates     map[string]SyncState
-	globalStats    GlobalStats
-	monitored      map[string]MonitoredContract
-	healthChecks   []HealthCheck
-	alerts         []ContractAlert
-	apiKeys        []APIKey
+	contracts          map[string]Contract
+	events             []Event
+	invocations        []Invocation
+	storageEntries     []StorageEntry
+	syncStates         map[string]SyncState
+	globalStats        GlobalStats
+	monitored          map[string]MonitoredContract
+	healthChecks       []HealthCheck
+	alerts             []ContractAlert
+	apiKeys            []APIKey
+	watchlist          map[string]map[string]bool
+	alertSubscriptions []AlertSubscription
 
 	// Error injection
 	UpsertContractErr   error
