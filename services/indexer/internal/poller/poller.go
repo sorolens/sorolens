@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/sorolens/sorolens/services/indexer/internal/partition"
 )
 
 const (
@@ -119,6 +121,11 @@ func (p *Poller) runContinuous(ctx context.Context) error {
 
 // processAll fetches and indexes events for every active contract.
 func (p *Poller) processAll(ctx context.Context) error {
+	// Ensure the next month's partition exists before processing.
+	if err := partition.EnsureNextMonthPartition(ctx, p.store); err != nil {
+		p.log.Warn("failed to ensure next month partition", "err", err)
+	}
+
 	var cursor string
 	for {
 		// Check for shutdown between contract batches.

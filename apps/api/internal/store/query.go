@@ -8,12 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// FullStore combines Store, QueryStore, and WatchdogStore: all three
-// implemented by the postgres backend and the in-memory MockStore.
+// FullStore combines Store, QueryStore, WatchdogStore,
+// AlertSubscriptionStore, and WatchlistStore: all implemented
+// by the postgres backend and the in-memory MockStore.
 type FullStore interface {
 	Store
 	QueryStore
 	WatchdogStore
+	AlertSubscriptionStore
+	WatchlistStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
@@ -60,6 +63,7 @@ type QueryStore interface {
 	ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error)
 	GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error)
 	RecentEvents(ctx context.Context, contractID string, limit int) ([]Event, error)
+	GetPartitionStats(ctx context.Context) ([]PartitionStats, error)
 }
 
 // ---- ListEvents --------------------------------------------------------------

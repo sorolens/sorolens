@@ -173,10 +173,69 @@ export interface WatchdogStats {
   critical_alerts: number;
 }
 
+export interface AlertSubscription {
+  id: string;
+  contract_id: string;
+  webhook_url: string;
+  severity_filter: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSubscriptionRequest {
+  contract_id: string;
+  webhook_url: string;
+  severity_filter?: string;
+}
+
+export interface SubscriptionsResponse {
+  subscriptions: AlertSubscription[];
+}
+
 export interface GlobalStats {
   tracked_contracts: number;
   total_events: number;
   total_invocations: number;
   total_storage_entries: number;
+}
+
+export interface WatchlistItem {
+  contract_id: string;
+  added_at: string;
+}
+
+export interface WatchlistResponse {
+  items: WatchlistItem[];
+}
+
+export interface WatchlistStatusResponse {
+  in_watchlist: boolean;
+}
+
+// ---- comparison ------------------------------------------------------------
+
+export interface CompareStats {
+  event_count_24h: number;
+  event_count_7d: number;
+  invocation_count: number;
+  avg_cpu: number;
+  avg_fee: number;
+  last_activity: string | null;
+}
+
+export interface ComparisonData {
+  contract: ContractSummary;
+  stats: CompareStats;
+  health_status: string;
+}
+
+export interface ContractStatsApiResponse {
+  event_count: number;
+  invocation_count: number;
+  storage_count: number;
+  last_synced_ledger: number;
+  window_event_count: number;
+  window_invocation_count: number;
+  window_duration: string;
 }
 

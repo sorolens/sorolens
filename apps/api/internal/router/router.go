@@ -44,6 +44,14 @@ func New(h *handler.Handler) http.Handler {
 			r.Get("/stream", h.StreamEvents)
 		})
 
+		// Watchlist
+		r.Route("/watchlist", func(r chi.Router) {
+			r.Post("/", h.AddToWatchlist)
+			r.Delete("/{contractId}", h.RemoveFromWatchlist)
+			r.Get("/", h.ListWatchlist)
+			r.Get("/{contractId}/status", h.WatchlistStatus)
+		})
+
 		// Watchdog: data from the on-chain sorolens-watchdog contract.
 		r.Route("/watchdog", func(r chi.Router) {
 			r.Get("/stats", h.WatchdogStats)
@@ -54,6 +62,10 @@ func New(h *handler.Handler) http.Handler {
 				r.Get("/health", h.ListHealthChecks)
 				r.Get("/alerts", h.ListWatchdogAlerts)
 			})
+			// Subscriptions
+			r.Post("/subscriptions", h.CreateSubscription)
+			r.Get("/subscriptions", h.ListSubscriptions)
+			r.Delete("/subscriptions/{id}", h.DeleteSubscription)
 		})
 	})
 

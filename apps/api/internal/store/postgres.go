@@ -99,7 +99,8 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 
 // ---- events ---------------------------------------------------------------
 
-// BatchInsertEvents inserts multiple events in a single batch operation. It ignores duplicate events based on the primary key (id).
+// BatchInsertEvents inserts multiple events in a single batch operation.
+// It ignores duplicate events based on the primary key (id, ledger_closed_at).
 func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) error {
 	if len(events) == 0 {
 		return nil
@@ -119,7 +120,7 @@ func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) e
 				 topic_xdr, value_xdr, topic_decoded, value_decoded,
 				 in_successful_call, inserted_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-			ON CONFLICT (id) DO NOTHING`,
+			ON CONFLICT (id, ledger_closed_at) DO NOTHING`,
 			e.ID, e.ContractID, e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
 			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
 			e.InSuccessfulCall, time.Now(),
@@ -256,4 +257,106 @@ func (s *postgresStore) GetGlobalStats(ctx context.Context) (GlobalStats, error)
 	var g GlobalStats
 	err := row.Scan(&g.TrackedContracts, &g.TotalEvents, &g.TotalInvocations, &g.TotalStorageEntries)
 	return g, err
+}
+
+// ---- partition management -------------------------------------------------
+
+// CreateNextMonthPartition creates the partition for next month if it does not exist.
+func (s *postgresStore) CreateNextMonthPartition(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, `SELECT create_next_month_partition()`)
+	return err
+}
+
+// CreateMonthlyPartitionIfNotExists creates a partition for the given year/month if it does not exist.
+func (s *postgresStore) CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error {
+	_, err := s.pool.Exec(ctx, `SELECT create_monthly_partition($1, $2)`, year, month)
+	return err
+}
+
+// GetPartitionStats returns information about all existing partitions of the events table.
+func (s *postgresStore) GetPartitionStats(ctx context.Context) ([]PartitionStats, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			c.relname AS partition_name,
+			pg_total_relation_size(c.oid) AS table_size,
+			c.reltuples AS row_count
+		FROM pg_inherits i
+		JOIN pg_class c ON c.oid = i.inhrelid
+		JOIN pg_class p ON p.oid = i.inhparent
+		WHERE p.relname = 'events'
+		ORDER BY c.relname`)
+	if err != nil {
+		return nil, fmt.Errorf("get partition stats: %w", err)
+	}
+	defer rows.Close()
+
+	var out []PartitionStats
+	for rows.Next() {
+		var ps PartitionStats
+		if err := rows.Scan(&ps.PartitionName, &ps.TableSize, &ps.RowCount); err != nil {
+			return nil, err
+		}
+		_, err := fmt.Sscanf(ps.PartitionName, "events_%d_%d", &ps.Year, &ps.Month)
+		if err != nil {
+			ps.Year = 0
+			ps.Month = 0
+		}
+		out = append(out, ps)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return out, nil
+}
+
+// ---- watchlist ------------------------------------------------------------
+
+func (s *postgresStore) AddToWatchlist(ctx context.Context, userID, contractID string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO watchlist_items (user_id, contract_id)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id, contract_id) DO NOTHING`,
+		userID, contractID,
+	)
+	return err
+}
+
+func (s *postgresStore) RemoveFromWatchlist(ctx context.Context, userID, contractID string) error {
+	_, err := s.pool.Exec(ctx, `
+		DELETE FROM watchlist_items WHERE user_id = $1 AND contract_id = $2`,
+		userID, contractID,
+	)
+	return err
+}
+
+func (s *postgresStore) ListWatchlist(ctx context.Context, userID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT contract_id FROM watchlist_items
+		WHERE user_id = $1 ORDER BY added_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var cid string
+		if err := rows.Scan(&cid); err != nil {
+			return nil, err
+		}
+		out = append(out, cid)
+	}
+	return out, rows.Err()
+}
+
+func (s *postgresStore) IsInWatchlist(ctx context.Context, userID, contractID string) (bool, error) {
+	var count int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM watchlist_items
+		WHERE user_id = $1 AND contract_id = $2`,
+		userID, contractID,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
