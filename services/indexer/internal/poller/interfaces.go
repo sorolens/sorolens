@@ -21,6 +21,8 @@ type Store interface {
 	BatchInsertInvocations(ctx context.Context, invocations []Invocation) error
 	GetSyncState(ctx context.Context, contractID string) (SyncState, error)
 	UpsertSyncState(ctx context.Context, s SyncState) error
+	CreateNextMonthPartition(ctx context.Context) error
+	CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.

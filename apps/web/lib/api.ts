@@ -1,5 +1,6 @@
 import type {
   AlertsResponse,
+  AlertSubscription,
   ContractDetail,
   ContractSnapshot,
   ContractSummary,
@@ -15,6 +16,11 @@ import type {
   TimeWindow,
   TrackContractRequest,
   WatchdogStats,
+  CreateSubscriptionRequest,
+  SubscriptionsResponse,
+  WatchlistItem,
+  WatchlistResponse,
+  WatchlistStatusResponse,
 } from "./types";
 
 
@@ -51,6 +57,12 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   }
 
   return res.json();
+}
+
+export function listContractsAll(): Promise<ContractsListResponse> {
+  return fetchJson<ContractsListResponse>(
+    `${API_URL}/api/v1/contracts?limit=1000`,
+  );
 }
 
 export function listContracts(
@@ -235,4 +247,64 @@ export function listAlerts(
     ? `/api/v1/watchdog/contracts/${contractId}/alerts`
     : `/api/v1/watchdog/alerts`;
   return fetchJson<AlertsResponse>(`${API_URL}${path}${qs ? "?" + qs : ""}`);
+}
+
+// ---- subscriptions --------------------------------------------------------
+
+export function createSubscription(
+  req: CreateSubscriptionRequest,
+): Promise<AlertSubscription> {
+  return fetchJson<AlertSubscription>(`${API_URL}/api/v1/watchdog/subscriptions`, {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export function listSubscriptions(): Promise<SubscriptionsResponse> {
+  return fetchJson<SubscriptionsResponse>(`${API_URL}/api/v1/watchdog/subscriptions`);
+}
+
+export function deleteSubscription(id: string): Promise<void> {
+  return fetchJson<void>(`${API_URL}/api/v1/watchdog/subscriptions/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// ---- watchlist ------------------------------------------------------------
+
+export function addToWatchlist(
+  contractId: string,
+  userId: string,
+): Promise<WatchlistStatusResponse> {
+  return fetchJson<WatchlistStatusResponse>(`${API_URL}/api/v1/watchlist`, {
+    method: "POST",
+    body: JSON.stringify({ contract_id: contractId }),
+    headers: { "X-User-ID": userId },
+  });
+}
+
+export function removeFromWatchlist(
+  contractId: string,
+  userId: string,
+): Promise<WatchlistStatusResponse> {
+  return fetchJson<WatchlistStatusResponse>(`${API_URL}/api/v1/watchlist/${contractId}`, {
+    method: "DELETE",
+    headers: { "X-User-ID": userId },
+  });
+}
+
+export function listWatchlist(userId: string): Promise<WatchlistResponse> {
+  return fetchJson<WatchlistResponse>(`${API_URL}/api/v1/watchlist`, {
+    headers: { "X-User-ID": userId },
+  });
+}
+
+export function watchlistStatus(
+  contractId: string,
+  userId: string,
+): Promise<WatchlistStatusResponse> {
+  return fetchJson<WatchlistStatusResponse>(
+    `${API_URL}/api/v1/watchlist/${contractId}/status`,
+    { headers: { "X-User-ID": userId } },
+  );
 }

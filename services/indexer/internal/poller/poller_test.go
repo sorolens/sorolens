@@ -127,6 +127,9 @@ func (f *fakeStore) UpsertSyncState(_ context.Context, s SyncState) error {
 	return nil
 }
 
+func (f *fakeStore) CreateNextMonthPartition(_ context.Context) error { return nil }
+func (f *fakeStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error { return nil }
+
 // ---- fake RedisClient -----------------------------------------------------
 
 type fakeRedis struct {

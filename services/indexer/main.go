@@ -103,6 +103,8 @@ func (s *stubStore) GetSyncState(ctx context.Context, contractID string) (poller
 func (s *stubStore) UpsertSyncState(ctx context.Context, state poller.SyncState) error {
 	return nil
 }
+func (s *stubStore) CreateNextMonthPartition(_ context.Context) error { return nil }
+func (s *stubStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error { return nil }
 
 type stubRedis struct{}
 

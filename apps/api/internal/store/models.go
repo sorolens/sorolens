@@ -83,3 +83,27 @@ type GlobalStats struct {
 	TotalInvocations    int64
 	TotalStorageEntries int64
 }
+
+// AlertSubscription represents a webhook subscription for watchdog alerts.
+type AlertSubscription struct {
+	ID             string
+	ContractID     string
+	WebhookURL     string
+	SeverityFilter string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// User represents a Sorolens user.
+type User struct {
+	ID        string
+	GitHubID  *string
+	CreatedAt time.Time
+}
+
+// WatchlistItem represents a contract bookmarked by a user.
+type WatchlistItem struct {
+	UserID     string
+	ContractID string
+	AddedAt    time.Time
+}

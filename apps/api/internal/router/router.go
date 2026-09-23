@@ -59,6 +59,14 @@ func New(h *handler.Handler) http.Handler {
 		post("/api-keys", h.CreateAPIKey)
 		del("/api-keys/{id}", h.RevokeAPIKey)
 
+		// Watchlist
+		r.Route("/watchlist", func(r chi.Router) {
+			r.Post("/", h.AddToWatchlist)
+			r.Delete("/{contractId}", h.RemoveFromWatchlist)
+			r.Get("/", h.ListWatchlist)
+			r.Get("/{contractId}/status", h.WatchlistStatus)
+		})
+
 		// Watchdog: data from the on-chain sorolens-watchdog contract.
 		get("/watchdog/stats", h.WatchdogStats)
 		get("/watchdog/alerts", h.ListWatchdogAlerts)

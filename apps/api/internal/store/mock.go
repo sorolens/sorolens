@@ -9,16 +9,18 @@ import (
 
 // MockStore is an in-memory Store + QueryStore implementation for unit tests.
 type MockStore struct {
-	contracts      map[string]Contract
-	events         []Event
-	invocations    []Invocation
-	storageEntries []StorageEntry
-	syncStates     map[string]SyncState
-	globalStats    GlobalStats
-	monitored      map[string]MonitoredContract
-	healthChecks   []HealthCheck
-	alerts         []ContractAlert
-	apiKeys        []APIKey
+	contracts          map[string]Contract
+	events             []Event
+	invocations        []Invocation
+	storageEntries     []StorageEntry
+	syncStates         map[string]SyncState
+	globalStats        GlobalStats
+	monitored          map[string]MonitoredContract
+	healthChecks       []HealthCheck
+	alerts             []ContractAlert
+	apiKeys            []APIKey
+	watchlist          map[string]map[string]bool
+	alertSubscriptions []AlertSubscription
 
 	// Error injection
 	UpsertContractErr   error
@@ -40,6 +42,9 @@ func NewMockStore() *MockStore {
 		contracts:  make(map[string]Contract),
 		syncStates: make(map[string]SyncState),
 		monitored:  make(map[string]MonitoredContract),
+		watchlist:  make(map[string]map[string]bool),
+		alerts:     make([]ContractAlert, 0),
+		alertSubscriptions: make([]AlertSubscription, 0),
 	}
 }
 
@@ -135,6 +140,10 @@ func (m *MockStore) GetGlobalStats(_ context.Context) (GlobalStats, error) {
 func (m *MockStore) SetGlobalStats(gs GlobalStats) {
 	m.globalStats = gs
 }
+
+func (m *MockStore) CreateNextMonthPartition(_ context.Context) error { return nil }
+
+func (m *MockStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error { return nil }
 
 // ---- store.QueryStore -------------------------------------------------------
 
@@ -428,6 +437,71 @@ func (m *MockStore) TouchAPIKey(_ context.Context, id string) error {
 		}
 	}
 	return nil
+}
+
+// ---- store.AlertSubscriptionStore -------------------------------------------
+
+func (m *MockStore) Create(_ context.Context, s AlertSubscription) error {
+	m.alertSubscriptions = append(m.alertSubscriptions, s)
+	return nil
+}
+
+func (m *MockStore) ListByContract(_ context.Context, contractID string) ([]AlertSubscription, error) {
+	out := make([]AlertSubscription, 0)
+	for _, s := range m.alertSubscriptions {
+		if s.ContractID == contractID {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+func (m *MockStore) Delete(_ context.Context, id string) error {
+	filtered := make([]AlertSubscription, 0, len(m.alertSubscriptions))
+	for _, s := range m.alertSubscriptions {
+		if s.ID != id {
+			filtered = append(filtered, s)
+		}
+	}
+	m.alertSubscriptions = filtered
+	return nil
+}
+
+func (m *MockStore) ListAll(_ context.Context) ([]AlertSubscription, error) {
+	out := make([]AlertSubscription, len(m.alertSubscriptions))
+	copy(out, m.alertSubscriptions)
+	return out, nil
+}
+
+// ---- store.WatchlistStore ---------------------------------------------------
+
+func (m *MockStore) AddToWatchlist(_ context.Context, userID, contractID string) error {
+	if m.watchlist[userID] == nil {
+		m.watchlist[userID] = make(map[string]bool)
+	}
+	m.watchlist[userID][contractID] = true
+	return nil
+}
+
+func (m *MockStore) RemoveFromWatchlist(_ context.Context, userID, contractID string) error {
+	if m.watchlist[userID] != nil {
+		delete(m.watchlist[userID], contractID)
+	}
+	return nil
+}
+
+func (m *MockStore) ListWatchlist(_ context.Context, userID string) ([]string, error) {
+	items := m.watchlist[userID]
+	out := make([]string, 0, len(items))
+	for contractID := range items {
+		out = append(out, contractID)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func (m *MockStore) IsInWatchlist(_ context.Context, userID, contractID string) (bool, error) {
+	return m.watchlist[userID][contractID], nil
 }
 
 // ErrPing is returned by MockPinger when Healthy is false.
