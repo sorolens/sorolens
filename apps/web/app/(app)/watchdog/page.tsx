@@ -15,6 +15,7 @@ import type {
 import { StatCard } from "@/components/StatCard";
 import { TableSkeleton } from "@/components/Skeleton";
 import { HealthBadge, SeverityBadge } from "@/components/WatchdogBadges";
+import { networkFilter, useNetwork } from "@/lib/network";
 
 const ZERO_STATS: WatchdogStats = {
   total_monitored: 0,
@@ -26,6 +27,7 @@ const ZERO_STATS: WatchdogStats = {
 };
 
 export default function WatchdogPage() {
+  const { network } = useNetwork();
   const [stats, setStats] = useState<WatchdogStats>(ZERO_STATS);
   const [contracts, setContracts] = useState<MonitoredContract[] | null>(null);
   const [alerts, setAlerts] = useState<ContractAlert[] | null>(null);
@@ -33,10 +35,11 @@ export default function WatchdogPage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      const filter = networkFilter(network);
       const [s, c, a] = await Promise.all([
-        getWatchdogStats().catch(() => ZERO_STATS),
-        listMonitoredContracts({ limit: 50 }).catch(() => ({ contracts: [], next_cursor: "" })),
-        listAlerts(undefined, { limit: 20 }).catch(() => ({ alerts: [] })),
+        getWatchdogStats(filter).catch(() => ZERO_STATS),
+        listMonitoredContracts({ limit: 50, network: filter }).catch(() => ({ contracts: [], next_cursor: "" })),
+        listAlerts(undefined, { limit: 20, network: filter }).catch(() => ({ alerts: [] })),
       ]);
       if (cancelled) return;
       setStats(s);
@@ -47,7 +50,7 @@ export default function WatchdogPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [network]);
 
   return (
     <div className="space-y-8">

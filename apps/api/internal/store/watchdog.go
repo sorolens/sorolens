@@ -15,6 +15,7 @@ import (
 // health snapshot for one contract registered with the on-chain watchdog.
 type MonitoredContract struct {
 	ContractID    string
+	Network       string
 	Name          string
 	Owner         string
 	Status        string // Healthy | Degraded | Unresponsive | <custom>
@@ -65,11 +66,11 @@ type WatchdogStore interface {
 	InsertHealthCheck(ctx context.Context, h HealthCheck) error
 	InsertContractAlert(ctx context.Context, a ContractAlert) error
 
-	ListMonitoredContracts(ctx context.Context, cursor string, limit int) ([]MonitoredContract, string, error)
+	ListMonitoredContracts(ctx context.Context, cursor string, limit int, network string) ([]MonitoredContract, string, error)
 	GetMonitoredContract(ctx context.Context, contractID string) (MonitoredContract, error)
 	ListHealthChecks(ctx context.Context, contractID string, limit int) ([]HealthCheck, error)
-	ListAlerts(ctx context.Context, contractID, severity string, limit int) ([]ContractAlert, error)
-	GetWatchdogStats(ctx context.Context) (WatchdogStats, error)
+	ListAlerts(ctx context.Context, contractID, severity, network string, limit int) ([]ContractAlert, error)
+	GetWatchdogStats(ctx context.Context, network string) (WatchdogStats, error)
 }
 
 // ---- postgres implementation ----------------------------------------------
@@ -77,16 +78,17 @@ type WatchdogStore interface {
 func (s *postgresStore) UpsertMonitoredContract(ctx context.Context, m MonitoredContract) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO monitored_contracts
-			(contract_id, name, owner, status, last_check, check_interval, registered_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			(contract_id, network, name, owner, status, last_check, check_interval, registered_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		ON CONFLICT (contract_id) DO UPDATE SET
+			network        = EXCLUDED.network,
 			name           = EXCLUDED.name,
 			owner          = EXCLUDED.owner,
 			status         = EXCLUDED.status,
 			last_check     = COALESCE(EXCLUDED.last_check, monitored_contracts.last_check),
 			check_interval = EXCLUDED.check_interval,
 			updated_at     = EXCLUDED.updated_at`,
-		m.ContractID, m.Name, m.Owner, m.Status, m.LastCheck,
+		m.ContractID, networkOrDefault(m.Network), m.Name, m.Owner, m.Status, m.LastCheck,
 		m.CheckInterval, m.RegisteredAt, time.Now().UTC(),
 	)
 	return err
@@ -117,16 +119,17 @@ func (s *postgresStore) InsertContractAlert(ctx context.Context, a ContractAlert
 	return err
 }
 
-func (s *postgresStore) ListMonitoredContracts(ctx context.Context, cursor string, limit int) ([]MonitoredContract, string, error) {
+func (s *postgresStore) ListMonitoredContracts(ctx context.Context, cursor string, limit int, network string) ([]MonitoredContract, string, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT contract_id, name, owner, status, last_check, check_interval, registered_at, updated_at
+		SELECT contract_id, network, name, owner, status, last_check, check_interval, registered_at, updated_at
 		FROM monitored_contracts
 		WHERE ($1 = '' OR contract_id > $1)
+		  AND ($2 = '' OR network = $2)
 		ORDER BY contract_id ASC
-		LIMIT $2`, cursor, limit+1)
+		LIMIT $3`, cursor, network, limit+1)
 	if err != nil {
 		return nil, "", fmt.Errorf("list monitored contracts: %w", err)
 	}
@@ -135,7 +138,7 @@ func (s *postgresStore) ListMonitoredContracts(ctx context.Context, cursor strin
 	var out []MonitoredContract
 	for rows.Next() {
 		var m MonitoredContract
-		if err := rows.Scan(&m.ContractID, &m.Name, &m.Owner, &m.Status,
+		if err := rows.Scan(&m.ContractID, &m.Network, &m.Name, &m.Owner, &m.Status,
 			&m.LastCheck, &m.CheckInterval, &m.RegisteredAt, &m.UpdatedAt); err != nil {
 			return nil, "", err
 		}
@@ -154,10 +157,10 @@ func (s *postgresStore) ListMonitoredContracts(ctx context.Context, cursor strin
 
 func (s *postgresStore) GetMonitoredContract(ctx context.Context, contractID string) (MonitoredContract, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT contract_id, name, owner, status, last_check, check_interval, registered_at, updated_at
+		SELECT contract_id, network, name, owner, status, last_check, check_interval, registered_at, updated_at
 		FROM monitored_contracts WHERE contract_id = $1`, contractID)
 	var m MonitoredContract
-	err := row.Scan(&m.ContractID, &m.Name, &m.Owner, &m.Status,
+	err := row.Scan(&m.ContractID, &m.Network, &m.Name, &m.Owner, &m.Status,
 		&m.LastCheck, &m.CheckInterval, &m.RegisteredAt, &m.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return MonitoredContract{}, ErrNotFound
@@ -195,17 +198,19 @@ func (s *postgresStore) ListHealthChecks(ctx context.Context, contractID string,
 	return out, rows.Err()
 }
 
-func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity string, limit int) ([]ContractAlert, error) {
+func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, network string, limit int) ([]ContractAlert, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT contract_id, severity, message, ledger, tx_hash, timestamp
-		FROM contract_alerts
-		WHERE ($1 = '' OR contract_id = $1)
-		  AND ($2 = '' OR severity = $2)
-		ORDER BY timestamp DESC
-		LIMIT $3`, contractID, severity, limit)
+		SELECT a.contract_id, a.severity, a.message, a.ledger, a.tx_hash, a.timestamp
+		FROM contract_alerts a
+		JOIN monitored_contracts m ON m.contract_id = a.contract_id
+		WHERE ($1 = '' OR a.contract_id = $1)
+		  AND ($2 = '' OR a.severity = $2)
+		  AND ($3 = '' OR m.network = $3)
+		ORDER BY a.timestamp DESC
+		LIMIT $4`, contractID, severity, network, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list alerts: %w", err)
 	}
@@ -222,15 +227,18 @@ func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity str
 	return out, rows.Err()
 }
 
-func (s *postgresStore) GetWatchdogStats(ctx context.Context) (WatchdogStats, error) {
+func (s *postgresStore) GetWatchdogStats(ctx context.Context, network string) (WatchdogStats, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT
-			(SELECT COUNT(*) FROM monitored_contracts)                                AS total_monitored,
-			(SELECT COUNT(*) FROM monitored_contracts WHERE status = 'Healthy')       AS healthy,
-			(SELECT COUNT(*) FROM monitored_contracts WHERE status = 'Degraded')      AS degraded,
-			(SELECT COUNT(*) FROM monitored_contracts WHERE status = 'Unresponsive')  AS unresponsive,
-			(SELECT COUNT(*) FROM contract_alerts)                                    AS total_alerts,
-			(SELECT COUNT(*) FROM contract_alerts WHERE severity = 'Critical')        AS critical_alerts`)
+			(SELECT COUNT(*) FROM monitored_contracts WHERE ($1 = '' OR network = $1))                              AS total_monitored,
+			(SELECT COUNT(*) FROM monitored_contracts WHERE status = 'Healthy'      AND ($1 = '' OR network = $1)) AS healthy,
+			(SELECT COUNT(*) FROM monitored_contracts WHERE status = 'Degraded'     AND ($1 = '' OR network = $1)) AS degraded,
+			(SELECT COUNT(*) FROM monitored_contracts WHERE status = 'Unresponsive' AND ($1 = '' OR network = $1)) AS unresponsive,
+			(SELECT COUNT(*) FROM contract_alerts a JOIN monitored_contracts m ON m.contract_id = a.contract_id
+			  WHERE ($1 = '' OR m.network = $1))                                                                   AS total_alerts,
+			(SELECT COUNT(*) FROM contract_alerts a JOIN monitored_contracts m ON m.contract_id = a.contract_id
+			  WHERE a.severity = 'Critical' AND ($1 = '' OR m.network = $1))                                      AS critical_alerts`,
+		network)
 	var s2 WatchdogStats
 	err := row.Scan(&s2.TotalMonitored, &s2.Healthy, &s2.Degraded, &s2.Unresponsive,
 		&s2.TotalAlerts, &s2.CriticalAlerts)

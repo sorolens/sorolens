@@ -6,6 +6,7 @@ import { DataTable, MonoId } from "@sorolens/ui";
 import type { Column } from "@sorolens/ui";
 import { listContracts, trackContract, ApiError } from "@/lib/api";
 import type { ContractSummary } from "@/lib/types";
+import { networkFilter, useNetwork } from "@/lib/network";
 import { TableSkeleton } from "@/components/Skeleton";
 
 // ---------------------------------------------------------------------------
@@ -269,6 +270,9 @@ const COLUMNS: Column<ContractSummary>[] = [
 // ---------------------------------------------------------------------------
 
 export default function ContractsPage() {
+  // Selected network from the header selector.
+  const { network } = useNetwork();
+
   // Data state
   const [contracts, setContracts] = useState<ContractSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -292,28 +296,43 @@ export default function ContractsPage() {
   // Data fetching
   // ---------------------------------------------------------------------------
 
-  const load = useCallback(async (cursor: string | null) => {
-    setLoading(true);
-    try {
-      const data = await listContracts({
-        cursor: cursor ?? undefined,
-        limit: PAGE_SIZE,
-      });
-      setContracts(data.contracts ?? []);
-      setHasMore(data.has_more ?? false);
-    } catch {
-      // Backend not reachable yet. Fall through to the empty state so the
-      // page still reads as "waiting for data" instead of "broken".
-      setContracts([]);
-      setHasMore(false);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (cursor: string | null) => {
+      setLoading(true);
+      try {
+        const data = await listContracts({
+          cursor: cursor ?? undefined,
+          limit: PAGE_SIZE,
+          network: networkFilter(network),
+        });
+        setContracts(data.contracts ?? []);
+        setHasMore(data.has_more ?? false);
+      } catch {
+        // Backend not reachable yet. Fall through to the empty state so the
+        // page still reads as "waiting for data" instead of "broken".
+        setContracts([]);
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [network],
+  );
 
   useEffect(() => {
     load(cursors[cursorIndex]);
   }, [load, cursors, cursorIndex]);
+
+  // Reset to the first page when the network filter changes. The ref guard
+  // keeps this from firing an extra fetch on mount.
+  const prevNetwork = useRef(network);
+  useEffect(() => {
+    if (prevNetwork.current !== network) {
+      prevNetwork.current = network;
+      setCursors([null]);
+      setCursorIndex(0);
+    }
+  }, [network]);
 
   // ---------------------------------------------------------------------------
   // Pagination handlers

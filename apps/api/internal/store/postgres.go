@@ -56,8 +56,9 @@ func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Con
 	return c, err
 }
 
-// ListContracts returns a list of contracts, ordered by ID. The cursor is the last-seen contract ID (lexicographic order).
-func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit int) ([]Contract, string, error) {
+// ListContracts returns a list of contracts matching the optional filters,
+// ordered by ID. The cursor is the last-seen contract ID (lexicographic order).
+func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -67,8 +68,10 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 		       backfill_complete_at, status, added_at
 		FROM contracts
 		WHERE ($1 = '' OR id > $1)
+		  AND ($2 = '' OR network = $2)
+		  AND ($3 = '' OR status = $3)
 		ORDER BY id ASC
-		LIMIT $2`, cursor, limit+1)
+		LIMIT $4`, cursor, f.Network, f.Status, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -99,6 +102,15 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 
 // ---- events ---------------------------------------------------------------
 
+// networkOrDefault normalizes an empty network to the testnet default so
+// callers that predate multi-network support keep writing valid rows.
+func networkOrDefault(network string) string {
+	if network == "" {
+		return "testnet"
+	}
+	return network
+}
+
 // BatchInsertEvents inserts multiple events in a single batch operation. It ignores duplicate events based on the primary key (id).
 func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) error {
 	if len(events) == 0 {
@@ -115,12 +127,12 @@ func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) e
 
 		batch.Queue(`
 			INSERT INTO events
-				(id, contract_id, ledger, ledger_closed_at, tx_hash, type,
+				(id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 				 topic_xdr, value_xdr, topic_decoded, value_decoded,
 				 in_successful_call, inserted_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 			ON CONFLICT (id) DO NOTHING`,
-			e.ID, e.ContractID, e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
+			e.ID, e.ContractID, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
 			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
 			e.InSuccessfulCall, time.Now(),
 		)
@@ -150,13 +162,13 @@ func (s *postgresStore) BatchInsertInvocations(ctx context.Context, invocations 
 
 		batch.Queue(`
 			INSERT INTO invocations
-				(tx_hash, contract_id, ledger, ledger_closed_at, status,
+				(tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 				 function_name, args_decoded, result_decoded, result_xdr,
 				 resource_fee_charged, cpu_insn, mem_byte,
 				 ledger_read_byte, ledger_write_byte, application_order, inserted_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 			ON CONFLICT (tx_hash) DO NOTHING`,
-			inv.TxHash, inv.ContractID, inv.Ledger, inv.LedgerClosedAt, inv.Status,
+			inv.TxHash, inv.ContractID, networkOrDefault(inv.Network), inv.Ledger, inv.LedgerClosedAt, inv.Status,
 			inv.FunctionName, argsJSON, resultJSON, inv.ResultXDR,
 			inv.ResourceFeeCharged, inv.CPUInsn, inv.MemByte,
 			inv.LedgerReadByte, inv.LedgerWriteByte, inv.ApplicationOrder, time.Now(),
@@ -187,10 +199,11 @@ func (s *postgresStore) UpsertStorageEntries(ctx context.Context, entries []Stor
 
 		batch.Queue(`
 			INSERT INTO storage_entries
-				(contract_id, key_xdr, key_decoded, value_xdr, value_decoded,
+				(contract_id, network, key_xdr, key_decoded, value_xdr, value_decoded,
 				 durability, live_until_ledger, last_modified_ledger, status, last_seen_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 			ON CONFLICT (contract_id, key_xdr) DO UPDATE SET
+				network             = EXCLUDED.network,
 				key_decoded         = EXCLUDED.key_decoded,
 				value_xdr           = EXCLUDED.value_xdr,
 				value_decoded       = EXCLUDED.value_decoded,
@@ -198,8 +211,25 @@ func (s *postgresStore) UpsertStorageEntries(ctx context.Context, entries []Stor
 				last_modified_ledger = EXCLUDED.last_modified_ledger,
 				status              = EXCLUDED.status,
 				last_seen_at        = EXCLUDED.last_seen_at`,
-			e.ContractID, e.KeyXDR, keyDecJSON, e.ValueXDR, valDecJSON,
+			e.ContractID, networkOrDefault(e.Network), e.KeyXDR, keyDecJSON, e.ValueXDR, valDecJSON,
 			e.Durability, e.LiveUntilLedger, e.LastModifiedLedger, e.Status, time.Now(),
+		)
+
+		// Append a versioned row so the snapshot/replay endpoint can recover
+		// the value that was live at any historical ledger.
+		batch.Queue(`
+			INSERT INTO storage_entry_history
+				(contract_id, key_xdr, key_decoded, value_xdr, value_decoded,
+				 durability, live_until_ledger, last_modified_ledger, status)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			ON CONFLICT (contract_id, key_xdr, last_modified_ledger) DO UPDATE SET
+				key_decoded         = EXCLUDED.key_decoded,
+				value_xdr           = EXCLUDED.value_xdr,
+				value_decoded       = EXCLUDED.value_decoded,
+				live_until_ledger   = EXCLUDED.live_until_ledger,
+				status              = EXCLUDED.status`,
+			e.ContractID, e.KeyXDR, keyDecJSON, e.ValueXDR, valDecJSON,
+			e.Durability, e.LiveUntilLedger, e.LastModifiedLedger, e.Status,
 		)
 	}
 

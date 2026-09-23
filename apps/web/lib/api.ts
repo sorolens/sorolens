@@ -1,6 +1,7 @@
 import type {
   AlertsResponse,
   ContractDetail,
+  ContractSnapshot,
   ContractSummary,
   ContractsListResponse,
   EventsResponse,
@@ -165,18 +166,39 @@ export function getGlobalStats(): Promise<GlobalStats> {
   return fetchJson<GlobalStats>(`${API_URL}/api/v1/stats/global`);
 }
 
+// ---- snapshot / replay ------------------------------------------------------
+
+/**
+ * Replay a contract's storage state and last known event as they were at a
+ * given ledger. Used by the ledger scrubber on the contract detail page.
+ */
+export function getContractSnapshot(
+  id: string,
+  ledger: number,
+): Promise<ContractSnapshot> {
+  return fetchJson<ContractSnapshot>(
+    `${API_URL}/api/v1/contracts/${id}/snapshot?ledger=${ledger}`,
+  );
+}
+
 // ---- watchdog --------------------------------------------------------------
 
-export function getWatchdogStats(): Promise<WatchdogStats> {
-  return fetchJson<WatchdogStats>(`${API_URL}/api/v1/watchdog/stats`);
+export function getWatchdogStats(network?: string): Promise<WatchdogStats> {
+  const search = new URLSearchParams();
+  if (network) search.set("network", network);
+  const qs = search.toString();
+  return fetchJson<WatchdogStats>(
+    `${API_URL}/api/v1/watchdog/stats${qs ? "?" + qs : ""}`,
+  );
 }
 
 export function listMonitoredContracts(
-  params?: { cursor?: string; limit?: number },
+  params?: { cursor?: string; limit?: number; network?: string },
 ): Promise<MonitoredContractsResponse> {
   const search = new URLSearchParams();
   if (params?.cursor) search.set("cursor", params.cursor);
   if (params?.limit) search.set("limit", String(params.limit));
+  if (params?.network) search.set("network", params.network);
   const qs = search.toString();
   return fetchJson<MonitoredContractsResponse>(
     `${API_URL}/api/v1/watchdog/contracts${qs ? "?" + qs : ""}`,
@@ -202,11 +224,12 @@ export function listHealthChecks(
 
 export function listAlerts(
   contractId?: string,
-  params?: { severity?: string; limit?: number },
+  params?: { severity?: string; limit?: number; network?: string },
 ): Promise<AlertsResponse> {
   const search = new URLSearchParams();
   if (params?.severity) search.set("severity", params.severity);
   if (params?.limit) search.set("limit", String(params.limit));
+  if (params?.network) search.set("network", params.network);
   const qs = search.toString();
   const path = contractId
     ? `/api/v1/watchdog/contracts/${contractId}/alerts`

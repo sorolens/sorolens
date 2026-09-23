@@ -29,32 +29,43 @@ func New(h *handler.Handler) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
 
+		// Scoped API key auth. It is applied per route with r.With so chi has
+		// already resolved the leaf route pattern when the middleware runs; the
+		// required scope is looked up from the metadata table in
+		// middleware/scopes.go keyed by that pattern. Requests without a
+		// credential still pass on read/write routes (public v0.1 surface),
+		// while API key management always requires a credential.
+		scope := middleware.RequireScopes(h.Store, h.Logger)
+		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
+		post := func(pattern string, fn http.HandlerFunc) { r.With(scope).Post(pattern, fn) }
+		del := func(pattern string, fn http.HandlerFunc) { r.With(scope).Delete(pattern, fn) }
+
 		// Stats
-		r.Get("/stats/global", h.GlobalStats)
+		get("/stats/global", h.GlobalStats)
 
 		// Contracts
-		r.Post("/contracts", h.RegisterContract)
-		r.Get("/contracts", h.ListContracts)
-		r.Route("/contracts/{id}", func(r chi.Router) {
-			r.Get("/", h.GetContract)
-			r.Get("/events", h.ListEvents)
-			r.Get("/invocations", h.ListInvocations)
-			r.Get("/storage", h.ListStorageEntries)
-			r.Get("/stats", h.ContractStats)
-			r.Get("/stream", h.StreamEvents)
-		})
+		post("/contracts", h.RegisterContract)
+		get("/contracts", h.ListContracts)
+		get("/contracts/{id}", h.GetContract)
+		get("/contracts/{id}/events", h.ListEvents)
+		get("/contracts/{id}/invocations", h.ListInvocations)
+		get("/contracts/{id}/storage", h.ListStorageEntries)
+		get("/contracts/{id}/stats", h.ContractStats)
+		get("/contracts/{id}/snapshot", h.ContractSnapshot)
+		get("/contracts/{id}/stream", h.StreamEvents)
+
+		// API keys (admin scope).
+		get("/api-keys", h.ListAPIKeys)
+		post("/api-keys", h.CreateAPIKey)
+		del("/api-keys/{id}", h.RevokeAPIKey)
 
 		// Watchdog: data from the on-chain sorolens-watchdog contract.
-		r.Route("/watchdog", func(r chi.Router) {
-			r.Get("/stats", h.WatchdogStats)
-			r.Get("/alerts", h.ListWatchdogAlerts)
-			r.Get("/contracts", h.ListMonitoredContracts)
-			r.Route("/contracts/{id}", func(r chi.Router) {
-				r.Get("/", h.GetMonitoredContract)
-				r.Get("/health", h.ListHealthChecks)
-				r.Get("/alerts", h.ListWatchdogAlerts)
-			})
-		})
+		get("/watchdog/stats", h.WatchdogStats)
+		get("/watchdog/alerts", h.ListWatchdogAlerts)
+		get("/watchdog/contracts", h.ListMonitoredContracts)
+		get("/watchdog/contracts/{id}", h.GetMonitoredContract)
+		get("/watchdog/contracts/{id}/health", h.ListHealthChecks)
+		get("/watchdog/contracts/{id}/alerts", h.ListWatchdogAlerts)
 	})
 
 	return r

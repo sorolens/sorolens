@@ -15,6 +15,10 @@ Soroban's public RPC retains events for 24 hours and transaction data for up to 
 - **Storage tracking**: snapshot of every temporary, persistent, and instance storage entry, with TTL health.
 - **Watchdog monitoring** *(new)*: the on-chain `sorolens-watchdog` Soroban contract lets any contract owner register a contract, push health status, and raise alerts. Sorolens indexes those events and materialises them into a dashboard, giving you the only proactive-monitoring path on Stellar without a centralised heartbeat service.
 - **Alerting**: when persistent storage entries are within a configurable number of ledgers of expiry, or when a monitored contract goes `Unresponsive`.
+- **Multi-network**: track and query testnet, mainnet, and futurenet contracts side by side, with a network selector in the dashboard header and a `?network=` filter on every list endpoint.
+- **Snapshot / replay**: `GET /api/v1/contracts/:id/snapshot?ledger=N` replays a contract's storage state and last known event as of any ledger, with a ledger scrubber on the contract page for time-travel debugging.
+- **Scoped API keys**: per-key permissions (`read:contracts`, `write:contracts`, `read:watchdog`, `admin:*`) enforced by route metadata, so a monitoring bot can hold a read-only watchdog key.
+- **API playground**: an interactive `/playground` page to explore every endpoint, send requests, and copy them as curl.
 
 ## Quickstart
 ### Prerequisites
@@ -106,7 +110,7 @@ Admin: `GAZ3HN2QNDKWLOI2OQEG65KBJEAUP4PROR3FJNXNDY34UH547MN4CJUI`
 sorolens/
   apps/
     api/          Go API (Vercel serverless functions)
-    web/          Next.js 15 dashboard (landing page + /contracts + /watchdog)
+    web/          Next.js 15 dashboard (landing page + /contracts + /watchdog + /playground)
   services/
     indexer/      Go indexer worker (+ internal/watchdog event classifier)
   packages/

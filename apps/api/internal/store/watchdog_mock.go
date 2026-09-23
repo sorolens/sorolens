@@ -64,13 +64,16 @@ func (m *MockStore) InsertContractAlert(_ context.Context, a ContractAlert) erro
 	return nil
 }
 
-func (m *MockStore) ListMonitoredContracts(_ context.Context, cursor string, limit int) ([]MonitoredContract, string, error) {
+func (m *MockStore) ListMonitoredContracts(_ context.Context, cursor string, limit int, network string) ([]MonitoredContract, string, error) {
 	m.ensureWatchdog()
 	if limit <= 0 {
 		limit = 50
 	}
 	ids := make([]string, 0, len(m.monitored))
-	for id := range m.monitored {
+	for id, mc := range m.monitored {
+		if network != "" && mc.Network != network {
+			continue
+		}
 		if cursor == "" || id > cursor {
 			ids = append(ids, id)
 		}
@@ -110,10 +113,11 @@ func (m *MockStore) ListHealthChecks(_ context.Context, contractID string, limit
 	return out, nil
 }
 
-func (m *MockStore) ListAlerts(_ context.Context, contractID, severity string, limit int) ([]ContractAlert, error) {
+func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network string, limit int) ([]ContractAlert, error) {
 	if limit <= 0 {
 		limit = 100
 	}
+	m.ensureWatchdog()
 	out := make([]ContractAlert, 0)
 	for i := len(m.alerts) - 1; i >= 0 && len(out) < limit; i-- {
 		a := m.alerts[i]
@@ -123,15 +127,21 @@ func (m *MockStore) ListAlerts(_ context.Context, contractID, severity string, l
 		if severity != "" && a.Severity != severity {
 			continue
 		}
+		if network != "" && m.monitored[a.ContractID].Network != network {
+			continue
+		}
 		out = append(out, a)
 	}
 	return out, nil
 }
 
-func (m *MockStore) GetWatchdogStats(_ context.Context) (WatchdogStats, error) {
+func (m *MockStore) GetWatchdogStats(_ context.Context, network string) (WatchdogStats, error) {
 	m.ensureWatchdog()
 	var s WatchdogStats
 	for _, mc := range m.monitored {
+		if network != "" && mc.Network != network {
+			continue
+		}
 		s.TotalMonitored++
 		switch mc.Status {
 		case "Healthy":
@@ -142,8 +152,11 @@ func (m *MockStore) GetWatchdogStats(_ context.Context) (WatchdogStats, error) {
 			s.Unresponsive++
 		}
 	}
-	s.TotalAlerts = int64(len(m.alerts))
 	for _, a := range m.alerts {
+		if network != "" && m.monitored[a.ContractID].Network != network {
+			continue
+		}
+		s.TotalAlerts++
 		if a.Severity == "Critical" {
 			s.CriticalAlerts++
 		}

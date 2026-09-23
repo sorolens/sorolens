@@ -253,6 +253,56 @@ CREATE TABLE sync_state (
     error_message  TEXT,                               -- last error, if any
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ============================================================
+-- storage_entry_history
+-- Append-only history of storage entries (migration 000005). Every write
+-- to storage_entries also appends a versioned row here, so the snapshot/
+-- replay endpoint can answer "what was live at ledger N?".
+-- ============================================================
+CREATE TABLE storage_entry_history (
+    id                   BIGSERIAL   PRIMARY KEY,
+    contract_id          TEXT        NOT NULL,
+    key_xdr              TEXT        NOT NULL,
+    key_decoded          JSONB,
+    value_xdr            TEXT,
+    value_decoded        JSONB,
+    durability           TEXT        NOT NULL,
+    live_until_ledger    BIGINT,
+    last_modified_ledger BIGINT,
+    status               TEXT        NOT NULL DEFAULT 'live',
+    recorded_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (contract_id, key_xdr, last_modified_ledger)
+);
+
+CREATE INDEX idx_storage_history_lookup
+    ON storage_entry_history (contract_id, key_xdr, last_modified_ledger DESC);
+
+-- ============================================================
+-- api_keys
+-- Scoped API credentials (migration 000004). Only the SHA-256 hash of the
+-- plaintext token is stored; the token is shown once at creation.
+-- ============================================================
+CREATE TABLE api_keys (
+    id           TEXT        PRIMARY KEY,
+    name         TEXT        NOT NULL,
+    key_prefix   TEXT        NOT NULL,
+    key_hash     TEXT        NOT NULL UNIQUE,
+    scopes       TEXT[]      NOT NULL DEFAULT '{}',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ,
+    revoked_at   TIMESTAMPTZ
+);
+
+CREATE INDEX idx_api_keys_hash ON api_keys (key_hash) WHERE revoked_at IS NULL;
+
+-- ============================================================
+-- multi-network (migration 000003)
+-- events, invocations, storage_entries, and monitored_contracts gained a
+-- `network` column defaulting to 'testnet', so the indexer and API can track
+-- testnet, mainnet, and futurenet simultaneously. Existing rows are
+-- backfilled to 'testnet' for backward compatibility.
+-- ============================================================
 ```
 
 ### Index justifications
@@ -280,6 +330,27 @@ All routes return `Content-Type: application/json`. Errors follow:
 ```
 
 Cursor pagination uses an opaque `cursor` token (base64 of `{ledger}:{id}`) rather than offset. This is safe against inserts during pagination and aligns with how the RPC itself paginates.
+
+#### Authentication and scopes
+
+Every list endpoint accepts an optional `?network=testnet|mainnet|futurenet`
+filter (omitted or `all` means every network).
+
+Requests may carry a scoped API key via `Authorization: Bearer <token>` or
+`X-API-Key: <token>`. Scope enforcement is driven by a route metadata table
+keyed by the chi route pattern (`internal/middleware/scopes.go`):
+
+| Scope | Grants |
+|---|---|
+| `read:contracts` | contract, event, invocation, storage, stats, and snapshot reads |
+| `write:contracts` | `POST /api/v1/contracts` |
+| `read:watchdog` | all `/api/v1/watchdog/*` reads |
+| `admin:*` | everything, including API key management |
+
+A presented key that lacks the required scope receives `403` with
+`{"error":"missing scope","required":"<scope>"}`. Unknown or revoked keys
+receive `401`. Requests that present no credential keep the public v0.1 read
+surface open; API key management always requires a credential.
 
 ---
 
@@ -497,7 +568,42 @@ Paginated storage entry list.
 
 ---
 
-### 4.5 Stats
+### 4.5 Snapshot / replay
+
+#### `GET /api/v1/contracts/:id/snapshot?ledger=N`
+
+Replays the contract's storage state and last known event as they were at
+ledger `N`. Used by the ledger scrubber on the contract detail page.
+
+**Responses:**
+- `200`: `{ contract_id, network, ledger, first_tracked_ledger, storage, last_event }`.
+- `404`: contract is unknown, or `N` precedes the first ledger the contract
+  was tracked at (the message names that ledger).
+- `422`: `ledger` is missing or not a positive integer.
+
+---
+
+### 4.6 API keys
+
+Scoped credentials are managed under `/api/v1/api-keys` and require the
+`admin:*` scope.
+
+#### `POST /api/v1/api-keys`
+
+Create a key. Body: `{ "name": string, "scopes": string[] }`. Returns `201`
+with the plaintext `key` exactly once; only its SHA-256 hash is persisted.
+
+#### `GET /api/v1/api-keys`
+
+List key metadata (never the token).
+
+#### `DELETE /api/v1/api-keys/:id`
+
+Revoke a key. Returns `204`.
+
+---
+
+### 4.7 Stats
 
 #### `GET /api/v1/stats/global`
 

@@ -3,17 +3,20 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// FullStore combines Store, QueryStore, and WatchdogStore: all three
-// implemented by the postgres backend and the in-memory MockStore.
+// FullStore combines every store interface: all of them are implemented by
+// the postgres backend and the in-memory MockStore.
 type FullStore interface {
 	Store
 	QueryStore
 	WatchdogStore
+	APIKeyStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
@@ -23,15 +26,17 @@ func NewFullStore(pool *pgxpool.Pool) FullStore {
 
 // EventFilters holds optional query filters for listing events.
 type EventFilters struct {
-	Type string
-	From uint32
-	To   uint32
+	Type    string
+	Network string
+	From    uint32
+	To      uint32
 }
 
 // InvocationFilters holds optional query filters for listing invocations.
 type InvocationFilters struct {
 	Status       string
 	FunctionName string
+	Network      string
 	From         uint32
 	To           uint32
 }
@@ -40,6 +45,7 @@ type InvocationFilters struct {
 type StorageFilters struct {
 	Durability string
 	Status     string
+	Network    string
 }
 
 // ContractStats holds per-contract aggregated statistics.
@@ -60,6 +66,19 @@ type QueryStore interface {
 	ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error)
 	GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error)
 	RecentEvents(ctx context.Context, contractID string, limit int) ([]Event, error)
+
+	// ContractFirstLedger returns the earliest ledger for which the contract
+	// has indexed data (events or invocations). It returns 0 when nothing has
+	// been indexed yet, letting callers fall back to the contract's
+	// created_at_ledger.
+	ContractFirstLedger(ctx context.Context, contractID string) (uint32, error)
+	// GetStorageSnapshot returns the storage entry version that was live at
+	// the given ledger: for each key, the most recent version written at or
+	// before ledger whose TTL had not yet expired.
+	GetStorageSnapshot(ctx context.Context, contractID string, ledger uint32) ([]StorageEntry, error)
+	// LastEventAtOrBefore returns the most recent event with ledger <= ledger,
+	// or ErrNotFound when the contract has no such event.
+	LastEventAtOrBefore(ctx context.Context, contractID string, ledger uint32) (Event, error)
 }
 
 // ---- ListEvents --------------------------------------------------------------
@@ -69,18 +88,19 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 		limit = 50
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, contract_id, ledger, ledger_closed_at, tx_hash, type,
+		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
 		       in_successful_call, inserted_at
 		FROM events
 		WHERE contract_id = $1
 		  AND ($2 = '' OR id > $2)
-		  AND ($3 = '' OR type = $3)
-		  AND ($4 = 0   OR ledger >= $4)
-		  AND ($5 = 0   OR ledger <= $5)
+		  AND ($3 = '' OR network = $3)
+		  AND ($4 = '' OR type = $4)
+		  AND ($5 = 0   OR ledger >= $5)
+		  AND ($6 = 0   OR ledger <= $6)
 		ORDER BY ledger ASC, id ASC
-		LIMIT $6`,
-		contractID, cursor, f.Type, f.From, f.To, limit+1,
+		LIMIT $7`,
+		contractID, cursor, f.Network, f.Type, f.From, f.To, limit+1,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("list events: %w", err)
@@ -92,7 +112,7 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 		var e Event
 		var topicXDR, topicDec, valDec []byte
 		if err := rows.Scan(
-			&e.ID, &e.ContractID, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
+			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
 			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
 			&e.InSuccessfulCall, &e.InsertedAt,
 		); err != nil {
@@ -122,7 +142,7 @@ func (s *postgresStore) RecentEvents(ctx context.Context, contractID string, lim
 		limit = 20
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, contract_id, ledger, ledger_closed_at, tx_hash, type,
+		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
 		       in_successful_call, inserted_at
 		FROM events
@@ -141,7 +161,7 @@ func (s *postgresStore) RecentEvents(ctx context.Context, contractID string, lim
 		var e Event
 		var topicXDR, topicDec, valDec []byte
 		if err := rows.Scan(
-			&e.ID, &e.ContractID, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
+			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
 			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
 			&e.InSuccessfulCall, &e.InsertedAt,
 		); err != nil {
@@ -162,20 +182,21 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		limit = 50
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT tx_hash, contract_id, ledger, ledger_closed_at, status,
+		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 		       function_name, args_decoded, result_decoded, result_xdr,
 		       resource_fee_charged, cpu_insn, mem_byte,
 		       ledger_read_byte, ledger_write_byte, application_order, inserted_at
 		FROM invocations
 		WHERE contract_id = $1
 		  AND ($2 = '' OR tx_hash > $2)
-		  AND ($3 = '' OR status = $3)
-		  AND ($4 = '' OR function_name = $4)
-		  AND ($5 = 0   OR ledger >= $5)
-		  AND ($6 = 0   OR ledger <= $6)
+		  AND ($3 = '' OR network = $3)
+		  AND ($4 = '' OR status = $4)
+		  AND ($5 = '' OR function_name = $5)
+		  AND ($6 = 0   OR ledger >= $6)
+		  AND ($7 = 0   OR ledger <= $7)
 		ORDER BY ledger ASC, tx_hash ASC
-		LIMIT $7`,
-		contractID, cursor, f.Status, f.FunctionName, f.From, f.To, limit+1,
+		LIMIT $8`,
+		contractID, cursor, f.Network, f.Status, f.FunctionName, f.From, f.To, limit+1,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("list invocations: %w", err)
@@ -187,7 +208,7 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		var inv Invocation
 		var argsDec, resultDec []byte
 		if err := rows.Scan(
-			&inv.TxHash, &inv.ContractID, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
+			&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
@@ -217,16 +238,17 @@ func (s *postgresStore) ListStorageEntries(ctx context.Context, contractID, curs
 		limit = 50
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT contract_id, key_xdr, key_decoded, value_xdr, value_decoded,
+		SELECT contract_id, network, key_xdr, key_decoded, value_xdr, value_decoded,
 		       durability, live_until_ledger, last_modified_ledger, status, last_seen_at
 		FROM storage_entries
 		WHERE contract_id = $1
 		  AND ($2 = '' OR key_xdr > $2)
-		  AND ($3 = '' OR durability = $3)
-		  AND ($4 = '' OR status = $4)
+		  AND ($3 = '' OR network = $3)
+		  AND ($4 = '' OR durability = $4)
+		  AND ($5 = '' OR status = $5)
 		ORDER BY key_xdr ASC
-		LIMIT $5`,
-		contractID, cursor, f.Durability, f.Status, limit+1,
+		LIMIT $6`,
+		contractID, cursor, f.Network, f.Durability, f.Status, limit+1,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("list storage entries: %w", err)
@@ -238,7 +260,7 @@ func (s *postgresStore) ListStorageEntries(ctx context.Context, contractID, curs
 		var se StorageEntry
 		var keyDec, valDec []byte
 		if err := rows.Scan(
-			&se.ContractID, &se.KeyXDR, &keyDec, &se.ValueXDR, &valDec,
+			&se.ContractID, &se.Network, &se.KeyXDR, &keyDec, &se.ValueXDR, &valDec,
 			&se.Durability, &se.LiveUntilLedger, &se.LastModifiedLedger, &se.Status, &se.LastSeenAt,
 		); err != nil {
 			return nil, "", err
@@ -295,4 +317,87 @@ func (s *postgresStore) GetContractStats(ctx context.Context, contractID, window
 		cs.WindowDuration = "24h"
 	}
 	return cs, err
+}
+
+// ---- ContractFirstLedger ----------------------------------------------------
+
+func (s *postgresStore) ContractFirstLedger(ctx context.Context, contractID string) (uint32, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT COALESCE(MIN(ledger), 0) FROM (
+			SELECT ledger FROM events      WHERE contract_id = $1
+			UNION ALL
+			SELECT ledger FROM invocations WHERE contract_id = $1
+		) AS l`, contractID)
+	var first uint32
+	if err := row.Scan(&first); err != nil {
+		return 0, fmt.Errorf("contract first ledger: %w", err)
+	}
+	return first, nil
+}
+
+// ---- GetStorageSnapshot -----------------------------------------------------
+
+func (s *postgresStore) GetStorageSnapshot(ctx context.Context, contractID string, ledger uint32) ([]StorageEntry, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT ON (key_xdr)
+		       contract_id, key_xdr, key_decoded, value_xdr, value_decoded,
+		       durability, live_until_ledger, last_modified_ledger, status, recorded_at
+		FROM storage_entry_history
+		WHERE contract_id = $1
+		  AND (last_modified_ledger IS NULL OR last_modified_ledger <= $2)
+		  AND (live_until_ledger IS NULL OR live_until_ledger >= $2)
+		ORDER BY key_xdr ASC, last_modified_ledger DESC NULLS LAST`,
+		contractID, ledger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get storage snapshot: %w", err)
+	}
+	defer rows.Close()
+
+	var out []StorageEntry
+	for rows.Next() {
+		var se StorageEntry
+		var keyDec, valDec []byte
+		if err := rows.Scan(
+			&se.ContractID, &se.KeyXDR, &keyDec, &se.ValueXDR, &valDec,
+			&se.Durability, &se.LiveUntilLedger, &se.LastModifiedLedger, &se.Status, &se.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(keyDec, &se.KeyDecoded)
+		_ = json.Unmarshal(valDec, &se.ValueDecoded)
+		out = append(out, se)
+	}
+	return out, rows.Err()
+}
+
+// ---- LastEventAtOrBefore ----------------------------------------------------
+
+func (s *postgresStore) LastEventAtOrBefore(ctx context.Context, contractID string, ledger uint32) (Event, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+		       topic_xdr, value_xdr, topic_decoded, value_decoded,
+		       in_successful_call, inserted_at
+		FROM events
+		WHERE contract_id = $1 AND ledger <= $2
+		ORDER BY ledger DESC, id DESC
+		LIMIT 1`, contractID, ledger)
+
+	var e Event
+	var topicXDR, topicDec, valDec []byte
+	err := row.Scan(
+		&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
+		&topicXDR, &e.ValueXDR, &topicDec, &valDec,
+		&e.InSuccessfulCall, &e.InsertedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Event{}, ErrNotFound
+	}
+	if err != nil {
+		return Event{}, err
+	}
+	_ = json.Unmarshal(topicXDR, &e.TopicXDR)
+	_ = json.Unmarshal(topicDec, &e.TopicDecoded)
+	_ = json.Unmarshal(valDec, &e.ValueDecoded)
+	return e, nil
 }

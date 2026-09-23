@@ -32,10 +32,11 @@ type Store interface {
 	// GetContract returns the contract with the given ID, or ErrNotFound.
 	GetContract(ctx context.Context, contractID string) (Contract, error)
 
-	// ListContracts returns a cursor-paginated list of all tracked contracts.
-	// cursor is opaque; pass "" for the first page. Returns the next cursor
-	// (empty string when there are no more pages) as the second return value.
-	ListContracts(ctx context.Context, cursor string, limit int) ([]Contract, string, error)
+	// ListContracts returns a cursor-paginated list of tracked contracts
+	// matching the optional filters. cursor is opaque; pass "" for the first
+	// page. Returns the next cursor (empty string when there are no more
+	// pages) as the second return value.
+	ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error)
 
 	// BatchInsertEvents inserts events, ignoring duplicates by primary key.
 	// All rows are sent in a single network round-trip.
@@ -57,6 +58,16 @@ type Store interface {
 	// GetGlobalStats returns aggregate counts across all tracked contracts.
 	// Computed with a single SQL query.
 	GetGlobalStats(ctx context.Context) (GlobalStats, error)
+}
+
+// ContractFilters holds optional query filters for listing contracts.
+type ContractFilters struct {
+	// Network restricts results to one of testnet | mainnet | futurenet.
+	// Empty means all networks.
+	Network string
+	// Status restricts results to one contract status (e.g. "active").
+	// Empty means all statuses.
+	Status string
 }
 
 // NewStore returns a Store backed by the given pgxpool.Pool.

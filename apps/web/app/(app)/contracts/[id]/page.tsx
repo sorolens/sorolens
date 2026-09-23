@@ -25,6 +25,7 @@ import { EventVolumeChart } from "@/components/EventVolumeChart";
 import { InvocationChart } from "@/components/InvocationChart";
 import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
+import { SnapshotPanel } from "@/components/SnapshotPanel";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -350,6 +351,11 @@ function ContractDetailContent({ id }: { id: string }) {
             hasMore={storageHasMore}
           />
         )}
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-4 text-xl font-semibold">Snapshot / replay</h2>
+        <SnapshotPanel contractId={id} currentLedger={currentLedger} />
       </section>
     </div>
   );

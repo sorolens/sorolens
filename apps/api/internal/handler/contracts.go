@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ type contractResponse struct {
 type eventResponse struct {
 	ID               string    `json:"id"`
 	ContractID       string    `json:"contract_id"`
+	Network          string    `json:"network"`
 	Ledger           uint32    `json:"ledger"`
 	LedgerClosedAt   time.Time `json:"ledger_closed_at"`
 	TxHash           string    `json:"tx_hash"`
@@ -43,6 +45,7 @@ type eventResponse struct {
 type invocationResponse struct {
 	TxHash             string         `json:"tx_hash"`
 	ContractID         string         `json:"contract_id"`
+	Network            string         `json:"network"`
 	Ledger             uint32         `json:"ledger"`
 	LedgerClosedAt     time.Time      `json:"ledger_closed_at"`
 	Status             string         `json:"status"`
@@ -60,6 +63,7 @@ type invocationResponse struct {
 
 type storageEntryResponse struct {
 	ContractID         string    `json:"contract_id"`
+	Network            string    `json:"network"`
 	KeyXDR             string    `json:"key_xdr"`
 	KeyDecoded         any       `json:"key_decoded"`
 	ValueXDR           string    `json:"value_xdr"`
@@ -122,6 +126,20 @@ func uint32Query(r *http.Request, key string) uint32 {
 	return uint32(n)
 }
 
+// networkParam reads the optional ?network= filter. It returns ("", true) when
+// the parameter is absent or empty, and ok=false when the value is not a
+// recognized network.
+func networkParam(r *http.Request) (string, bool) {
+	v := strings.TrimSpace(r.URL.Query().Get("network"))
+	if v == "" || v == "all" {
+		return "", true
+	}
+	if !validNetworks[v] {
+		return "", false
+	}
+	return v, true
+}
+
 func contractFromStore(c store.Contract) contractResponse {
 	return contractResponse{
 		ID:                 c.ID,
@@ -139,6 +157,7 @@ func eventFromStore(e store.Event) eventResponse {
 	return eventResponse{
 		ID:               e.ID,
 		ContractID:       e.ContractID,
+		Network:          e.Network,
 		Ledger:           e.Ledger,
 		LedgerClosedAt:   e.LedgerClosedAt,
 		TxHash:           e.TxHash,
@@ -155,6 +174,7 @@ func invocationFromStore(inv store.Invocation) invocationResponse {
 	return invocationResponse{
 		TxHash:             inv.TxHash,
 		ContractID:         inv.ContractID,
+		Network:            inv.Network,
 		Ledger:             inv.Ledger,
 		LedgerClosedAt:     inv.LedgerClosedAt,
 		Status:             inv.Status,
@@ -174,6 +194,7 @@ func invocationFromStore(inv store.Invocation) invocationResponse {
 func storageEntryFromStore(se store.StorageEntry) storageEntryResponse {
 	return storageEntryResponse{
 		ContractID:         se.ContractID,
+		Network:            se.Network,
 		KeyXDR:             se.KeyXDR,
 		KeyDecoded:         se.KeyDecoded,
 		ValueXDR:           se.ValueXDR,
@@ -237,15 +258,26 @@ func (h *Handler) RegisterContract(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListContracts handles GET /api/v1/contracts.
+//
+// Query params: cursor, limit, network (testnet|mainnet|futurenet), status.
 func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
+	network, ok := networkParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
 	limit := intQuery(r, "limit", 50)
+	f := store.ContractFilters{
+		Network: network,
+		Status:  r.URL.Query().Get("status"),
+	}
 
-	contracts, nextRaw, err := h.Store.ListContracts(r.Context(), rawCursor, limit)
+	contracts, nextRaw, err := h.Store.ListContracts(r.Context(), rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list contracts", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list contracts")
@@ -286,10 +318,16 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
+	network, ok := networkParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
 	f := store.EventFilters{
-		Type: r.URL.Query().Get("type"),
-		From: uint32Query(r, "from"),
-		To:   uint32Query(r, "to"),
+		Type:    r.URL.Query().Get("type"),
+		Network: network,
+		From:    uint32Query(r, "from"),
+		To:      uint32Query(r, "to"),
 	}
 	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
 	if err != nil {
@@ -315,9 +353,15 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
+	network, ok := networkParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
 	f := store.InvocationFilters{
 		Status:       r.URL.Query().Get("status"),
 		FunctionName: r.URL.Query().Get("fn"),
+		Network:      network,
 		From:         uint32Query(r, "from"),
 		To:           uint32Query(r, "to"),
 	}
@@ -345,9 +389,15 @@ func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
+	network, ok := networkParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
 	f := store.StorageFilters{
 		Durability: r.URL.Query().Get("durability"),
 		Status:     r.URL.Query().Get("status"),
+		Network:    network,
 	}
 	entries, nextRaw, err := h.Store.ListStorageEntries(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
 	if err != nil {
@@ -387,6 +437,95 @@ func (h *Handler) ContractStats(w http.ResponseWriter, r *http.Request) {
 		WindowEventCount:      cs.WindowEventCount,
 		WindowInvocationCount: cs.WindowInvocationCount,
 		WindowDuration:        cs.WindowDuration,
+	})
+}
+
+// ---- snapshot / replay ------------------------------------------------------
+
+type snapshotResponse struct {
+	ContractID         string                 `json:"contract_id"`
+	Network            string                 `json:"network"`
+	Ledger             uint32                 `json:"ledger"`
+	FirstTrackedLedger uint32                 `json:"first_tracked_ledger"`
+	Storage            []storageEntryResponse `json:"storage"`
+	LastEvent          *eventResponse         `json:"last_event"`
+}
+
+// ContractSnapshot handles GET /api/v1/contracts/{id}/snapshot?ledger=N.
+//
+// It replays the contract's storage state and last known event as they were
+// at ledger N, so an operator can inspect "what did the contract look like
+// immediately before?" without reading raw ledger data.
+func (h *Handler) ContractSnapshot(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+
+	ledgerStr := strings.TrimSpace(r.URL.Query().Get("ledger"))
+	if ledgerStr == "" {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "ledger query parameter is required")
+		return
+	}
+	ledgerU64, err := strconv.ParseUint(ledgerStr, 10, 32)
+	if err != nil || ledgerU64 == 0 {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "ledger must be a positive integer")
+		return
+	}
+	ledger := uint32(ledgerU64)
+
+	contract, err := h.Store.GetContract(r.Context(), contractID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "contract not found")
+		return
+	}
+	if err != nil {
+		h.Logger.Error("snapshot get contract", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch contract")
+		return
+	}
+
+	first, err := h.Store.ContractFirstLedger(r.Context(), contractID)
+	if err != nil {
+		h.Logger.Error("snapshot first ledger", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to compute snapshot range")
+		return
+	}
+	if first == 0 && contract.CreatedAtLedger > 0 && contract.CreatedAtLedger <= int64(^uint32(0)) {
+		first = uint32(contract.CreatedAtLedger)
+	}
+	if first > 0 && ledger < first {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, fmt.Sprintf(
+			"no snapshot for ledger %d: contract %s was first tracked at ledger %d",
+			ledger, contractID, first))
+		return
+	}
+
+	entries, err := h.Store.GetStorageSnapshot(r.Context(), contractID, ledger)
+	if err != nil {
+		h.Logger.Error("snapshot storage", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to build snapshot")
+		return
+	}
+
+	var lastEvent *eventResponse
+	if e, err := h.Store.LastEventAtOrBefore(r.Context(), contractID, ledger); err == nil {
+		ev := eventFromStore(e)
+		lastEvent = &ev
+	} else if !errors.Is(err, store.ErrNotFound) {
+		h.Logger.Error("snapshot last event", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to build snapshot")
+		return
+	}
+
+	resp := make([]storageEntryResponse, len(entries))
+	for i, se := range entries {
+		resp[i] = storageEntryFromStore(se)
+	}
+	writeJSON(w, http.StatusOK, snapshotResponse{
+		ContractID:         contractID,
+		Network:            contract.Network,
+		Ledger:             ledger,
+		FirstTrackedLedger: first,
+		Storage:            resp,
+		LastEvent:          lastEvent,
 	})
 }
 

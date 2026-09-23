@@ -338,6 +338,48 @@ func TestPoller_UsesContractNetworkRPCClient(t *testing.T) {
 	}
 }
 
+func TestPoller_StampsContractNetwork(t *testing.T) {
+	t.Parallel()
+
+	contractID := "CNETSTAMP"
+	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: "mainnet"}})
+	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
+
+	rpc := &fakeRPC{
+		latestLedger: &LatestLedger{Sequence: 500000},
+		events: map[string]*GetEventsResult{
+			contractID: {
+				Events: []RPCEvent{{
+					ID:             "0001-0001",
+					ContractID:     contractID,
+					Ledger:         499100,
+					LedgerClosedAt: "2026-07-26T10:00:00Z",
+					TxHash:         "txnet",
+					Type:           "contract",
+				}},
+				LatestLedger: 500000,
+			},
+		},
+		transactions: map[string]*TransactionResult{
+			"txnet": {Status: "SUCCESS", Ledger: 499100},
+		},
+	}
+
+	p := NewWithRPCClients(map[string]RPCClient{"mainnet": rpc}, store, newFakeRedis(), testConfig(), testLogger())
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.events) != 1 || store.events[0].Network != "mainnet" {
+		t.Fatalf("event network: want mainnet, got %+v", store.events)
+	}
+	if len(store.invocations) != 1 || store.invocations[0].Network != "mainnet" {
+		t.Fatalf("invocation network: want mainnet, got %+v", store.invocations)
+	}
+}
+
 func TestPoller_SkipsUnconfiguredNetwork(t *testing.T) {
 	t.Parallel()
 

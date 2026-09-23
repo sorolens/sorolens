@@ -13,6 +13,7 @@ import (
 
 type monitoredContractResponse struct {
 	ContractID    string     `json:"contract_id"`
+	Network       string     `json:"network"`
 	Name          string     `json:"name"`
 	Owner         string     `json:"owner"`
 	Status        string     `json:"status"`
@@ -54,6 +55,7 @@ type watchdogStatsResponse struct {
 func monitoredFromStore(m store.MonitoredContract) monitoredContractResponse {
 	return monitoredContractResponse{
 		ContractID:    m.ContractID,
+		Network:       m.Network,
 		Name:          m.Name,
 		Owner:         m.Owner,
 		Status:        m.Status,
@@ -95,7 +97,12 @@ func (h *Handler) ListMonitoredContracts(w http.ResponseWriter, r *http.Request)
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
-	items, nextRaw, err := h.Store.ListMonitoredContracts(r.Context(), rawCursor, intQuery(r, "limit", 50))
+	network, ok := networkParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	items, nextRaw, err := h.Store.ListMonitoredContracts(r.Context(), rawCursor, intQuery(r, "limit", 50), network)
 	if err != nil {
 		h.Logger.Error("list monitored contracts", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list monitored contracts")
@@ -148,7 +155,12 @@ func (h *Handler) ListHealthChecks(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	severity := r.URL.Query().Get("severity")
-	alerts, err := h.Store.ListAlerts(r.Context(), id, severity, intQuery(r, "limit", 100))
+	network, ok := networkParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	alerts, err := h.Store.ListAlerts(r.Context(), id, severity, network, intQuery(r, "limit", 100))
 	if err != nil {
 		h.Logger.Error("list alerts", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list alerts")
@@ -163,7 +175,12 @@ func (h *Handler) ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 
 // WatchdogStats handles GET /api/v1/watchdog/stats.
 func (h *Handler) WatchdogStats(w http.ResponseWriter, r *http.Request) {
-	s, err := h.Store.GetWatchdogStats(r.Context())
+	network, ok := networkParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	s, err := h.Store.GetWatchdogStats(r.Context(), network)
 	if err != nil {
 		h.Logger.Error("watchdog stats", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch watchdog stats")
