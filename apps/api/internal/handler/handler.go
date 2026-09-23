@@ -13,6 +13,8 @@ type APIStore interface {
 	store.QueryStore
 	store.WatchdogStore
 	store.APIKeyStore
+	store.AlertSubscriptionStore
+	store.WatchlistStore
 }
 
 // Pinger is implemented by both the postgres pool and the Redis client.
