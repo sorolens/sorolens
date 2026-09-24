@@ -21,7 +21,7 @@ type MockStore struct {
 	apiKeys            []APIKey
 	watchlist          map[string]map[string]bool
 	alertSubscriptions []AlertSubscription
-	contractUpgrades   []ContractUpgrade
+	users              map[string]User
 
 	// Error injection
 	UpsertContractErr   error
@@ -35,7 +35,8 @@ type MockStore struct {
 	RecentEventsErr     error
 	CreateAPIKeyErr     error
 	GetAPIKeyErr        error
-	ListUpgradesErr     error
+	UpsertUserErr       error
+	GetUserErr          error
 }
 
 // NewMockStore returns an initialized MockStore.
@@ -47,6 +48,7 @@ func NewMockStore() *MockStore {
 		watchlist:          make(map[string]map[string]bool),
 		alerts:             make([]ContractAlert, 0),
 		alertSubscriptions: make([]AlertSubscription, 0),
+		users:              make(map[string]User),
 	}
 }
 
@@ -274,6 +276,51 @@ func (m *MockStore) GetContractStats(_ context.Context, contractID, window strin
 		}
 	}
 	return cs, nil
+}
+
+// DailyAggregates aggregates the in-memory events/invocations into per-day
+// buckets (midnight UTC). Mirrors the postgres generate_series behaviour:
+// every day in the window appears, empty days as zeroes.
+func (m *MockStore) DailyAggregates(_ context.Context, contractID string, days int) ([]DailyAggregate, error) {
+	if days <= 0 {
+		days = 90
+	}
+	now := time.Now().UTC()
+	start := now.AddDate(0, 0, -days)
+	dayOf := func(t time.Time) time.Time {
+		y, mo, d := t.UTC().Date()
+		return time.Date(y, mo, d, 0, 0, 0, 0, time.UTC)
+	}
+
+	feeByDay := map[time.Time]float64{}
+	invByDay := map[time.Time]float64{}
+	for _, inv := range m.invocations {
+		if inv.ContractID != contractID || inv.LedgerClosedAt.Before(start) {
+			continue
+		}
+		feeByDay[dayOf(inv.LedgerClosedAt)] += float64(inv.ResourceFeeCharged)
+		invByDay[dayOf(inv.LedgerClosedAt)]++
+	}
+
+	evByDay := map[time.Time]float64{}
+	for _, e := range m.events {
+		if e.ContractID != contractID || e.LedgerClosedAt.Before(start) {
+			continue
+		}
+		evByDay[dayOf(e.LedgerClosedAt)]++
+	}
+
+	var out []DailyAggregate
+	for i := days - 1; i >= 0; i-- {
+		d := dayOf(now.AddDate(0, 0, -i))
+		out = append(out, DailyAggregate{
+			Day:         d,
+			Fee:         feeByDay[d],
+			Invocations: invByDay[d],
+			Events:      evByDay[d],
+		})
+	}
+	return out, nil
 }
 
 // RecentHourlyActivity returns hourly buckets (oldest first) for the most
@@ -554,6 +601,68 @@ func (m *MockStore) ListWatchlist(_ context.Context, userID string) ([]string, e
 
 func (m *MockStore) IsInWatchlist(_ context.Context, userID, contractID string) (bool, error) {
 	return m.watchlist[userID][contractID], nil
+}
+
+// ---- store.UserStore --------------------------------------------------------
+
+// AddUser is a test helper that seeds a user directly.
+func (m *MockStore) AddUser(u User) {
+	if u.CreatedAt.IsZero() {
+		u.CreatedAt = time.Now()
+	}
+	if u.Role == "" {
+		u.Role = RoleViewer
+	}
+	m.users[u.ID] = u
+}
+
+func (m *MockStore) UpsertUser(_ context.Context, u User) error {
+	if m.UpsertUserErr != nil {
+		return m.UpsertUserErr
+	}
+	existing, ok := m.users[u.ID]
+	if !ok {
+		if u.Role == "" {
+			u.Role = RoleViewer
+		}
+		if u.CreatedAt.IsZero() {
+			u.CreatedAt = time.Now()
+		}
+		m.users[u.ID] = u
+		return nil
+	}
+	// Preserve existing fields when the call does not supply a replacement.
+	if u.GitHubID != nil {
+		existing.GitHubID = u.GitHubID
+	}
+	if u.Role != "" {
+		existing.Role = u.Role
+	}
+	m.users[u.ID] = existing
+	return nil
+}
+
+func (m *MockStore) GetUserByID(_ context.Context, id string) (User, error) {
+	if m.GetUserErr != nil {
+		return User{}, m.GetUserErr
+	}
+	u, ok := m.users[id]
+	if !ok {
+		return User{}, ErrNotFound
+	}
+	return u, nil
+}
+
+func (m *MockStore) GetUserByGitHubID(_ context.Context, githubID string) (User, error) {
+	if m.GetUserErr != nil {
+		return User{}, m.GetUserErr
+	}
+	for _, u := range m.users {
+		if u.GitHubID != nil && *u.GitHubID == githubID {
+			return u, nil
+		}
+	}
+	return User{}, ErrNotFound
 }
 
 // ErrPing is returned by MockPinger when Healthy is false.

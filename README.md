@@ -102,6 +102,7 @@ Admin: `GAZ3HN2QNDKWLOI2OQEG65KBJEAUP4PROR3FJNXNDY34UH547MN4CJUI`
 | Dashboard | Next.js 15, TypeScript, Tailwind CSS, deployed on Vercel |
 | XDR decoder | TypeScript package (`packages/xdr`), wraps `@stellar/stellar-sdk` |
 | CLI | Go 1.23, cobra |
+| Go client | Generated from [`docs/openapi.yaml`](docs/openapi.yaml) into `packages/go-client` |
 | Fixture contract | Rust (stable), Soroban SDK, deployed to Stellar testnet |
 | Watchdog contract | Rust (stable), Soroban SDK, on-chain health tracking (`contracts/watchdog`) |
 ---
@@ -116,6 +117,7 @@ sorolens/
   packages/
     xdr/          TypeScript XDR decoder
     ui/           Shared React UI primitives
+    go-client/    Auto-generated Go API client (from docs/openapi.yaml)
   cli/            Go CLI (cobra)
   contracts/
     counter/      Rust Soroban fixture contract

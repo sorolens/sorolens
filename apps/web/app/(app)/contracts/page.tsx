@@ -9,6 +9,23 @@ import type { ContractSummary } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
 import { TableSkeleton } from "@/components/Skeleton";
 
+// RBAC identity: same localStorage key the watchlist page uses, so the UI
+// registers a contract under the same user identity. Must map to a user
+// granted at least the contributor role in the API's users table.
+const STORAGE_KEY = "sorolens_user_id";
+
+function getUserId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) || "";
+  } catch {
+    // localStorage can be unavailable (private mode, some test runners);
+    // RBAC still allows registered-contract calls for anonymous callers as
+    // reads remain open.
+    return "";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -74,7 +91,10 @@ function TrackContractModal({ onClose, onSuccess }: TrackModalProps) {
     setSubmitting(true);
     setError(null);
     try {
-      await trackContract({ id: contractId, label: label || undefined });
+      await trackContract(
+        { id: contractId, label: label || undefined },
+        getUserId(),
+      );
       onSuccess();
       onClose();
     } catch (err) {

@@ -36,29 +36,43 @@ func New(h *handler.Handler) http.Handler {
 		// credential still pass on read/write routes (public v0.1 surface),
 		// while API key management always requires a credential.
 		scope := middleware.RequireScopes(h.Store, h.Logger)
+		// RBAC: role enforcement on top of scope. Route wiring uses r.With
+		// (same pattern as scope) so the role middleware denies a request
+		// that lacks the minimum role regardless of API key scopes.
+		contributor := middleware.RequireRole(h.Store, h.Logger, middleware.RoleContributor)
+		admin := middleware.RequireRole(h.Store, h.Logger, middleware.RoleAdmin)
+
 		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
-		post := func(pattern string, fn http.HandlerFunc) { r.With(scope).Post(pattern, fn) }
-		del := func(pattern string, fn http.HandlerFunc) { r.With(scope).Delete(pattern, fn) }
 
 		// Stats
 		get("/stats/global", h.GlobalStats)
 
-		// Contracts
-		post("/contracts", h.RegisterContract)
+		// Contracts. Registration mutates shared state, so it requires at
+		// least contributor role. Reads stay open.
+		r.With(scope, contributor).Post("/contracts", h.RegisterContract)
 		get("/contracts", h.ListContracts)
 		get("/contracts/{id}", h.GetContract)
 		get("/contracts/{id}/events", h.ListEvents)
 		get("/contracts/{id}/invocations", h.ListInvocations)
 		get("/contracts/{id}/storage", h.ListStorageEntries)
 		get("/contracts/{id}/stats", h.ContractStats)
+		get("/contracts/{id}/forecast", h.ContractForecast)
 		get("/contracts/{id}/snapshot", h.ContractSnapshot)
 		get("/contracts/{id}/upgrades", h.ListContractUpgrades)
 		get("/contracts/{id}/stream", h.StreamEvents)
 
-		// API keys (admin scope).
-		get("/api-keys", h.ListAPIKeys)
-		post("/api-keys", h.CreateAPIKey)
-		del("/api-keys/{id}", h.RevokeAPIKey)
+		// API keys (admin scope + admin role).
+		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
+		r.With(scope, admin).Post("/api-keys", h.CreateAPIKey)
+		r.With(scope, admin).Delete("/api-keys/{id}", h.RevokeAPIKey)
+
+		// Admin surface. Wrapped by role admin so contributors cannot reach
+		// these endpoints even when the API key carries admin scope.
+		r.With(admin).Route("/admin", func(r chi.Router) {
+			r.Get("/keys", h.ListAPIKeys)
+			r.Post("/keys", h.CreateAPIKey)
+			r.Delete("/keys/{id}", h.RevokeAPIKey)
+		})
 
 		// Watchlist
 		r.Route("/watchlist", func(r chi.Router) {

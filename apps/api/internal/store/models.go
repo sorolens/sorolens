@@ -94,21 +94,41 @@ type AlertSubscription struct {
 	UpdatedAt      time.Time
 }
 
-// ContractUpgrade records one observed Wasm-hash change for a tracked contract.
-type ContractUpgrade struct {
-	ID         int64
-	ContractID string
-	FromHash   string
-	ToHash     string
-	Ledger     int64
-	TxHash     string
-	At         time.Time
+// Role names for role-based access control.
+const (
+	RoleViewer      = "viewer"
+	RoleContributor = "contributor"
+	RoleAdmin       = "admin"
+)
+
+// ValidRoles is the set of roles a user may hold.
+var ValidRoles = map[string]bool{
+	RoleViewer:      true,
+	RoleContributor: true,
+	RoleAdmin:       true,
+}
+
+// RoleRank returns a total ordering over roles so the Router can decide
+// whether one role satisfies a minimum requirement. Higher is more
+// privileged; any unknown role ranks below viewer (no privileges).
+func RoleRank(role string) int {
+	switch role {
+	case RoleAdmin:
+		return 3
+	case RoleContributor:
+		return 2
+	case RoleViewer:
+		return 1
+	default:
+		return 0
+	}
 }
 
 // User represents a Sorolens user.
 type User struct {
 	ID        string
 	GitHubID  *string
+	Role      string
 	CreatedAt time.Time
 }
 

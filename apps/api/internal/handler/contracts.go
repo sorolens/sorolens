@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sorolens/sorolens/apps/api/internal/forecast"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
@@ -438,6 +440,100 @@ func (h *Handler) ContractStats(w http.ResponseWriter, r *http.Request) {
 		WindowInvocationCount: cs.WindowInvocationCount,
 		WindowDuration:        cs.WindowDuration,
 	})
+}
+
+// ---- cost forecasting -------------------------------------------------------
+
+type forecastPointResponse struct {
+	Date  string  `json:"date"`
+	Value float64 `json:"value"`
+	Lower float64 `json:"lower"`
+	Upper float64 `json:"upper"`
+}
+
+type forecastSeriesResponse struct {
+	Metric     string                  `json:"metric"`
+	Horizon    int                     `json:"horizon"`
+	DailyCount int                     `json:"daily_count"`
+	Points     []forecastPointResponse `json:"points"`
+}
+
+type forecastResponse struct {
+	ContractID   string                   `json:"contract_id"`
+	LookbackDays int                      `json:"lookback_days"`
+	Series       []forecastSeriesResponse `json:"series"`
+}
+
+// ContractForecast returns projected fees, invocations, and event volume for
+// the next N days (horizon, default 30d) by fitting a linear trend + weekly
+// seasonality model over the last 90 days of daily aggregates.
+func (h *Handler) ContractForecast(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	horizon := 30
+	if hv := r.URL.Query().Get("horizon"); hv != "" {
+		n, err := strconv.Atoi(strings.TrimSuffix(hv, "d"))
+		if err != nil || n <= 0 {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidInput, "horizon must be a positive number of days, e.g. horizon=30d")
+			return
+		}
+		horizon = n
+	}
+	if horizon > 365 {
+		horizon = 365
+	}
+
+	const lookback = 90
+	aggs, err := h.Store.DailyAggregates(r.Context(), contractID, lookback)
+	if err != nil {
+		h.Logger.Error("get daily aggregates", "err", err, "contract_id", contractID)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch daily aggregates")
+		return
+	}
+
+	serieses := []struct {
+		metric string
+		pick   func(store.DailyAggregate) float64
+	}{
+		{"fees", func(a store.DailyAggregate) float64 { return a.Fee }},
+		{"invocations", func(a store.DailyAggregate) float64 { return a.Invocations }},
+		{"events", func(a store.DailyAggregate) float64 { return a.Events }},
+	}
+
+	resp := forecastResponse{
+		ContractID:   contractID,
+		LookbackDays: lookback,
+		Series:       make([]forecastSeriesResponse, 0, len(serieses)),
+	}
+	for _, s := range serieses {
+		history := make([]forecast.DayValue, 0, len(aggs))
+		for _, a := range aggs {
+			history = append(history, forecast.DayValue{Date: a.Day, Value: s.pick(a)})
+		}
+		preds := forecast.Fit(history, horizon)
+		pts := make([]forecastPointResponse, 0, len(preds))
+		for _, p := range preds {
+			pts = append(pts, forecastPointResponse{
+				Date:  p.Date.Format("2006-01-02"),
+				Value: mathRound(p.Value),
+				Lower: mathRound(p.Lower),
+				Upper: mathRound(p.Upper),
+			})
+		}
+		resp.Series = append(resp.Series, forecastSeriesResponse{
+			Metric:     s.metric,
+			Horizon:    horizon,
+			DailyCount: len(pts),
+			Points:     pts,
+		})
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func mathRound(v float64) float64 {
+	if v > 1e-5 {
+		return math.Round(v*100) / 100
+	}
+	return 0
 }
 
 // ---- snapshot / replay ------------------------------------------------------
