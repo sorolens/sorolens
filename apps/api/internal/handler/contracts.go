@@ -404,6 +404,31 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ExportEventsCSV handles GET /api/v1/contracts/{id}/events.csv.
+// Streams events as CSV without buffering all rows in memory.
+func (h *Handler) ExportEventsCSV(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	network, ok := networkParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	f := store.EventFilters{
+		Type:    r.URL.Query().Get("type"),
+		Network: network,
+		From:    uint32Query(r, "from"),
+		To:      uint32Query(r, "to"),
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s-events.csv\"", contractID))
+	w.Header().Set("Cache-Control", "no-store")
+
+	if err := h.Store.StreamEventsCSV(r.Context(), contractID, f, w); err != nil {
+		h.Logger.Error("export events csv", "err", err)
+	}
+}
+
 // ListInvocations handles GET /api/v1/contracts/{id}/invocations.
 func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")

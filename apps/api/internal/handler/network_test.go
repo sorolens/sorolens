@@ -239,3 +239,88 @@ func TestWatchdogFiltersByNetwork(t *testing.T) {
 		t.Fatalf("want 1 healthy testnet contract, got %+v", stats)
 	}
 }
+
+func TestExportEventsCSV(t *testing.T) {
+	ms := store.NewMockStore()
+	if err := ms.UpsertContract(nil, store.Contract{
+		ID:      netContractA,
+		Network: "testnet",
+		Label:   "testnet contract",
+		Status:  "active",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ms.BatchInsertEvents(nil, []store.Event{
+		{
+			ID: "evt-1", ContractID: netContractA, Network: "testnet",
+			Ledger: 100, LedgerClosedAt: time.Now().UTC(), TxHash: "tx1", Type: "contract",
+		},
+		{
+			ID: "evt-2", ContractID: netContractA, Network: "testnet",
+			Ledger: 101, LedgerClosedAt: time.Now().UTC(), TxHash: "tx2", Type: "contract",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := newTestHandler(ms, true, true)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/contracts/"+netContractA+"/events.csv", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	ct := w.Header().Get("Content-Type")
+	if ct != "text/csv; charset=utf-8" {
+		t.Errorf("want Content-Type text/csv, got %q", ct)
+	}
+
+	cd := w.Header().Get("Content-Disposition")
+	expectedCD := "attachment; filename=\"" + netContractA + "-events.csv\""
+	if cd != expectedCD {
+		t.Errorf("want Content-Disposition %q, got %q", expectedCD, cd)
+	}
+
+	body := w.Body.String()
+	if body == "" {
+		t.Fatal("want non-empty CSV body")
+	}
+
+	lines := splitLines(body)
+	if len(lines) < 3 {
+		t.Fatalf("want at least header + 2 data rows, got %d lines: %s", len(lines), body)
+	}
+
+	// Check header
+	expectedHeader := "id,contract_id,network,ledger,ledger_closed_at,tx_hash,type,topic_xdr,value_xdr,topic_decoded,value_decoded,in_successful_call"
+	if lines[0] != expectedHeader {
+		t.Errorf("header mismatch: got %q, want %q", lines[0], expectedHeader)
+	}
+
+	// Check data rows contain our events
+	if !containsEvent(lines[1], "evt-1") || !containsEvent(lines[2], "evt-2") {
+		t.Errorf("data rows missing expected events: %v", lines[1:])
+	}
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
+func containsEvent(line, eventID string) bool {
+	return len(line) > len(eventID) && (line[:len(eventID)] == eventID || line[1:len(eventID)+1] == eventID)
+}
