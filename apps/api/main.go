@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/exaring/otelpgx"
+	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sorolens/sorolens/apps/api/internal/config"
@@ -31,6 +32,17 @@ func main() {
 	if err != nil {
 		logger.Error("config", "err", err)
 		os.Exit(1)
+	}
+
+	if cfg.SentryDSN != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:         cfg.SentryDSN,
+			Environment: cfg.SentryEnvironment,
+		}); err != nil {
+			logger.Error("sentry init", "err", err)
+		} else {
+			defer sentry.Flush(2 * time.Second)
+		}
 	}
 
 	// Apply pending schema migrations before connecting the query pool so the

@@ -5,21 +5,21 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
+	"github.com/getsentry/sentry-go"
 	"github.com/sorolens/sorolens/services/indexer/internal/poller"
 	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
 )
 
 func main() {
+	defer reportPanic()
+
 	tp, _ := poller.InitTracer()
 	if tp != nil {
 		defer tp.Shutdown(context.Background())
@@ -29,16 +29,27 @@ func main() {
 	maxDuration := flag.Duration("max-duration", 270*time.Second, "Maximum duration for a single pass (once mode)")
 	pollInterval := flag.Duration("poll-interval", 5*time.Minute, "Sleep between passes (continuous mode)")
 	ledgerWindow := flag.Uint("ledger-window", 120960, "Ledger window per getEvents call")
-	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics HTTP server (empty disables it)")
-	workers := envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
+	// Error reporting is disabled entirely when SENTRY_DSN is unset:
+	// sentry-go falls back to a no-op transport, so reportPanic below still
+	// runs safely but delivers nothing.
+	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:         dsn,
+			Environment: envString("SENTRY_ENVIRONMENT", "production"),
+		}); err != nil {
+			log.Error("sentry init", "err", err)
+		} else {
+			defer sentry.Flush(2 * time.Second)
+		}
+	}
+
 	cfg := poller.Config{
-		Workers:              workers,
 		LedgerWindow:         uint32(*ledgerWindow),
 		PollInterval:         *pollInterval,
 		MaxDuration:          *maxDuration,
@@ -88,28 +99,13 @@ func main() {
 
 	p := poller.NewWithRPCClients(clients, st, redis, cfg, log)
 
-	// Prometheus metrics (issue #198): the indexer exposes per-network lag on
-	// /metrics. The server is best-effort — a bind failure is logged but does
-	// not stop indexing.
-	recorder := metrics.New()
-	p.SetMetrics(recorder)
-	metricsSrv := startMetricsServer(*metricsAddr, recorder.Handler(), log)
-	defer func() {
-		if metricsSrv == nil {
-			return
-		}
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
-			log.Warn("indexer metrics shutdown", "err", err)
-		}
-	}()
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	// Start nightly performance job
 	go func() {
+		defer reportPanic()
+
 		type perfStore interface {
 			ComputeAndStoreBaselines(ctx context.Context, snapshotDate time.Time) error
 			CheckAndEmitRegressions(ctx context.Context, snapshotDate time.Time) (int, error)
@@ -270,9 +266,6 @@ func (s *stubRPC) GetLedgerEntries(ctx context.Context, keys []string) (*poller.
 	}
 	return &poller.GetLedgerEntriesResult{}, nil
 }
-func (s *stubRPC) GetContractWasmHash(_ context.Context, _ string) (string, error) {
-	return "", nil
-}
 
 type stubStore struct{}
 
@@ -296,7 +289,7 @@ func (s *stubStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, 
 	return nil
 }
 func (s *stubStore) GetIndexerCursor(_ context.Context, _ string) (uint32, error) { return 0, nil }
-func (s *stubStore) SetIndexerCursor(_ context.Context, _ string, _ uint32) error  { return nil }
+func (s *stubStore) SetIndexerCursor(_ context.Context, _ string, _ uint32) error { return nil }
 func (s *stubStore) BatchInsertWithCursor(_ context.Context, _ string, _ uint32, _ []poller.Event, _ []poller.Invocation, _ poller.SyncState) error {
 	return nil
 }
@@ -316,12 +309,6 @@ func (s *stubStore) ContractHealthInputs(_ context.Context, _ string) (poller.He
 func (s *stubStore) UpsertContractHealthScore(_ context.Context, _ poller.ContractHealthScore) error {
 	return nil
 }
-func (s *stubStore) RecordContractVersion(_ context.Context, _ poller.ContractVersion) error {
-	return nil
-}
-func (s *stubStore) GetLatestContractVersion(_ context.Context, _ string) (poller.ContractVersion, error) {
-	return poller.ContractVersion{}, poller.ErrVersionNotFound
-}
 
 type stubRedis struct{}
 
@@ -330,28 +317,17 @@ func (r *stubRedis) SetNX(ctx context.Context, key, value string, ttl time.Durat
 }
 func (r *stubRedis) Del(ctx context.Context, key string) error { return nil }
 
-// startMetricsServer serves the Prometheus /metrics endpoint on addr and
-// returns the server so the caller can shut it down. It returns nil when addr
-// is empty, which disables the endpoint. Startup errors are logged rather than
-// fatal so a port clash never takes the indexer down.
-func startMetricsServer(addr string, h http.Handler, log *slog.Logger) *http.Server {
-	if addr == "" {
-		return nil
+// reportPanic reports a recovered panic to Sentry (a no-op when Sentry was
+// not initialized), flushes, then re-panics so the process still crashes and
+// exits with the same non-zero status it always has. Every goroutine that
+// can panic needs its own deferred call: recover only ever catches a panic
+// on the same goroutine's call stack.
+func reportPanic() {
+	if err := recover(); err != nil {
+		sentry.CurrentHub().Recover(err)
+		sentry.Flush(2 * time.Second)
+		panic(err)
 	}
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", h)
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	go func() {
-		log.Info("indexer metrics listening", "addr", addr, "path", "/metrics")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("indexer metrics server", "addr", addr, "err", err)
-		}
-	}()
-	return srv
 }
 
 // envString reads a string env var with a default.

@@ -9,11 +9,13 @@
 // Optional with defaults: SOROBAN_RPC_URL (testnet), STELLAR_NETWORK (testnet),
 // PORT (8080), LOG_LEVEL (info), INDEXER_POLL_INTERVAL (5m),
 // INDEXER_LEDGER_WINDOW (120960 ledgers ≈ 7 days), INDEXER_MAX_DURATION (270s),
-// REQUEST_MAX_BODY_BYTES (1048576 bytes = 1 MiB).
+// REQUEST_MAX_BODY_BYTES (1048576 bytes = 1 MiB), SENTRY_ENVIRONMENT (production).
 //
 // METRICS_PORT is optional with no default: when set, GET /metrics is also
 // served on that port (a dedicated admin listener); when empty the endpoint is
 // only available on PORT.
+// Optional with no default: SENTRY_DSN. Error reporting is disabled entirely
+// when it is unset.
 //
 // Load collects every missing required variable into a single error message
 // so the process fails fast with actionable output.
@@ -71,6 +73,11 @@ type Config struct {
 	WebhookMaxRetries int
 	// WebhookBackoffSchedule specifies backoff durations between attempts.
 	WebhookBackoffSchedule []time.Duration
+	// SentryDSN is the Sentry project DSN. Error reporting is disabled
+	// entirely when this is empty.
+	SentryDSN string
+	// SentryEnvironment tags reported events (e.g. production, staging).
+	SentryEnvironment string
 }
 
 // Load reads configuration from environment variables and returns an error
@@ -88,6 +95,8 @@ func Load() (*Config, error) {
 		MetricsPort:          os.Getenv("METRICS_PORT"),
 		InitialAdminGitHubID: os.Getenv("INITIAL_ADMIN_GITHUB_ID"),
 		SlackSigningSecret:   os.Getenv("SLACK_SIGNING_SECRET"),
+		SentryDSN:            os.Getenv("SENTRY_DSN"),
+		SentryEnvironment:    getEnvDefault("SENTRY_ENVIRONMENT", "production"),
 	}
 
 	pollStr := getEnvDefault("INDEXER_POLL_INTERVAL", "5m")
