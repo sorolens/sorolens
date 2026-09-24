@@ -256,3 +256,22 @@ export interface ContractStatsApiResponse {
   window_duration: string;
 }
 
+export interface CreateSubscriptionRequest {
+  contract_id: string;
+  webhook_url: string;
+  severity_filter?: string;
+}
+
+export interface AlertSubscription {
+  id: string;
+  contract_id: string;
+  webhook_url: string;
+  severity_filter: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubscriptionsResponse {
+  subscriptions: AlertSubscription[];
+}
+
