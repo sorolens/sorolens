@@ -57,6 +57,14 @@ jobs:
           echo "Waiting for PostgreSQL..."
           DB_CONTAINER=$(docker compose ps -q postgres)
           until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
+      - name: Run DB migrations
+        if: matrix.module == 'apps/api'
+        env:
+          PGPASSWORD: sorolens
+        run: |
+          for f in $(ls apps/api/internal/db/migrations/*.up.sql | sort); do
+            psql -h localhost -U sorolens -d sorolens -f "$f"
+          done
       - name: go test
         working-directory: ${{ matrix.module }}
         env:

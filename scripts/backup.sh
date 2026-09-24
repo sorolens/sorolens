@@ -20,7 +20,7 @@ rm "$DUMP_FILE"
 echo "Taking pg_basebackup physical backup..."
 BASE_BACKUP_DIR="basebackup_${DATE}"
 docker exec -t "$DB_CONTAINER" pg_basebackup -U "$DB_USER" -D "/tmp/$BASE_BACKUP_DIR" -Ft -z -P
-docker exec -t "$DB_CONTAINER" sh -c "cat /tmp/$BASE_BACKUP_DIR/base.tar.gz" > "base_${DATE}.tar.gz"
+docker exec "$DB_CONTAINER" sh -c "cat /tmp/$BASE_BACKUP_DIR/base.tar.gz" > "base_${DATE}.tar.gz"
 docker exec -t "$DB_CONTAINER" rm -rf "/tmp/$BASE_BACKUP_DIR"
 
 echo "Uploading base backup to S3..."
