@@ -579,14 +579,14 @@ paths:
           schema:
             type: string
             enum: [id, label, network, status, added_at]
-          description: Column to sort by. Defaults to id when omitted or unknown.
+          description: Column to sort by. Defaults to id when omitted; values outside the enum are rejected with 422.
         - name: dir
           in: query
           required: false
           schema:
             type: string
             enum: [asc, desc]
-          description: Sort direction. Defaults to asc when omitted.
+          description: Sort direction. Defaults to asc when omitted; values outside the enum are rejected with 422.
       responses:
         "200":
           description: Page of contracts
