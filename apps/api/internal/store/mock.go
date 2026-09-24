@@ -21,6 +21,7 @@ type MockStore struct {
 	apiKeys            []APIKey
 	watchlist          map[string]map[string]bool
 	alertSubscriptions []AlertSubscription
+	contractUpgrades   []ContractUpgrade
 
 	// Error injection
 	UpsertContractErr   error
@@ -34,6 +35,7 @@ type MockStore struct {
 	RecentEventsErr     error
 	CreateAPIKeyErr     error
 	GetAPIKeyErr        error
+	ListUpgradesErr     error
 }
 
 // NewMockStore returns an initialized MockStore.

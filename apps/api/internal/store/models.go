@@ -94,6 +94,17 @@ type AlertSubscription struct {
 	UpdatedAt      time.Time
 }
 
+// ContractUpgrade records one observed Wasm-hash change for a tracked contract.
+type ContractUpgrade struct {
+	ID         int64
+	ContractID string
+	FromHash   string
+	ToHash     string
+	Ledger     int64
+	TxHash     string
+	At         time.Time
+}
+
 // User represents a Sorolens user.
 type User struct {
 	ID        string
