@@ -65,14 +65,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 	// cursor is the last-seen contract ID (lexicographic order).
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, network, label, wasm_hash, created_at_ledger,
-		       backfill_complete_at, status, added_at,
-		       COALESCE((
-		           SELECT COUNT(*) FROM storage_entries se
-		           WHERE se.contract_id = contracts.id
-		             AND se.status = 'live'
-		             AND se.live_until_ledger IS NOT NULL
-		             AND se.live_until_ledger - COALESCE((SELECT last_ledger FROM sync_state ss WHERE ss.contract_id = contracts.id), 0) < 120960
-		       ), 0) AS expiring_keys_count
+		       backfill_complete_at, status, added_at
 		FROM contracts
 		WHERE ($1 = '' OR id > $1)
 		  AND ($2 = '' OR network = $2)
@@ -89,7 +82,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 		var c Contract
 		if err := rows.Scan(
 			&c.ID, &c.Network, &c.Label, &c.WasmHash, &c.CreatedAtLedger,
-			&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.ExpiringKeysCount,
+			&c.BackfillCompleteAt, &c.Status, &c.AddedAt,
 		); err != nil {
 			return nil, "", err
 		}

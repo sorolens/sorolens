@@ -271,20 +271,7 @@ const COLUMNS: Column<ContractSummary>[] = [
     key: "status",
     header: "Status",
     sortable: true,
-    accessor: (c) => (
-      <div className="flex items-center gap-2">
-        <StatusBadge status={c.status} />
-        {(c.expiring_keys_count ?? 0) > 0 && (
-          <span
-            className="inline-flex items-center gap-1 rounded-full bg-amber-900/40 border border-amber-800/40 px-2 py-0.5 text-xs font-medium text-amber-400"
-            title={`${c.expiring_keys_count} key(s) expiring within 7 days`}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-            {c.expiring_keys_count} expiring
-          </span>
-        )}
-      </div>
-    ),
+    accessor: (c) => <StatusBadge status={c.status} />,
   },
   {
     key: "added_at",

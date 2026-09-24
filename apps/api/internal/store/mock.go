@@ -98,16 +98,6 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 		if f.Status != "" && c.Status != f.Status {
 			continue
 		}
-		var expiringCount int64
-		currentLedger := int64(m.syncStates[c.ID].LastLedger)
-		for _, se := range m.storageEntries {
-			if se.ContractID == c.ID && (se.Status == "" || se.Status == "live") && se.LiveUntilLedger != 0 {
-				if se.LiveUntilLedger-currentLedger < 120960 {
-					expiringCount++
-				}
-			}
-		}
-		c.ExpiringKeysCount = expiringCount
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -261,43 +251,6 @@ func (m *MockStore) ListStorageEntries(_ context.Context, contractID, cursor str
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
-}
-
-func (m *MockStore) ListExpiringStorageEntries(_ context.Context, contractID string, withinSeconds int64) ([]StorageEntry, uint32, error) {
-	if m.ListStorageErr != nil {
-		return nil, 0, m.ListStorageErr
-	}
-	if withinSeconds <= 0 {
-		withinSeconds = 86400
-	}
-	withinLedgers := int64(withinSeconds / 5)
-
-	var currentLedger int64
-	if ss, ok := m.syncStates[contractID]; ok {
-		currentLedger = int64(ss.LastLedger)
-	}
-
-	var out []StorageEntry
-	for _, se := range m.storageEntries {
-		if se.ContractID != contractID {
-			continue
-		}
-		if se.Status != "" && se.Status != "live" {
-			continue
-		}
-		if se.LiveUntilLedger != 0 {
-			diff := se.LiveUntilLedger - currentLedger
-			if diff < withinLedgers {
-				out = append(out, se)
-			}
-		}
-	}
-
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].LiveUntilLedger < out[j].LiveUntilLedger
-	})
-
-	return out, uint32(currentLedger), nil
 }
 
 func (m *MockStore) GetContractStats(_ context.Context, contractID, window string) (ContractStats, error) {

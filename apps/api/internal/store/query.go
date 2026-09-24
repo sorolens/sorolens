@@ -117,9 +117,6 @@ type QueryStore interface {
 	// yield a zero bucket, providing a contiguous series to the indexer's
 	// anomaly detector.
 	RecentHourlyActivity(ctx context.Context, contractID string, hours int) ([]HourlyActivity, error)
-	// ListExpiringStorageEntries returns storage entries expiring within withinSeconds,
-	// ordered soonest-to-expire first, alongside the contract's current ledger.
-	ListExpiringStorageEntries(ctx context.Context, contractID string, withinSeconds int64) ([]StorageEntry, uint32, error)
 }
 
 // ---- ListEvents --------------------------------------------------------------
@@ -320,61 +317,6 @@ func (s *postgresStore) ListStorageEntries(ctx context.Context, contractID, curs
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
-}
-
-// ---- ListExpiringStorageEntries ---------------------------------------------
-
-func (s *postgresStore) ListExpiringStorageEntries(ctx context.Context, contractID string, withinSeconds int64) ([]StorageEntry, uint32, error) {
-	if withinSeconds <= 0 {
-		withinSeconds = 86400
-	}
-	withinLedgers := withinSeconds / 5 // approx 5s per ledger
-
-	var currentLedger int64
-	err := s.pool.QueryRow(ctx, `
-		SELECT COALESCE(
-			(SELECT last_ledger FROM sync_state WHERE contract_id = $1),
-			(SELECT MAX(ledger) FROM events WHERE contract_id = $1),
-			0
-		)`, contractID).Scan(&currentLedger)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, 0, fmt.Errorf("get current ledger: %w", err)
-	}
-
-	rows, err := s.pool.Query(ctx, `
-		SELECT contract_id, network, key_xdr, key_decoded, value_xdr, value_decoded,
-		       durability, live_until_ledger, last_modified_ledger, status, last_seen_at
-		FROM storage_entries
-		WHERE contract_id = $1
-		  AND status = 'live'
-		  AND live_until_ledger IS NOT NULL
-		  AND live_until_ledger - $2 < $3
-		ORDER BY live_until_ledger ASC`,
-		contractID, currentLedger, withinLedgers,
-	)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list expiring storage: %w", err)
-	}
-	defer rows.Close()
-
-	var out []StorageEntry
-	for rows.Next() {
-		var se StorageEntry
-		var keyDec, valDec []byte
-		if err := rows.Scan(
-			&se.ContractID, &se.Network, &se.KeyXDR, &keyDec, &se.ValueXDR, &valDec,
-			&se.Durability, &se.LiveUntilLedger, &se.LastModifiedLedger, &se.Status, &se.LastSeenAt,
-		); err != nil {
-			return nil, 0, err
-		}
-		_ = json.Unmarshal(keyDec, &se.KeyDecoded)
-		_ = json.Unmarshal(valDec, &se.ValueDecoded)
-		out = append(out, se)
-	}
-	if rows.Err() != nil {
-		return nil, 0, rows.Err()
-	}
-	return out, uint32(currentLedger), nil
 }
 
 // ---- GetContractStats -------------------------------------------------------

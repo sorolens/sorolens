@@ -27,7 +27,6 @@ type contractResponse struct {
 	BackfillCompleteAt *time.Time `json:"backfill_complete_at"`
 	Status             string     `json:"status"`
 	AddedAt            time.Time  `json:"added_at"`
-	ExpiringKeysCount  int64      `json:"expiring_keys_count"`
 }
 
 type eventResponse struct {
@@ -73,7 +72,6 @@ type storageEntryResponse struct {
 	ValueDecoded       any       `json:"value_decoded"`
 	Durability         string    `json:"durability"`
 	LiveUntilLedger    int64     `json:"live_until_ledger"`
-	LedgersUntilExpiry *int64    `json:"ledgers_until_expiry,omitempty"`
 	LastModifiedLedger int64     `json:"last_modified_ledger"`
 	Status             string    `json:"status"`
 	LastSeenAt         time.Time `json:"last_seen_at"`
@@ -154,7 +152,6 @@ func contractFromStore(c store.Contract) contractResponse {
 		BackfillCompleteAt: c.BackfillCompleteAt,
 		Status:             c.Status,
 		AddedAt:            c.AddedAt,
-		ExpiringKeysCount:  c.ExpiringKeysCount,
 	}
 }
 
@@ -646,40 +643,3 @@ func (h *Handler) StreamEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
 	writeJSON(w, http.StatusOK, map[string]any{"events": resp})
 }
-
-// GetExpiringStorage handles GET /api/v1/contracts/{id}/storage/expiring?within=86400.
-func (h *Handler) GetExpiringStorage(w http.ResponseWriter, r *http.Request) {
-	contractID := chi.URLParam(r, "id")
-	withinStr := r.URL.Query().Get("within")
-	withinSeconds := int64(86400)
-	if withinStr != "" {
-		n, err := strconv.ParseInt(withinStr, 10, 64)
-		if err == nil && n > 0 {
-			withinSeconds = n
-		}
-	}
-
-	entries, currentLedger, err := h.Store.ListExpiringStorageEntries(r.Context(), contractID, withinSeconds)
-	if err != nil {
-		h.Logger.Error("list expiring storage entries", "err", err)
-		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list expiring storage entries")
-		return
-	}
-
-	resp := make([]storageEntryResponse, len(entries))
-	for i, se := range entries {
-		resp[i] = storageEntryFromStore(se)
-		rem := se.LiveUntilLedger - int64(currentLedger)
-		resp[i].LedgersUntilExpiry = &rem
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"contract_id":    contractID,
-		"current_ledger": currentLedger,
-		"within_seconds": withinSeconds,
-		"entries":        resp,
-		"storage":        resp,
-		"count":          len(resp),
-	})
-}
-
