@@ -13,6 +13,7 @@ import (
 // APIStore is the combined read/write interface required by the HTTP handlers.
 type APIStore interface {
 	store.Store
+	store.ContractBulkStore
 	store.QueryStore
 	store.WatchdogStore
 	store.ContractUpgradeStore

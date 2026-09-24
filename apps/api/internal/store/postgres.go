@@ -112,6 +112,61 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 	return out, nextCursor, nil
 }
 
+// contractChildTables lists the contract-scoped tables whose rows are removed
+// when a contract is untracked. The identifiers are hardcoded so they are safe
+// to interpolate; contract IDs are always bound as query parameters.
+var contractChildTables = []string{
+	"events",
+	"invocations",
+	"storage_entries",
+	"storage_entry_history",
+	"sync_state",
+	"contract_upgrades",
+	"contract_health_scores",
+	"performance_baselines",
+}
+
+// DeleteContracts permanently removes the given contracts and every indexed
+// row that references them, in a single transaction. Child rows go first so
+// the foreign keys on events/invocations/storage_entries/sync_state hold.
+func (s *postgresStore) DeleteContracts(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin untrack tx: %w", err)
+	}
+	defer tx.Rollback(ctx) // no-op once committed
+
+	for _, table := range contractChildTables {
+		if _, err := tx.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE contract_id = ANY($1)", table), ids); err != nil {
+			return 0, fmt.Errorf("delete %s for contracts: %w", table, err)
+		}
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM contracts WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return 0, fmt.Errorf("delete contracts: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit untrack tx: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// SetContractLabel sets the label (tag) on every given contract and returns the
+// number of contracts updated. Unknown IDs are ignored.
+func (s *postgresStore) SetContractLabel(ctx context.Context, ids []string, label string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE contracts SET label = $1 WHERE id = ANY($2)`, label, ids)
+	if err != nil {
+		return 0, fmt.Errorf("set contract label: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // ---- events ---------------------------------------------------------------
 
 // networkOrDefault normalizes an empty network to the testnet default so

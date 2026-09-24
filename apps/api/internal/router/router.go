@@ -145,6 +145,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Contracts. Registration mutates shared state, so it requires at
 		// least contributor role. Reads stay open.
 		r.With(scope, contributor, purgeContracts).Post("/contracts", h.RegisterContract)
+		// Bulk untrack/tag over a selection; mutates shared state, so it
+		// requires the same scope + contributor role as registration.
+		r.With(scope, contributor, purgeContracts).Post("/contracts/batch", h.BatchContracts)
 		r.With(scope, contributor, purgeLabels).Post("/labels", h.CreateLabel)
 		r.With(scope, cacheLabels).Get("/labels", h.ListLabels)
 		r.With(scope, cacheLabels).Get("/resolve", h.ResolveLabel)

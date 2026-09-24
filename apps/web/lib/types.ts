@@ -110,6 +110,23 @@ export interface ContractsListResponse {
   has_more: boolean;
 }
 
+// ---- bulk contract actions (#176) ------------------------------------------
+
+export type BatchContractsAction = "untrack" | "tag";
+
+export interface BatchContractsRequest {
+  ids: string[];
+  action: BatchContractsAction;
+  // args.label is the tag to apply for action "tag".
+  args?: { label?: string };
+}
+
+export interface BatchContractsResponse {
+  action: BatchContractsAction;
+  requested: number;
+  affected: number;
+}
+
 export interface TrackContractRequest {
   id: string;
   label?: string;

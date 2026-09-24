@@ -653,6 +653,38 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/contracts/batch:
+    post:
+      tags: [Contracts]
+      summary: Apply a bulk action to many contracts
+      operationId: batchContracts
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchContractsRequest"
+      responses:
+        "200":
+          description: Bulk action applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchContractsResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/contracts/{id}:
     get:
       tags: [Contracts]
@@ -1987,6 +2019,46 @@ components:
         added_at:
           type: string
           format: date-time
+
+    BatchContractsRequest:
+      type: object
+      required: [ids, action]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+            pattern: "^C[A-Za-z0-9]{55}$"
+          description: Contract IDs to act on (at most 100; duplicates are ignored).
+        action:
+          type: string
+          enum: [untrack, tag]
+          description: >-
+            untrack permanently deletes the contracts and their indexed data;
+            tag sets the label on each contract.
+        args:
+          type: object
+          properties:
+            label:
+              type: string
+              description: Required when action is `tag`; replaces the contract label.
+
+    BatchContractsResult:
+      type: object
+      required: [action, requested, affected]
+      properties:
+        action:
+          type: string
+          enum: [untrack, tag]
+        requested:
+          type: integer
+          description: Number of distinct contract IDs in the request.
+        affected:
+          type: integer
+          format: int64
+          description: Number of contracts actually changed (unknown IDs are ignored).
 
     Event:
       type: object

@@ -1,6 +1,8 @@
 import type {
   AlertsResponse,
   AlertSubscription,
+  BatchContractsRequest,
+  BatchContractsResponse,
   ContractDetail,
   ContractSnapshot,
   ContractSummary,
@@ -100,6 +102,25 @@ export function trackContract(
     body: JSON.stringify(req),
     headers,
   });
+}
+
+// batchContracts applies one bulk action (untrack | tag) to many contracts.
+// Like trackContract it forwards the browser identity so the API's RBAC layer
+// can require the contributor role.
+export function batchContracts(
+  req: BatchContractsRequest,
+  userId?: string,
+): Promise<BatchContractsResponse> {
+  const headers: Record<string, string> = {};
+  if (userId) headers["X-User-ID"] = userId;
+  return fetchJson<BatchContractsResponse>(
+    `${API_URL}/api/v1/contracts/batch`,
+    {
+      method: "POST",
+      body: JSON.stringify(req),
+      headers,
+    },
+  );
 }
 
 export function getContract(id: string): Promise<ContractDetail> {
