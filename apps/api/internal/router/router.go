@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -46,6 +47,7 @@ func New(h *handler.Handler) http.Handler {
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
+		r.Use(middleware.Timeout(30 * time.Second))
 
 		// Scoped API key auth. It is applied per route with r.With so chi has
 		// already resolved the leaf route pattern when the middleware runs; the
@@ -94,8 +96,10 @@ func New(h *handler.Handler) http.Handler {
 		get("/contracts/{id}/summary", h.ContractSummary)
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
-		get("/stream/events", h.StreamEventsSSE)
 
+		// Stream routes with 5-minute timeout
+		streamTimeout := middleware.Timeout(5 * time.Minute)
+		r.With(scope, streamTimeout).Get("/stream/events", h.StreamEventsSSE)
 
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
