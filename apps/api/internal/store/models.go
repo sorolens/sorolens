@@ -138,3 +138,37 @@ type WatchlistItem struct {
 	ContractID string
 	AddedAt    time.Time
 }
+
+// ContractUpgrade records a Wasm-hash change for a tracked contract.
+type ContractUpgrade struct {
+	ID         int64
+	ContractID string
+	FromHash   string
+	ToHash     string
+	Ledger     int64
+	TxHash     string
+	At         time.Time
+}
+
+// ContractHealthScore is a cached composite health score for a contract.
+type ContractHealthScore struct {
+	ContractID           string
+	Score                int32
+	ComponentUptime      int32
+	ComponentErrorRate   int32
+	ComponentPerformance int32
+	ComponentStorageTTL  int32
+	ComputedAt           time.Time
+}
+
+// HealthScoreInputs holds the raw signals aggregated to compute a health score.
+type HealthScoreInputs struct {
+	HealthyChecks    int64
+	TotalChecks      int64
+	WatchdogStatus   string
+	TotalInvocations int64
+	FailedInvocations int64
+	Activity          []HourlyActivity
+	TotalStorage      int64
+	ExpiringStorage   int64
+}
