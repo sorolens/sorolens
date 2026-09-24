@@ -225,6 +225,12 @@ jobs:
         run: |
           mkdir -p /tmp/s3/sorolens-backups/logical /tmp/s3/sorolens-backups/base /tmp/s3/sorolens-backups/wal
           install -m 755 scripts/aws-mock.sh /usr/local/bin/aws
+      - name: Install aws mock in postgres container
+        run: |
+          DB_CONTAINER=$(docker compose ps -q postgres)
+          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
+          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
+          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
       - name: Run Backup Script
         run: |
           export DB_CONTAINER=$(docker compose ps -q postgres)
