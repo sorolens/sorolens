@@ -16,6 +16,12 @@ Runs as a single Node.js process. Deploys to Render's free tier (Docker) with an
 | `/unlink` | Remove the GitHub link on your Discord account. |
 | `/whoami` | Show your current linked GitHub account, if any. |
 | `/mypr` | Show your merged PR count and current tier. |
+| `/status <contract>` | Show the current Sorolens status of a tracked contract. |
+| `/alerts <contract> [limit]` | Show the latest watchdog alerts for a contract. |
+| `/watch <contract>` | Add a contract to your Sorolens watchlist. |
+| `/unwatch <contract>` | Remove a contract from your watchlist. |
+
+See [`docs/discord-bot.md`](../../docs/discord-bot.md) for the API-backed query commands in detail.
 
 New members are also DM'd a personal `/connect` link automatically when they join, so most contributors never need to type anything.
 
