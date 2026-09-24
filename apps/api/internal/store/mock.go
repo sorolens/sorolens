@@ -22,6 +22,7 @@ type MockStore struct {
 	watchlist          map[string]map[string]bool
 	alertSubscriptions []AlertSubscription
 	contractUpgrades   []ContractUpgrade
+	healthScores       map[string]ContractHealthScore
 
 	// Error injection
 	UpsertContractErr   error
@@ -36,6 +37,7 @@ type MockStore struct {
 	CreateAPIKeyErr     error
 	GetAPIKeyErr        error
 	ListUpgradesErr     error
+	GetHealthScoreErr   error
 }
 
 // NewMockStore returns an initialized MockStore.
@@ -47,6 +49,7 @@ func NewMockStore() *MockStore {
 		watchlist:          make(map[string]map[string]bool),
 		alerts:             make([]ContractAlert, 0),
 		alertSubscriptions: make([]AlertSubscription, 0),
+		healthScores:       make(map[string]ContractHealthScore),
 	}
 }
 

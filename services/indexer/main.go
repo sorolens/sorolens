@@ -128,6 +128,12 @@ func (s *stubStore) InsertContractUpgrade(_ context.Context, _ poller.ContractUp
 func (s *stubStore) UpdateContractWasmHash(_ context.Context, _ string, _ string) error {
 	return nil
 }
+func (s *stubStore) ContractHealthInputs(_ context.Context, _ string) (poller.HealthInputs, error) {
+	return poller.HealthInputs{}, nil
+}
+func (s *stubStore) UpsertContractHealthScore(_ context.Context, _ poller.ContractHealthScore) error {
+	return nil
+}
 
 type stubRedis struct{}
 

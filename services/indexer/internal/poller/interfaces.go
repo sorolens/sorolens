@@ -39,6 +39,12 @@ type Store interface {
 	// UpdateContractWasmHash records the now-current on-chain Wasm hash for a
 	// contract so subsequent polls can diff against it.
 	UpdateContractWasmHash(ctx context.Context, contractID, wasmHash string) error
+
+	// ContractHealthInputs aggregates the raw signals that feed the composite
+	// health score (issue #137). It never errors on empty data.
+	ContractHealthInputs(ctx context.Context, contractID string) (HealthInputs, error)
+	// UpsertContractHealthScore caches a computed 0-100 health score.
+	UpsertContractHealthScore(ctx context.Context, h ContractHealthScore) error
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -188,4 +194,29 @@ type Alert struct {
 	Ledger     int64
 	TxHash     string
 	Timestamp  time.Time
+}
+
+// HealthInputs mirrors store.HealthScoreInputs (issue #137). It carries the
+// raw aggregates an implementation gathers so the pure healthscore package can
+// compute the composite score without importing apps/api.
+type HealthInputs struct {
+	HealthyChecks     int64
+	TotalChecks       int64
+	WatchdogStatus    string
+	TotalInvocations  int64
+	FailedInvocations int64
+	Activity          []HourlyActivity
+	TotalStorage      int64
+	ExpiringStorage   int64
+}
+
+// ContractHealthScore mirrors store.ContractHealthScore.
+type ContractHealthScore struct {
+	ContractID           string
+	Score                int32
+	ComponentUptime      int32
+	ComponentErrorRate   int32
+	ComponentPerformance int32
+	ComponentStorageTTL  int32
+	ComputedAt           time.Time
 }

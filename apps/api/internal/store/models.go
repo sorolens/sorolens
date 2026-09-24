@@ -94,6 +94,43 @@ type AlertSubscription struct {
 	UpdatedAt      time.Time
 }
 
+// ContractHealthScore is one cached composite 0-100 health score row for a
+// contract (issue #137). The indexer recomputes and upserts it every poll
+// cycle; the component_* fields hold the normalized 0-100 value of each input
+// so the dashboard can render a breakdown without recomputing.
+type ContractHealthScore struct {
+	ContractID           string
+	Score                int32
+	ComponentUptime      int32
+	ComponentErrorRate   int32
+	ComponentPerformance int32
+	ComponentStorageTTL  int32
+	ComputedAt           time.Time
+}
+
+// HealthScoreInputs holds the raw aggregates that feed the composite health
+// score (issue #137). The indexer fetches these every poll cycle and runs the
+// pure scoring function over them.
+type HealthScoreInputs struct {
+	// Watchdog uptime: recent health-check history for the contract.
+	HealthyChecks int64
+	TotalChecks   int64
+	// WatchdogStatus is monitored_contracts.status (Healthy/Degraded/
+	// Unresponsive). Empty when the contract is not registered with the
+	// watchdog; used as a fallback when there is no check history.
+	WatchdogStatus string
+	// Invocation error rate over the trailing window.
+	TotalInvocations  int64
+	FailedInvocations int64
+	// Activity is the chronological per-hour activity (oldest first) used to
+	// evaluate the CPU/fee trend.
+	Activity []HourlyActivity
+	// Storage TTL headroom: live entries vs entries expiring within the
+	// headroom horizon of the current ledger.
+	TotalStorage    int64
+	ExpiringStorage int64
+}
+
 // ContractUpgrade records one observed Wasm-hash change for a tracked contract.
 type ContractUpgrade struct {
 	ID         int64

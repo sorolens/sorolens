@@ -18,6 +18,7 @@ type FullStore interface {
 	QueryStore
 	WatchdogStore
 	ContractUpgradeStore
+	HealthScoreStore
 	APIKeyStore
 	AlertSubscriptionStore
 	WatchlistStore
