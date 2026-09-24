@@ -74,7 +74,13 @@ jobs:
         working-directory: ${{ matrix.module }}
         env:
           POSTGRES_TEST_URL: postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable
-        run: go test -race -timeout 120s ./...
+        run: go test -race -timeout 120s -coverprofile=coverage.out ./...
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ${{ matrix.module }}/coverage.out
+          flags: go
+          token: ${{ secrets.CODECOV_TOKEN }}
   # ------------------------------------------------------------
   # Go client regeneration (issue #149): fail if the checked-in generated
   # code under packages/go-client is out of date with docs/openapi.yaml.
