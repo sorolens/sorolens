@@ -14,6 +14,8 @@ func New(h *handler.Handler) http.Handler {
 	r := chi.NewRouter()
 
 	// Global middleware
+	r.Use(OTelMiddleware)
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.CORS)
 	r.Use(middleware.Recoverer(h.Logger))

@@ -24,6 +24,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"time"
 )
 
@@ -49,7 +50,7 @@ func New(endpoint string, timeout time.Duration) *Client {
 	}
 	return &Client{
 		endpoint:   endpoint,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
 		timeout:    timeout,
 	}
 }
