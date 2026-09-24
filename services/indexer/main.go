@@ -12,10 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sorolens/sorolens/apps/api/internal/soroban"
-	"github.com/sorolens/sorolens/apps/api/internal/store"
-	"github.com/sorolens/sorolens/apps/api/services/indexer/internal/poller"
-	"github.com/sorolens/sorolens/apps/api/services/indexer/internal/watchdog"
+	"github.com/sorolens/sorolens/services/indexer/internal/poller"
+	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
 )
 
 func main() {
@@ -65,8 +63,8 @@ func main() {
 	// surface yet, so wdStore stays nil and the interceptor no-ops; the
 	// any-assertion lights up once the real FullStore is wired here.
 	var storeAny any = st
-	var wdStore store.WatchdogStore
-	if ws, ok := storeAny.(store.WatchdogStore); ok {
+	var wdStore watchdogStore
+	if ws, ok := storeAny.(watchdogStore); ok {
 		wdStore = ws
 	}
 	watchdogEnabled := os.Getenv("WATCHDOG_ENABLED") == "true"
@@ -133,7 +131,7 @@ func decodeWatchdogValue(valueXDR string) map[string]any {
 	if valueXDR == "" {
 		return out
 	}
-	sc, err := soroban.DecodeScVal(valueXDR)
+	sc, err := decodeScVal(valueXDR)
 	if err != nil {
 		return out
 	}
@@ -148,7 +146,7 @@ func decodeWatchdogValue(valueXDR string) map[string]any {
 // watchdogInterceptor intercepts getEvents and routes watchdog events to the classifier
 type watchdogInterceptor struct {
 	poller.RPCClient
-	store    store.WatchdogStore
+	store    watchdogStore
 	enabled  bool
 	contract string
 	log      *slog.Logger
@@ -175,7 +173,7 @@ func (w *watchdogInterceptor) GetEvents(ctx context.Context, start, end uint32, 
 			switch watchdog.ClassifyKind(raw) {
 			case watchdog.KindContractRegistered:
 				if reg, err := watchdog.ProjectRegistration(raw); err == nil {
-					_ = w.store.UpsertMonitoredContract(ctx, store.MonitoredContract{
+					_ = w.store.UpsertMonitoredContract(ctx, wdMonitoredContract{
 						ContractID:    reg.ContractID,
 						Name:          reg.Name,
 						Owner:         reg.Owner,
@@ -191,7 +189,7 @@ func (w *watchdogInterceptor) GetEvents(ctx context.Context, start, end uint32, 
 				}
 			case watchdog.KindHealthCheck:
 				if h, err := watchdog.ProjectHealth(raw); err == nil {
-					_ = w.store.InsertHealthCheck(ctx, store.HealthCheck{
+					_ = w.store.InsertHealthCheck(ctx, wdHealthCheck{
 						ContractID: h.ContractID,
 						Status:     h.Status,
 						Metadata:   h.Metadata,
@@ -203,7 +201,7 @@ func (w *watchdogInterceptor) GetEvents(ctx context.Context, start, end uint32, 
 				}
 			case watchdog.KindContractAlert:
 				if a, err := watchdog.ProjectAlert(raw); err == nil {
-					_ = w.store.InsertContractAlert(ctx, store.ContractAlert{
+					_ = w.store.InsertContractAlert(ctx, wdContractAlert{
 						ContractID: a.ContractID,
 						Severity:   a.Severity,
 						Message:    a.Message,

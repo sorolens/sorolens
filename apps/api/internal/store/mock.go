@@ -16,7 +16,6 @@ type MockStore struct {
 	syncStates         map[string]SyncState
 	globalStats        GlobalStats
 	monitored          map[string]MonitoredContract
-	ListUpgradesErr     error
 	healthChecks       []HealthCheck
 	alerts             []ContractAlert
 	apiKeys            []APIKey
@@ -24,7 +23,6 @@ type MockStore struct {
 	watchlist          map[string]map[string]bool
 	alertSubscriptions []AlertSubscription
 	users              map[string]User
-	contractUpgrades   []ContractUpgrade
 	healthScores       map[string]ContractHealthScore
 
 	// Error injection
