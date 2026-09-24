@@ -39,6 +39,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <main>{children}</main>
+        <footer className="mt-12 border-t border-[var(--color-border)] pt-6 text-sm text-[var(--color-text-secondary)]">
+          Built for the Stellar developer community.
+        </footer>
       </div>
     </NetworkProvider>
   );
