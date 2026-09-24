@@ -76,44 +76,6 @@ export interface StorageResponse {
   has_more: boolean;
 }
 
-// ---- storage diff ----------------------------------------------------------
-
-export type StorageChangeKind = "created" | "updated" | "deleted" | "expired";
-
-/** One side of a storage diff row, matching the API's storage entry shape. */
-export interface DiffStorageEntry {
-  contract_id: string;
-  network: string;
-  key_xdr: string;
-  key_decoded: unknown | null;
-  value_xdr: string | null;
-  value_decoded: unknown | null;
-  durability: string;
-  live_until_ledger: number | null;
-  last_modified_ledger: number | null;
-  status: string;
-}
-
-export interface StorageChange {
-  key_xdr: string;
-  key_decoded: unknown | null;
-  kind: StorageChangeKind;
-  durability: string;
-  /** Present for updates: which fields differ (value, ttl, durability, status). */
-  changed_fields?: string[];
-  before: DiffStorageEntry | null;
-  after: DiffStorageEntry | null;
-  last_modified_ledger: number | null;
-}
-
-export interface StorageDiffResponse {
-  contract_id: string;
-  from_ledger: number;
-  to_ledger: number;
-  counts: Partial<Record<StorageChangeKind, number>>;
-  changes: StorageChange[];
-}
-
 export interface ContractStats {
   total_events: number;
   total_invocations: number;
@@ -313,52 +275,35 @@ export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
 }
 
-// ---- groups (contract portfolios) ------------------------------------------
+// ---- source verification ---------------------------------------------------
 
-export interface Group {
-  id: string;
-  owner_id: string;
-  name: string;
-  created_at: string;
+export interface VerificationDiagnostic {
+  code: string;
+  severity: string;
+  message: string;
+  hint?: string;
 }
 
-export interface GroupStats {
-  group_id: string;
-  contract_count: number;
-  event_count: number;
-  invocation_count: number;
-  storage_entry_count: number;
-  average_health_score: number;
-}
-
-export interface GroupSummary extends Group {
-  stats: GroupStats;
-}
-
-export interface GroupContract {
+export interface ContractVerification {
   contract_id: string;
-  network: string;
-  label: string;
   status: string;
-  health_score: number | null;
-  last_activity_at: string | null;
+  matched: boolean;
+  on_chain_hash?: string;
+  compiled_wasm_hash?: string;
+  source: {
+    kind: string;
+    ref?: string;
+    digest?: string;
+  };
+  toolchain: {
+    stellar?: string;
+    rustc?: string;
+    cargo?: string;
+  };
+  diagnostics: VerificationDiagnostic[];
+  build_log?: string;
+  submitted_at: string;
+  verified_at?: string;
+  updated_at: string;
 }
-
-export interface GroupDetail extends Group {
-  contracts: GroupContract[];
-}
-
-export interface GroupsListResponse {
-  groups: GroupSummary[];
-}
-
-export interface GroupMembershipResponse {
-  group_id: string;
-  contract_id: string;
-}
-
-export interface GroupDeletedResponse {
-  deleted: boolean;
-}
-
 

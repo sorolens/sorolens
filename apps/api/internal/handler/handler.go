@@ -33,6 +33,7 @@ type APIStore interface {
 	store.WatchedAccountStore
 	store.AuditStore
 	store.GroupStore
+	store.ContractVerificationStore
 }
 
 // Pinger is implemented by both the postgres pool and the Redis client.
@@ -69,6 +70,12 @@ type Handler struct {
 
 	// GraphQL configures the /graphql endpoint (issue #125).
 	GraphQL graph.Options
+
+	// Verifier rebuilds submitted contract source and compares the resulting
+	// Wasm hash against the on-chain hash (issue #263). It is nil on
+	// deployments without a build sandbox (for example the Vercel serverless
+	// entrypoint), in which case POST /contracts/{id}/verify answers 503.
+	Verifier ContractVerifier
 
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.

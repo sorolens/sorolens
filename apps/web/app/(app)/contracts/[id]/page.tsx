@@ -27,9 +27,8 @@ import { InvocationChart } from "@/components/InvocationChart";
 import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
-import { StorageDiffPanel } from "@/components/StorageDiffPanel";
 import { HealthScoreCard } from "@/components/HealthScoreCard";
-import { AddToGroup } from "@/components/AddToGroup";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { useEventStream } from "@/hooks/useEventStream";
 
 interface Props {
@@ -268,7 +267,7 @@ function ContractDetailContent({ id }: { id: string }) {
           >
             {contract?.status}
           </span>
-          <AddToGroup contractId={id} />
+          <VerifiedBadge contractId={id} />
         </div>
         {contract?.sync && (
           <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-secondary)]">
@@ -380,11 +379,6 @@ function ContractDetailContent({ id }: { id: string }) {
       <section className="mb-8">
         <h2 className="mb-4 text-xl font-semibold">Snapshot / replay</h2>
         <SnapshotPanel contractId={id} currentLedger={currentLedger} />
-      </section>
-
-      <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Storage diff</h2>
-        <StorageDiffPanel contractId={id} currentLedger={currentLedger} />
       </section>
 
       <section className="mb-8">
