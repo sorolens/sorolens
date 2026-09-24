@@ -301,10 +301,6 @@ function ContractDetailContent({ id }: { id: string }) {
       </section>
 
       <section className="mb-8">
-
-      </section>
-
-      <section className="mb-8">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Activity</h2>
           <WindowSelector selected={window} onChange={setWindow} />
