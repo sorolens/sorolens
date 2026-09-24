@@ -28,10 +28,12 @@ func TestTimeoutMiddleware_Returns503OnTimeout(t *testing.T) {
 
 func TestTimeoutMiddleware_CancelsContext(t *testing.T) {
 	var ctx context.Context
+	done := make(chan struct{})
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx = r.Context()
 		<-r.Context().Done()
+		close(done)
 	})
 
 	middleware := Timeout(10 * time.Millisecond)(testHandler)
@@ -41,7 +43,7 @@ func TestTimeoutMiddleware_CancelsContext(t *testing.T) {
 
 	middleware.ServeHTTP(rr, req)
 
-	time.Sleep(50 * time.Millisecond)
+	<-done
 
 	if ctx.Err() != context.DeadlineExceeded {
 		t.Errorf("expected context deadline exceeded, got %v", ctx.Err())
