@@ -138,3 +138,16 @@ type WatchlistItem struct {
 	ContractID string
 	AddedAt    time.Time
 }
+
+// ContractUpgrade records a Wasm-code (contract_hash) change observed on the
+// ledger for a contract. TxHash is the ledger operation that applied the
+// upgrade (empty when the ledger only carried a hash change).
+type ContractUpgrade struct {
+	ID        int64
+	ContractID string
+	FromHash  string
+	ToHash    string
+	Ledger    int64
+	TxHash    string
+	At        time.Time
+}

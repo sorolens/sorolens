@@ -16,9 +16,11 @@ type MockStore struct {
 	syncStates         map[string]SyncState
 	globalStats        GlobalStats
 	monitored          map[string]MonitoredContract
+	ListUpgradesErr     error
 	healthChecks       []HealthCheck
 	alerts             []ContractAlert
 	apiKeys            []APIKey
+	contractUpgrades   []ContractUpgrade
 	watchlist          map[string]map[string]bool
 	alertSubscriptions []AlertSubscription
 	users              map[string]User
