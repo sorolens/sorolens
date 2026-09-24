@@ -39,6 +39,14 @@ export function HealthScoreCard({ contractId }: HealthScoreCardProps) {
   const data = state.data;
   const error = state.error;
 
+  if (data && !data.components) {
+    return (
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4 text-sm text-[var(--color-text-secondary)]">
+        Health score: Unavailable
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4 text-sm text-[var(--color-text-secondary)]">

@@ -60,6 +60,12 @@ function defaultContract(route: Route): { status: number; body: unknown } {
   if (path.endsWith("/stats")) {
     return { status: 200, body: statsResponse() };
   }
+  if (path.endsWith("/health-score")) {
+    return { status: 404, body: { error: "not found" } };
+  }
+  if (path.endsWith("/snapshot")) {
+    return { status: 404, body: { error: "not found" } };
+  }
   return { status: 200, body: contractDetail() };
 }
 
