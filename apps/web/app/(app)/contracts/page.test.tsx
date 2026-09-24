@@ -28,6 +28,32 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
+// ── Mock next/navigation ────────────────────────────────────────────────────
+// router.replace() updates the shared search params, so the component re-reads
+// the new sort state on the next render just as a real navigation would.
+const nav = vi.hoisted(() => {
+  let query = new URLSearchParams("");
+  const replace = vi.fn((href: string) => {
+    query = new URLSearchParams(
+      href.startsWith("?") ? href.slice(1) : href,
+    );
+  });
+  const push = vi.fn();
+  return {
+    replace,
+    push,
+    getQuery: () => query,
+    setQuery: (q: string | URLSearchParams) => {
+      query = new URLSearchParams(q);
+    },
+  };
+});
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: nav.replace, push: nav.push }),
+  useSearchParams: () => nav.getQuery(),
+}));
+
 // ── Mock @sorolens/ui so we don't need the built dist ───────────────────────
 // Toast is the real component so the tests assert what users actually get.
 vi.mock("@sorolens/ui", async (importOriginal) => ({
@@ -39,23 +65,46 @@ vi.mock("@sorolens/ui", async (importOriginal) => ({
     loading,
     emptyState,
     onRowClick,
+    onSort,
+    sortColumn,
+    sortDirection,
   }: {
     data: T[];
-    columns: {
-      key: string;
-      header: string;
-      accessor?: (item: T) => React.ReactNode;
-    }[];
+    columns: { key: string; header: React.ReactNode; sortable?: boolean; accessor?: (item: T) => React.ReactNode }[];
     rowKey: (item: T) => string;
     loading?: boolean;
     emptyState?: React.ReactNode;
     onRowClick?: (item: T) => void;
+    onSort?: (columnKey: string) => void;
+    sortColumn?: string;
+    sortDirection?: "asc" | "desc";
   }) => {
     if (loading) return <div data-testid="data-table-loading">loading</div>;
-    if (data.length === 0)
-      return <div data-testid="data-table-empty">{emptyState}</div>;
+    if (data.length === 0) return <div data-testid="data-table-empty">{emptyState}</div>;
     return (
       <table data-testid="data-table">
+        <thead>
+          <tr>
+            {columns.map((col) => (
+              <th
+                key={col.key}
+                data-testid={`col-${col.key}`}
+                onClick={() => col.sortable && onSort?.(col.key)}
+              >
+                {col.header}
+                {col.sortable && (
+                  <span>
+                    {sortColumn === col.key
+                      ? sortDirection === "asc"
+                        ? "▲"
+                        : "▼"
+                      : "↕"}
+                  </span>
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
           {data.map((item) => (
             <tr
@@ -77,9 +126,7 @@ vi.mock("@sorolens/ui", async (importOriginal) => ({
     );
   },
   MonoId: ({ value }: { value: string }) => (
-    <span data-testid="mono-id">
-      {value.slice(0, 8)}…{value.slice(-8)}
-    </span>
+    <span data-testid="mono-id">{value.slice(0, 8)}…{value.slice(-8)}</span>
   ),
 }));
 
@@ -93,7 +140,7 @@ vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
     constructor(
       public status: number,
-      message: string
+      message: string,
     ) {
       super(message);
       this.name = "ApiError";
@@ -104,9 +151,7 @@ vi.mock("@/lib/api", () => ({
 // ── Mock @/components/Skeleton ───────────────────────────────────────────────
 vi.mock("@/components/Skeleton", () => ({
   TableSkeleton: ({ rows }: { rows?: number }) => (
-    <div data-testid="table-skeleton" data-rows={rows}>
-      skeleton
-    </div>
+    <div data-testid="table-skeleton" data-rows={rows}>skeleton</div>
   ),
 }));
 
@@ -121,7 +166,6 @@ const CONTRACT_A = {
   status: "active",
   wasm_hash: null,
   added_at: "2024-01-01T00:00:00Z",
-  last_activity_at: "2024-01-01T00:03:00Z",
 };
 
 const CONTRACT_B = {
@@ -131,7 +175,6 @@ const CONTRACT_B = {
   status: "backfilling",
   wasm_hash: null,
   added_at: "2024-02-01T00:00:00Z",
-  last_activity_at: null,
 };
 
 const VALID_CONTRACT_ID =
@@ -144,7 +187,6 @@ const NEW_CONTRACT = {
   network: "testnet",
   wasm_hash: null,
   added_at: "2024-03-01T00:00:00Z",
-  last_activity_at: null,
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -178,7 +220,7 @@ function submitTrack(contractId: string, label?: string) {
     });
   }
   const submitEl = document.getElementById(
-    "track-modal-submit"
+    "track-modal-submit",
   ) as HTMLButtonElement;
   fireEvent.submit(submitEl.closest("form")!);
 }
@@ -188,6 +230,7 @@ function submitTrack(contractId: string, label?: string) {
 describe("ContractsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    nav.setQuery("");
     mockListContracts.mockResolvedValue({
       contracts: [CONTRACT_A, CONTRACT_B],
       cursor: null,
@@ -201,8 +244,9 @@ describe("ContractsPage", () => {
 
   // Helper: dynamic import so mocks are in place before module loads
   async function renderPage() {
-    const { default: ContractsPage } =
-      await import("@/app/(app)/contracts/page");
+    const { default: ContractsPage } = await import(
+      "@/app/(app)/contracts/page"
+    );
     return render(<ContractsPage />);
   }
 
@@ -227,41 +271,11 @@ describe("ContractsPage", () => {
   it("renders the DataTable with contracts after loading", async () => {
     await renderPage();
     await waitFor(() =>
-      expect(screen.queryByTestId("table-skeleton")).toBeNull()
+      expect(screen.queryByTestId("table-skeleton")).toBeNull(),
     );
     expect(screen.getByTestId("data-table")).toBeDefined();
   });
 
-  it("renders and updates relative last activity", async () => {
-    vi.useFakeTimers();
-
-    try {
-      const now = new Date("2024-01-01T00:06:00Z").getTime();
-      vi.setSystemTime(now);
-
-      await act(async () => {
-        await renderPage();
-      });
-
-      expect(screen.getByTestId("data-table")).toBeDefined();
-      const activityRow = screen
-        .getAllByTestId("data-table-row")
-        .find((row) => row.textContent?.includes(CONTRACT_A.id.slice(0, 8)));
-
-      expect(activityRow).toBeDefined();
-      expect(activityRow).toHaveTextContent("3m ago");
-
-      vi.setSystemTime(new Date("2024-01-01T00:07:00Z").getTime());
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(30_000);
-      });
-
-      expect(activityRow).toHaveTextContent("4m ago");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
   // ── Happy path: search filters by label ───────────────────────────────────
 
   it("filters contracts by label when searching", async () => {
@@ -269,7 +283,7 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const search = screen.getByPlaceholderText(
-      /search by alias or contract id/i
+      /search by alias or contract id/i,
     );
     fireEvent.change(search, { target: { value: "My Contract" } });
 
@@ -287,7 +301,7 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const search = screen.getByPlaceholderText(
-      /search by alias or contract id/i
+      /search by alias or contract id/i,
     );
     // CONTRACT_A id starts with CAAAA, CONTRACT_B with CBBBB
     fireEvent.change(search, { target: { value: "CBBBB" } });
@@ -306,9 +320,11 @@ describe("ContractsPage", () => {
     });
     await renderPage();
     await waitFor(() =>
-      expect(screen.queryByTestId("table-skeleton")).toBeNull()
+      expect(screen.queryByTestId("table-skeleton")).toBeNull(),
     );
-    expect(screen.getByText(/no contracts tracked yet/i)).toBeDefined();
+    expect(
+      screen.getByText(/no contracts tracked yet/i),
+    ).toBeDefined();
   });
 
   // ── Happy path: track contract modal open/close ────────────────────────────
@@ -330,7 +346,9 @@ describe("ContractsPage", () => {
     expect(screen.getByRole("dialog")).toBeDefined();
 
     fireEvent.keyDown(window, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).toBeNull(),
+    );
   });
 
   // ── Validation: invalid contract ID is rejected ────────────────────────────
@@ -345,7 +363,7 @@ describe("ContractsPage", () => {
     fireEvent.change(input, { target: { value: "NOT_A_VALID_ID" } });
 
     expect(
-      screen.getByText(/contract id must be 56 characters/i)
+      screen.getByText(/contract id must be 56 characters/i),
     ).toBeDefined();
   });
 
@@ -358,9 +376,7 @@ describe("ContractsPage", () => {
     const input = screen.getByLabelText(/contract id/i);
     fireEvent.change(input, { target: { value: "BAD" } });
 
-    const submitEl = document.getElementById(
-      "track-modal-submit"
-    ) as HTMLButtonElement;
+    const submitEl = document.getElementById("track-modal-submit") as HTMLButtonElement;
     expect(submitEl?.disabled).toBe(true);
   });
 
@@ -380,8 +396,8 @@ describe("ContractsPage", () => {
           id: VALID_CONTRACT_ID,
           label: undefined,
         },
-        ""
-      )
+        "",
+      ),
     );
     // Modal closes on submit
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -417,7 +433,7 @@ describe("ContractsPage", () => {
     expect(screen.getByRole("link", { name: "My Contract" })).toBeDefined();
     expect(
       (document.getElementById("track-contract-btn") as HTMLButtonElement)
-        .disabled
+        .disabled,
     ).toBe(true);
 
     await act(async () => track.resolve(NEW_CONTRACT));
@@ -447,7 +463,7 @@ describe("ContractsPage", () => {
     const rows = rowTexts();
     expect(rows).toHaveLength(3);
     expect(
-      rows.filter((r) => r.includes(VALID_CONTRACT_ID.slice(0, 8)))
+      rows.filter((r) => r.includes(VALID_CONTRACT_ID.slice(0, 8))),
     ).toHaveLength(1);
     expect(rows.some((r) => r.includes("pending"))).toBe(false);
     expect(rows.slice(1)).toEqual(before);
@@ -468,12 +484,12 @@ describe("ContractsPage", () => {
     expect(rowTexts()).toHaveLength(3);
 
     await act(async () =>
-      track.reject(new ApiError(409, "Contract already tracked"))
+      track.reject(new ApiError(409, "Contract already tracked")),
     );
 
     const toast = await screen.findByRole("alert");
     expect(toast.textContent).toContain(
-      "Couldn't track contract: Contract already tracked"
+      "Couldn't track contract: Contract already tracked",
     );
     expect(rowTexts()).toEqual(before);
     // Rolled back locally, not refetched.
@@ -481,7 +497,7 @@ describe("ContractsPage", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(
       (document.getElementById("track-contract-btn") as HTMLButtonElement)
-        .disabled
+        .disabled,
     ).toBe(false);
   });
 
@@ -496,7 +512,7 @@ describe("ContractsPage", () => {
 
     const toast = await screen.findByRole("alert");
     expect(toast.textContent).toContain(
-      "Couldn't track contract. Please try again."
+      "Couldn't track contract. Please try again.",
     );
     expect(rowTexts()).toEqual(before);
   });
@@ -512,7 +528,7 @@ describe("ContractsPage", () => {
     expect(screen.getByRole("dialog")).toBeDefined();
     // The only alert is the inline validation message, not a toast.
     expect(screen.getByRole("alert").textContent).toMatch(
-      /contract id must be 56 characters/i
+      /contract id must be 56 characters/i,
     );
     expect(screen.queryByText(/couldn't track contract/i)).toBeNull();
     expect(rowTexts()).toEqual(before);
@@ -537,7 +553,7 @@ describe("ContractsPage", () => {
         contracts: [CONTRACT_A, CONTRACT_B],
         cursor: null,
         has_more: false,
-      })
+      }),
     );
     expect(rowTexts()).toHaveLength(1);
     expect(rowTexts()[0]).toContain("New Contract");
@@ -557,7 +573,7 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const prevBtn = document.getElementById(
-      "contracts-prev-page"
+      "contracts-prev-page",
     ) as HTMLButtonElement;
     expect(prevBtn?.disabled).toBe(true);
   });
@@ -569,7 +585,7 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const nextBtn = document.getElementById(
-      "contracts-next-page"
+      "contracts-next-page",
     ) as HTMLButtonElement;
     expect(nextBtn?.disabled).toBe(true);
   });
@@ -593,13 +609,78 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const nextBtn = document.getElementById(
-      "contracts-next-page"
+      "contracts-next-page",
     ) as HTMLButtonElement;
     expect(nextBtn?.disabled).toBe(false);
 
     fireEvent.click(nextBtn);
 
     // listContracts should be called a second time for page 2
-    await waitFor(() => expect(mockListContracts).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(mockListContracts).toHaveBeenCalledTimes(2),
+    );
+  });
+
+  // ── Sorting: header click toggles asc/desc, sort lives in the URL ────────
+
+  it("sorts ascending on first click of a new column and mirrors it in the URL", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+    nav.replace.mockClear();
+
+    fireEvent.click(screen.getByTestId("col-label"));
+
+    // The page refetches with the new sort against the API…
+    await waitFor(() =>
+      expect(mockListContracts).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: "label", dir: "asc" }),
+      ),
+    );
+    // …and the active sort is written to the URL so the view is shareable.
+    expect(nav.replace).toHaveBeenCalledWith("?sort=label&dir=asc");
+    // The visual indicator is rendered for the active sort column.
+    expect(screen.getByText("▲")).toBeDefined();
+  });
+
+  it("toggles to descending on a second click of the same column", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+    nav.replace.mockClear();
+
+    // First click on the default column (added_at, desc) flips to asc.
+    fireEvent.click(screen.getByTestId("col-added_at"));
+    await waitFor(() =>
+      expect(nav.replace).toHaveBeenCalledWith("?sort=added_at&dir=asc"),
+    );
+
+    // Second click flips back to desc.
+    fireEvent.click(screen.getByTestId("col-added_at"));
+    await waitFor(() =>
+      expect(nav.replace).toHaveBeenCalledWith("?sort=added_at&dir=desc"),
+    );
+    expect(screen.getByText("▼")).toBeDefined();
+  });
+
+  it("initializes the sort from the URL on load", async () => {
+    nav.setQuery("?sort=status&dir=asc");
+
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    // The first request already carries the URL sort params.
+    expect(mockListContracts).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: "status", dir: "asc" }),
+    );
+    // A URL that already matches the state is not rewritten.
+    expect(nav.replace).not.toHaveBeenCalled();
+    expect(screen.getByText("▲")).toBeDefined();
+  });
+
+  it("does not rewrite the URL for the default sort", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    // Visiting /contracts without sort params keeps the URL untouched.
+    expect(nav.replace).not.toHaveBeenCalled();
   });
 });

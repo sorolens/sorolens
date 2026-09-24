@@ -137,7 +137,30 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 		}
 		out = append(out, c)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		var cmp int
+		switch f.Sort {
+		case "label":
+			cmp = strings.Compare(a.Label, b.Label)
+		case "network":
+			cmp = strings.Compare(a.Network, b.Network)
+		case "status":
+			cmp = strings.Compare(a.Status, b.Status)
+		case "added_at":
+			cmp = a.AddedAt.Compare(b.AddedAt)
+		default:
+			cmp = strings.Compare(a.ID, b.ID)
+		}
+		// The contract ID is the stable tie-breaker, mirroring the SQL.
+		if cmp == 0 {
+			cmp = strings.Compare(a.ID, b.ID)
+		}
+		if strings.EqualFold(f.SortDir, "desc") {
+			return cmp > 0
+		}
+		return cmp < 0
+	})
 	var nextCursor string
 	if len(out) > limit {
 		nextCursor = out[limit-1].ID

@@ -154,6 +154,27 @@ type ContractFilters struct {
 	// Status restricts results to one contract status (e.g. "active").
 	// Empty means all statuses.
 	Status string
+	// Sort is the column to order by, one of id, label, network, status,
+	// added_at. Empty means the default (id ASC). See ValidContractSort.
+	Sort string
+	// SortDir is "asc" or "desc". Empty means asc.
+	SortDir string
+}
+
+// contractSortColumns is the whitelist of columns ListContracts may order by,
+// mapped to their SQL identifiers. Only these values are ever interpolated
+// into the ORDER BY clause, so the sort parameter cannot inject SQL.
+var contractSortColumns = map[string]string{
+	"id":       "id",
+	"label":    "label",
+	"network":  "network",
+	"status":   "status",
+	"added_at": "added_at",
+}
+
+// ValidContractSort reports whether col is a sortable contracts column.
+func ValidContractSort(col string) bool {
+	return contractSortColumns[col] != ""
 }
 
 // NewStore returns a Store backed by the given pgxpool.Pool.

@@ -573,6 +573,20 @@ paths:
           schema:
             type: string
           description: Filter by contract status (pending, active, backfilling, error, paused).
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [id, label, network, status, added_at]
+          description: Column to sort by. Defaults to id when omitted or unknown.
+        - name: dir
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+          description: Sort direction. Defaults to asc when omitted.
       responses:
         "200":
           description: Page of contracts

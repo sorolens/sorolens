@@ -366,7 +366,7 @@ Register a contract for tracking.
 
 List all tracked contracts.
 
-**Query params:** `network` (filter by network), `status` (filter by status).
+**Query params:** `network` (filter by network), `status` (filter by status), `sort` (sort column: `id`, `label`, `network`, `status`, or `added_at`; unknown values fall back to `id`), `dir` (`asc` or `desc`, default `asc`).
 
 **Response `200`:**
 ```json

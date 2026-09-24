@@ -152,6 +152,21 @@ func networkParam(r *http.Request) (string, bool) {
 	return v, true
 }
 
+// contractSortParam reads the optional ?sort= and ?dir= filters for the
+// contracts list. Unknown sort columns and directions are rejected so the
+// handler can respond 422 instead of silently falling back to the default.
+func contractSortParam(r *http.Request) (sort, dir string, ok bool) {
+	sort = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("sort")))
+	dir = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("dir")))
+	if sort != "" && !store.ValidContractSort(sort) {
+		return "", "", false
+	}
+	if dir != "" && dir != "asc" && dir != "desc" {
+		return "", "", false
+	}
+	return sort, dir, true
+}
+
 func contractFromStore(c store.Contract) contractResponse {
 	return contractResponse{
 		ID:                 c.ID,
@@ -283,7 +298,8 @@ func (h *Handler) RegisterContract(w http.ResponseWriter, r *http.Request) {
 
 // ListContracts handles GET /api/v1/contracts.
 //
-// Query params: cursor, limit, network (testnet|mainnet|futurenet), status.
+// Query params: cursor, limit, network (testnet|mainnet|futurenet), status,
+// sort (id|label|network|status|added_at), dir (asc|desc).
 func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
 	if !ok {
@@ -295,10 +311,17 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	sort, dir, ok := contractSortParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "sort must be one of: id, label, network, status, added_at; dir must be asc or desc")
+		return
+	}
 	limit := intQuery(r, "limit", 50)
 	f := store.ContractFilters{
 		Network: network,
 		Status:  r.URL.Query().Get("status"),
+		Sort:    sort,
+		SortDir: dir,
 	}
 
 	contracts, nextRaw, err := h.Store.ListContracts(r.Context(), rawCursor, limit, f)
