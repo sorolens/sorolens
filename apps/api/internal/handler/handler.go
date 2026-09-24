@@ -8,6 +8,7 @@ import (
 
 	"github.com/sorolens/sorolens/apps/api/internal/graph"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
+	"github.com/sorolens/sorolens/apps/api/internal/simulator"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
@@ -78,6 +79,10 @@ type Handler struct {
 	// deployments without a build sandbox (for example the Vercel serverless
 	// entrypoint), in which case POST /contracts/{id}/verify answers 503.
 	Verifier ContractVerifier
+
+	// Simulator runs dry-run invocations for POST /simulate. When nil, the
+	// handler falls back to a default service that caches results for 30s.
+	Simulator *simulator.Service
 
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.
