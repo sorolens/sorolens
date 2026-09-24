@@ -12,17 +12,29 @@ export default async function globalSetup(): Promise<void> {
   ];
 
   for (const path of paths) {
+    let warmed = false;
+    let lastFailure = "unknown error";
+
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const res = await fetch(base + path, {
           signal: AbortSignal.timeout(90_000),
         });
-        if (res.ok) break;
+        if (res.ok) {
+          warmed = true;
+          break;
+        }
+        lastFailure = `HTTP ${res.status}`;
         console.warn(`[e2e warmup] ${path} -> ${res.status}, retrying`);
       } catch (err) {
+        lastFailure = String(err);
         console.warn(`[e2e warmup] ${path} failed: ${String(err)}, retrying`);
         await new Promise((r) => setTimeout(r, 2000));
       }
+    }
+
+    if (!warmed) {
+      throw new Error(`[e2e warmup] failed for ${path} after 3 attempts: ${lastFailure}`);
     }
   }
 }
