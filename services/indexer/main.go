@@ -314,6 +314,12 @@ func (s *stubStore) InsertAlert(ctx context.Context, a poller.Alert) error { ret
 func (s *stubStore) InsertContractUpgrade(_ context.Context, _ poller.ContractUpgrade) error {
 	return nil
 }
+func (s *stubStore) HasContractWasm(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+func (s *stubStore) UpsertContractWasm(_ context.Context, _ string, _ []byte) error {
+	return nil
+}
 func (s *stubStore) UpdateContractWasmHash(_ context.Context, _ string, _ string) error {
 	return nil
 }

@@ -49,6 +49,10 @@ type Store interface {
 	// UpdateContractWasmHash records the now-current on-chain Wasm hash for a
 	// contract so subsequent polls can diff against it.
 	UpdateContractWasmHash(ctx context.Context, contractID, wasmHash string) error
+	// HasContractWasm reports whether the Wasm binary for wasmHash is cached.
+	HasContractWasm(ctx context.Context, wasmHash string) (bool, error)
+	// UpsertContractWasm stores Wasm bytes under their content-addressed hash.
+	UpsertContractWasm(ctx context.Context, wasmHash string, code []byte) error
 
 	// ContractHealthInputs aggregates the raw signals that feed the composite
 	// health score (issue #137). It never errors on empty data.
