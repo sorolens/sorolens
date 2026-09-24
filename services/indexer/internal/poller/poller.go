@@ -9,6 +9,7 @@ package poller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -20,6 +21,10 @@ import (
 )
 
 const (
+	// maxEventRetries is how many times a single event is retried before
+	// it is parked in the dead-letter queue (issue #202).
+	maxEventRetries = 3
+
 	// lockTTL is the Redis advisory lock lifetime per contract.
 	// Set to twice the expected maximum per-contract processing time.
 	lockTTL = 60 * time.Second
@@ -477,8 +482,8 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 	}
 
 	if len(events) > 0 {
-		if err := p.store.BatchInsertEvents(ctx, events); err != nil {
-			return fmt.Errorf("batch insert events: %w", err)
+		if err := p.insertEventsWithDLQ(ctx, events); err != nil {
+			return fmt.Errorf("insert events: %w", err)
 		}
 	}
 	if len(invocations) > 0 {

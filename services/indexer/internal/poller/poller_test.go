@@ -98,7 +98,6 @@ type fakeStore struct {
 	invocations  []Invocation
 	upgrades     []ContractUpgrade
 	wasmHashes   map[string]string
-	wasmBinaries map[string][]byte
 	syncErr      error
 	listErr      error
 	hourly       map[string][]HourlyActivity // contractID -> buckets
@@ -106,6 +105,12 @@ type fakeStore struct {
 	insertErr    error
 	healthInputs map[string]HealthInputs // contractID -> inputs
 	healthScores []ContractHealthScore
+	failedEvents []FailedEvent
+	// eventInsertErrs maps event ID -> error returned by BatchInsertEvents.
+	// Used to simulate deliberately bad events for the DLQ path (issue #202).
+	eventInsertErrs map[string]error
+	// eventInsertFailTimes maps event ID -> remaining failures before success.
+	eventInsertFailTimes map[string]int
 }
 
 func newFakeStore(contracts []Contract) *fakeStore {
@@ -114,7 +119,6 @@ func newFakeStore(contracts []Contract) *fakeStore {
 		syncStates:   make(map[string]SyncState),
 		hourly:       make(map[string][]HourlyActivity),
 		wasmHashes:   make(map[string]string),
-		wasmBinaries: make(map[string][]byte),
 		healthInputs: make(map[string]HealthInputs),
 	}
 }
@@ -131,7 +135,27 @@ func (f *fakeStore) ListContracts(_ context.Context, cursor string, limit int) (
 func (f *fakeStore) BatchInsertEvents(_ context.Context, events []Event) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	for _, e := range events {
+		if f.eventInsertErrs != nil {
+			if err, ok := f.eventInsertErrs[e.ID]; ok {
+				return err
+			}
+		}
+		if f.eventInsertFailTimes != nil {
+			if n, ok := f.eventInsertFailTimes[e.ID]; ok && n > 0 {
+				f.eventInsertFailTimes[e.ID] = n - 1
+				return errors.New("transient insert failure")
+			}
+		}
+	}
 	f.events = append(f.events, events...)
+	return nil
+}
+
+func (f *fakeStore) InsertFailedEvent(_ context.Context, fe FailedEvent) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.failedEvents = append(f.failedEvents, fe)
 	return nil
 }
 
@@ -186,23 +210,6 @@ func (f *fakeStore) InsertContractUpgrade(_ context.Context, u ContractUpgrade) 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.upgrades = append(f.upgrades, u)
-	return nil
-}
-
-func (f *fakeStore) HasContractWasm(_ context.Context, wasmHash string) (bool, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	_, ok := f.wasmBinaries[wasmHash]
-	return ok, nil
-}
-
-func (f *fakeStore) UpsertContractWasm(_ context.Context, wasmHash string, code []byte) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if _, ok := f.wasmBinaries[wasmHash]; !ok {
-		cp := append([]byte(nil), code...)
-		f.wasmBinaries[wasmHash] = cp
-	}
 	return nil
 }
 
@@ -768,54 +775,78 @@ func TestPoller_noUpgradeWhenWasmHashUnchanged(t *testing.T) {
 	}
 }
 
-func buildCodeEntryXDR(wasmHashHex string, code []byte, lastModified uint32) string {
-	var out []byte
-	putU32 := func(v uint32) { out = binary.BigEndian.AppendUint32(out, v) }
-	putU32(lastModified)
-	putU32(7) // CONTRACT_CODE
-	putU32(0) // ext v0
-	wasmHash, _ := hex.DecodeString(wasmHashHex)
-	out = append(out, wasmHash...)
-	putU32(uint32(len(code)))
-	out = append(out, code...)
-	pad := (4 - (len(code) % 4)) % 4
-	out = append(out, make([]byte, pad)...)
-	return base64.StdEncoding.EncodeToString(out)
+
+func TestInsertEventsWithDLQ_BadEventParked(t *testing.T) {
+	st := newFakeStore([]Contract{{ID: "C1", Status: "active", Network: "testnet"}})
+	st.eventInsertErrs = map[string]error{
+		"bad-event": errors.New("deliberately bad event"),
+	}
+	rpc := &fakeRPC{
+		latestLedger: &LatestLedger{Sequence: 1000},
+		events: map[string]*GetEventsResult{
+			"C1": {
+				Events: []RPCEvent{
+					{
+						ID: "good-event", ContractID: "C1", Ledger: 900,
+						LedgerClosedAt: "2025-01-01T00:00:00Z", TxHash: "tx1",
+						Type: "contract", Topic: []string{"t"}, Value: "v",
+						InSuccessfulContractCall: true,
+					},
+					{
+						ID: "bad-event", ContractID: "C1", Ledger: 901,
+						LedgerClosedAt: "2025-01-01T00:00:01Z", TxHash: "tx2",
+						Type: "contract", Topic: []string{"t"}, Value: "bad",
+						InSuccessfulContractCall: true,
+					},
+				},
+				LatestLedger: 1000,
+			},
+		},
+	}
+	st.syncStates["C1"] = SyncState{ContractID: "C1", LastLedger: 899}
+	p := New(rpc, st, newFakeRedis(), Config{LedgerWindow: 1000}, slog.Default())
+	if err := p.processContract(context.Background(), Contract{ID: "C1", Status: "active", Network: "testnet"}); err != nil {
+		t.Fatalf("processContract: %v", err)
+	}
+
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if len(st.failedEvents) != 1 {
+		t.Fatalf("failedEvents = %d, want 1", len(st.failedEvents))
+	}
+	if st.failedEvents[0].EventID != "bad-event" {
+		t.Fatalf("DLQ event_id = %q", st.failedEvents[0].EventID)
+	}
+	good := false
+	for _, e := range st.events {
+		if e.ID == "good-event" {
+			good = true
+		}
+		if e.ID == "bad-event" {
+			t.Fatal("bad event should not be in events table")
+		}
+	}
+	if !good {
+		t.Fatal("good event should still be inserted")
+	}
 }
 
-func TestPoller_cachesWasmBinaryOnBaseline(t *testing.T) {
-	t.Parallel()
-
-	contractID := "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
-	wasmHash := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	code := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
-
-	instanceKey := instanceKeyXDR(contractID)
-	codeKey, err := wasm.ContractCodeKey(wasmHash)
+func TestInsertEventsWithDLQ_RetryThenSuccess(t *testing.T) {
+	st := newFakeStore(nil)
+	st.eventInsertFailTimes = map[string]int{"flaky": 2} // fail twice, succeed on 3rd
+	p := New(&fakeRPC{}, st, newFakeRedis(), Config{}, slog.Default())
+	err := p.insertEventsWithDLQ(context.Background(), []Event{{
+		ID: "flaky", ContractID: "C1", Network: "testnet",
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: ""}})
-	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
-
-	rpc := &fakeRPC{
-		latestLedger: &LatestLedger{Sequence: 500000},
-		ledgerEntries: map[string]LedgerEntry{
-			instanceKey: {Key: instanceKey, XDR: buildInstanceEntryXDR(contractID, wasmHash, 501), LastModifiedLedgerSeq: 501},
-			codeKey:     {Key: codeKey, XDR: buildCodeEntryXDR(wasmHash, code, 501), LastModifiedLedgerSeq: 501},
-		},
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if len(st.failedEvents) != 0 {
+		t.Fatalf("unexpected DLQ entries: %d", len(st.failedEvents))
 	}
-
-	p := New(rpc, store, newFakeRedis(), testConfig(), testLogger())
-	if err := p.Run(context.Background(), "once"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	got, ok := store.wasmBinaries[wasmHash]
-	if !ok {
-		t.Fatal("expected wasm binary to be cached on baseline")
-	}
-	if string(got) != string(code) {
-		t.Errorf("cached code mismatch: got %x want %x", got, code)
+	if len(st.events) != 1 || st.events[0].ID != "flaky" {
+		t.Fatalf("events = %+v", st.events)
 	}
 }

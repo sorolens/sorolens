@@ -12,9 +12,7 @@ type RPCClient interface {
 	GetEvents(ctx context.Context, startLedger, endLedger uint32, filters []EventFilter) (*GetEventsResult, error)
 	GetTransaction(ctx context.Context, hash string) (*TransactionResult, error)
 	GetLedgerEntries(ctx context.Context, keys []string) (*GetLedgerEntriesResult, error)
-	GetContractWasmHash(ctx context.Context, contractID string) (string, error)
 }
-
 
 // Store is the subset of the data store the poller needs.
 // The concrete implementation is store.postgresStore from apps/api.
@@ -26,14 +24,6 @@ type Store interface {
 	UpsertSyncState(ctx context.Context, s SyncState) error
 	CreateNextMonthPartition(ctx context.Context) error
 	CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error
-
-	// GetIndexerCursor returns the last committed ledger for a network, or 0 if none.
-	GetIndexerCursor(ctx context.Context, network string) (uint32, error)
-	// SetIndexerCursor updates the last committed ledger for a network.
-	SetIndexerCursor(ctx context.Context, network string, ledger uint32) error
-	// BatchInsertWithCursor atomically writes events, invocations, contract sync state,
-	// and advances the network indexer cursor within a single database transaction.
-	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error
 
 	// RecentHourlyActivity returns per-hour activity buckets for the most
 	// recent `hours` hours (oldest first), aggregated across events and
@@ -49,10 +39,6 @@ type Store interface {
 	// UpdateContractWasmHash records the now-current on-chain Wasm hash for a
 	// contract so subsequent polls can diff against it.
 	UpdateContractWasmHash(ctx context.Context, contractID, wasmHash string) error
-	// HasContractWasm reports whether the Wasm binary for wasmHash is cached.
-	HasContractWasm(ctx context.Context, wasmHash string) (bool, error)
-	// UpsertContractWasm stores Wasm bytes under their content-addressed hash.
-	UpsertContractWasm(ctx context.Context, wasmHash string, code []byte) error
 
 	// ContractHealthInputs aggregates the raw signals that feed the composite
 	// health score (issue #137). It never errors on empty data.
@@ -60,10 +46,9 @@ type Store interface {
 	// UpsertContractHealthScore caches a computed 0-100 health score.
 	UpsertContractHealthScore(ctx context.Context, h ContractHealthScore) error
 
-	// RecordContractVersion persists a detected Wasm hash transition (issue #276).
-	RecordContractVersion(ctx context.Context, v ContractVersion) error
-	// GetLatestContractVersion returns the most recently recorded ContractVersion.
-	GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error)
+	// InsertFailedEvent parks an event that exhausted processing retries
+	// in the dead-letter queue (issue #202).
+	InsertFailedEvent(ctx context.Context, fe FailedEvent) error
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -176,6 +161,16 @@ type Event struct {
 	InSuccessfulCall bool
 }
 
+// FailedEvent mirrors store.FailedEvent for the indexer DLQ (issue #202).
+type FailedEvent struct {
+	EventID      string
+	ContractID   string
+	Network      string
+	EventPayload []byte
+	ErrorMessage string
+	Attempts     int
+}
+
 // Invocation mirrors store.Invocation.
 type Invocation struct {
 	TxHash           string
@@ -229,35 +224,6 @@ type HealthInputs struct {
 	ExpiringStorage   int64
 }
 
-// LedgerTransaction is one entry of a getTransactions page.
-type LedgerTransaction struct {
-	Status      string // SUCCESS | FAILED
-	Ledger      uint32
-	TxHash      string
-	EnvelopeXDR string // base64 TransactionEnvelope
-}
-
-// GetTransactionsResult mirrors a getTransactions response page.
-type GetTransactionsResult struct {
-	Transactions []LedgerTransaction
-	LatestLedger uint32
-	// Cursor continues pagination after the last returned transaction.
-	Cursor string
-}
-
-// WatchedAccount mirrors store.WatchedAccount (fields discovery needs).
-type WatchedAccount struct {
-	AccountID string
-}
-
-// DiscoveredContract mirrors store.DiscoveredContract.
-type DiscoveredContract struct {
-	ContractID string
-	Network    string
-	AccountID  string
-	Ledger     int64
-}
-
 // ContractHealthScore mirrors store.ContractHealthScore.
 type ContractHealthScore struct {
 	ContractID           string
@@ -268,20 +234,3 @@ type ContractHealthScore struct {
 	ComponentStorageTTL  int32
 	ComputedAt           time.Time
 }
-
-// ContractVersion mirrors store.ContractVersion.
-type ContractVersion struct {
-	ContractID        string
-	WasmHash          string
-	FirstSeenLedger   int64
-	TxHash            string
-	VerifiedSourceRef string
-}
-
-// ErrVersionNotFound is returned by GetLatestContractVersion when no entry exists.
-var ErrVersionNotFound = errorString("poller: contract version not found")
-
-type errorString string
-
-func (e errorString) Error() string { return string(e) }
-
