@@ -2,24 +2,30 @@ package poller
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"os"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
 )
 
 // ---- fake RPCClient -------------------------------------------------------
 
 type fakeRPC struct {
-	mu           sync.Mutex
-	latestLedger *LatestLedger
-	latestErr    error
-	events       map[string]*GetEventsResult // key: "contractID:start-end"
-	transactions map[string]*TransactionResult
-	txErr        error
-	eventsCalls  []getEventsCall
+	mu            sync.Mutex
+	latestLedger  *LatestLedger
+	latestErr     error
+	events        map[string]*GetEventsResult // key: "contractID:start-end"
+	transactions  map[string]*TransactionResult
+	ledgerEntries map[string]LedgerEntry // key: base64 LedgerKey
+	txErr         error
+	eventsCalls   []getEventsCall
 }
 
 type getEventsCall struct {
@@ -66,6 +72,22 @@ func (f *fakeRPC) GetTransaction(_ context.Context, hash string) (*TransactionRe
 	return &TransactionResult{Status: "SUCCESS", Ledger: 490000}, nil
 }
 
+// GetLedgerEntries returns entries keyed by the base64 LedgerKey. Tests with
+// no configured entries get an empty result (so upgrade detection is skipped).
+func (f *fakeRPC) GetLedgerEntries(_ context.Context, keys []string) (*GetLedgerEntriesResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	res := &GetLedgerEntriesResult{LatestLedger: 500000}
+	for _, k := range keys {
+		if e, ok := f.ledgerEntries[k]; ok {
+			res.Entries = append(res.Entries, e)
+		} else {
+			res.KeysNotFound = append(res.KeysNotFound, k)
+		}
+	}
+	return res, nil
+}
+
 // ---- fake Store -----------------------------------------------------------
 
 type fakeStore struct {
@@ -74,6 +96,8 @@ type fakeStore struct {
 	syncStates  map[string]SyncState
 	events      []Event
 	invocations []Invocation
+	upgrades    []ContractUpgrade
+	wasmHashes  map[string]string
 	syncErr     error
 	listErr     error
 	hourly      map[string][]HourlyActivity // contractID -> buckets
@@ -86,6 +110,7 @@ func newFakeStore(contracts []Contract) *fakeStore {
 		contracts:  contracts,
 		syncStates: make(map[string]SyncState),
 		hourly:     make(map[string][]HourlyActivity),
+		wasmHashes: make(map[string]string),
 	}
 }
 
@@ -149,6 +174,20 @@ func (f *fakeStore) InsertAlert(_ context.Context, a Alert) error {
 		return f.insertErr
 	}
 	f.alerts = append(f.alerts, a)
+	return nil
+}
+
+func (f *fakeStore) InsertContractUpgrade(_ context.Context, u ContractUpgrade) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.upgrades = append(f.upgrades, u)
+	return nil
+}
+
+func (f *fakeStore) UpdateContractWasmHash(_ context.Context, contractID, wasmHash string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.wasmHashes[contractID] = wasmHash
 	return nil
 }
 
@@ -571,5 +610,125 @@ func TestPoller_AnomalyJobRespectsCancellation(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// buildInstanceEntryXDR builds a valid contract-instance ContractData
+// LedgerEntry.xdr fixture matching the wire layout wasm.WasmHashFromInstanceEntry
+// expects: lastModified, type=6, ext=0, addrType=contract, contractID,
+// key=20, val=19, then the 32-byte wasm hash.
+func buildInstanceEntryXDR(contractIDHex, wasmHashHex string, lastModified uint32) string {
+	var out []byte
+	putU32 := func(v uint32) { out = binary.BigEndian.AppendUint32(out, v) }
+	putU32(lastModified)
+	putU32(6) // LedgerEntryType CONTRACT_DATA
+	putU32(0) // ContractDataEntryExt V0
+	putU32(1) // SCAddressType CONTRACT
+	contractID, _ := hex.DecodeString(contractIDHex)
+	out = append(out, contractID...)
+	putU32(20) // SCValType scvLedgerKeyContractInstance
+	putU32(19) // SCValType scvContractInstance
+	wasmHash, _ := hex.DecodeString(wasmHashHex)
+	out = append(out, wasmHash...)
+	return base64.StdEncoding.EncodeToString(out)
+}
+
+// instanceKeyXDR returns the base64 LedgerKey for a contract's instance entry.
+// It mirrors wasm.ContractInstanceKey; using the real function here keeps the
+// fixture key consistent with what checkWasmHash requests.
+func instanceKeyXDR(contractIDHex string) string {
+	key, err := wasm.ContractInstanceKey(contractIDHex)
+	if err != nil {
+		panic(err)
+	}
+	return key
+}
+
+func TestPoller_checksWasmHashBaseline(t *testing.T) {
+	t.Parallel()
+
+	contractID := "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
+	wasmHash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	key := instanceKeyXDR(contractID)
+	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: ""}})
+	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
+
+	rpc := &fakeRPC{
+		latestLedger: &LatestLedger{Sequence: 500000},
+		ledgerEntries: map[string]LedgerEntry{
+			key: {Key: key, XDR: buildInstanceEntryXDR(contractID, wasmHash, 501), LastModifiedLedgerSeq: 501},
+		},
+	}
+
+	p := New(rpc, store, newFakeRedis(), testConfig(), testLogger())
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := store.wasmHashes[contractID]; got != wasmHash {
+		t.Errorf("stored wasm hash = %q, want %q (baseline)", got, wasmHash)
+	}
+	if len(store.upgrades) != 0 {
+		t.Errorf("expected no upgrade row on first observation, got %d", len(store.upgrades))
+	}
+}
+
+func TestPoller_recordsContractUpgradeOnWasmChange(t *testing.T) {
+	t.Parallel()
+
+	contractID := "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
+	oldHash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	newHash := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	key := instanceKeyXDR(contractID)
+	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: "", WasmHash: oldHash}})
+	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
+
+	rpc := &fakeRPC{
+		latestLedger: &LatestLedger{Sequence: 500000},
+		ledgerEntries: map[string]LedgerEntry{
+			key: {Key: key, XDR: buildInstanceEntryXDR(contractID, newHash, 501), LastModifiedLedgerSeq: 501},
+		},
+	}
+
+	p := New(rpc, store, newFakeRedis(), testConfig(), testLogger())
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := store.wasmHashes[contractID]; got != newHash {
+		t.Errorf("stored wasm hash = %q, want %q after upgrade", got, newHash)
+	}
+	if len(store.upgrades) != 1 {
+		t.Fatalf("expected exactly 1 upgrade row, got %d", len(store.upgrades))
+	}
+	u := store.upgrades[0]
+	if u.ContractID != contractID || u.FromHash != oldHash || u.ToHash != newHash {
+		t.Errorf("unexpected upgrade row: %+v", u)
+	}
+	if u.Ledger != 501 {
+		t.Errorf("upgrade ledger = %d, want 501", u.Ledger)
+	}
+}
+
+func TestPoller_noUpgradeWhenWasmHashUnchanged(t *testing.T) {
+	t.Parallel()
+
+	contractID := "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
+	hash := "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	key := instanceKeyXDR(contractID)
+	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: "", WasmHash: hash}})
+	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
+
+	rpc := &fakeRPC{
+		latestLedger: &LatestLedger{Sequence: 500000},
+		ledgerEntries: map[string]LedgerEntry{
+			key: {Key: key, XDR: buildInstanceEntryXDR(contractID, hash, 502), LastModifiedLedgerSeq: 502},
+		},
+	}
+
+	p := New(rpc, store, newFakeRedis(), testConfig(), testLogger())
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(store.upgrades) != 0 {
+		t.Errorf("expected no upgrade row when hash unchanged, got %d", len(store.upgrades))
 	}
 }

@@ -90,6 +90,12 @@ func (s *stubRPC) GetTransaction(ctx context.Context, hash string) (*poller.Tran
 	}
 	return &poller.TransactionResult{}, nil
 }
+func (s *stubRPC) GetLedgerEntries(ctx context.Context, keys []string) (*poller.GetLedgerEntriesResult, error) {
+	if s.endpoint == "" {
+		return nil, fmt.Errorf("stub: RPC not wired")
+	}
+	return &poller.GetLedgerEntriesResult{}, nil
+}
 
 type stubStore struct{}
 
@@ -116,6 +122,12 @@ func (s *stubStore) RecentHourlyActivity(ctx context.Context, contractID string,
 	return nil, nil
 }
 func (s *stubStore) InsertAlert(ctx context.Context, a poller.Alert) error { return nil }
+func (s *stubStore) InsertContractUpgrade(_ context.Context, _ poller.ContractUpgrade) error {
+	return nil
+}
+func (s *stubStore) UpdateContractWasmHash(_ context.Context, _ string, _ string) error {
+	return nil
+}
 
 type stubRedis struct{}
 

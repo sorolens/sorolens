@@ -11,6 +11,7 @@ type RPCClient interface {
 	GetLatestLedger(ctx context.Context) (*LatestLedger, error)
 	GetEvents(ctx context.Context, startLedger, endLedger uint32, filters []EventFilter) (*GetEventsResult, error)
 	GetTransaction(ctx context.Context, hash string) (*TransactionResult, error)
+	GetLedgerEntries(ctx context.Context, keys []string) (*GetLedgerEntriesResult, error)
 }
 
 // Store is the subset of the data store the poller needs.
@@ -32,6 +33,12 @@ type Store interface {
 	// anomaly spikes). Implementations may de-duplicate on (tx_hash,
 	// contract_id).
 	InsertAlert(ctx context.Context, a Alert) error
+	// InsertContractUpgrade records a Wasm-hash change for a contract. The
+	// store is responsible for ignoring duplicate (contract, tx) rows.
+	InsertContractUpgrade(ctx context.Context, u ContractUpgrade) error
+	// UpdateContractWasmHash records the now-current on-chain Wasm hash for a
+	// contract so subsequent polls can diff against it.
+	UpdateContractWasmHash(ctx context.Context, contractID, wasmHash string) error
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -90,11 +97,44 @@ type TransactionResult struct {
 	ResourceFee      int64
 }
 
+// LedgerEntry mirrors soroban.LedgerEntry.
+type LedgerEntry struct {
+	// Key is the base64-encoded LedgerKey that was requested.
+	Key string
+	// XDR is the base64-encoded LedgerEntry from getLedgerEntries.
+	XDR string
+	// LastModifiedLedgerSeq is the most recent ledger in which the entry
+	// was modified.
+	LastModifiedLedgerSeq uint32
+}
+
+// GetLedgerEntriesResult mirrors soroban.GetLedgerEntriesResult.
+type GetLedgerEntriesResult struct {
+	Entries        []LedgerEntry
+	LatestLedger   uint32
+	KeysNotFound   []string
+	DuplicatedKeys []string
+}
+
+// WasmHashResult mirrors soroban.GetWasmHashResult.
+
+// ContractUpgrade mirrors store.ContractUpgrade.
+type ContractUpgrade struct {
+	ContractID string
+	FromHash   string
+	ToHash     string
+	Ledger     uint32
+	TxHash     string
+	At         time.Time
+}
+
 // Contract mirrors store.Contract (fields the poller needs).
 type Contract struct {
 	ID      string
 	Status  string
 	Network string
+	// WasmHash is the current on-chain Wasm hash the poller last observed.
+	WasmHash string
 }
 
 // Event mirrors store.Event.

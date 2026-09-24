@@ -15,6 +15,7 @@ import (
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
+	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
 )
 
 const (
@@ -156,7 +157,7 @@ func (p *Poller) processAll(ctx context.Context) error {
 			if c.Status != "active" && c.Status != "backfilling" {
 				continue
 			}
-			if err := p.processContract(ctx, c.ID, c.Network); err != nil {
+			if err := p.processContract(ctx, c); err != nil {
 				// Log and continue; one failing contract must not block others.
 				p.log.Error("failed to index contract",
 					"contract_id", c.ID,
@@ -293,8 +294,12 @@ func (p *Poller) hourlyActivity(ctx context.Context, contractID string) ([]anoma
 	return samples, nil
 }
 
-// processContract indexes all new events for one contract.
-func (p *Poller) processContract(ctx context.Context, contractID, network string) error {
+// processContract indexes all new events for one contract. It also checks the
+// contract's on-chain Wasm hash for upgrades before scanning events so a code
+// upgrade with no indexable events still gets recorded.
+func (p *Poller) processContract(ctx context.Context, contract Contract) error {
+	contractID := contract.ID
+	network := contract.Network
 	rpc, ok := p.selectRPCClient(network)
 	if !ok {
 		p.log.Warn("skipping contract with unconfigured network",
@@ -316,6 +321,16 @@ func (p *Poller) processContract(ctx context.Context, contractID, network string
 		return nil
 	}
 	defer p.redis.Del(ctx, lockKey) //nolint:errcheck
+
+	// Detect Wasm upgrades (contract code changes) before scanning events so
+	// an upgrade with no indexable events still gets recorded. Any error here
+	// must not block event indexing, so we log and continue.
+	if err := p.checkWasmHash(ctx, rpc, contract); err != nil {
+		p.log.Warn("wasm upgrade check failed (continuing)",
+			"contract_id", contractID,
+			"err", err,
+		)
+	}
 
 	latest, err := rpc.GetLatestLedger(ctx)
 	if err != nil {
@@ -390,6 +405,86 @@ func (p *Poller) processContract(ctx context.Context, contractID, network string
 		"duration", time.Since(runStart),
 	)
 	return nil
+}
+
+// checkWasmHash compares the current on-chain Wasm hash of the contract's
+// instance entry against the hash observed on the previous poll. A mismatch
+// means the contract code was upgraded. The change is recorded as a
+// ContractUpgrade row and the stored hash is refreshed so later polls diff
+// against the new value.
+//
+// Best-effort by design: a transient RPC error or an unreadable entry is
+// reported to the caller, and processContract logs it without failing the
+// event index pass.
+func (p *Poller) checkWasmHash(ctx context.Context, rpc RPCClient, contract Contract) error {
+	key, err := wasm.ContractInstanceKey(contract.ID)
+	if err != nil {
+		return fmt.Errorf("build instance key: %w", err)
+	}
+
+	res, err := rpc.GetLedgerEntries(ctx, []string{key})
+	if err != nil {
+		return fmt.Errorf("get instance entry: %w", err)
+	}
+
+	var currentHash string
+	for _, e := range res.Entries {
+		if h, ok := wasm.WasmHashFromInstanceEntry(e.XDR); ok {
+			currentHash = h
+			break
+		}
+	}
+	if currentHash == "" {
+		// Entry not yet readable (e.g. ledger retention); nothing to record.
+		return nil
+	}
+
+	// First observed hash: baseline it without recording an upgrade.
+	if contract.WasmHash == "" {
+		if err := p.store.UpdateContractWasmHash(ctx, contract.ID, currentHash); err != nil {
+			return fmt.Errorf("baseline contract wasm hash: %w", err)
+		}
+		return nil
+	}
+
+	if currentHash == contract.WasmHash {
+		return nil // unchanged
+	}
+
+	upgrade := ContractUpgrade{
+		ContractID: contract.ID,
+		FromHash:   contract.WasmHash,
+		ToHash:     currentHash,
+		Ledger:     ledgerFromEntry(res),
+		At:         time.Now().UTC(),
+	}
+	if err := p.store.InsertContractUpgrade(ctx, upgrade); err != nil {
+		return fmt.Errorf("insert contract upgrade: %w", err)
+	}
+	if err := p.store.UpdateContractWasmHash(ctx, contract.ID, currentHash); err != nil {
+		return fmt.Errorf("update contract wasm hash: %w", err)
+	}
+
+	p.log.Info("contract code upgraded",
+		"contract_id", contract.ID,
+		"from_hash", contract.WasmHash,
+		"to_hash", currentHash,
+	)
+	return nil
+}
+
+// ledgerFromEntry returns the modification ledger of the first instance entry
+// if present, falling back to the latest ledger reported by the RPC result.
+func ledgerFromEntry(res *GetLedgerEntriesResult) uint32 {
+	for _, e := range res.Entries {
+		if e.LastModifiedLedgerSeq != 0 {
+			return e.LastModifiedLedgerSeq
+		}
+	}
+	if res.LatestLedger != 0 {
+		return res.LatestLedger
+	}
+	return 0
 }
 
 // fetchWindow calls getEvents for [startLedger, endLedger] and fetches the
