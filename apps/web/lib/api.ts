@@ -9,12 +9,15 @@ import type {
   GlobalStats,
   HealthChecksResponse,
   InvocationsResponse,
+  LiveActivityResponse,
   MonitoredContract,
+  RecentEventsResponse,
   MonitoredContractsResponse,
   StatsResponse,
   StorageResponse,
   TimeWindow,
   TrackContractRequest,
+  ValidateContractResponse,
   WatchdogStats,
   CreateSubscriptionRequest,
   SubscriptionsResponse,
@@ -98,6 +101,45 @@ export function trackContract(
 
 export function getContract(id: string): Promise<ContractDetail> {
   return fetchJson<ContractDetail>(`${API_URL}/api/v1/contracts/${id}`);
+}
+
+/**
+ * Pre-flight check for the tracking wizard: validates the contract id's StrKey
+ * format (including its checksum) and reports whether it is already tracked.
+ * Read-only; it never registers the contract.
+ */
+export function validateContract(req: {
+  contract_id: string;
+  network: string;
+}): Promise<ValidateContractResponse> {
+  return fetchJson<ValidateContractResponse>(
+    `${API_URL}/api/v1/contracts/validate`,
+    { method: "POST", body: JSON.stringify(req) },
+  );
+}
+
+// ---- live dashboard (#139) -------------------------------------------------
+
+/**
+ * The newest events across every tracked contract, newest first. The /live
+ * ticker polls this and de-duplicates by event id; there is no cursor because
+ * the dashboard always wants the newest slice.
+ */
+export function getRecentEvents(limit = 50): Promise<RecentEventsResponse> {
+  return fetchJson<RecentEventsResponse>(
+    `${API_URL}/api/v1/events/recent?limit=${limit}`,
+  );
+}
+
+/**
+ * Per-contract events-per-minute buckets over the last `minutes` minutes,
+ * ordered hottest first. Backs both the sparklines and the hot-contracts
+ * leaderboard in a single request.
+ */
+export function getLiveActivity(minutes = 30): Promise<LiveActivityResponse> {
+  return fetchJson<LiveActivityResponse>(
+    `${API_URL}/api/v1/stats/activity?minutes=${minutes}`,
+  );
 }
 
 export function getContractEvents(

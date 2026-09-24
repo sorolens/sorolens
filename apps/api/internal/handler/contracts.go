@@ -446,6 +446,22 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list events")
 		return
 	}
+
+	// Cold-storage fallback (issue #146): if the hot store has nothing for a
+	// ledger range that starts at `from`, the rows may have been archived to
+	// Parquet. Serve them transparently so old ledgers stay queryable. The
+	// first page is fetched from the archive with the same ordering the
+	// Postgres path uses; archive-backed pages are not cursor-paginated, so
+	// next_cursor stays empty.
+	if len(events) == 0 && h.Cold != nil && f.From > 0 && rawCursor == "" {
+		archived, coldErr := h.Cold.Events(r.Context(), contractID, f.From, f.To, intQuery(r, "limit", 50))
+		if coldErr != nil {
+			h.Logger.Error("list archived events", "err", coldErr, "contract_id", contractID)
+		} else if len(archived) > 0 {
+			events = archived
+		}
+	}
+
 	resp := make([]eventResponse, len(events))
 	for i, e := range events {
 		resp[i] = eventFromStore(e)

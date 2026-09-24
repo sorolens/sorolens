@@ -2,46 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { DataTable, MonoId, Toast } from "@sorolens/ui";
-import type { Column, ToastVariant } from "@sorolens/ui";
-import type { ReactNode } from "react";
+import { DataTable, MonoId } from "@sorolens/ui";
+import type { Column } from "@sorolens/ui";
 import { listContracts } from "@/lib/api";
-import type { TrackContractRequest } from "@/lib/types";
+import type { ContractSummary } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
-import {
-  contractRowKey,
-  isPendingRow,
-  trackContractOptimistically,
-} from "@/lib/optimisticTrack";
-import type { ContractRow } from "@/lib/optimisticTrack";
 import { TableSkeleton } from "@/components/Skeleton";
-import { OPEN_TRACK_MODAL_EVENT } from "@/components/CommandPalette";
-
-// RBAC identity: same localStorage key the watchlist page uses, so the UI
-// registers a contract under the same user identity. Must map to a user
-// granted at least the contributor role in the API's users table.
-const STORAGE_KEY = "sorolens_user_id";
-
-function getUserId(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return window.localStorage.getItem(STORAGE_KEY) || "";
-  } catch {
-    // localStorage can be unavailable (private mode, some test runners);
-    // RBAC still allows registered-contract calls for anonymous callers as
-    // reads remain open.
-    return "";
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const PAGE_SIZE = 20;
-
-// Soroban contract IDs are 56-char strkeys starting with 'C'
-const CONTRACT_ID_RE = /^C[A-Z0-9]{55}$/;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,158 +45,16 @@ function formatDate(iso: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Track Contract Modal
-// ---------------------------------------------------------------------------
-
-interface TrackModalProps {
-  onClose: () => void;
-  /** Receives validated input; the page performs the (optimistic) API call. */
-  onSubmit: (input: TrackContractRequest) => void;
-}
-
-function TrackContractModal({ onClose, onSubmit }: TrackModalProps) {
-  const [contractId, setContractId] = useState("");
-  const [label, setLabel] = useState("");
-
-  const idError =
-    contractId.length > 0 && !CONTRACT_ID_RE.test(contractId)
-      ? "Contract ID must be 56 characters starting with 'C' (A–Z, 0–9 only)"
-      : null;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (idError || !contractId) return;
-
-    // Close right away so the optimistic row is visible; API errors are
-    // reported by the page with a toast.
-    onSubmit({ id: contractId, label: label || undefined });
-    onClose();
-  };
-
-  // Close on backdrop click
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const handleBackdrop = (e: React.MouseEvent) => {
-    if (e.target === backdropRef.current) onClose();
-  };
-
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  return (
-    <div
-      ref={backdropRef}
-      onClick={handleBackdrop}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      aria-modal="true"
-      role="dialog"
-      aria-labelledby="track-modal-title"
-    >
-      <div className="w-full max-w-md rounded-xl bg-[var(--color-bg-card)] p-6 shadow-2xl border border-[var(--color-border)]">
-        <div className="mb-5 flex items-center justify-between">
-          <h2
-            id="track-modal-title"
-            className="text-lg font-semibold text-[var(--color-text-primary)]"
-          >
-            Track a Contract
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-            aria-label="Close modal"
-          >
-            ✕
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          <div>
-            <label
-              htmlFor="track-contract-id"
-              className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]"
-            >
-              Contract ID <span className="text-red-400">*</span>
-            </label>
-            <input
-              id="track-contract-id"
-              type="text"
-              value={contractId}
-              onChange={(e) => setContractId(e.target.value.trim())}
-              placeholder="C…"
-              className="w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2.5 font-mono text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
-              autoComplete="off"
-              spellCheck={false}
-              required
-            />
-            {idError && (
-              <p className="mt-1.5 text-xs text-red-400" role="alert">
-                {idError}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="track-contract-label"
-              className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]"
-            >
-              Alias / Label{" "}
-              <span className="text-[var(--color-text-secondary)] font-normal">
-                (optional)
-              </span>
-            </label>
-            <input
-              id="track-contract-label"
-              type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="My Contract"
-              className="w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
-            />
-          </div>
-
-          <div className="flex gap-3 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-lg border border-[var(--color-border)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              id="track-modal-submit"
-              type="submit"
-              disabled={!!idError || !contractId}
-              className="flex-1 rounded-lg bg-[var(--color-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity disabled:opacity-50 hover:opacity-90"
-            >
-              Track contract
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Contracts Table Columns
 // ---------------------------------------------------------------------------
 
-const COLUMNS: Column<ContractRow>[] = [
+const COLUMNS: Column<ContractSummary>[] = [
   {
     key: "id",
     header: "Contract ID",
     sortable: true,
     accessor: (c) => (
-      <span
-        className={`font-mono text-xs ${isPendingRow(c) ? "opacity-60" : ""}`}
-      >
+      <span className="font-mono text-xs">
         <MonoId value={c.id} headChars={8} tailChars={8} />
       </span>
     ),
@@ -277,7 +107,7 @@ export default function ContractsPage() {
   const { network } = useNetwork();
 
   // Data state
-  const [contracts, setContracts] = useState<ContractRow[]>([]);
+  const [contracts, setContracts] = useState<ContractSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Pagination state: stack of cursors, index 0 = first page
@@ -292,37 +122,12 @@ export default function ContractsPage() {
   const [sortColumn, setSortColumn] = useState<string>("added_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
-  // Modal state
-  const [showModal, setShowModal] = useState(false);
-
-  // Listen for the global command-palette "Track contract" command so that
-  // Cmd+K → "Track contract" opens the modal even when the page is already
-  // mounted (the command palette navigates here and then fires this event).
-  useEffect(() => {
-    const handler = () => setShowModal(true);
-    window.addEventListener(OPEN_TRACK_MODAL_EVENT, handler);
-    return () => window.removeEventListener(OPEN_TRACK_MODAL_EVENT, handler);
-  }, []);
-
-  // Track state: one request in flight at a time, errors surface as a toast.
-  const [trackPending, setTrackPending] = useState(false);
-  const [toast, setToast] = useState<{ id: number; message: ReactNode; variant?: ToastVariant } | null>(
-    null,
-  );
-  const toastSeq = useRef(0);
-  const dismissToast = useCallback(() => setToast(null), []);
-
   // ---------------------------------------------------------------------------
   // Data fetching
   // ---------------------------------------------------------------------------
 
-  // Only the most recent load() may write to state, so a slow response can't
-  // overwrite a newer page, the optimistic list, or a restored snapshot.
-  const loadSeq = useRef(0);
-
   const load = useCallback(
     async (cursor: string | null) => {
-      const seq = ++loadSeq.current;
       setLoading(true);
       try {
         const data = await listContracts({
@@ -330,17 +135,15 @@ export default function ContractsPage() {
           limit: PAGE_SIZE,
           network: networkFilter(network),
         });
-        if (seq !== loadSeq.current) return;
         setContracts(data.contracts ?? []);
         setHasMore(data.has_more ?? false);
       } catch {
-        if (seq !== loadSeq.current) return;
         // Backend not reachable yet. Fall through to the empty state so the
         // page still reads as "waiting for data" instead of "broken".
         setContracts([]);
         setHasMore(false);
       } finally {
-        if (seq === loadSeq.current) setLoading(false);
+        setLoading(false);
       }
     },
     [network],
@@ -405,8 +208,6 @@ export default function ContractsPage() {
   });
 
   const sorted = [...filtered].sort((a, b) => {
-    // Keep a just-submitted contract at the top whatever the sort column.
-    if (isPendingRow(a) !== isPendingRow(b)) return isPendingRow(a) ? -1 : 1;
     const av = (a as unknown as Record<string, unknown>)[sortColumn];
     const bv = (b as unknown as Record<string, unknown>)[sortColumn];
     const cmp = String(av ?? "").localeCompare(String(bv ?? ""));
@@ -417,123 +218,11 @@ export default function ContractsPage() {
   const isLastPage = !hasMore;
 
   // ---------------------------------------------------------------------------
-  // Track success: refresh first page
-  // ---------------------------------------------------------------------------
-
-  const handleTrackSuccess = () => {
-    setCursors([null]);
-    setCursorIndex(0);
-  };
-
-  // ---------------------------------------------------------------------------
-  // Track submit: optimistic prepend, rollback + toast on API error
-  // ---------------------------------------------------------------------------
-
-  const handleTrackSubmit = async (input: TrackContractRequest) => {
-    setTrackPending(true);
-
-    // A load() still in flight would land after the prepend and wipe the
-    // optimistic row, so supersede it and show the current list instead.
-    const interruptedLoad = loading;
-    if (interruptedLoad) {
-      loadSeq.current++;
-      setLoading(false);
-    }
-    const seqAtSubmit = loadSeq.current;
-    const listIsCurrent = () => loadSeq.current === seqAtSubmit;
-
-    const result = await trackContractOptimistically(
-      contracts,
-      setContracts,
-      input,
-      {
-        userId: getUserId(),
-        network: networkFilter(network),
-        // If the user paged or switched network meanwhile, a newer load()
-        // already replaced the list; restoring the snapshot would clobber it.
-        shouldRollback: listIsCurrent,
-      },
-    );
-    setTrackPending(false);
-
-    if (result.ok) {
-      handleTrackSuccess();
-      return;
-    }
-    setToast({ id: ++toastSeq.current, message: result.message, variant: "error" });
-    // The superseded load never landed, so fetch the page it was loading.
-    if (interruptedLoad && listIsCurrent()) load(cursors[cursorIndex]);
-  };
-
-
-  // ---------------------------------------------------------------------------
-  // Paste-to-add contract listener
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
-        return;
-      }
-      
-      const pastedText = e.clipboardData?.getData("text")?.trim();
-      if (!pastedText || !CONTRACT_ID_RE.test(pastedText)) return;
-      
-      const trackId = pastedText;
-      const tId = ++toastSeq.current;
-      setToast({
-        id: tId,
-        variant: "info",
-        message: (
-          <div className="flex flex-col gap-2">
-            <div>
-              Track this contract?
-              <br />
-              <span className="font-mono text-xs opacity-70">{trackId}</span>
-            </div>
-            <button
-              type="button"
-              className="self-start rounded bg-[var(--color-accent)] px-3 py-1 text-xs font-semibold text-[var(--color-bg-page)] hover:opacity-90 transition-opacity"
-              onClick={() => {
-                dismissToast();
-                handleTrackSubmit({ id: trackId });
-              }}
-            >
-              Confirm
-            </button>
-          </div>
-        ),
-      });
-    };
-    
-    document.addEventListener("paste", handlePaste);
-    return () => document.removeEventListener("paste", handlePaste);
-  }, [handleTrackSubmit]);
-
-  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
   return (
     <>
-      {showModal && (
-        <TrackContractModal
-          onClose={() => setShowModal(false)}
-          onSubmit={handleTrackSubmit}
-        />
-      )}
-
-      {toast && (
-        <Toast
-          key={toast.id}
-          message={toast.message}
-          variant={toast.variant || "error"}
-          onDismiss={dismissToast}
-        />
-      )}
-
       <div>
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -541,16 +230,16 @@ export default function ContractsPage() {
             Contracts
           </h1>
 
-          <button
+          {/* The tracking wizard (issue #140) replaced the old single-field
+              modal, so this is a route, not a dialog trigger. */}
+          <Link
             id="track-contract-btn"
-            type="button"
-            onClick={() => setShowModal(true)}
-            disabled={trackPending}
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            href="/contracts/new"
+            className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity hover:opacity-90"
           >
             <span aria-hidden="true">+</span>
-            {trackPending ? "Tracking…" : "Track contract"}
-          </button>
+            Track contract
+          </Link>
         </div>
 
         {/* Search */}
@@ -577,15 +266,13 @@ export default function ContractsPage() {
             </p>
             {!search && (
               <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                Use the CLI or API to start tracking a Soroban contract, or click{" "}
-                <button
-                  type="button"
-                  onClick={() => setShowModal(true)}
-                  disabled={trackPending}
+                Use the CLI or API to start tracking a Soroban contract, or{" "}
+                <Link
+                  href="/contracts/new"
                   className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
                 >
-                  Track contract
-                </button>{" "}
+                  run the tracking wizard
+                </Link>{" "}
                 to add one from here.
               </p>
             )}
@@ -594,16 +281,14 @@ export default function ContractsPage() {
 
         {/* Data table */}
         {!loading && sorted.length > 0 && (
-          <DataTable<ContractRow>
+          <DataTable<ContractSummary>
             columns={COLUMNS}
             data={sorted}
-            rowKey={contractRowKey}
+            rowKey={(c) => c.id}
             sortColumn={sortColumn}
             sortDirection={sortDirection}
             onSort={handleSort}
             onRowClick={(c) => {
-              // The detail page doesn't exist until the API confirms it.
-              if (isPendingRow(c)) return;
               window.location.href = `/contracts/${c.id}`;
             }}
             emptyState={
@@ -647,7 +332,7 @@ export default function ContractsPage() {
 
         {/* Shortcut link to contract detail (accessible) */}
         <div className="sr-only">
-          {sorted.filter((c) => !isPendingRow(c)).map((c) => (
+          {sorted.map((c) => (
             <Link key={c.id} href={`/contracts/${c.id}`}>
               {c.label ?? c.id}
             </Link>

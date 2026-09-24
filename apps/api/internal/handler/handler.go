@@ -17,6 +17,8 @@ type APIStore interface {
 	store.Store
 	store.ContractBulkStore
 	store.QueryStore
+	store.LiveStore
+	store.ArchiveStore
 	store.WatchdogStore
 	store.ContractUpgradeStore
 	store.ContractSpecStore
@@ -47,6 +49,14 @@ type Pinger interface {
 type RedisClient interface {
 	Incr(ctx context.Context, key string) (int64, error)
 	Expire(ctx context.Context, key string, expiration time.Duration) (bool, error)
+}
+
+// ColdEventReader serves events that have been archived out of Postgres into
+// cold storage (issue #146). It is satisfied by *coldstorage.Reader. A nil
+// Cold disables the fallback, which is the default for local development and
+// for deployments that have not configured a cold bucket.
+type ColdEventReader interface {
+	Events(ctx context.Context, contractID string, from, to uint32, limit int) ([]store.Event, error)
 }
 
 // Handler holds shared dependencies for all HTTP handlers.
@@ -83,6 +93,10 @@ type Handler struct {
 	// Simulator runs dry-run invocations for POST /simulate. When nil, the
 	// handler falls back to a default service that caches results for 30s.
 	Simulator *simulator.Service
+
+	// Cold is optional; when set, event queries fall back to object storage for
+	// ledger ranges that are no longer in Postgres.
+	Cold ColdEventReader
 
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.

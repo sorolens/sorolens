@@ -16,6 +16,8 @@ import (
 type FullStore interface {
 	Store
 	QueryStore
+	LiveStore
+	ArchiveStore
 	WatchdogStore
 	ContractUpgradeStore
 	HealthScoreStore
