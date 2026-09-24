@@ -32,6 +32,7 @@ const (
 var routeScopes = map[string]string{
 	"GET /api/v1/stats/global": ScopeReadContracts,
 	"GET /api/v1/compare":      ScopeReadContracts,
+	"GET /api/v1/search":       ScopeReadContracts,
 
 	"GET /api/v1/contracts":                  ScopeReadContracts,
 	"POST /api/v1/contracts":                 ScopeWriteContracts,

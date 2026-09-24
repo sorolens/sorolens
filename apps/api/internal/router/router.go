@@ -119,6 +119,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 
 		// Stats
 		get("/stats/global", h.GlobalStats)
+		get("/search", h.Search)
 
 		// Response cache (issue #143): hot reads are cached for CacheTTL and
 		// a successful write purges the namespace it changes.
@@ -178,7 +179,6 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Stream routes with 5-minute timeout
 		streamTimeout := middleware.Timeout(5 * time.Minute)
 		r.With(scope, streamTimeout).Get("/stream/events", h.StreamEventsSSE)
-
 
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)

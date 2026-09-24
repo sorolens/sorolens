@@ -59,6 +59,9 @@ type Store interface {
 	// Computed with a single SQL query.
 	GetGlobalStats(ctx context.Context) (GlobalStats, error)
 
+	// Search returns up to ten matching results from each searchable source.
+	Search(ctx context.Context, query string) ([]SearchResult, error)
+
 	// CreateNextMonthPartition creates the partition for next month if it does not exist.
 	CreateNextMonthPartition(ctx context.Context) error
 
