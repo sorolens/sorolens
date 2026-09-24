@@ -139,15 +139,36 @@ type WatchlistItem struct {
 	AddedAt    time.Time
 }
 
-// ContractUpgrade records a Wasm-code (contract_hash) change observed on the
-// ledger for a contract. TxHash is the ledger operation that applied the
-// upgrade (empty when the ledger only carried a hash change).
+// ContractUpgrade records a Wasm-hash change for a tracked contract.
 type ContractUpgrade struct {
-	ID        int64
+	ID         int64
 	ContractID string
-	FromHash  string
-	ToHash    string
-	Ledger    int64
-	TxHash    string
-	At        time.Time
+	FromHash   string
+	ToHash     string
+	Ledger     int64
+	TxHash     string
+	At         time.Time
+}
+
+// ContractHealthScore is a cached composite health score for a contract.
+type ContractHealthScore struct {
+	ContractID           string
+	Score                int32
+	ComponentUptime      int32
+	ComponentErrorRate   int32
+	ComponentPerformance int32
+	ComponentStorageTTL  int32
+	ComputedAt           time.Time
+}
+
+// HealthScoreInputs holds the raw signals aggregated to compute a health score.
+type HealthScoreInputs struct {
+	HealthyChecks    int64
+	TotalChecks      int64
+	WatchdogStatus   string
+	TotalInvocations int64
+	FailedInvocations int64
+	Activity          []HourlyActivity
+	TotalStorage      int64
+	ExpiringStorage   int64
 }
