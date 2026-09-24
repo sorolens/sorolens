@@ -50,13 +50,26 @@ jobs:
           args: --timeout=10m
       - name: Start Postgres
         working-directory: ./
-        run: docker compose up -d postgres
+        run: |
+          docker compose up -d postgres
+          DB_CONTAINER=$(docker compose ps -q postgres)
+          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
+          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
+          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
       - name: Wait for Postgres
         working-directory: ./
         run: |
           echo "Waiting for PostgreSQL..."
           DB_CONTAINER=$(docker compose ps -q postgres)
           until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
+      - name: Run DB migrations
+        if: matrix.module == 'apps/api'
+        env:
+          PGPASSWORD: sorolens
+        run: |
+          for f in $(ls apps/api/internal/db/migrations/*.up.sql | sort); do
+            psql -h localhost -U sorolens -d sorolens -f "$f"
+          done
       - name: go test
         working-directory: ${{ matrix.module }}
         env:
@@ -207,31 +220,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Start Postgres
-        run: docker compose up -d postgres
+        run: |
+          docker compose up -d postgres
+          DB_CONTAINER=$(docker compose ps -q postgres)
+          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
+          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
+          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
       - name: Wait for Postgres
         run: |
           echo "Waiting for PostgreSQL..."
           DB_CONTAINER=$(docker compose ps -q postgres)
           until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
-      # backup.sh has a #!/usr/bin/env bash shebang, so it runs as a subprocess
-      # that cannot inherit shell functions. Install a real executable shim at
-      # /usr/local/bin/aws so every child process finds it in PATH.
       - name: Setup Mock S3 Bucket
         run: |
           mkdir -p /tmp/s3/sorolens-backups/logical /tmp/s3/sorolens-backups/base /tmp/s3/sorolens-backups/wal
-          cat > /usr/local/bin/aws <<'EOS'
-#!/usr/bin/env bash
-# Minimal S3 shim: rewrites s3:// URIs to /tmp/s3/ and copies.
-if [ "$1" = "s3" ] && [ "$2" = "cp" ]; then
-  src="$3"
-  dest="$4"
-  case "$src" in s3://*) src="/tmp/s3/${src#s3://}" ;; esac
-  case "$dest" in s3://*) dest="/tmp/s3/${dest#s3://}" ;; esac
-  mkdir -p "$(dirname "$dest")"
-  cp "$src" "$dest"
-fi
-EOS
-          chmod +x /usr/local/bin/aws
+          install -m 755 scripts/aws-mock.sh /usr/local/bin/aws
       - name: Run Backup Script
         run: |
           export DB_CONTAINER=$(docker compose ps -q postgres)
