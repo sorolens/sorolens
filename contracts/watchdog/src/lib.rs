@@ -54,13 +54,32 @@ pub struct Alert {
     pub timestamp: u64,
 }
 
+/// A single contract to register in a batch call.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Registration {
+    pub contract_id: Address,
+    pub name: Symbol,
+    pub check_interval: u64,
+}
+
+/// Outcome of a single registration within a batch.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum BatchResult {
+    /// The contract was registered successfully.
+    Success,
+    /// The contract was skipped with a reason (duplicate, invalid, etc.).
+    Skipped(String),
+}
+
 #[contracttype]
 #[derive(Clone)]
 enum DataKey {
     Admin,
-    Registry,               // Vec<Address>: list of monitored contract ids
-    Health(Address),        // ContractHealth by contract id
-    Alerts(Address),        // Vec<Alert> by contract id
+    Registry,        // Vec<Address>: list of monitored contract ids
+    Health(Address), // ContractHealth by contract id
+    Alerts(Address), // Vec<Alert> by contract id
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +133,7 @@ pub struct ContractAlert {
 pub struct WatchdogContract;
 
 const MAX_ALERTS_PER_CONTRACT: u32 = 100;
+const MAX_BATCH_SIZE: u32 = 20;
 
 #[contractimpl]
 impl WatchdogContract {
@@ -125,7 +145,9 @@ impl WatchdogContract {
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage().instance().set(&DataKey::Registry, &Vec::<Address>::new(&env));
+        env.storage()
+            .instance()
+            .set(&DataKey::Registry, &Vec::<Address>::new(&env));
     }
 
     /// Register a contract for monitoring. Only the admin, or the account
@@ -145,38 +167,64 @@ impl WatchdogContract {
             panic!("contract already registered");
         }
 
-        let now = env.ledger().timestamp();
-        let record = ContractHealth {
-            contract_id: contract_id.clone(),
-            name: name.clone(),
-            owner: caller.clone(),
-            status: HealthStatus::Healthy,
-            last_check: now,
-            check_interval,
-            registered_at: now,
-        };
-        env.storage().persistent().set(&health_key, &record);
-        env.storage()
-            .persistent()
-            .set(&DataKey::Alerts(contract_id.clone()), &Vec::<Alert>::new(&env));
-
-        let mut registry: Vec<Address> = env
-            .storage()
-            .instance()
-            .get(&DataKey::Registry)
-            .unwrap_or_else(|| Vec::new(&env));
-        registry.push_back(contract_id.clone());
-        env.storage().instance().set(&DataKey::Registry, &registry);
-
-        ContractRegistered {
-            contract_id,
-            name,
-            owner: caller,
-            timestamp: now,
-        }
-        .publish(&env);
+        Self::store_registration(
+            &env,
+            &caller,
+            &Registration {
+                contract_id,
+                name,
+                check_interval,
+            },
+        );
     }
 
+    /// Register up to {@link MAX_BATCH_SIZE} contracts in a single call.
+    ///
+    /// Each registration is applied independently: a duplicate (or otherwise
+    /// invalid) entry is skipped without reverting the whole batch, and a
+    /// `ContractRegistered` event is emitted for every successful one. The
+    /// caller receives a `Vec<BatchResult>` describing what happened per
+    /// entry.
+    ///
+    /// # Errors
+    ///
+    /// Panics with `"batch size exceeds maximum"` if `registrations.len()`
+    /// exceeds {@link MAX_BATCH_SIZE}, before any entry is processed. An
+    /// empty batch returns an empty `Vec` without panicking.
+    pub fn register_contracts_batch(
+        env: Env,
+        caller: Address,
+        registrations: Vec<Registration>,
+    ) -> Vec<BatchResult> {
+        caller.require_auth();
+        Self::require_admin_or(&env, &caller);
+
+        if registrations.len() > MAX_BATCH_SIZE {
+            panic!("batch size exceeds maximum");
+        }
+
+        let mut results: Vec<BatchResult> = Vec::new(&env);
+        for registration in registrations.iter() {
+            if registration.check_interval == 0 {
+                results.push_back(BatchResult::Skipped(String::from_str(
+                    &env,
+                    "check interval must be greater than zero",
+                )));
+                continue;
+            }
+            let health_key = DataKey::Health(registration.contract_id.clone());
+            if env.storage().persistent().has(&health_key) {
+                results.push_back(BatchResult::Skipped(String::from_str(
+                    &env,
+                    "contract already registered",
+                )));
+                continue;
+            }
+            Self::store_registration(&env, &caller, &registration);
+            results.push_back(BatchResult::Success);
+        }
+        results
+    }
     /// Deregister a contract. Only the owner (recorded at registration) or
     /// the admin can deregister.
     pub fn deregister_contract(env: Env, caller: Address, contract_id: Address) {
@@ -375,6 +423,42 @@ impl WatchdogContract {
 
     // ---- helpers -----------------------------------------------------------
 
+    fn store_registration(env: &Env, caller: &Address, registration: &Registration) {
+        let now = env.ledger().timestamp();
+        let record = ContractHealth {
+            contract_id: registration.contract_id.clone(),
+            name: registration.name.clone(),
+            owner: caller.clone(),
+            status: HealthStatus::Healthy,
+            last_check: now,
+            check_interval: registration.check_interval,
+            registered_at: now,
+        };
+        env.storage()
+            .persistent()
+            .set(&DataKey::Health(registration.contract_id.clone()), &record);
+        env.storage().persistent().set(
+            &DataKey::Alerts(registration.contract_id.clone()),
+            &Vec::<Alert>::new(env),
+        );
+
+        let mut registry: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Registry)
+            .unwrap_or_else(|| Vec::new(env));
+        registry.push_back(registration.contract_id.clone());
+        env.storage().instance().set(&DataKey::Registry, &registry);
+
+        ContractRegistered {
+            contract_id: registration.contract_id.clone(),
+            name: registration.name.clone(),
+            owner: caller.clone(),
+            timestamp: now,
+        }
+        .publish(env);
+    }
+
     fn require_admin_or(env: &Env, caller: &Address) {
         // Any authenticated caller can self-register a contract they own;
         // this hook exists so that in future we can gate registration
@@ -477,6 +561,135 @@ mod test {
     }
 
     #[test]
+    fn batch_registering_multiple_contracts_succeeds() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+
+        let mut registrations: Vec<Registration> = Vec::new(&env);
+        for _ in 0u32..5u32 {
+            let id = Address::generate(&env);
+            registrations.push_back(Registration {
+                contract_id: id,
+                name: symbol_short!("svc"),
+                check_interval: 60,
+            });
+        }
+
+        let results = client.register_contracts_batch(&owner, &registrations);
+
+        assert_eq!(results.len(), 5);
+        for idx in 0u32..5u32 {
+            assert_eq!(results.get(idx).unwrap(), BatchResult::Success);
+        }
+        assert_eq!(client.get_monitored_count(), 5);
+        assert_eq!(client.get_all_monitored().len(), 5);
+    }
+
+    #[test]
+    fn batch_skips_duplicates_but_registers_the_rest() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let existing = Address::generate(&env);
+        client.register_contract(&owner, &existing, &symbol_short!("old"), &60u64);
+
+        let fresh = Address::generate(&env);
+        let mut registrations: Vec<Registration> = Vec::new(&env);
+        registrations.push_back(Registration {
+            contract_id: existing.clone(),
+            name: symbol_short!("dup"),
+            check_interval: 60,
+        });
+        registrations.push_back(Registration {
+            contract_id: fresh.clone(),
+            name: symbol_short!("new"),
+            check_interval: 120,
+        });
+
+        let results = client.register_contracts_batch(&owner, &registrations);
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(
+            results.get(0).unwrap(),
+            BatchResult::Skipped(SString::from_str(&env, "contract already registered",))
+        );
+        assert_eq!(results.get(1).unwrap(), BatchResult::Success);
+        assert_eq!(client.get_monitored_count(), 2);
+        assert!(client.get_status(&fresh).check_interval == 120);
+    }
+
+    #[test]
+    #[should_panic(expected = "batch size exceeds maximum")]
+    fn batch_over_max_size_errors_before_processing() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+
+        let mut registrations: Vec<Registration> = Vec::new(&env);
+        for _ in 0u32..21u32 {
+            let id = Address::generate(&env);
+            registrations.push_back(Registration {
+                contract_id: id,
+                name: symbol_short!("svc"),
+                check_interval: 60,
+            });
+        }
+
+        client.register_contracts_batch(&owner, &registrations);
+    }
+
+    #[test]
+    fn batch_skips_zero_check_interval() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let bad = Address::generate(&env);
+        let good = Address::generate(&env);
+
+        let mut registrations: Vec<Registration> = Vec::new(&env);
+        registrations.push_back(Registration {
+            contract_id: bad.clone(),
+            name: symbol_short!("bad"),
+            check_interval: 0,
+        });
+        registrations.push_back(Registration {
+            contract_id: good.clone(),
+            name: symbol_short!("good"),
+            check_interval: 60,
+        });
+
+        let results = client.register_contracts_batch(&owner, &registrations);
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(
+            results.get(0).unwrap(),
+            BatchResult::Skipped(SString::from_str(
+                &env,
+                "check interval must be greater than zero",
+            ))
+        );
+        assert_eq!(results.get(1).unwrap(), BatchResult::Success);
+        assert_eq!(client.get_monitored_count(), 1);
+    }
+
+    #[test]
+    fn empty_batch_returns_empty_results() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+
+        let registrations: Vec<Registration> = Vec::new(&env);
+        let results = client.register_contracts_batch(&owner, &registrations);
+
+        assert_eq!(results.len(), 0);
+        assert_eq!(client.get_monitored_count(), 0);
+    }
+
+    #[test]
     fn report_status_updates_record_and_emits_event() {
         let env = Env::default();
         set_timestamp(&env, 1_700_000_000);
@@ -505,7 +718,12 @@ mod test {
         client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
 
         let metadata = SString::from_str(&env, "x");
-        client.report_status(&stranger, &monitored, &HealthStatus::Unresponsive, &metadata);
+        client.report_status(
+            &stranger,
+            &monitored,
+            &HealthStatus::Unresponsive,
+            &metadata,
+        );
     }
 
     #[test]
@@ -518,7 +736,10 @@ mod test {
 
         let metadata = SString::from_str(&env, "admin override");
         client.report_status(&admin, &monitored, &HealthStatus::Unresponsive, &metadata);
-        assert_eq!(client.get_status(&monitored).status, HealthStatus::Unresponsive);
+        assert_eq!(
+            client.get_status(&monitored).status,
+            HealthStatus::Unresponsive
+        );
     }
 
     #[test]
@@ -578,7 +799,11 @@ mod test {
         let owner = Address::generate(&env);
         for i in 0u32..5u32 {
             let id = Address::generate(&env);
-            let name = if i % 2 == 0 { symbol_short!("even") } else { symbol_short!("odd") };
+            let name = if i % 2 == 0 {
+                symbol_short!("even")
+            } else {
+                symbol_short!("odd")
+            };
             client.register_contract(&owner, &id, &name, &60u64);
         }
         assert_eq!(client.get_all_monitored().len(), 5);

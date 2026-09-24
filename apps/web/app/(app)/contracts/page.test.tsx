@@ -301,10 +301,13 @@ describe("ContractsPage", () => {
     fireEvent.submit(submitEl.closest("form")!);
 
     await waitFor(() =>
-      expect(mockTrackContract).toHaveBeenCalledWith({
-        id: VALID_CONTRACT_ID,
-        label: undefined,
-      }),
+      expect(mockTrackContract).toHaveBeenCalledWith(
+        {
+          id: VALID_CONTRACT_ID,
+          label: undefined,
+        },
+        "",
+      ),
     );
     // Modal closes after success
     await waitFor(() =>

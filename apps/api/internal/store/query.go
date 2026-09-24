@@ -22,6 +22,7 @@ type FullStore interface {
 	APIKeyStore
 	AlertSubscriptionStore
 	WatchlistStore
+	UserStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
@@ -74,6 +75,17 @@ type HourlyActivity struct {
 	Fees        int64 // sum of resource fees, stroops
 }
 
+// DailyAggregate holds one calendar day of contract activity. Fees are the
+// sum of resource fees charged across invocations (stroops). The forecast
+// feature fits trend + weekly seasonality over these cheap aggregate scans
+// rather than over raw rows.
+type DailyAggregate struct {
+	Day         time.Time // midnight UTC
+	Fee         float64
+	Invocations float64
+	Events      float64
+}
+
 // QueryStore provides read-only querying methods needed by the HTTP API.
 type QueryStore interface {
 	ListEvents(ctx context.Context, contractID, cursor string, limit int, f EventFilters) ([]Event, string, error)
@@ -94,6 +106,11 @@ type QueryStore interface {
 	// LastEventAtOrBefore returns the most recent event with ledger <= ledger,
 	// or ErrNotFound when the contract has no such event.
 	LastEventAtOrBefore(ctx context.Context, contractID string, ledger uint32) (Event, error)
+	// DailyAggregates returns one row per calendar day for the most recent
+	// `days` days (midnight UTC buckets), oldest first. Days with no activity
+	// yield a zero aggregate rather than a gap, so the forecasting model can
+	// fit a contiguous series.
+	DailyAggregates(ctx context.Context, contractID string, days int) ([]DailyAggregate, error)
 	// RecentHourlyActivity returns one row per hour bucket for the most recent
 	// `hours` hours (hour-start UTC, oldest first). Hours with no activity
 	// yield a zero bucket, providing a contiguous series to the indexer's
@@ -337,6 +354,64 @@ func (s *postgresStore) GetContractStats(ctx context.Context, contractID, window
 		cs.WindowDuration = "24h"
 	}
 	return cs, err
+}
+
+// DailyAggregates queries the last `days` calendar days (oldest first),
+// coalescing fee/invocation sums from invocations and event counts from
+// events. generate_series guarantees a row for every day in the window.
+func (s *postgresStore) DailyAggregates(ctx context.Context, contractID string, days int) ([]DailyAggregate, error) {
+	if days <= 0 {
+		days = 90
+	}
+	if days > 3650 {
+		days = 3650
+	}
+	rows, err := s.pool.Query(ctx, `
+		WITH buckets AS (
+			SELECT date_trunc('day', d)::date AS day
+			FROM generate_series(now() - ($2::int || ' days')::interval, now(), '1 day') AS d
+		)
+		SELECT b.day,
+		       COALESCE(inv.fee, 0)          AS fee,
+		       COALESCE(inv.invocations, 0)  AS invocations,
+		       COALESCE(ev.events, 0)        AS events
+		FROM buckets b
+		LEFT JOIN (
+			SELECT date_trunc('day', ledger_closed_at)::date AS day,
+			       COALESCE(SUM(resource_fee_charged), 0)    AS fee,
+			       COUNT(*)                                   AS invocations
+			FROM invocations
+			WHERE contract_id = $1
+			  AND ledger_closed_at >= now() - ($2::int || ' days')::interval
+			GROUP BY 1
+		) inv ON inv.day = b.day
+		LEFT JOIN (
+			SELECT date_trunc('day', ledger_closed_at)::date AS day,
+			       COUNT(*)                                   AS events
+			FROM events
+			WHERE contract_id = $1
+			  AND ledger_closed_at >= now() - ($2::int || ' days')::interval
+			GROUP BY 1
+		) ev ON ev.day = b.day
+		ORDER BY b.day ASC`,
+		contractID, days,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("daily aggregates: %w", err)
+	}
+	defer rows.Close()
+
+	var out []DailyAggregate
+	for rows.Next() {
+		var a DailyAggregate
+		var day time.Time
+		if err := rows.Scan(&day, &a.Fee, &a.Invocations, &a.Events); err != nil {
+			return nil, fmt.Errorf("daily aggregates scan: %w", err)
+		}
+		a.Day = day
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 // ---- ContractFirstLedger ----------------------------------------------------

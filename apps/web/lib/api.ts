@@ -82,10 +82,16 @@ export function listContracts(
 
 export function trackContract(
   req: TrackContractRequest,
+  userId?: string,
 ): Promise<ContractSummary> {
+  const headers: Record<string, string> = {};
+  // RBAC: registering a contract requires a recognized (contributor+) user,
+  // so the UI forwards its browser identity the same way the watchlist does.
+  if (userId) headers["X-User-ID"] = userId;
   return fetchJson<ContractSummary>(`${API_URL}/api/v1/contracts`, {
     method: "POST",
     body: JSON.stringify(req),
+    headers,
   });
 }
 

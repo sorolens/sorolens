@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/exaring/otelpgx"
 	"github.com/redis/go-redis/v9"
 	sorohandler "github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/router"
@@ -29,7 +30,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			Level: slog.LevelInfo,
 		}))
 
-		pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
+		var pool *pgxpool.Pool
+		config, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+		if err == nil {
+			config.ConnConfig.Tracer = otelpgx.NewTracer()
+			var p *pgxpool.Pool
+			p, err = pgxpool.NewWithConfig(context.Background(), config)
+			pool = p
+		}
 		if err != nil {
 			logger.Error("postgres connect", "err", err)
 			return

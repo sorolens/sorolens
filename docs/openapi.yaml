@@ -1,0 +1,1583 @@
+openapi: 3.0.3
+info:
+  title: Sorolens API
+  version: 1.0.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  description: |
+    Sorolens indexes and surfaces data from Soroban smart contracts: events,
+    invocations, storage, and per-contract analytics. This spec is the single
+    source of truth for the auto-generated Go client (packages/go-client) and
+    matches the live routes in apps/api/internal/router/router.go.
+
+    Authentication: most read endpoints accept an optional API key via
+    `Authorization: Bearer <token>` or `X-API-Key: <token>`. API-key management
+    additionally requires an admin identity via role headers
+    (`X-User-ID`, `X-GitHub-Login`, `X-User-Sub`, or `X-GitHub-ID`).
+  contact:
+    name: Sorolens
+
+servers:
+  - url: https://api.sorolens.xyz
+    description: Production
+
+tags:
+  - name: Health
+    description: Liveness and readiness probes
+  - name: Stats
+    description: Global and per-contract statistics
+  - name: Contracts
+    description: Tracked contract registration and lookup
+  - name: Events
+    description: Contract events
+  - name: Invocations
+    description: Contract invocations and resource usage
+  - name: Storage
+    description: Contract storage entries
+  - name: Forecast
+    description: Cost and usage forecasting
+  - name: Snapshots
+    description: Historical storage snapshots
+  - name: API Keys
+    description: Scoped API key management (admin only)
+  - name: Watchlist
+    description: Per-user contract watchlists
+  - name: Watchdog
+    description: On-chain watchdog monitoring data
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Service health probe
+      operationId: health
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness probe for postgres and redis
+      operationId: readyz
+      security: []
+      responses:
+        "200":
+          description: All dependencies reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: A dependency is unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: unavailable
+                  checks:
+                    type: object
+                    additionalProperties:
+                      type: string
+
+  /api/v1/stats/global:
+    get:
+      tags: [Stats]
+      summary: Global index statistics
+      operationId: getGlobalStats
+      security:
+        - ApiKeyAuth: [read:contracts]
+      responses:
+        "200":
+          description: Global counts across all tracked contracts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tracked_contracts, total_events, total_invocations, total_storage_entries]
+                properties:
+                  tracked_contracts:
+                    type: integer
+                    format: int64
+                  total_events:
+                    type: integer
+                    format: int64
+                  total_invocations:
+                    type: integer
+                    format: int64
+                  total_storage_entries:
+                    type: integer
+                    format: int64
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts:
+    get:
+      tags: [Contracts]
+      summary: List tracked contracts
+      operationId: listContracts
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/NetworkParam"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by contract status (pending, active, backfilling, error, paused).
+      responses:
+        "200":
+          description: Page of contracts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contracts, next_cursor]
+                properties:
+                  contracts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Contract"
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor for the next page; empty when no more pages.
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Contracts]
+      summary: Register a contract for tracking
+      operationId: registerContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, network]
+              properties:
+                id:
+                  type: string
+                  pattern: "^C[A-Za-z0-9]{55}$"
+                  description: Stellar contract ID (56 chars, starts with C).
+                network:
+                  type: string
+                  enum: [testnet, mainnet, futurenet, standalone]
+                label:
+                  type: string
+                  description: Optional human-friendly label.
+      responses:
+        "201":
+          description: Contract registered (status pending until backfill completes).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contract"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}:
+    get:
+      tags: [Contracts]
+      summary: Get one contract
+      operationId: getContract
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contract"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/events:
+    get:
+      tags: [Events]
+      summary: List contract events
+      operationId: listContractEvents
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/NetworkParam"
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Event type filter.
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Lower ledger bound (inclusive).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Upper ledger bound (inclusive).
+      responses:
+        "200":
+          description: Page of events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next_cursor]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+                  next_cursor:
+                    type: string
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/invocations:
+    get:
+      tags: [Invocations]
+      summary: List contract invocations
+      operationId: listContractInvocations
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/NetworkParam"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [SUCCESS, FAILED, NOT_FOUND]
+          description: Invocation status filter.
+        - name: fn
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Function name filter.
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Lower ledger bound (inclusive).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Upper ledger bound (inclusive).
+      responses:
+        "200":
+          description: Page of invocations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invocations, next_cursor]
+                properties:
+                  invocations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Invocation"
+                  next_cursor:
+                    type: string
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/storage:
+    get:
+      tags: [Storage]
+      summary: List contract storage entries
+      operationId: listContractStorage
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/NetworkParam"
+        - name: durability
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [temporary, persistent, instance]
+          description: Storage durability filter.
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [live, archived, deleted]
+          description: Storage entry status filter.
+      responses:
+        "200":
+          description: Page of storage entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [storage, next_cursor]
+                properties:
+                  storage:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StorageEntry"
+                  next_cursor:
+                    type: string
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/stats:
+    get:
+      tags: [Stats]
+      summary: Per-contract statistics
+      operationId: getContractStats
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: window
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Aggregation window. 7d and 30d map to 7/30 days; anything else is 24 hours.
+      responses:
+        "200":
+          description: Contract statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractStats"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/forecast:
+    get:
+      tags: [Forecast]
+      summary: Forecast contract usage over the next N days
+      operationId: getContractForecast
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: horizon
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+          description: Number of days to forecast (default 30; optional trailing d accepted).
+      responses:
+        "200":
+          description: Forecast series for fees, invocations, and events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contract_id, lookback_days, series]
+                properties:
+                  contract_id:
+                    type: string
+                  lookback_days:
+                    type: integer
+                  series:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ForecastSeries"
+        "400":
+          description: Invalid horizon parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/snapshot:
+    get:
+      tags: [Snapshots]
+      summary: Snapshot of contract storage at a historical ledger
+      operationId: getContractSnapshot
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: ledger
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Ledger to snap (greater than zero).
+      responses:
+        "200":
+          description: Storage snapshot plus the last event at or before the ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractSnapshot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/stream:
+    get:
+      tags: [Events]
+      summary: Poll the most recent contract events
+      operationId: streamContractEvents
+      description: |
+        Short-poll convenience used by the dashboard. Returns the 20 most
+        recent events as JSON (not SSE).
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: Most recent events
+          headers:
+            Last-Modified:
+              schema:
+                type: string
+                format: date-time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/api-keys:
+    get:
+      tags: [API Keys]
+      summary: List API keys
+      operationId: listApiKeys
+      security:
+        - ApiKeyAuth: [admin:*]
+        - RoleAuth: [admin]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Page of API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [api_keys, next_cursor]
+                properties:
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/APIKey"
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [API Keys]
+      summary: Create an API key
+      operationId: createApiKey
+      security:
+        - ApiKeyAuth: [admin:*]
+        - RoleAuth: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, scopes]
+              properties:
+                name:
+                  type: string
+                  description: Human-friendly key name.
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [read:contracts, write:contracts, read:watchdog, admin:*]
+                  minItems: 1
+                  description: Scopes granted to the key.
+      responses:
+        "201":
+          description: Key created; the plaintext key is returned once.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIKey"
+                  - type: object
+                    required: [key]
+                    properties:
+                      key:
+                        type: string
+                        description: Plaintext token, shown once.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/api-keys/{id}:
+    delete:
+      tags: [API Keys]
+      summary: Revoke an API key
+      operationId: revokeApiKey
+      security:
+        - ApiKeyAuth: [admin:*]
+        - RoleAuth: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: API key ID.
+      responses:
+        "204":
+          description: Key revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/admin/keys:
+    get:
+      tags: [API Keys]
+      summary: List API keys (admin role only)
+      operationId: listApiKeysAdmin
+      security:
+        - RoleAuth: [admin]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Page of API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [api_keys, next_cursor]
+                properties:
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/APIKey"
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [API Keys]
+      summary: Create an API key (admin role only)
+      operationId: createApiKeyAdmin
+      security:
+        - RoleAuth: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, scopes]
+              properties:
+                name:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+      responses:
+        "201":
+          description: Key created; the plaintext key is returned once.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIKey"
+                  - type: object
+                    required: [key]
+                    properties:
+                      key:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/admin/keys/{id}:
+    delete:
+      tags: [API Keys]
+      summary: Revoke an API key (admin role only)
+      operationId: revokeApiKeyAdmin
+      security:
+        - RoleAuth: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Key revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchlist:
+    get:
+      tags: [Watchlist]
+      summary: List the caller's watchlist
+      operationId: listWatchlist
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+      responses:
+        "200":
+          description: Watchlist items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Watchlist"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Watchlist]
+      summary: Add a contract to the caller's watchlist
+      operationId: addToWatchlist
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract_id]
+              properties:
+                contract_id:
+                  type: string
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InWatchlist"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchlist/{contractId}:
+    delete:
+      tags: [Watchlist]
+      summary: Remove a contract from the caller's watchlist
+      operationId: removeFromWatchlist
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InWatchlist"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchlist/{contractId}/status:
+    get:
+      tags: [Watchlist]
+      summary: Check watchlist membership for a contract
+      operationId: getWatchlistStatus
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Membership status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InWatchlist"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/stats:
+    get:
+      tags: [Watchdog]
+      summary: Watchdog statistics
+      operationId: getWatchdogStats
+      security:
+        - ApiKeyAuth: [read:watchdog]
+      parameters:
+        - $ref: "#/components/parameters/NetworkParam"
+      responses:
+        "200":
+          description: Watchdog summary counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchdogStats"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/alerts:
+    get:
+      tags: [Watchdog]
+      summary: List watchdog alerts
+      operationId: listWatchdogAlerts
+      security:
+        - ApiKeyAuth: [read:watchdog]
+      parameters:
+        - name: severity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Info, Warning, Critical]
+          description: Severity filter.
+        - $ref: "#/components/parameters/NetworkParam"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+          description: Maximum alerts to return (default 100).
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alerts]
+                properties:
+                  alerts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ContractAlert"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/contracts:
+    get:
+      tags: [Watchdog]
+      summary: List monitored contracts
+      operationId: listMonitoredContracts
+      security:
+        - ApiKeyAuth: [read:watchdog]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/NetworkParam"
+      responses:
+        "200":
+          description: Page of monitored contracts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contracts, next_cursor]
+                properties:
+                  contracts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MonitoredContract"
+                  next_cursor:
+                    type: string
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/contracts/{id}:
+    get:
+      tags: [Watchdog]
+      summary: Get one monitored contract
+      operationId: getMonitoredContract
+      security:
+        - ApiKeyAuth: [read:watchdog]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The monitored contract
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitoredContract"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/contracts/{id}/health:
+    get:
+      tags: [Watchdog]
+      summary: List health checks for a monitored contract
+      operationId: listContractHealthChecks
+      security:
+        - ApiKeyAuth: [read:watchdog]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+          description: Maximum checks to return (default 100).
+      responses:
+        "200":
+          description: Health checks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [health_checks]
+                properties:
+                  health_checks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/HealthCheck"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/contracts/{id}/alerts:
+    get:
+      tags: [Watchdog]
+      summary: List alerts for a monitored contract
+      operationId: listContractAlerts
+      security:
+        - ApiKeyAuth: [read:watchdog]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: severity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Info, Warning, Critical]
+        - $ref: "#/components/parameters/NetworkParam"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        "200":
+          description: Alerts for the contract
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alerts]
+                properties:
+                  alerts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ContractAlert"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      description: "Scoped API key. Send as `Authorization: Bearer <token>` (or `X-API-Key`)."
+    RoleAuth:
+      type: apiKey
+      in: header
+      name: X-User-ID
+      description: |
+        Role-based auth. Resolve a user identity from one of
+        X-User-ID, X-GitHub-Login, X-User-Sub, or X-GitHub-ID and enforce the
+        minimum role declared next to this security scheme.
+    IdentityHeaderAuth:
+      type: apiKey
+      in: header
+      name: X-User-ID
+      description: Watchlist endpoints read the user ID from X-User-ID.
+
+  parameters:
+    ContractID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Contract ID (starts with C).
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Opaque pagination cursor from a previous response.
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+      description: Page size (default 50, clamped to 200).
+    NetworkParam:
+      name: network
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [testnet, mainnet, futurenet, standalone]
+      description: Network filter; empty means all networks.
+    UserIDHeader:
+      name: X-User-ID
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Caller user ID.
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credential or identity
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ForbiddenScope:
+      description: Valid credential but missing required scope
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ScopeError"
+    ForbiddenRole:
+      description: Identity present but role below the required minimum
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RoleError"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InvalidInput:
+      description: Invalid query or body input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnsupportedMediaType:
+      description: Content-Type is not application/json
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Global per-IP rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                  enum: [NOT_FOUND, INVALID_INPUT, INTERNAL, RATE_LIMITED, UNSUPPORTED_MEDIA_TYPE]
+                message:
+                  type: string
+                request_id:
+                  type: string
+            - type: object
+              properties:
+                error:
+                  type: string
+
+    ScopeError:
+      type: object
+      required: [error, required]
+      properties:
+        error:
+          type: string
+        required:
+          type: string
+
+    RoleError:
+      type: object
+      required: [error, required, role]
+      properties:
+        error:
+          type: string
+        required:
+          type: string
+        role:
+          type: string
+
+    Contract:
+      type: object
+      required: [id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at]
+      properties:
+        id:
+          type: string
+        network:
+          type: string
+        label:
+          type: string
+        wasm_hash:
+          type: string
+        created_at_ledger:
+          type: integer
+          format: int64
+        backfill_complete_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [pending, active, backfilling, error, paused]
+        added_at:
+          type: string
+          format: date-time
+
+    Event:
+      type: object
+      required:
+        - id
+        - contract_id
+        - network
+        - ledger
+        - ledger_closed_at
+        - tx_hash
+        - type
+        - topic_xdr
+        - value_xdr
+        - topic_decoded
+        - value_decoded
+        - in_successful_call
+      properties:
+        id:
+          type: string
+        contract_id:
+          type: string
+        network:
+          type: string
+        ledger:
+          type: integer
+          format: int32
+        ledger_closed_at:
+          type: string
+          format: date-time
+        tx_hash:
+          type: string
+        type:
+          type: string
+        topic_xdr:
+          type: array
+          items:
+            type: string
+        value_xdr:
+          type: string
+        topic_decoded:
+          type: array
+          items: {}
+        value_decoded: {}
+        in_successful_call:
+          type: boolean
+
+    Invocation:
+      type: object
+      required:
+        - tx_hash
+        - contract_id
+        - network
+        - ledger
+        - ledger_closed_at
+        - status
+        - function_name
+        - args_decoded
+        - result_decoded
+        - result_xdr
+        - resource_fee_charged
+        - cpu_insn
+        - mem_byte
+        - ledger_read_byte
+        - ledger_write_byte
+        - application_order
+      properties:
+        tx_hash:
+          type: string
+        contract_id:
+          type: string
+        network:
+          type: string
+        ledger:
+          type: integer
+          format: int32
+        ledger_closed_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        function_name:
+          type: string
+        args_decoded:
+          type: object
+          additionalProperties: true
+        result_decoded: {}
+        result_xdr:
+          type: string
+        resource_fee_charged:
+          type: integer
+          format: int64
+        cpu_insn:
+          type: integer
+          format: int64
+        mem_byte:
+          type: integer
+          format: int64
+        ledger_read_byte:
+          type: integer
+          format: int64
+        ledger_write_byte:
+          type: integer
+          format: int64
+        application_order:
+          type: integer
+
+    StorageEntry:
+      type: object
+      required: [contract_id, network, key_xdr, value_xdr, durability, live_until_ledger, last_modified_ledger, status, last_seen_at]
+      properties:
+        contract_id:
+          type: string
+        network:
+          type: string
+        key_xdr:
+          type: string
+        key_decoded: {}
+        value_xdr:
+          type: string
+        value_decoded: {}
+        durability:
+          type: string
+        live_until_ledger:
+          type: integer
+          format: int64
+        last_modified_ledger:
+          type: integer
+          format: int64
+        status:
+          type: string
+        last_seen_at:
+          type: string
+          format: date-time
+
+    ContractStats:
+      type: object
+      required:
+        - event_count
+        - invocation_count
+        - storage_count
+        - last_synced_ledger
+        - window_event_count
+        - window_invocation_count
+        - window_duration
+      properties:
+        event_count:
+          type: integer
+          format: int64
+        invocation_count:
+          type: integer
+          format: int64
+        storage_count:
+          type: integer
+          format: int64
+        last_synced_ledger:
+          type: integer
+          format: int32
+        window_event_count:
+          type: integer
+          format: int64
+        window_invocation_count:
+          type: integer
+          format: int64
+        window_duration:
+          type: string
+
+    ForecastPoint:
+      type: object
+      required: [date, value, lower, upper]
+      properties:
+        date:
+          type: string
+          format: date
+        value:
+          type: number
+          format: double
+        lower:
+          type: number
+          format: double
+        upper:
+          type: number
+          format: double
+
+    ForecastSeries:
+      type: object
+      required: [metric, horizon, daily_count, points]
+      properties:
+        metric:
+          type: string
+          enum: [fees, invocations, events]
+        horizon:
+          type: integer
+        daily_count:
+          type: integer
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForecastPoint"
+
+    ContractSnapshot:
+      type: object
+      required: [contract_id, network, ledger, first_tracked_ledger, storage, last_event]
+      properties:
+        contract_id:
+          type: string
+        network:
+          type: string
+        ledger:
+          type: integer
+          format: int32
+        first_tracked_ledger:
+          type: integer
+          format: int32
+        storage:
+          type: array
+          items:
+            $ref: "#/components/schemas/StorageEntry"
+        last_event:
+          description: The last event at or before the ledger, or null if none.
+          allOf:
+            - $ref: "#/components/schemas/Event"
+          nullable: true
+          type: object
+
+    APIKey:
+      type: object
+      required: [id, name, key_prefix, scopes, created_at, last_used_at, revoked_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        key_prefix:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Watchlist:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchlistItem"
+
+    WatchlistItem:
+      type: object
+      required: [contract_id, added_at]
+      properties:
+        contract_id:
+          type: string
+        added_at:
+          type: string
+          format: date-time
+
+    InWatchlist:
+      type: object
+      required: [in_watchlist]
+      properties:
+        in_watchlist:
+          type: boolean
+
+    WatchdogStats:
+      type: object
+      required: [total_monitored, healthy, degraded, unresponsive, total_alerts, critical_alerts]
+      properties:
+        total_monitored:
+          type: integer
+          format: int64
+        healthy:
+          type: integer
+          format: int64
+        degraded:
+          type: integer
+          format: int64
+        unresponsive:
+          type: integer
+          format: int64
+        total_alerts:
+          type: integer
+          format: int64
+        critical_alerts:
+          type: integer
+          format: int64
+
+    ContractAlert:
+      type: object
+      required: [contract_id, severity, message, ledger, tx_hash, timestamp]
+      properties:
+        contract_id:
+          type: string
+        severity:
+          type: string
+          enum: [Info, Warning, Critical]
+        message:
+          type: string
+        ledger:
+          type: integer
+          format: int64
+        tx_hash:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    MonitoredContract:
+      type: object
+      required: [contract_id, network, name, owner, status, last_check, check_interval, registered_at, updated_at]
+      properties:
+        contract_id:
+          type: string
+        network:
+          type: string
+        name:
+          type: string
+        owner:
+          type: string
+        status:
+          type: string
+        last_check:
+          type: string
+          format: date-time
+          nullable: true
+        check_interval:
+          type: integer
+          format: int64
+        registered_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    HealthCheck:
+      type: object
+      required: [contract_id, status, metadata, ledger, tx_hash, timestamp]
+      properties:
+        contract_id:
+          type: string
+        status:
+          type: string
+        metadata:
+          type: string
+        ledger:
+          type: integer
+          format: int64
+        tx_hash:
+          type: string
+        timestamp:
+          type: string
+          format: date-time

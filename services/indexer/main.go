@@ -16,6 +16,11 @@ import (
 )
 
 func main() {
+	tp, _ := poller.InitTracer()
+	if tp != nil {
+		defer tp.Shutdown(context.Background())
+	}
+
 	mode := flag.String("mode", "once", "Run mode: once or continuous")
 	maxDuration := flag.Duration("max-duration", 270*time.Second, "Maximum duration for a single pass (once mode)")
 	pollInterval := flag.Duration("poll-interval", 5*time.Minute, "Sleep between passes (continuous mode)")

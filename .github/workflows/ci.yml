@@ -19,6 +19,7 @@ jobs:
           - apps/api
           - services/indexer
           - cli
+          - packages/go-client
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,6 +51,28 @@ jobs:
       - name: go test
         working-directory: ${{ matrix.module }}
         run: go test -race -timeout 120s ./...
+  # ------------------------------------------------------------
+  # Go client regeneration (issue #149): fail if the checked-in generated
+  # code under packages/go-client is out of date with docs/openapi.yaml.
+  # ------------------------------------------------------------
+  go-client-stale:
+    name: Go client up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go 1.26
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: false
+      - name: Install oapi-codegen
+        run: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1
+      - name: Regenerate client
+        working-directory: packages/go-client
+        run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
+      - name: Verify no diff
+        run: git diff --exit-code -- packages/go-client/internal
   # ------------------------------------------------------------
   # Node: XDR decoder package and shared packages
   # ------------------------------------------------------------

@@ -19,6 +19,14 @@ const (
 	validContractBody = `{"id":"CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","network":"testnet"}`
 )
 
+const (
+	adminUser         = "user-admin"
+	contributorUser   = "user-contrib"
+	viewerUser        = "user-viewer"
+	adminGitHub       = "github-admin"
+	contributorGitHub = "github-contrib"
+)
+
 func seedScopedKeyStore(t *testing.T) *store.MockStore {
 	t.Helper()
 	ms := seedMultiNetworkStore(t)
@@ -37,10 +45,20 @@ func seedScopedKeyStore(t *testing.T) *store.MockStore {
 		KeyHash: store.HashKey(readWatchdogKey), Scopes: []string{store.ScopeReadWatchdog},
 		CreatedAt: time.Now().UTC(),
 	})
+	adminGH := adminGitHub
+	contribGH := contributorGitHub
+	ms.AddUser(store.User{ID: adminUser, GitHubID: &adminGH, Role: store.RoleAdmin})
+	ms.AddUser(store.User{ID: contributorUser, GitHubID: &contribGH, Role: store.RoleContributor})
 	return ms
 }
 
 func doRequest(srv http.Handler, method, path, token, body string) *httptest.ResponseRecorder {
+	return doRequestAsUser(srv, method, path, token, "", body)
+}
+
+// doRequestAsUser is doRequest with an optional calling user identity in
+// X-User-ID, used to exercise role-based access control.
+func doRequestAsUser(srv http.Handler, method, path, token, userID, body string) *httptest.ResponseRecorder {
 	var reader io.Reader
 	if body != "" {
 		reader = strings.NewReader(body)
@@ -48,6 +66,9 @@ func doRequest(srv http.Handler, method, path, token, body string) *httptest.Res
 	req := httptest.NewRequest(method, path, reader)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if userID != "" {
+		req.Header.Set("X-User-ID", userID)
 	}
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
@@ -65,26 +86,27 @@ func TestAPIKeyGrantAndDenyPerScope(t *testing.T) {
 		method   string
 		path     string
 		token    string
+		userID   string
 		body     string
 		wantCode int
 	}{
 		// read:contracts grants reads, denies writes.
-		{"read:contracts grants GET /contracts", http.MethodGet, "/api/v1/contracts", readContractsKey, "", http.StatusOK},
-		{"read:contracts denies POST /contracts", http.MethodPost, "/api/v1/contracts", readContractsKey, validContractBody, http.StatusForbidden},
-		{"read:contracts denies watchdog", http.MethodGet, "/api/v1/watchdog/stats", readContractsKey, "", http.StatusForbidden},
+		{"read:contracts grants GET /contracts", http.MethodGet, "/api/v1/contracts", readContractsKey, "", "", http.StatusOK},
+		{"read:contracts denies POST /contracts", http.MethodPost, "/api/v1/contracts", readContractsKey, "", validContractBody, http.StatusForbidden},
+		{"read:contracts denies watchdog", http.MethodGet, "/api/v1/watchdog/stats", readContractsKey, "", "", http.StatusForbidden},
 		// read:watchdog grants watchdog reads, denies contracts.
-		{"read:watchdog grants watchdog stats", http.MethodGet, "/api/v1/watchdog/stats", readWatchdogKey, "", http.StatusOK},
-		{"read:watchdog grants watchdog contracts", http.MethodGet, "/api/v1/watchdog/contracts", readWatchdogKey, "", http.StatusOK},
-		{"read:watchdog denies GET /contracts", http.MethodGet, "/api/v1/contracts", readWatchdogKey, "", http.StatusForbidden},
-		// admin:* grants everything.
-		{"admin grants POST /contracts", http.MethodPost, "/api/v1/contracts", adminToken, validContractBody, http.StatusCreated},
-		{"admin grants GET /contracts", http.MethodGet, "/api/v1/contracts", adminToken, "", http.StatusOK},
-		{"admin grants watchdog", http.MethodGet, "/api/v1/watchdog/stats", adminToken, "", http.StatusOK},
+		{"read:watchdog grants watchdog stats", http.MethodGet, "/api/v1/watchdog/stats", readWatchdogKey, "", "", http.StatusOK},
+		{"read:watchdog grants watchdog contracts", http.MethodGet, "/api/v1/watchdog/contracts", readWatchdogKey, "", "", http.StatusOK},
+		{"read:watchdog denies GET /contracts", http.MethodGet, "/api/v1/contracts", readWatchdogKey, "", "", http.StatusForbidden},
+		// admin:* grants everything when the caller is an admin.
+		{"admin grants POST /contracts", http.MethodPost, "/api/v1/contracts", adminToken, adminUser, validContractBody, http.StatusCreated},
+		{"admin grants GET /contracts", http.MethodGet, "/api/v1/contracts", adminToken, "", "", http.StatusOK},
+		{"admin grants watchdog", http.MethodGet, "/api/v1/watchdog/stats", adminToken, "", "", http.StatusOK},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := doRequest(srv, tc.method, tc.path, tc.token, tc.body)
+			w := doRequestAsUser(srv, tc.method, tc.path, tc.token, tc.userID, tc.body)
 			if w.Code != tc.wantCode {
 				t.Fatalf("want %d, got %d (%s)", tc.wantCode, w.Code, w.Body.String())
 			}
@@ -161,7 +183,7 @@ func TestAnonymousReadsRemainAllowed(t *testing.T) {
 func TestCreateAPIKeyLifecycle(t *testing.T) {
 	srv := newTestHandler(seedScopedKeyStore(t), true, true)
 
-	w := doRequest(srv, http.MethodPost, "/api/v1/api-keys", adminToken,
+	w := doRequestAsUser(srv, http.MethodPost, "/api/v1/api-keys", adminToken, adminUser,
 		`{"name":"monitoring bot","scopes":["read:watchdog"]}`)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d (%s)", w.Code, w.Body.String())
@@ -191,7 +213,7 @@ func TestCreateAPIKeyLifecycle(t *testing.T) {
 	}
 
 	// List returns metadata, never key material.
-	w = doRequest(srv, http.MethodGet, "/api/v1/api-keys", adminToken, "")
+	w = doRequestAsUser(srv, http.MethodGet, "/api/v1/api-keys", adminToken, adminUser, "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("list keys: want 200, got %d", w.Code)
 	}
@@ -200,7 +222,7 @@ func TestCreateAPIKeyLifecycle(t *testing.T) {
 	}
 
 	// Revoke and confirm the key stops working.
-	w = doRequest(srv, http.MethodDelete, "/api/v1/api-keys/"+created.ID, adminToken, "")
+	w = doRequestAsUser(srv, http.MethodDelete, "/api/v1/api-keys/"+created.ID, adminToken, adminUser, "")
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("revoke: want 204, got %d (%s)", w.Code, w.Body.String())
 	}
@@ -212,7 +234,7 @@ func TestCreateAPIKeyLifecycle(t *testing.T) {
 func TestCreateAPIKeyRejectsUnknownScope(t *testing.T) {
 	srv := newTestHandler(seedScopedKeyStore(t), true, true)
 
-	w := doRequest(srv, http.MethodPost, "/api/v1/api-keys", adminToken,
+	w := doRequestAsUser(srv, http.MethodPost, "/api/v1/api-keys", adminToken, adminUser,
 		`{"name":"bad","scopes":["read:everything"]}`)
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("want 422, got %d (%s)", w.Code, w.Body.String())
@@ -222,7 +244,7 @@ func TestCreateAPIKeyRejectsUnknownScope(t *testing.T) {
 func TestRevokeUnknownAPIKey(t *testing.T) {
 	srv := newTestHandler(seedScopedKeyStore(t), true, true)
 
-	w := doRequest(srv, http.MethodDelete, "/api/v1/api-keys/does-not-exist", adminToken, "")
+	w := doRequestAsUser(srv, http.MethodDelete, "/api/v1/api-keys/does-not-exist", adminToken, adminUser, "")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d", w.Code)
 	}

@@ -25,6 +25,18 @@ func newTestHandler(ms *store.MockStore, dbHealthy, redisHealthy bool) http.Hand
 	return router.New(h)
 }
 
+// seedRoleStore returns a MockStore with an admin and a contributor user so
+// tests that now enforce RBAC on write routes can act as one of them.
+func seedRoleStore(t *testing.T) *store.MockStore {
+	t.Helper()
+	ms := store.NewMockStore()
+	adminGH := adminGitHub
+	contribGH := contributorGitHub
+	ms.AddUser(store.User{ID: adminUser, GitHubID: &adminGH, Role: store.RoleAdmin})
+	ms.AddUser(store.User{ID: contributorUser, GitHubID: &contribGH, Role: store.RoleContributor})
+	return ms
+}
+
 func TestHealth(t *testing.T) {
 	srv := newTestHandler(store.NewMockStore(), true, true)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -78,9 +90,10 @@ func TestReadyzUnhealthy(t *testing.T) {
 }
 
 func TestRegisterContractInvalidBody(t *testing.T) {
-	srv := newTestHandler(store.NewMockStore(), true, true)
+	srv := newTestHandler(seedRoleStore(t), true, true)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts", bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -95,10 +108,11 @@ func TestRegisterContractInvalidBody(t *testing.T) {
 }
 
 func TestRegisterContractInvalidID(t *testing.T) {
-	srv := newTestHandler(store.NewMockStore(), true, true)
+	srv := newTestHandler(seedRoleStore(t), true, true)
 	body, _ := json.Marshal(map[string]string{"id": "short", "network": "testnet"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -108,7 +122,7 @@ func TestRegisterContractInvalidID(t *testing.T) {
 }
 
 func TestRegisterContractSuccess(t *testing.T) {
-	srv := newTestHandler(store.NewMockStore(), true, true)
+	srv := newTestHandler(seedRoleStore(t), true, true)
 	validID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB2" + "22"
 	// Use a well-formed 56-char contract ID starting with C
 	validID = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -119,6 +133,7 @@ func TestRegisterContractSuccess(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 

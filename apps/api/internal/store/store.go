@@ -89,6 +89,19 @@ type WatchlistStore interface {
 	IsInWatchlist(ctx context.Context, userID, contractID string) (bool, error)
 }
 
+// UserStore is the data-access surface for role-based access control and
+// user lookups used by the RBAC middleware.
+type UserStore interface {
+	// UpsertUser inserts or updates a user, setting its role. Missing GitHub
+	// IDs and roles are left untouched on update.
+	UpsertUser(ctx context.Context, u User) error
+	// GetUserByID returns the user with the given ID, or ErrNotFound.
+	GetUserByID(ctx context.Context, id string) (User, error)
+	// GetUserByGitHubID returns the user whose GitHub ID matches, or
+	// ErrNotFound.
+	GetUserByGitHubID(ctx context.Context, githubID string) (User, error)
+}
+
 // ContractFilters holds optional query filters for listing contracts.
 type ContractFilters struct {
 	// Network restricts results to one of testnet | mainnet | futurenet.

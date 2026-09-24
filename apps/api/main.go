@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/exaring/otelpgx"
 	"github.com/redis/go-redis/v9"
 	"github.com/sorolens/sorolens/apps/api/internal/config"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
@@ -29,7 +30,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	config, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		logger.Error("parse config", "err", err)
+	os.Exit(1)
+	}
+	config.ConnConfig.Tracer = otelpgx.NewTracer()
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		logger.Error("postgres connect", "err", err)
 		os.Exit(1)
@@ -49,6 +56,11 @@ func main() {
 		DB:     &dbPinger{pool: pool},
 		Redis:  &redisPinger{client: redisClient},
 		Logger: logger,
+	}
+
+	if err := seedInitialAdmin(context.Background(), h.Store, cfg.InitialAdminGitHubID, logger); err != nil {
+		logger.Error("seed initial admin", "err", err)
+		os.Exit(1)
 	}
 
 	srv := &http.Server{
@@ -79,6 +91,27 @@ func main() {
 		logger.Error("shutdown", "err", err)
 	}
 	logger.Info("shutdown complete")
+}
+
+// seedInitialAdmin creates the bootstrap admin user when the
+// INITIAL_ADMIN_GITHUB_ID environment variable is set. It is idempotent:
+// the user's row is keyed by its GitHub ID (also used as the row ID) so the
+// same bootstrap value always resolves to the same admin on restarts.
+func seedInitialAdmin(ctx context.Context, s store.FullStore, githubID string, logger *slog.Logger) error {
+	if githubID == "" {
+		logger.Info("INITIAL_ADMIN_GITHUB_ID not set; skipping admin seed")
+		return nil
+	}
+	id := githubID
+	if err := s.UpsertUser(ctx, store.User{
+		ID:       id,
+		GitHubID: &githubID,
+		Role:     store.RoleAdmin,
+	}); err != nil {
+		return fmt.Errorf("seed admin user %q: %w", githubID, err)
+	}
+	logger.Info("seeded initial admin", "github_id", githubID)
+	return nil
 }
 
 type dbPinger struct{ pool *pgxpool.Pool }

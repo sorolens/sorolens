@@ -44,6 +44,10 @@ type Config struct {
 	IndexerLedgerWindow int
 	// IndexerMaxDuration is the wall-clock budget for a single indexer run.
 	IndexerMaxDuration time.Duration
+	// InitialAdminGitHubID, when set, seeds a user with the admin role on
+	// startup. The user is keyed by this value as both its ID and GitHub ID so
+	// requests authenticated with X-User-ID or X-GitHub-ID resolve to it.
+	InitialAdminGitHubID string
 }
 
 // Load reads configuration from environment variables and returns an error
@@ -51,13 +55,14 @@ type Config struct {
 // single, actionable message.
 func Load() (*Config, error) {
 	cfg := &Config{
-		DatabaseURL:       os.Getenv("DATABASE_URL"),
-		DirectDatabaseURL: os.Getenv("DIRECT_DATABASE_URL"),
-		RedisURL:          os.Getenv("REDIS_URL"),
-		SorobanRPCURL:     getEnvDefault("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org"),
-		StellarNetwork:    getEnvDefault("STELLAR_NETWORK", "testnet"),
-		Port:              getEnvDefault("PORT", "8080"),
-		LogLevel:          getEnvDefault("LOG_LEVEL", "info"),
+		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		DirectDatabaseURL:    os.Getenv("DIRECT_DATABASE_URL"),
+		RedisURL:             os.Getenv("REDIS_URL"),
+		SorobanRPCURL:        getEnvDefault("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org"),
+		StellarNetwork:       getEnvDefault("STELLAR_NETWORK", "testnet"),
+		Port:                 getEnvDefault("PORT", "8080"),
+		LogLevel:             getEnvDefault("LOG_LEVEL", "info"),
+		InitialAdminGitHubID: os.Getenv("INITIAL_ADMIN_GITHUB_ID"),
 	}
 
 	pollStr := getEnvDefault("INDEXER_POLL_INTERVAL", "5m")

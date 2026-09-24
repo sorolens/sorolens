@@ -94,58 +94,41 @@ type AlertSubscription struct {
 	UpdatedAt      time.Time
 }
 
-// ContractHealthScore is one cached composite 0-100 health score row for a
-// contract (issue #137). The indexer recomputes and upserts it every poll
-// cycle; the component_* fields hold the normalized 0-100 value of each input
-// so the dashboard can render a breakdown without recomputing.
-type ContractHealthScore struct {
-	ContractID           string
-	Score                int32
-	ComponentUptime      int32
-	ComponentErrorRate   int32
-	ComponentPerformance int32
-	ComponentStorageTTL  int32
-	ComputedAt           time.Time
+// Role names for role-based access control.
+const (
+	RoleViewer      = "viewer"
+	RoleContributor = "contributor"
+	RoleAdmin       = "admin"
+)
+
+// ValidRoles is the set of roles a user may hold.
+var ValidRoles = map[string]bool{
+	RoleViewer:      true,
+	RoleContributor: true,
+	RoleAdmin:       true,
 }
 
-// HealthScoreInputs holds the raw aggregates that feed the composite health
-// score (issue #137). The indexer fetches these every poll cycle and runs the
-// pure scoring function over them.
-type HealthScoreInputs struct {
-	// Watchdog uptime: recent health-check history for the contract.
-	HealthyChecks int64
-	TotalChecks   int64
-	// WatchdogStatus is monitored_contracts.status (Healthy/Degraded/
-	// Unresponsive). Empty when the contract is not registered with the
-	// watchdog; used as a fallback when there is no check history.
-	WatchdogStatus string
-	// Invocation error rate over the trailing window.
-	TotalInvocations  int64
-	FailedInvocations int64
-	// Activity is the chronological per-hour activity (oldest first) used to
-	// evaluate the CPU/fee trend.
-	Activity []HourlyActivity
-	// Storage TTL headroom: live entries vs entries expiring within the
-	// headroom horizon of the current ledger.
-	TotalStorage    int64
-	ExpiringStorage int64
-}
-
-// ContractUpgrade records one observed Wasm-hash change for a tracked contract.
-type ContractUpgrade struct {
-	ID         int64
-	ContractID string
-	FromHash   string
-	ToHash     string
-	Ledger     int64
-	TxHash     string
-	At         time.Time
+// RoleRank returns a total ordering over roles so the Router can decide
+// whether one role satisfies a minimum requirement. Higher is more
+// privileged; any unknown role ranks below viewer (no privileges).
+func RoleRank(role string) int {
+	switch role {
+	case RoleAdmin:
+		return 3
+	case RoleContributor:
+		return 2
+	case RoleViewer:
+		return 1
+	default:
+		return 0
+	}
 }
 
 // User represents a Sorolens user.
 type User struct {
 	ID        string
 	GitHubID  *string
+	Role      string
 	CreatedAt time.Time
 }
 
