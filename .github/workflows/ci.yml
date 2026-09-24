@@ -50,20 +50,18 @@ jobs:
           args: --timeout=10m
       - name: Start Postgres
         working-directory: ./
-        run: docker compose up -d postgres
+        run: |
+          docker compose up -d postgres
+          DB_CONTAINER=$(docker compose ps -q postgres)
+          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
+          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
+          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
       - name: Wait for Postgres
         working-directory: ./
         run: |
           echo "Waiting for PostgreSQL..."
           DB_CONTAINER=$(docker compose ps -q postgres)
           until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
-      - name: Install aws mock in postgres container
-        working-directory: ./
-        run: |
-          DB_CONTAINER=$(docker compose ps -q postgres)
-          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
-          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
-          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
       - name: Run DB migrations
         if: matrix.module == 'apps/api'
         env:
@@ -222,7 +220,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Start Postgres
-        run: docker compose up -d postgres
+        run: |
+          docker compose up -d postgres
+          DB_CONTAINER=$(docker compose ps -q postgres)
+          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
+          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
+          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
       - name: Wait for Postgres
         run: |
           echo "Waiting for PostgreSQL..."
@@ -232,12 +235,6 @@ jobs:
         run: |
           mkdir -p /tmp/s3/sorolens-backups/logical /tmp/s3/sorolens-backups/base /tmp/s3/sorolens-backups/wal
           install -m 755 scripts/aws-mock.sh /usr/local/bin/aws
-      - name: Install aws mock in postgres container
-        run: |
-          DB_CONTAINER=$(docker compose ps -q postgres)
-          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
-          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
-          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
       - name: Run Backup Script
         run: |
           export DB_CONTAINER=$(docker compose ps -q postgres)

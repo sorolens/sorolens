@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Minimal S3 shim for CI: rewrites s3:// URIs to /tmp/s3/ and copies.
 if [ "$1" = "s3" ] && [ "$2" = "cp" ]; then
   src="$3"
