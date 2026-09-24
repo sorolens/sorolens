@@ -10,14 +10,29 @@ import { metadata as watchlistMetadata } from "./(app)/watchlist/layout";
 
 describe("page titles", () => {
   it("suffixes every page title with | Sorolens via the root template", () => {
-    expect(rootMetadata.title).toEqual({ default: "Sorolens", template: "%s | Sorolens" });
+    expect(rootMetadata.title).toEqual({
+      default: "Sorolens",
+      template: "%s | Sorolens",
+    });
   });
 
   it("gives each section a page title for the template", () => {
     expect(
-      [compareMetadata, contractsMetadata, eventsMetadata, playgroundMetadata, watchdogMetadata, watchlistMetadata].map(
-        (m) => m.title,
-      ),
-    ).toEqual(["Compare Contracts", "Contracts", "Live Events", "API Playground", "Watchdog", "Watchlist"]);
+      [
+        compareMetadata,
+        contractsMetadata,
+        eventsMetadata,
+        playgroundMetadata,
+        watchdogMetadata,
+        watchlistMetadata,
+      ].map((m) => m.title)
+    ).toEqual([
+      "Compare Contracts",
+      "Contracts",
+      "Live Events",
+      "API Playground",
+      "Watchdog",
+      "Watchlist",
+    ]);
   });
 });
