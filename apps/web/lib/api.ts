@@ -21,6 +21,7 @@ import type {
   WatchlistItem,
   WatchlistResponse,
   WatchlistStatusResponse,
+  HealthScoreResponse,
 } from "./types";
 
 
@@ -196,6 +197,15 @@ export function getContractSnapshot(
 ): Promise<ContractSnapshot> {
   return fetchJson<ContractSnapshot>(
     `${API_URL}/api/v1/contracts/${id}/snapshot?ledger=${ledger}`,
+  );
+}
+
+
+export function getContractHealthScore(
+  id: string,
+): Promise<HealthScoreResponse> {
+  return fetchJson<HealthScoreResponse>(
+    `${API_URL}/api/v1/contracts/${id}/health-score`,
   );
 }
 

@@ -9,6 +9,7 @@ import {
   getContractEvents,
   getContractStorage,
   getContractStats,
+  getContractSnapshot,
   ApiError,
 } from "@/lib/api";
 import type {
@@ -26,6 +27,7 @@ import { InvocationChart } from "@/components/InvocationChart";
 import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
+import { HealthScoreCard } from "@/components/HealthScoreCard";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -105,10 +107,7 @@ function ContractDetailContent({ id }: { id: string }) {
     };
   }, [id, window]);
 
-  useEffect(() => {
-    let cancelled = false;
 
-    async function loadEvents() {
       setEventsLoading(true);
       try {
         const data = await getContractEvents(id, { limit: 50 });
@@ -299,6 +298,10 @@ function ContractDetailContent({ id }: { id: string }) {
       </section>
 
       <section className="mb-8">
+
+      </section>
+
+      <section className="mb-8">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Activity</h2>
           <WindowSelector selected={window} onChange={setWindow} />
@@ -356,6 +359,10 @@ function ContractDetailContent({ id }: { id: string }) {
       <section className="mb-8">
         <h2 className="mb-4 text-xl font-semibold">Snapshot / replay</h2>
         <SnapshotPanel contractId={id} currentLedger={currentLedger} />
+      </section>
+
+      <section className="mb-8">
+        <HealthScoreCard contractId={id} />
       </section>
     </div>
   );

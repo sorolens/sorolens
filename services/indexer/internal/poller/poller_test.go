@@ -91,26 +91,29 @@ func (f *fakeRPC) GetLedgerEntries(_ context.Context, keys []string) (*GetLedger
 // ---- fake Store -----------------------------------------------------------
 
 type fakeStore struct {
-	mu          sync.Mutex
-	contracts   []Contract
-	syncStates  map[string]SyncState
-	events      []Event
-	invocations []Invocation
-	upgrades    []ContractUpgrade
-	wasmHashes  map[string]string
-	syncErr     error
-	listErr     error
-	hourly      map[string][]HourlyActivity // contractID -> buckets
-	alerts      []Alert
-	insertErr   error
+	mu           sync.Mutex
+	contracts    []Contract
+	syncStates   map[string]SyncState
+	events       []Event
+	invocations  []Invocation
+	upgrades     []ContractUpgrade
+	wasmHashes   map[string]string
+	syncErr      error
+	listErr      error
+	hourly       map[string][]HourlyActivity // contractID -> buckets
+	alerts       []Alert
+	insertErr    error
+	healthInputs map[string]HealthInputs // contractID -> inputs
+	healthScores []ContractHealthScore
 }
 
 func newFakeStore(contracts []Contract) *fakeStore {
 	return &fakeStore{
-		contracts:  contracts,
-		syncStates: make(map[string]SyncState),
-		hourly:     make(map[string][]HourlyActivity),
-		wasmHashes: make(map[string]string),
+		contracts:    contracts,
+		syncStates:   make(map[string]SyncState),
+		hourly:       make(map[string][]HourlyActivity),
+		wasmHashes:   make(map[string]string),
+		healthInputs: make(map[string]HealthInputs),
 	}
 }
 
@@ -188,6 +191,19 @@ func (f *fakeStore) UpdateContractWasmHash(_ context.Context, contractID, wasmHa
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.wasmHashes[contractID] = wasmHash
+	return nil
+}
+
+func (f *fakeStore) ContractHealthInputs(_ context.Context, contractID string) (HealthInputs, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.healthInputs[contractID], nil
+}
+
+func (f *fakeStore) UpsertContractHealthScore(_ context.Context, s ContractHealthScore) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.healthScores = append(f.healthScores, s)
 	return nil
 }
 

@@ -180,6 +180,18 @@ export interface SnapshotStorageEntry extends StorageEntry {
   network: string;
 }
 
+export interface HealthScoreResponse {
+  contract_id: string;
+  score: number;
+  components: {
+    uptime: number;
+    error_rate: number;
+    performance: number;
+    storage_ttl: number;
+  };
+  computed_at: string;
+}
+
 export interface ContractSnapshot {
   contract_id: string;
   network: string;

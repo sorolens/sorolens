@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
+	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
 	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
 )
@@ -175,6 +176,7 @@ func (p *Poller) processAll(ctx context.Context) error {
 	if p.cfg.AnomalyEnabled {
 		p.runAnomalyDetection(ctx)
 	}
+	p.runHealthScores(ctx)
 	return nil
 }
 
@@ -292,6 +294,97 @@ func (p *Poller) hourlyActivity(ctx context.Context, contractID string) ([]anoma
 		})
 	}
 	return samples, nil
+}
+
+// runHealthScores refreshes the cached composite health score (issue #137) for
+// every active contract. The job is best-effort like the anomaly pass: store
+// errors are logged and never block the indexing pass, and the score for a
+// contract with no data yet still gets computed from zero-inputs so the cache
+// table receives a row on the first poll.
+func (p *Poller) runHealthScores(ctx context.Context) {
+	start := time.Now()
+	var scored int
+
+	var cursor string
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		contracts, next, err := p.store.ListContracts(ctx, cursor, 50)
+		if err != nil {
+			p.log.Error("health score: list contracts", "err", err)
+			return
+		}
+		for _, c := range contracts {
+			if ctx.Err() != nil {
+				return
+			}
+			if c.Status != "active" && c.Status != "backfilling" {
+				continue
+			}
+			inputs, err := p.store.ContractHealthInputs(ctx, c.ID)
+			if err != nil {
+				p.log.Warn("health score: fetch inputs",
+					"contract_id", c.ID,
+					"err", err,
+				)
+				continue
+			}
+			score := healthscore.Compute(healthInputsToScoreInputs(inputs))
+			if err := p.store.UpsertContractHealthScore(ctx, ContractHealthScore{
+				ContractID:           c.ID,
+				Score:                score.Overall,
+				ComponentUptime:      score.Uptime,
+				ComponentErrorRate:   score.ErrorRate,
+				ComponentPerformance: score.Performance,
+				ComponentStorageTTL:  score.StorageTTL,
+				ComputedAt:           time.Now().UTC(),
+			}); err != nil {
+				p.log.Warn("health score: upsert",
+					"contract_id", c.ID,
+					"err", err,
+				)
+				continue
+			}
+			scored++
+			p.log.Debug("health score updated",
+				"contract_id", c.ID,
+				"score", score.Overall,
+			)
+		}
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+
+	p.log.Info("health score pass complete",
+		"contracts_scored", scored,
+		"duration", time.Since(start),
+	)
+}
+
+// healthInputsToScoreInputs converts the poller's mirror HealthInputs into the
+// pure healthscore package's Inputs type.
+func healthInputsToScoreInputs(in HealthInputs) healthscore.Inputs {
+	activity := make([]healthscore.Activity, 0, len(in.Activity))
+	for _, a := range in.Activity {
+		activity = append(activity, healthscore.Activity{
+			Invocations: a.InvokeCount,
+			CPU:         a.CPU,
+			Fees:        a.Fees,
+		})
+	}
+	return healthscore.Inputs{
+		HealthyChecks:     in.HealthyChecks,
+		TotalChecks:       in.TotalChecks,
+		WatchdogStatus:    in.WatchdogStatus,
+		TotalInvocations:  in.TotalInvocations,
+		FailedInvocations: in.FailedInvocations,
+		Activity:          activity,
+		TotalStorage:      in.TotalStorage,
+		ExpiringStorage:   in.ExpiringStorage,
+	}
 }
 
 // processContract indexes all new events for one contract. It also checks the
