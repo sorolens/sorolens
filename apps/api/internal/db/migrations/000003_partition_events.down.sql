@@ -46,6 +46,7 @@ BEGIN
   END IF;
 END $$;
 
--- Clean up partition tracking and helper function.
+-- Clean up partition tracking and helper functions.
+DROP FUNCTION IF EXISTS create_monthly_partition(int, int);
 DROP FUNCTION IF EXISTS create_next_month_partition();
 DROP TABLE IF EXISTS events_partitions;
