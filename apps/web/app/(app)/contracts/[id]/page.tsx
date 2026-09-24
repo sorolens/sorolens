@@ -107,7 +107,10 @@ function ContractDetailContent({ id }: { id: string }) {
     };
   }, [id, window]);
 
+  useEffect(() => {
+    let cancelled = false;
 
+    async function loadEvents() {
       setEventsLoading(true);
       try {
         const data = await getContractEvents(id, { limit: 50 });
