@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 	"net/http/pprof"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -88,6 +89,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
+		r.Use(middleware.Timeout(30 * time.Second))
 
 		// Versioned liveness alias. Keep it dependency-free and exempt from
 		// rate limiting (see middleware.RateLimit) so container orchestrators
@@ -156,7 +158,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
 		get("/contracts/{id}/spec", h.GetContractSpec)
-		get("/stream/events", h.StreamEventsSSE)
+
+		// Stream routes with 5-minute timeout
+		streamTimeout := middleware.Timeout(5 * time.Minute)
+		r.With(scope, streamTimeout).Get("/stream/events", h.StreamEventsSSE)
+
 
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
