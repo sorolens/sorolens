@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -204,7 +205,9 @@ func (f *fakeStore) GetIndexerCursor(_ context.Context, network string) (uint32,
 func (f *fakeStore) SetIndexerCursor(_ context.Context, network string, ledger uint32) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.indexerCursors[network] = ledger
+	if ledger > f.indexerCursors[network] {
+		f.indexerCursors[network] = ledger
+	}
 	return nil
 }
 
@@ -219,7 +222,9 @@ func (f *fakeStore) BatchInsertWithCursor(ctx context.Context, network string, l
 	if syncState.ContractID != "" {
 		f.syncStates[syncState.ContractID] = syncState
 	}
-	f.indexerCursors[network] = ledger
+	if ledger > f.indexerCursors[network] {
+		f.indexerCursors[network] = ledger
+	}
 	return nil
 }
 
@@ -325,6 +330,7 @@ func testConfig() Config {
 		LedgerWindow: 1000,
 		PollInterval: 10 * time.Millisecond,
 		MaxDuration:  5 * time.Second,
+		Workers:      1,
 	}
 }
 
@@ -335,6 +341,100 @@ func TestPoller_RunOnce_noContracts(t *testing.T) {
 	p := New(&fakeRPC{}, newFakeStore(nil), newFakeRedis(), testConfig(), testLogger())
 	if err := p.Run(context.Background(), "once"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPoller_ProcessAllUsesBoundedWorkersAndPreservesContractEventOrder(t *testing.T) {
+	t.Parallel()
+
+	contractIDs := []string{
+		"contract-0", "contract-1", "contract-2", "contract-3",
+		"contract-4", "contract-5", "contract-6", "contract-7",
+	}
+	orderedIDs := []string{"event-0a", "event-0b", "event-0c"}
+	makeBatch := func(workerCount int) (time.Duration, int32, []string) {
+		store := newFakeStore(nil)
+		results := make(map[string]*GetEventsResult, len(contractIDs))
+		for i, id := range contractIDs {
+			store.contracts = append(store.contracts, Contract{ID: id, Status: "active"})
+			store.syncStates[id] = SyncState{ContractID: id, LastLedger: 499000}
+			switch {
+			case i == 0:
+				results[id] = &GetEventsResult{Events: []RPCEvent{
+					{ID: orderedIDs[0], ContractID: id, Ledger: 499101, TxHash: "tx-0a"},
+					{ID: orderedIDs[1], ContractID: id, Ledger: 499102, TxHash: "tx-0b"},
+					{ID: orderedIDs[2], ContractID: id, Ledger: 499103, TxHash: "tx-0c"},
+				}}
+			case i%2 == 0:
+				results[id] = &GetEventsResult{Events: []RPCEvent{{
+					ID: "event-" + id, ContractID: id, Ledger: 499100, TxHash: "tx-" + id,
+				}}}
+			default:
+				results[id] = &GetEventsResult{}
+			}
+		}
+
+		var inFlight atomic.Int32
+		var maxInFlight atomic.Int32
+		rpc := &fakeRPC{
+			latestLedger: &LatestLedger{Sequence: 500000},
+			events:       results,
+			transactions: map[string]*TransactionResult{
+				"tx-0a": {Status: "SUCCESS", Ledger: 499101},
+				"tx-0b": {Status: "SUCCESS", Ledger: 499102},
+				"tx-0c": {Status: "SUCCESS", Ledger: 499103},
+			},
+		}
+		rpc.onGetEvents = func() {
+			active := inFlight.Add(1)
+			for current := maxInFlight.Load(); active > current; current = maxInFlight.Load() {
+				if maxInFlight.CompareAndSwap(current, active) {
+					break
+				}
+			}
+			time.Sleep(50 * time.Millisecond)
+			inFlight.Add(-1)
+		}
+
+		cfg := testConfig()
+		cfg.Workers = workerCount
+		p := New(rpc, store, newFakeRedis(), cfg, testLogger())
+		started := time.Now()
+		if err := p.processAll(context.Background()); err != nil {
+			t.Fatalf("processAll with %d workers: %v", workerCount, err)
+		}
+		elapsed := time.Since(started)
+
+		var gotOrderedIDs []string
+		store.mu.Lock()
+		for _, event := range store.events {
+			if event.ContractID == contractIDs[0] {
+				gotOrderedIDs = append(gotOrderedIDs, event.ID)
+			}
+		}
+		store.mu.Unlock()
+		return elapsed, maxInFlight.Load(), gotOrderedIDs
+	}
+
+	serialDuration, _, serialOrder := makeBatch(1)
+	parallelDuration, maxParallel, parallelOrder := makeBatch(4)
+	if parallelDuration >= serialDuration*3/4 {
+		t.Errorf("parallel mixed batch took %s; want less than 75%% of serial %s", parallelDuration, serialDuration)
+	}
+	if maxParallel < 2 {
+		t.Errorf("maximum simultaneous GetEvents calls = %d, want at least 2", maxParallel)
+	}
+	if maxParallel > 4 {
+		t.Errorf("maximum simultaneous GetEvents calls = %d, exceeds configured worker count 4", maxParallel)
+	}
+	if len(serialOrder) != len(orderedIDs) || len(parallelOrder) != len(orderedIDs) {
+		t.Fatalf("ordered contract event counts: serial %v, parallel %v", serialOrder, parallelOrder)
+	}
+	for i, want := range orderedIDs {
+		if serialOrder[i] != want || parallelOrder[i] != want {
+			t.Errorf("event order at %d: serial %v, parallel %v; want %v", i, serialOrder, parallelOrder, orderedIDs)
+			break
+		}
 	}
 }
 

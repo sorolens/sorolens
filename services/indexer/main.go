@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -28,6 +29,8 @@ func main() {
 	maxDuration := flag.Duration("max-duration", 270*time.Second, "Maximum duration for a single pass (once mode)")
 	pollInterval := flag.Duration("poll-interval", 5*time.Minute, "Sleep between passes (continuous mode)")
 	ledgerWindow := flag.Uint("ledger-window", 120960, "Ledger window per getEvents call")
+	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics HTTP server (empty disables it)")
+	workers := envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -35,6 +38,7 @@ func main() {
 	}))
 
 	cfg := poller.Config{
+		Workers:              workers,
 		LedgerWindow:         uint32(*ledgerWindow),
 		PollInterval:         *pollInterval,
 		MaxDuration:          *maxDuration,
@@ -84,28 +88,25 @@ func main() {
 
 	p := poller.NewWithRPCClients(clients, st, redis, cfg, log)
 
+	// Prometheus metrics (issue #198): the indexer exposes per-network lag on
+	// /metrics. The server is best-effort — a bind failure is logged but does
+	// not stop indexing.
+	recorder := metrics.New()
+	p.SetMetrics(recorder)
+	metricsSrv := startMetricsServer(*metricsAddr, recorder.Handler(), log)
+	defer func() {
+		if metricsSrv == nil {
+			return
+		}
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+			log.Warn("indexer metrics shutdown", "err", err)
+		}
+	}()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-
-	// Optional metrics listener. Setting METRICS_PORT exposes GET /metrics for
-	// Prometheus scraping; it is most useful with --mode continuous, where the
-	// process is long-lived enough to be scraped repeatedly.
-	var metricsSrv *http.Server
-	if metricsPort := os.Getenv("METRICS_PORT"); metricsPort != "" {
-		metricsSrv = &http.Server{
-			Addr:         ":" + metricsPort,
-			Handler:      metrics.NewAdminMux(),
-			ReadTimeout:  15 * time.Second,
-			WriteTimeout: 30 * time.Second,
-			IdleTimeout:  60 * time.Second,
-		}
-		go func() {
-			log.Info("sorolens/indexer metrics listening", "port", metricsPort)
-			if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Error("metrics listen", "err", err)
-			}
-		}()
-	}
 
 	// Start nightly performance job
 	go func() {
@@ -137,13 +138,7 @@ func main() {
 	}()
 
 	log.Info("sorolens/indexer starting", "mode", *mode)
-	err := p.Run(ctx, *mode)
-
-	if metricsSrv != nil {
-		_ = metricsSrv.Close()
-	}
-
-	if err != nil {
+	if err := p.Run(ctx, *mode); err != nil {
 		log.Error("indexer error", "err", err)
 		os.Exit(1)
 	}
@@ -275,6 +270,9 @@ func (s *stubRPC) GetLedgerEntries(ctx context.Context, keys []string) (*poller.
 	}
 	return &poller.GetLedgerEntriesResult{}, nil
 }
+func (s *stubRPC) GetContractWasmHash(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
 
 type stubStore struct{}
 
@@ -318,6 +316,12 @@ func (s *stubStore) ContractHealthInputs(_ context.Context, _ string) (poller.He
 func (s *stubStore) UpsertContractHealthScore(_ context.Context, _ poller.ContractHealthScore) error {
 	return nil
 }
+func (s *stubStore) RecordContractVersion(_ context.Context, _ poller.ContractVersion) error {
+	return nil
+}
+func (s *stubStore) GetLatestContractVersion(_ context.Context, _ string) (poller.ContractVersion, error) {
+	return poller.ContractVersion{}, poller.ErrVersionNotFound
+}
 
 type stubRedis struct{}
 
@@ -325,6 +329,38 @@ func (r *stubRedis) SetNX(ctx context.Context, key, value string, ttl time.Durat
 	return true, nil
 }
 func (r *stubRedis) Del(ctx context.Context, key string) error { return nil }
+
+// startMetricsServer serves the Prometheus /metrics endpoint on addr and
+// returns the server so the caller can shut it down. It returns nil when addr
+// is empty, which disables the endpoint. Startup errors are logged rather than
+// fatal so a port clash never takes the indexer down.
+func startMetricsServer(addr string, h http.Handler, log *slog.Logger) *http.Server {
+	if addr == "" {
+		return nil
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", h)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		log.Info("indexer metrics listening", "addr", addr, "path", "/metrics")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("indexer metrics server", "addr", addr, "err", err)
+		}
+	}()
+	return srv
+}
+
+// envString reads a string env var with a default.
+func envString(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
 
 // envBool reads a boolean env var with a default.
 func envBool(key string, def bool) bool {
