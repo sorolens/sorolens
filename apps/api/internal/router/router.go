@@ -47,7 +47,7 @@ func New(h *handler.Handler) http.Handler {
 	// pprof (issue #157). Gated behind admin role so probing always gets 403
 	// rather than 401, avoiding path enumeration by unauthenticated callers.
 	adminOnly := middleware.RequireRoleOrForbidden(h.Store, h.Logger, middleware.RoleAdmin)
-	r.With(adminOnly).HandleFunc("/debug/pprof/", pprof.Index)
+	r.With(adminOnly).HandleFunc("/debug/pprof", pprof.Index)
 	r.With(adminOnly).HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	r.With(adminOnly).HandleFunc("/debug/pprof/profile", pprof.Profile)
 	r.With(adminOnly).HandleFunc("/debug/pprof/symbol", pprof.Symbol)
