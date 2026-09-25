@@ -27,6 +27,8 @@ type MockStore struct {
 	users              map[string]User
 	healthScores       map[string]ContractHealthScore
 	indexerCursors     map[string]uint32
+	groups             map[string]Group
+	groupContracts     map[string]map[string]bool
 	contractVersions   map[string][]ContractVersion
 	alertGroups        []AlertGroup
 
@@ -63,6 +65,8 @@ func NewMockStore() *MockStore {
 		alertSubscriptions: make([]AlertSubscription, 0),
 		users:              make(map[string]User),
 		indexerCursors:     make(map[string]uint32),
+		groups:             make(map[string]Group),
+		groupContracts:     make(map[string]map[string]bool),
 		contractVersions:   make(map[string][]ContractVersion),
 	}
 }

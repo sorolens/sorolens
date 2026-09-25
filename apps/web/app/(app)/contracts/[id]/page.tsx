@@ -31,6 +31,7 @@ import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
 import { HealthScoreCard } from "@/components/HealthScoreCard";
+import { AddToGroup } from "@/components/AddToGroup";
 import { useEventStream } from "@/hooks/useEventStream";
 
 interface Props {
@@ -302,6 +303,7 @@ function ContractDetailContent({ id }: { id: string }) {
           >
             {contract?.status}
           </span>
+          <AddToGroup contractId={id} />
         </div>
         {contract?.sync && (
           <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-secondary)]">
