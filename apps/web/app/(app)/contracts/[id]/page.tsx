@@ -17,6 +17,7 @@ import type {
   ContractEvent,
   StorageEntry,
   StatsResponse,
+  ResourceTrendPoint,
   TimeWindow,
 } from "@/lib/types";
 import { StatCard } from "@/components/StatCard";
@@ -24,6 +25,8 @@ import { CardSkeleton, ChartSkeleton, TableSkeleton } from "@/components/Skeleto
 import { WindowSelector } from "@/components/WindowSelector";
 import { EventVolumeChart } from "@/components/EventVolumeChart";
 import { InvocationChart } from "@/components/InvocationChart";
+import { ResourceTrendChart } from "@/components/ResourceTrendChart";
+import { getResourceTrend } from "@/lib/resourceTrend";
 import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
@@ -47,6 +50,9 @@ function ContractDetailContent({ id }: { id: string }) {
   const [window, setWindow] = useState<TimeWindow>("7d");
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+
+  const [trend, setTrend] = useState<ResourceTrendPoint[]>([]);
+  const [trendLoading, setTrendLoading] = useState(true);
 
   const [events, setEvents] = useState<ContractEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
@@ -118,6 +124,27 @@ function ContractDetailContent({ id }: { id: string }) {
       cancelled = true;
     };
   }, [id, window]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrend() {
+      setTrendLoading(true);
+      try {
+        const data = await getResourceTrend(id, 30);
+        if (!cancelled) setTrend(data);
+      } catch {
+        // non-critical
+      } finally {
+        if (!cancelled) setTrendLoading(false);
+      }
+    }
+
+    loadTrend();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   useEffect(() => {
     let cancelled = false;

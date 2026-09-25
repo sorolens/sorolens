@@ -29,6 +29,16 @@ type contractResponse struct {
 	AddedAt            time.Time  `json:"added_at"`
 }
 
+type contractListResponse struct {
+	ID             string     `json:"id"`
+	Network        string     `json:"network"`
+	Label          string     `json:"label"`
+	WasmHash       string     `json:"wasm_hash"`
+	Status         string     `json:"status"`
+	AddedAt        time.Time  `json:"added_at"`
+	LastActivityAt *time.Time `json:"last_activity_at"`
+}
+
 type eventResponse struct {
 	ID               string    `json:"id"`
 	ContractID       string    `json:"contract_id"`
@@ -152,6 +162,18 @@ func contractFromStore(c store.Contract) contractResponse {
 		BackfillCompleteAt: c.BackfillCompleteAt,
 		Status:             c.Status,
 		AddedAt:            c.AddedAt,
+	}
+}
+
+func contractListFromStore(c store.Contract) contractListResponse {
+	return contractListResponse{
+		ID:             c.ID,
+		Network:        c.Network,
+		Label:          c.Label,
+		WasmHash:       c.WasmHash,
+		Status:         c.Status,
+		AddedAt:        c.AddedAt,
+		LastActivityAt: c.LastActivityAt,
 	}
 }
 
@@ -286,9 +308,9 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := make([]contractResponse, len(contracts))
+	resp := make([]contractListResponse, len(contracts))
 	for i, c := range contracts {
-		resp[i] = contractFromStore(c)
+		resp[i] = contractListFromStore(c)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"contracts":   resp,

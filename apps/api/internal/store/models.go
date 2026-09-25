@@ -12,6 +12,7 @@ type Contract struct {
 	BackfillCompleteAt *time.Time
 	Status             string // pending | backfilling | active | paused | error
 	AddedAt            time.Time
+	LastActivityAt     *time.Time
 }
 
 // Event is a single contract event indexed from the Soroban RPC.
