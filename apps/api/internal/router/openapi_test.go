@@ -82,6 +82,10 @@ func TestOpenAPICoversEveryRoute(t *testing.T) {
 
 	live := map[string]bool{}
 	err := chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		// pprof debug routes are internal endpoints not part of the public API.
+		if strings.HasPrefix(route, "/debug/") {
+			return nil
+		}
 		route = strings.ReplaceAll(route, "/*/", "/")
 		if len(route) > 1 {
 			route = strings.TrimSuffix(route, "/")
