@@ -105,6 +105,12 @@ export interface VolumePoint {
   count: number;
 }
 
+/** One hour bucket of invocation frequency (issue #185). */
+export interface InvocationFrequencyPoint {
+  hour: string; // "HH:00" UTC hour start
+  count: number;
+}
+
 export interface StatsResponse {
   event_volume: VolumePoint[];
   invocation_count: VolumePoint[];
