@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sorolens/sorolens/apps/api/internal/config"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/router"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
@@ -74,7 +75,7 @@ func TestOpenAPICoversEveryRoute(t *testing.T) {
 		DB:     &store.MockPinger{Healthy: true},
 		Redis:  &store.MockPinger{Healthy: true},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}, 1<<20)
+	}, config.DefaultRequestMaxBodyBytes)
 	routes, ok := r.(chi.Routes)
 	if !ok {
 		t.Fatalf("router is %T, want chi.Routes", r)

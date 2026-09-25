@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { DataTable, Toast } from "@sorolens/ui";
 import type { Column } from "@sorolens/ui";
+import { LabelledId } from "@/components/LabelledId";
 import { listContracts } from "@/lib/api";
 import type { TrackContractRequest } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
@@ -15,7 +16,6 @@ import {
 import type { ContractRow } from "@/lib/optimisticTrack";
 import { TableSkeleton } from "@/components/Skeleton";
 import ImportContractsCsv from "@/components/ImportContractsCsv";
-import { LabelledId } from "@/components/LabelledId";
 
 // RBAC identity: same localStorage key the watchlist page uses, so the UI
 // registers a contract under the same user identity. Must map to a user
@@ -260,17 +260,6 @@ const COLUMNS: Column<ContractRow>[] = [
         <LabelledId value={c.id} knownLabel={c.label} />
       </span>
     ),
-  },
-  {
-    key: "label",
-    header: "Alias",
-    sortable: true,
-    accessor: (c) =>
-      c.label ? (
-        <span className="text-[var(--color-text-primary)]">{c.label}</span>
-      ) : (
-        <span className="text-[var(--color-text-secondary)]">--</span>
-      ),
   },
   {
     key: "network",

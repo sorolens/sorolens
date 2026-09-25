@@ -15,7 +15,7 @@ import (
 
 // New builds and returns the HTTP router with all middleware and routes wired.
 // maxBodyBytes caps the request body size in bytes; values of zero or less
-// disable the limit. Callers normally pass cfg.RequestMaxBodyBytes.
+// disable the limit. Callers normally pass config.MaxBodyBytesFromEnv().
 func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r := chi.NewRouter()
 
@@ -24,6 +24,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.CORS)
+	// Sentry must run before Recoverer: it reports a panic and re-panics so
+	// Recoverer still produces the standard 500 response.
+	r.Use(middleware.Sentry)
 	r.Use(middleware.Recoverer(h.Logger))
 	r.Use(middleware.BodyLimit(maxBodyBytes))
 	r.Use(middleware.Logger(h.Logger))
@@ -81,6 +84,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
+
+		// Liveness probe with dependency reachability. It always returns 200
+		// and carries no scope rule, so uptime monitors can poll it without a
+		// credential.
+		r.Get("/health", h.HealthCheck)
 
 		// Scoped API key auth. It is applied per route with r.With so chi has
 		// already resolved the leaf route pattern when the middleware runs; the
