@@ -102,6 +102,7 @@ export interface ContractSummary {
   status: string;
   wasm_hash: string | null;
   added_at: string;
+  last_activity_at: string | null;
 }
 
 export interface ContractsListResponse {
