@@ -76,6 +76,44 @@ export interface StorageResponse {
   has_more: boolean;
 }
 
+// ---- storage diff ----------------------------------------------------------
+
+export type StorageChangeKind = "created" | "updated" | "deleted" | "expired";
+
+/** One side of a storage diff row, matching the API's storage entry shape. */
+export interface DiffStorageEntry {
+  contract_id: string;
+  network: string;
+  key_xdr: string;
+  key_decoded: unknown | null;
+  value_xdr: string | null;
+  value_decoded: unknown | null;
+  durability: string;
+  live_until_ledger: number | null;
+  last_modified_ledger: number | null;
+  status: string;
+}
+
+export interface StorageChange {
+  key_xdr: string;
+  key_decoded: unknown | null;
+  kind: StorageChangeKind;
+  durability: string;
+  /** Present for updates: which fields differ (value, ttl, durability, status). */
+  changed_fields?: string[];
+  before: DiffStorageEntry | null;
+  after: DiffStorageEntry | null;
+  last_modified_ledger: number | null;
+}
+
+export interface StorageDiffResponse {
+  contract_id: string;
+  from_ledger: number;
+  to_ledger: number;
+  counts: Partial<Record<StorageChangeKind, number>>;
+  changes: StorageChange[];
+}
+
 export interface ContractStats {
   total_events: number;
   total_invocations: number;

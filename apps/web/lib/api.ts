@@ -12,6 +12,7 @@ import type {
   MonitoredContract,
   MonitoredContractsResponse,
   StatsResponse,
+  StorageDiffResponse,
   StorageResponse,
   TimeWindow,
   TrackContractRequest,
@@ -173,6 +174,23 @@ export function getContractStorage(
   const qs = search.toString();
   return fetchJson<StorageResponse>(
     `${API_URL}/api/v1/contracts/${id}/storage${qs ? "?" + qs : ""}`,
+  );
+}
+
+/**
+ * Diff a contract's storage between two ledgers: every key that was created,
+ * updated, deleted, or expired in between. Powers the storage diff view.
+ */
+export function getContractStorageDiff(
+  id: string,
+  from: number,
+  to: number,
+): Promise<StorageDiffResponse> {
+  const search = new URLSearchParams();
+  search.set("from", String(from));
+  search.set("to", String(to));
+  return fetchJson<StorageDiffResponse>(
+    `${API_URL}/api/v1/contracts/${id}/storage/diff?${search.toString()}`,
   );
 }
 

@@ -87,6 +87,25 @@ type storageEntryResponse struct {
 	LastSeenAt         time.Time `json:"last_seen_at"`
 }
 
+type storageChangeResponse struct {
+	KeyXDR             string                `json:"key_xdr"`
+	KeyDecoded         any                   `json:"key_decoded"`
+	Kind               string                `json:"kind"`
+	Durability         string                `json:"durability"`
+	ChangedFields      []string              `json:"changed_fields,omitempty"`
+	Before             *storageEntryResponse `json:"before"`
+	After              *storageEntryResponse `json:"after"`
+	LastModifiedLedger int64                 `json:"last_modified_ledger"`
+}
+
+type storageDiffResponse struct {
+	ContractID string                  `json:"contract_id"`
+	FromLedger uint32                  `json:"from_ledger"`
+	ToLedger   uint32                  `json:"to_ledger"`
+	Counts     map[string]int          `json:"counts"`
+	Changes    []storageChangeResponse `json:"changes"`
+}
+
 type contractStatsResponse struct {
 	EventCount            int64  `json:"event_count"`
 	InvocationCount       int64  `json:"invocation_count"`
@@ -244,6 +263,39 @@ func storageEntryFromStore(se store.StorageEntry) storageEntryResponse {
 		Status:             se.Status,
 		LastSeenAt:         se.LastSeenAt,
 	}
+}
+
+func storageDiffFromStore(d store.StorageDiff) storageDiffResponse {
+	resp := storageDiffResponse{
+		ContractID: d.ContractID,
+		FromLedger: d.From,
+		ToLedger:   d.To,
+		Counts:     d.Counts,
+		Changes:    make([]storageChangeResponse, 0, len(d.Changes)),
+	}
+	if resp.Counts == nil {
+		resp.Counts = map[string]int{}
+	}
+	for _, c := range d.Changes {
+		change := storageChangeResponse{
+			KeyXDR:             c.KeyXDR,
+			KeyDecoded:         c.KeyDecoded,
+			Kind:               string(c.Kind),
+			Durability:         c.Durability,
+			ChangedFields:      c.ChangedFields,
+			LastModifiedLedger: c.LastModifiedLedger,
+		}
+		if c.Before != nil {
+			before := storageEntryFromStore(*c.Before)
+			change.Before = &before
+		}
+		if c.After != nil {
+			after := storageEntryFromStore(*c.After)
+			change.After = &after
+		}
+		resp.Changes = append(resp.Changes, change)
+	}
+	return resp
 }
 
 var validNetworks = map[string]bool{
@@ -605,6 +657,54 @@ func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 		"storage":     resp,
 		"next_cursor": encodeCursor(nextRaw),
 	})
+}
+
+// ContractStorageDiff handles GET /api/v1/contracts/{id}/storage/diff?from=N&to=M.
+//
+// It compares the contract's storage state at two ledgers and returns every
+// key that was created, updated, deleted, or expired in between — the storage
+// equivalent of `git diff`. Temporary, persistent, and instance entries are
+// all covered because the diff is computed over full per-key snapshots.
+func (h *Handler) ContractStorageDiff(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+
+	fromStr := strings.TrimSpace(r.URL.Query().Get("from"))
+	toStr := strings.TrimSpace(r.URL.Query().Get("to"))
+	if fromStr == "" || toStr == "" {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from and to query parameters are required")
+		return
+	}
+	fromU64, err := strconv.ParseUint(fromStr, 10, 32)
+	if err != nil || fromU64 == 0 {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must be a positive integer")
+		return
+	}
+	toU64, err := strconv.ParseUint(toStr, 10, 32)
+	if err != nil || toU64 == 0 {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "to must be a positive integer")
+		return
+	}
+	if fromU64 > toU64 {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must be less than or equal to to")
+		return
+	}
+
+	if _, err := h.Store.GetContract(r.Context(), contractID); errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "contract not found")
+		return
+	} else if err != nil {
+		h.Logger.Error("storage diff get contract", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch contract")
+		return
+	}
+
+	diff, err := h.Store.GetStorageDiff(r.Context(), contractID, uint32(fromU64), uint32(toU64))
+	if err != nil {
+		h.Logger.Error("storage diff", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to build storage diff")
+		return
+	}
+	writeJSON(w, http.StatusOK, storageDiffFromStore(diff))
 }
 
 // ContractStats handles GET /api/v1/contracts/{id}/stats.
