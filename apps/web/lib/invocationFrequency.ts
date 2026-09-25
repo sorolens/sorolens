@@ -26,7 +26,7 @@ function hourKey(iso: string): string {
 export function aggregateInvocationFrequency(
   invocations: Invocation[],
   hours = 24,
-  now: Date = new Date(),
+  now: Date = new Date()
 ): InvocationFrequencyPoint[] {
   const counts = new Map<string, number>();
   for (const inv of invocations) {
@@ -49,7 +49,7 @@ export function aggregateInvocationFrequency(
  */
 export async function getInvocationFrequency(
   id: string,
-  hours = 24,
+  hours = 24
 ): Promise<InvocationFrequencyPoint[]> {
   const since = new Date(Date.now() - hours * HOUR_MS).toISOString();
   const invocations: Invocation[] = [];
@@ -62,8 +62,8 @@ export async function getInvocationFrequency(
       cursor,
     });
     invocations.push(...(res.invocations ?? []));
-    if (!res.has_more || !res.cursor) break;
-    cursor = res.cursor;
+    if (!res.next_cursor) break;
+    cursor = res.next_cursor;
   }
 
   return aggregateInvocationFrequency(invocations, hours);

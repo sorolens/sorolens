@@ -23,7 +23,7 @@ const POLL_INTERVAL_MS = 5_000;
 export function useOfflineAlertQueue() {
   const [pending, setPending] = useState<QueuedAlert[]>([]);
   const [isOffline, setIsOffline] = useState<boolean>(
-    typeof navigator !== "undefined" ? !navigator.onLine : false,
+    typeof navigator !== "undefined" ? !navigator.onLine : false
   );
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -74,7 +74,7 @@ export function useOfflineAlertQueue() {
       });
       void refresh();
     },
-    [refresh],
+    [refresh]
   );
 
   const dismiss = useCallback(
@@ -82,7 +82,7 @@ export function useOfflineAlertQueue() {
       await dismissAlert(id);
       void refresh();
     },
-    [refresh],
+    [refresh]
   );
 
   const dismissAllPending = useCallback(async () => {

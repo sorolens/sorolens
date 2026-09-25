@@ -67,10 +67,9 @@ export async function _closeForTests(): Promise<void> {
   }
 }
 
-
 /** Enqueue an alert into the offline queue. No-ops on duplicate IDs. */
 export async function enqueueAlert(
-  alert: Omit<QueuedAlert, "enqueuedAt" | "dismissed">,
+  alert: Omit<QueuedAlert, "enqueuedAt" | "dismissed">
 ): Promise<void> {
   const db = await getDB();
   const existing = await db.get(STORE, alert.id);
@@ -121,5 +120,7 @@ export async function deleteAlert(id: string): Promise<void> {
 export async function purgeDismissed(): Promise<void> {
   const db = await getDB();
   const all = await db.getAll(STORE);
-  await Promise.all(all.filter((a) => a.dismissed).map((a) => db.delete(STORE, a.id)));
+  await Promise.all(
+    all.filter((a) => a.dismissed).map((a) => db.delete(STORE, a.id))
+  );
 }

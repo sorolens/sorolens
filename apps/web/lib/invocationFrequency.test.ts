@@ -21,6 +21,8 @@ vi.mock("@/lib/api", () => ({
 function invocation(ledgerClosedAt: string): Invocation {
   return {
     tx_hash: "a1b2c3",
+    contract_id: "CABC1234",
+    network: "testnet",
     ledger: 120_400,
     ledger_closed_at: ledgerClosedAt,
     status: "success",

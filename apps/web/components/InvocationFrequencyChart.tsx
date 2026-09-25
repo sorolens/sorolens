@@ -17,7 +17,7 @@ interface InvocationFrequencyChartProps {
 
 /** Tooltip text: exact invocation count for the hovered hour. */
 export function formatCountTooltip(
-  value: number | string | (number | string)[],
+  value: number | string | (number | string)[]
 ): string {
   const count = Array.isArray(value) ? value[0] : value;
   return `${count} invocation${Number(count) === 1 ? "" : "s"}`;

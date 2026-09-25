@@ -41,7 +41,7 @@ function getVapidDetails() {
   if (!publicKey || !privateKey) {
     throw new Error(
       "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set. " +
-        "Generate them with: node -e \"const wp=require('web-push'); console.log(wp.generateVAPIDKeys())\"",
+        "Generate them with: node -e \"const wp=require('web-push'); console.log(wp.generateVAPIDKeys())\""
     );
   }
 
@@ -54,7 +54,7 @@ function getVapidDetails() {
  */
 export async function sendPushNotification(
   subscription: PushSubscriptionJSON,
-  payload: PushPayload,
+  payload: PushPayload
 ): Promise<void> {
   const { publicKey, privateKey, subject } = getVapidDetails();
 
@@ -67,7 +67,7 @@ export async function sendPushNotification(
       TTL: 86400, // 24 hours
       urgency: payload.severity === "Critical" ? "high" : "normal",
       topic: payload.tag,
-    },
+    }
   );
 }
 

@@ -8,7 +8,13 @@ import type { TrackContractRequest } from "@/lib/types";
 // contract IDs are 56-character strkeys beginning with 'C'.
 const CONTRACT_ID_RE = /^C[A-Z0-9]{55}$/;
 
-const KNOWN_NETWORKS = ["testnet", "mainnet", "futurenet", "standalone", "local"] as const;
+const KNOWN_NETWORKS = [
+  "testnet",
+  "mainnet",
+  "futurenet",
+  "standalone",
+  "local",
+] as const;
 
 /** Per-row lifecycle: validated -> importing -> settled. */
 type RowStatus = "invalid" | "ready" | "importing" | "ok" | "error";
@@ -84,10 +90,20 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
-const HEADER_HINTS = ["contract_id", "contractid", "contract", "network", "label", "alias"];
+const HEADER_HINTS = [
+  "contract_id",
+  "contractid",
+  "contract",
+  "network",
+  "label",
+  "alias",
+];
 
 function looksLikeHeader(cells: string[]): boolean {
-  const first = (cells[0] ?? "").trim().toLowerCase().replace(/[\s_-]/g, "");
+  const first = (cells[0] ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]/g, "");
   if (!first) return false;
   return HEADER_HINTS.some((h) => first === h.replace(/[\s_-]/g, ""));
 }
@@ -164,7 +180,10 @@ export default function ImportContractsCsv({
           error: "contract_id must be 56 chars starting with 'C' (A–Z, 0–9)",
         };
       }
-      if (rawNetwork && !KNOWN_NETWORKS.includes(rawNetwork as (typeof KNOWN_NETWORKS)[number])) {
+      if (
+        rawNetwork &&
+        !KNOWN_NETWORKS.includes(rawNetwork as (typeof KNOWN_NETWORKS)[number])
+      ) {
         return {
           ...base,
           status: "invalid",
@@ -183,7 +202,7 @@ export default function ImportContractsCsv({
       }
       return base;
     },
-    [network],
+    [network]
   );
 
   const handleFile = useCallback(
@@ -202,7 +221,7 @@ export default function ImportContractsCsv({
       }
 
       const records = parseCsv(text).filter((cells) =>
-        cells.some((c) => c.trim() !== ""),
+        cells.some((c) => c.trim() !== "")
       );
 
       if (records.length === 0) {
@@ -224,24 +243,27 @@ export default function ImportContractsCsv({
 
       setRows(body.map((cells, i) => validate(cells, i + lineOffset)));
     },
-    [validate],
+    [validate]
   );
 
   const validRows = useMemo(
     () => rows.filter((r) => r.status === "ready" || r.status === "ok"),
-    [rows],
+    [rows]
   );
   const invalidCount = useMemo(
-    () => rows.filter((r) => r.status === "invalid" || r.status === "error").length,
-    [rows],
+    () =>
+      rows.filter((r) => r.status === "invalid" || r.status === "error").length,
+    [rows]
   );
   const pendingCount = useMemo(
     () => rows.filter((r) => r.status === "ready").length,
-    [rows],
+    [rows]
   );
 
   const setRow = (line: number, patch: Partial<CsvRow>) =>
-    setRows((prev) => prev.map((r) => (r.line === line ? { ...r, ...patch } : r)));
+    setRows((prev) =>
+      prev.map((r) => (r.line === line ? { ...r, ...patch } : r))
+    );
 
   const handleImport = async () => {
     setImporting(true);
@@ -282,11 +304,15 @@ export default function ImportContractsCsv({
       case "error":
         return <span className="text-red-400">{row.message ?? "Failed"}</span>;
       case "importing":
-        return <span className="text-[var(--color-text-secondary)]">Importing…</span>;
+        return (
+          <span className="text-[var(--color-text-secondary)]">Importing…</span>
+        );
       case "invalid":
         return <span className="text-red-400">{row.error}</span>;
       default:
-        return <span className="text-[var(--color-text-secondary)]">Ready</span>;
+        return (
+          <span className="text-[var(--color-text-secondary)]">Ready</span>
+        );
     }
   };
 
@@ -355,7 +381,9 @@ export default function ImportContractsCsv({
               <span>{rows.length} row(s)</span>
               <span className="text-green-400">{okCount} imported</span>
               {invalidCount > 0 && (
-                <span className="text-red-400">{invalidCount} with problems</span>
+                <span className="text-red-400">
+                  {invalidCount} with problems
+                </span>
               )}
               {fileName && <span className="font-mono">{fileName}</span>}
             </div>
@@ -373,12 +401,17 @@ export default function ImportContractsCsv({
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <tr key={row.line} className="border-t border-[var(--color-border)]">
+                    <tr
+                      key={row.line}
+                      className="border-t border-[var(--color-border)]"
+                    >
                       <td className="px-3 py-2 text-[var(--color-text-secondary)]">
                         {row.line}
                       </td>
                       <td className="px-3 py-2 font-mono text-[var(--color-text-primary)]">
-                        {row.contractId ? `${row.contractId.slice(0, 12)}…` : "--"}
+                        {row.contractId
+                          ? `${row.contractId.slice(0, 12)}…`
+                          : "--"}
                       </td>
                       <td className="px-3 py-2 text-[var(--color-text-secondary)]">
                         {row.network || "--"}

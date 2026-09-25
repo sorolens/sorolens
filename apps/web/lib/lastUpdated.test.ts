@@ -92,7 +92,7 @@ describe("formatRelativeTime", () => {
     "formats %i ms of elapsed time as %s",
     (elapsed, expected) => {
       expect(formatRelativeTime(T0 - elapsed, T0)).toBe(expected);
-    },
+    }
   );
 
   it("never reports future timestamps as negative", () => {

@@ -57,7 +57,7 @@ test.describe("Settings", () => {
     await expectHeading(page, "Settings");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(
-      page.getByRole("radio", { name: "Dark", exact: true }),
+      page.getByRole("radio", { name: "Dark", exact: true })
     ).toBeChecked();
   });
 
@@ -70,7 +70,7 @@ test.describe("Settings", () => {
       .getByRole("button", { name: "Save" })
       .click();
     await expect(page.getByTestId("settings-network-status")).toHaveText(
-      "Saved",
+      "Saved"
     );
     await expect(page.locator("#network-selector")).toHaveValue("futurenet");
 
@@ -83,7 +83,7 @@ test.describe("Settings", () => {
   }) => {
     await page.getByLabel("Email address").fill("not-an-email");
     await expect(
-      page.getByTestId("settings-notifications-error"),
+      page.getByTestId("settings-notifications-error")
     ).toBeVisible();
 
     await page
@@ -91,13 +91,13 @@ test.describe("Settings", () => {
       .getByRole("button", { name: "Save" })
       .click();
     await expect(page.getByTestId("settings-notifications-status")).toHaveCount(
-      0,
+      0
     );
 
     await page.reload();
     await expect(page.getByLabel("Email address")).toHaveValue("");
     await expect(page.getByTestId("settings-notifications-error")).toHaveCount(
-      0,
+      0
     );
   });
 
@@ -111,14 +111,14 @@ test.describe("Settings", () => {
       .getByRole("button", { name: "Save" })
       .click();
     await expect(page.getByTestId("settings-notifications-status")).toHaveText(
-      "Saved",
+      "Saved"
     );
 
     await page.reload();
     await expectHeading(page, "Settings");
     await expect(page.getByTestId("settings-theme")).toBeVisible();
     await expect(page.getByLabel("Email address")).toHaveValue(
-      "dev@example.com",
+      "dev@example.com"
     );
     await expect(page.getByLabel("Weekly digest")).toBeChecked();
     await expect(page.getByLabel("Health changes")).not.toBeChecked();
@@ -130,7 +130,7 @@ test.describe("Settings", () => {
       .getByRole("button", { name: "Generate key" })
       .click();
     await expect(page.getByTestId("settings-api-key-value")).toContainText(
-      "sl_live_",
+      "sl_live_"
     );
 
     await page
@@ -138,7 +138,7 @@ test.describe("Settings", () => {
       .getByRole("button", { name: "Save" })
       .click();
     await expect(page.getByTestId("settings-api-key-status")).toHaveText(
-      "Saved",
+      "Saved"
     );
 
     // Reloading masks the token again, but the key is still stored.
@@ -146,7 +146,7 @@ test.describe("Settings", () => {
     await expect(page.getByTestId("settings-theme")).toBeVisible();
     await expect(page.getByTestId("settings-api-key-value")).toContainText("•");
     await expect(page.getByTestId("settings-api-key-value")).toContainText(
-      "sl_live_",
+      "sl_live_"
     );
 
     await page
@@ -164,7 +164,7 @@ test.describe("Settings", () => {
     await expect(page.getByTestId("settings-api-key-value")).toHaveText("—");
     const stored = await page.evaluate(
       (key) => window.localStorage.getItem(key),
-      SETTINGS_KEY,
+      SETTINGS_KEY
     );
     expect(JSON.parse(stored as string).apiKey).toBeNull();
   });

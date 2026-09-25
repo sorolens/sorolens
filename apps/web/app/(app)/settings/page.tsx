@@ -32,7 +32,7 @@ export default function SettingsPage() {
   const [draft, setDraft] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState<Partial<Record<SectionId, SaveState>>>(
-    {},
+    {}
   );
 
   // Read stored preferences after mount so server and client markup match.
@@ -114,7 +114,7 @@ export default function SettingsPage() {
                     ...draft,
                     notifications: { ...draft.notifications, email },
                   },
-                  "notifications",
+                  "notifications"
                 );
               }}
             />

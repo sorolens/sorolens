@@ -20,6 +20,6 @@ export function useLastUpdated(): LastUpdatedSnapshot {
   return useSyncExternalStore(
     subscribeLastUpdated,
     getLastUpdated,
-    getServerLastUpdated,
+    getServerLastUpdated
   );
 }

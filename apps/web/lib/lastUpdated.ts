@@ -45,7 +45,7 @@ export function subscribeLastUpdated(listener: () => void): () => void {
  */
 export function recordLastUpdated(
   resource: string,
-  at: number = Date.now(),
+  at: number = Date.now()
 ): void {
   if (snapshot.timestamp === at && snapshot.resource === resource) return;
   snapshot = { timestamp: at, resource };
@@ -71,7 +71,7 @@ const DAY = 24 * HOUR;
  */
 export function formatRelativeTime(
   timestamp: number,
-  now: number = Date.now(),
+  now: number = Date.now()
 ): string {
   if (!Number.isFinite(timestamp)) return "";
   const elapsed = Math.max(0, now - timestamp);

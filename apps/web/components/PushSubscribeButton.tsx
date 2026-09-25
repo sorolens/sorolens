@@ -29,9 +29,7 @@ export function PushSubscribeButton() {
         onClick={state === "subscribed" ? unsubscribe : subscribe}
         disabled={state === "subscribing"}
         aria-label={
-          state === "subscribed"
-            ? "Disable push alerts"
-            : "Enable push alerts"
+          state === "subscribed" ? "Disable push alerts" : "Enable push alerts"
         }
         title={error ?? undefined}
         className={[

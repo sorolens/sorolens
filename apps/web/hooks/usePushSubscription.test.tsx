@@ -92,7 +92,6 @@ beforeEach(() => {
   vi.resetModules();
 });
 
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -117,8 +116,11 @@ describe("usePushSubscription", () => {
   });
 
   it("transitions to denied when Notification.requestPermission() returns denied", async () => {
-    (window.Notification as unknown as { requestPermission: ReturnType<typeof vi.fn> }).requestPermission =
-      vi.fn().mockResolvedValue("denied");
+    (
+      window.Notification as unknown as {
+        requestPermission: ReturnType<typeof vi.fn>;
+      }
+    ).requestPermission = vi.fn().mockResolvedValue("denied");
 
     const { result } = renderHook(() => usePushSubscription());
 

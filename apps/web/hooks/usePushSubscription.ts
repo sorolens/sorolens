@@ -10,12 +10,12 @@
 import { useCallback, useEffect, useState } from "react";
 
 export type PushState =
-  | "unsupported"   // push API not in this browser
-  | "denied"        // permission explicitly denied
-  | "idle"          // not subscribed, no outstanding operation
-  | "subscribing"   // in-flight permission + subscription request
-  | "subscribed"    // actively subscribed
-  | "error";        // last operation failed
+  | "unsupported" // push API not in this browser
+  | "denied" // permission explicitly denied
+  | "idle" // not subscribed, no outstanding operation
+  | "subscribing" // in-flight permission + subscription request
+  | "subscribed" // actively subscribed
+  | "error"; // last operation failed
 
 export function usePushSubscription() {
   const [state, setState] = useState<PushState>("idle");
@@ -59,7 +59,9 @@ export function usePushSubscription() {
       // Subscribe via PushManager
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
+        applicationServerKey: urlBase64ToUint8Array(
+          publicKey
+        ) as unknown as BufferSource,
       });
 
       // Send subscription to our API

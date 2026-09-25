@@ -16,7 +16,11 @@ interface Props {
   className?: string;
 }
 
-export function OfflineBanner({ isOffline, pendingCount, className = "" }: Props) {
+export function OfflineBanner({
+  isOffline,
+  pendingCount,
+  className = "",
+}: Props) {
   if (!isOffline) return null;
 
   return (
@@ -38,13 +42,10 @@ export function OfflineBanner({ isOffline, pendingCount, className = "" }: Props
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
         </span>
-        <span className="font-medium text-amber-200">
-          You&apos;re offline
-        </span>
+        <span className="font-medium text-amber-200">You&apos;re offline</span>
         {pendingCount > 0 && (
           <span className="text-amber-300">
-            &mdash;{" "}
-            <strong className="font-semibold">{pendingCount}</strong>{" "}
+            &mdash; <strong className="font-semibold">{pendingCount}</strong>{" "}
             {pendingCount === 1 ? "alert" : "alerts"} queued
           </span>
         )}
@@ -85,7 +86,11 @@ const SEVERITY_BADGE: Record<QueuedAlert["severity"], string> = {
   Info: "bg-sky-900 text-sky-200",
 };
 
-export function OfflineAlertPanel({ alerts, onDismiss, onDismissAll }: PanelProps) {
+export function OfflineAlertPanel({
+  alerts,
+  onDismiss,
+  onDismissAll,
+}: PanelProps) {
   if (alerts.length === 0) {
     return (
       <div

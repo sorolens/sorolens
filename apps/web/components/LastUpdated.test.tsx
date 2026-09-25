@@ -52,9 +52,9 @@ describe("LastUpdated", () => {
     expect(el.dataset.state).toBe("ready");
     expect(el.textContent).toContain("watchdog");
     expect(el.textContent).toContain("just now");
-    expect(
-      el.querySelector("time")?.getAttribute("datetime"),
-    ).toBe(new Date(at).toISOString());
+    expect(el.querySelector("time")?.getAttribute("datetime")).toBe(
+      new Date(at).toISOString()
+    );
   });
 
   it("advances the timestamp after each later fetch", () => {
@@ -65,9 +65,10 @@ describe("LastUpdated", () => {
       recordLastUpdated("contracts", first);
     });
     expect(
-      screen.getByTestId("last-updated").querySelector("time")?.getAttribute(
-        "datetime",
-      ),
+      screen
+        .getByTestId("last-updated")
+        .querySelector("time")
+        ?.getAttribute("datetime")
     ).toBe(new Date(first).toISOString());
 
     const second = first + 60_000;
@@ -78,7 +79,7 @@ describe("LastUpdated", () => {
     const el = screen.getByTestId("last-updated");
     expect(el.textContent).toContain("watchlist");
     expect(el.querySelector("time")?.getAttribute("datetime")).toBe(
-      new Date(second).toISOString(),
+      new Date(second).toISOString()
     );
   });
 });
@@ -94,7 +95,7 @@ describe("AppLayout footer", () => {
     render(
       <AppLayout>
         <p>page content</p>
-      </AppLayout>,
+      </AppLayout>
     );
 
     const footer = screen.getByRole("contentinfo");

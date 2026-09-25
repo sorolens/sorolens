@@ -114,7 +114,7 @@ export function getContract(id: string): Promise<ContractDetail> {
 
 export function resolveLabel(query: string): Promise<LabelResolution> {
   return fetchJson<LabelResolution>(
-    `${API_URL}/api/v1/resolve?query=${encodeURIComponent(query)}`,
+    `${API_URL}/api/v1/resolve?query=${encodeURIComponent(query)}`
   );
 }
 
@@ -332,11 +332,11 @@ export function getContractUptime(
  */
 export function getContractReportHistory(
   contractId: string,
-  months = 12,
+  months = 12
 ): Promise<SLAHistoryResponse> {
   const search = new URLSearchParams({ months: String(months) });
   return fetchJson<SLAHistoryResponse>(
-    `${API_URL}/api/v1/reports/${contractId}/history?${search.toString()}`,
+    `${API_URL}/api/v1/reports/${contractId}/history?${search.toString()}`
   );
 }
 
@@ -347,7 +347,7 @@ export function getContractReportHistory(
 export function contractReportUrl(
   contractId: string,
   month: string,
-  format: ReportFormat,
+  format: ReportFormat
 ): string {
   const search = new URLSearchParams({ month, format });
   return `${API_URL}/api/v1/reports/${contractId}?${search.toString()}`;

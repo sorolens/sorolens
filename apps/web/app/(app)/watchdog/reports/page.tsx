@@ -70,11 +70,15 @@ function MetricCard({
       <p className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)]">
         {label}
       </p>
-      <p className={`mt-1 text-2xl font-semibold ${tone ?? "text-[var(--color-text-primary)]"}`}>
+      <p
+        className={`mt-1 text-2xl font-semibold ${tone ?? "text-[var(--color-text-primary)]"}`}
+      >
         {value}
       </p>
       {sub && (
-        <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{sub}</p>
+        <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+          {sub}
+        </p>
       )}
     </div>
   );
@@ -101,7 +105,8 @@ function UptimeChart({ months }: { months: MonthlySLA[] }) {
 
   // A tight 90-100% window would exaggerate noise; 0-100 keeps the bars honest
   // about what 99.9% actually looks like next to a bad month.
-  const scale = (pct: number) => (height - padY * 2) * (Math.max(0, Math.min(100, pct)) / 100);
+  const scale = (pct: number) =>
+    (height - padY * 2) * (Math.max(0, Math.min(100, pct)) / 100);
 
   return (
     <svg
@@ -189,7 +194,9 @@ export default function SLAReportsPage() {
 
   // The contract picker. A failure here is not fatal: the page still works for
   // a contract id typed or linked in directly.
-  const [contracts, setContracts] = useState<{ contract_id: string; name: string }[]>([]);
+  const [contracts, setContracts] = useState<
+    { contract_id: string; name: string }[]
+  >([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -233,7 +240,7 @@ export default function SLAReportsPage() {
   // the month the user picked rather than always showing the newest one.
   const selected = useMemo(
     () => history.find((m) => m.month === month) ?? null,
-    [history, month],
+    [history, month]
   );
 
   const badgeUrl = contractId ? contractSLABadgeUrl(contractId, month) : "";
@@ -305,7 +312,11 @@ export default function SLAReportsPage() {
         <div className="flex gap-2">
           <a
             id="sla-export-csv"
-            href={contractId ? contractReportUrl(contractId, month, "csv") : undefined}
+            href={
+              contractId
+                ? contractReportUrl(contractId, month, "csv")
+                : undefined
+            }
             aria-disabled={!contractId}
             className={`rounded-lg border border-[var(--color-border)] px-4 py-2.5 text-sm font-medium transition-colors ${
               contractId
@@ -317,7 +328,11 @@ export default function SLAReportsPage() {
           </a>
           <a
             id="sla-export-pdf"
-            href={contractId ? contractReportUrl(contractId, month, "pdf") : undefined}
+            href={
+              contractId
+                ? contractReportUrl(contractId, month, "pdf")
+                : undefined
+            }
             aria-disabled={!contractId}
             className={`rounded-lg bg-[var(--color-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity ${
               contractId ? "hover:opacity-90" : "pointer-events-none opacity-40"
@@ -353,7 +368,9 @@ export default function SLAReportsPage() {
           <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
               label="Uptime"
-              value={selected.total_checks ? formatPct(selected.uptime_pct) : "—"}
+              value={
+                selected.total_checks ? formatPct(selected.uptime_pct) : "—"
+              }
               sub={
                 selected.total_checks
                   ? `${selected.healthy_checks}/${selected.total_checks} healthy checks`
@@ -368,7 +385,9 @@ export default function SLAReportsPage() {
             />
             <MetricCard
               label="MTTR"
-              value={selected.incidents ? formatSeconds(selected.mttr_seconds) : "—"}
+              value={
+                selected.incidents ? formatSeconds(selected.mttr_seconds) : "—"
+              }
               sub={
                 selected.ongoing_outage
                   ? "excludes the open incident"
@@ -388,7 +407,8 @@ export default function SLAReportsPage() {
                 Uptime — last {MONTHS_SHOWN} months
               </h2>
               <span className="text-xs text-[var(--color-text-secondary)]">
-                {selected.month}: {verdict(selected)} · {selected.total_alerts} alert
+                {selected.month}: {verdict(selected)} · {selected.total_alerts}{" "}
+                alert
                 {selected.total_alerts === 1 ? "" : "s"}
               </span>
             </div>
@@ -408,7 +428,9 @@ export default function SLAReportsPage() {
                   ["Total", selected.total_alerts],
                 ].map(([label, value]) => (
                   <div key={String(label)} className="flex justify-between">
-                    <dt className="text-[var(--color-text-secondary)]">{label}</dt>
+                    <dt className="text-[var(--color-text-secondary)]">
+                      {label}
+                    </dt>
                     <dd className="font-medium text-[var(--color-text-primary)]">
                       {String(value)}
                     </dd>
@@ -453,9 +475,9 @@ export default function SLAReportsPage() {
                 className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-black/30 p-2 font-mono text-xs text-[var(--color-text-primary)]"
               />
               <p className="mt-3 border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-text-secondary)]">
-                Exports are signed with HMAC-SHA256; the signature is returned in
-                the <code className="font-mono">X-Report-Signature</code> header and
-                embedded in the PDF.
+                Exports are signed with HMAC-SHA256; the signature is returned
+                in the <code className="font-mono">X-Report-Signature</code>{" "}
+                header and embedded in the PDF.
               </p>
             </div>
           </div>

@@ -53,7 +53,9 @@ self.addEventListener("push", (event: any) => {
     requireInteraction: payload.severity === "Critical",
   };
 
-  event.waitUntil(self.registration.showNotification(payload.title, notifOptions));
+  event.waitUntil(
+    self.registration.showNotification(payload.title, notifOptions)
+  );
 });
 
 // ---- Notification click -------------------------------------------------------
@@ -76,7 +78,7 @@ self.addEventListener("notificationclick", (event: any) => {
         }
       }
       await self.clients.openWindow(url);
-    })(),
+    })()
   );
 });
 
@@ -89,7 +91,7 @@ self.addEventListener("sync", (event: any) => {
     event.waitUntil(
       self.clients.matchAll({ type: "window" }).then((clients: any[]) => {
         clients.forEach((c) => c.postMessage({ type: "ALERT_SYNC" }));
-      }),
+      })
     );
   }
 });

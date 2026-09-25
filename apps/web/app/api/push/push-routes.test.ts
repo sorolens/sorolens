@@ -37,7 +37,7 @@ beforeEach(() => {
 function makeRequest(
   method: string,
   body?: unknown,
-  headers?: Record<string, string>,
+  headers?: Record<string, string>
 ): Request {
   return new Request("http://localhost/api/push/subscribe", {
     method,
@@ -48,9 +48,7 @@ function makeRequest(
 
 describe("GET /api/push/vapid-public-key", () => {
   it("returns the public VAPID key when env vars are set", async () => {
-    const { GET } = await import(
-      "@/app/api/push/vapid-public-key/route"
-    );
+    const { GET } = await import("@/app/api/push/vapid-public-key/route");
     const res = await GET();
     const data = await res.json();
     expect(res.status).toBe(200);
@@ -62,9 +60,7 @@ describe("GET /api/push/vapid-public-key", () => {
     delete process.env.VAPID_PRIVATE_KEY;
     vi.resetModules();
 
-    const { GET } = await import(
-      "@/app/api/push/vapid-public-key/route"
-    );
+    const { GET } = await import("@/app/api/push/vapid-public-key/route");
     const res = await GET();
     expect(res.status).toBe(503);
     const data = await res.json();
@@ -74,9 +70,7 @@ describe("GET /api/push/vapid-public-key", () => {
 
 describe("POST /api/push/subscribe", () => {
   it("accepts a valid subscription payload and returns 201", async () => {
-    const { POST } = await import(
-      "@/app/api/push/subscribe/route"
-    );
+    const { POST } = await import("@/app/api/push/subscribe/route");
 
     const body = {
       endpoint: "https://fcm.googleapis.com/test-endpoint",
@@ -96,18 +90,14 @@ describe("POST /api/push/subscribe", () => {
   });
 
   it("returns 400 for missing endpoint", async () => {
-    const { POST } = await import(
-      "@/app/api/push/subscribe/route"
-    );
+    const { POST } = await import("@/app/api/push/subscribe/route");
     const req = makeRequest("POST", { keys: { auth: "a", p256dh: "b" } });
     const res = await POST(req as unknown as Parameters<typeof POST>[0]);
     expect(res.status).toBe(400);
   });
 
   it("returns 400 for missing keys", async () => {
-    const { POST } = await import(
-      "@/app/api/push/subscribe/route"
-    );
+    const { POST } = await import("@/app/api/push/subscribe/route");
     const req = makeRequest("POST", {
       endpoint: "https://fcm.googleapis.com/x",
     });
@@ -118,9 +108,7 @@ describe("POST /api/push/subscribe", () => {
 
 describe("DELETE /api/push/subscribe", () => {
   it("accepts a delete request with an endpoint", async () => {
-    const { DELETE } = await import(
-      "@/app/api/push/subscribe/route"
-    );
+    const { DELETE } = await import("@/app/api/push/subscribe/route");
     const req = makeRequest("DELETE", {
       endpoint: "https://fcm.googleapis.com/test-endpoint",
     });
@@ -131,9 +119,7 @@ describe("DELETE /api/push/subscribe", () => {
   });
 
   it("returns 400 when endpoint is missing", async () => {
-    const { DELETE } = await import(
-      "@/app/api/push/subscribe/route"
-    );
+    const { DELETE } = await import("@/app/api/push/subscribe/route");
     const req = makeRequest("DELETE", {});
     const res = await DELETE(req as unknown as Parameters<typeof DELETE>[0]);
     expect(res.status).toBe(400);

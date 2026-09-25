@@ -34,7 +34,12 @@ const SEVERITY_COLORS = {
   },
 };
 
-export function OfflineAlertBanner({ pending, isOffline, onDismiss, onDismissAll }: Props) {
+export function OfflineAlertBanner({
+  pending,
+  isOffline,
+  onDismiss,
+  onDismissAll,
+}: Props) {
   const [expanded, setExpanded] = useState(false);
 
   // Auto-expand when new critical alerts arrive while offline
@@ -99,7 +104,9 @@ export function OfflineAlertBanner({ pending, isOffline, onDismiss, onDismissAll
             boxShadow: isOffline
               ? "0 0 0 3px rgba(239,68,68,0.25)"
               : "0 0 0 3px rgba(34,197,94,0.25)",
-            animation: isOffline ? "pulse-red 1.5s ease-in-out infinite" : "none",
+            animation: isOffline
+              ? "pulse-red 1.5s ease-in-out infinite"
+              : "none",
           }}
         />
         <span style={{ fontWeight: 600, fontSize: "0.875rem", flex: 1 }}>
@@ -178,7 +185,8 @@ export function OfflineAlertBanner({ pending, isOffline, onDismiss, onDismissAll
                 style={{ listStyle: "none", margin: 0, padding: "0 0 0.5rem" }}
               >
                 {pending.map((alert) => {
-                  const colors = SEVERITY_COLORS[alert.severity] ?? SEVERITY_COLORS.Info;
+                  const colors =
+                    SEVERITY_COLORS[alert.severity] ?? SEVERITY_COLORS.Info;
                   return (
                     <li
                       key={alert.id}

@@ -35,10 +35,7 @@ export function PushNotificationToggle() {
       )}
 
       {state === "error" && error && (
-        <span
-          style={{ fontSize: "0.72rem", color: "#f87171" }}
-          title={error}
-        >
+        <span style={{ fontSize: "0.72rem", color: "#f87171" }} title={error}>
           Push unavailable
         </span>
       )}

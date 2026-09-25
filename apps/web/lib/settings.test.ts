@@ -106,14 +106,17 @@ describe("loadSettings / saveSettings", () => {
     const storage = memoryStorage();
     storage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify({ defaultNetwork: "futurenet", notifications: { email: "a@b.co" } }),
+      JSON.stringify({
+        defaultNetwork: "futurenet",
+        notifications: { email: "a@b.co" },
+      })
     );
 
     const loaded = loadSettings(storage);
     expect(loaded.defaultNetwork).toBe("futurenet");
     expect(loaded.notifications.email).toBe("a@b.co");
     expect(loaded.notifications.channels).toEqual(
-      DEFAULT_SETTINGS.notifications.channels,
+      DEFAULT_SETTINGS.notifications.channels
     );
     expect(loaded.apiKey).toBeNull();
   });

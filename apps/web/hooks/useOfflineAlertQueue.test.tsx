@@ -18,28 +18,30 @@ import type { ContractAlert } from "@/lib/types";
 const mockAlerts: QueuedAlert[] = [];
 
 vi.mock("@/lib/alertQueue", () => ({
-  enqueueAlert: vi.fn(async (raw: Omit<QueuedAlert, "enqueuedAt" | "dismissed">) => {
-    // Add to the in-memory list only if not duplicate
-    if (!mockAlerts.find((a) => a.id === raw.id)) {
-      mockAlerts.push({
-        ...raw,
-        enqueuedAt: new Date().toISOString(),
-        dismissed: false,
-      });
+  enqueueAlert: vi.fn(
+    async (raw: Omit<QueuedAlert, "enqueuedAt" | "dismissed">) => {
+      // Add to the in-memory list only if not duplicate
+      if (!mockAlerts.find((a) => a.id === raw.id)) {
+        mockAlerts.push({
+          ...raw,
+          enqueuedAt: new Date().toISOString(),
+          dismissed: false,
+        });
+      }
     }
-  }),
-  getPendingAlerts: vi.fn(async () =>
-    mockAlerts.filter((a) => !a.dismissed),
   ),
-  getPendingCount: vi.fn(async () =>
-    mockAlerts.filter((a) => !a.dismissed).length,
+  getPendingAlerts: vi.fn(async () => mockAlerts.filter((a) => !a.dismissed)),
+  getPendingCount: vi.fn(
+    async () => mockAlerts.filter((a) => !a.dismissed).length
   ),
   dismissAlert: vi.fn(async (id: string) => {
     const a = mockAlerts.find((x) => x.id === id);
     if (a) a.dismissed = true;
   }),
   dismissAll: vi.fn(async () => {
-    mockAlerts.forEach((a) => { a.dismissed = true; });
+    mockAlerts.forEach((a) => {
+      a.dismissed = true;
+    });
   }),
   deleteAlert: vi.fn(async (id: string) => {
     const idx = mockAlerts.findIndex((x) => x.id === id);
@@ -74,13 +76,15 @@ afterEach(() => {
 
 describe("useOfflineAlertQueue", () => {
   it("starts with an empty pending list", async () => {
-    const { useOfflineAlertQueue } = await import("@/hooks/useOfflineAlertQueue");
+    const { useOfflineAlertQueue } =
+      await import("@/hooks/useOfflineAlertQueue");
     const { result } = renderHook(() => useOfflineAlertQueue());
     await waitFor(() => expect(result.current.pending).toHaveLength(0));
   });
 
   it("queueAlert persists an alert and it appears in pending", async () => {
-    const { useOfflineAlertQueue } = await import("@/hooks/useOfflineAlertQueue");
+    const { useOfflineAlertQueue } =
+      await import("@/hooks/useOfflineAlertQueue");
     const { result } = renderHook(() => useOfflineAlertQueue());
 
     const alert: ContractAlert = {
@@ -96,13 +100,16 @@ describe("useOfflineAlertQueue", () => {
       await result.current.queueAlert(alert);
     });
 
-    await waitFor(() => expect(result.current.pending.length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(result.current.pending.length).toBeGreaterThan(0)
+    );
     expect(result.current.pending[0].contractId).toBe("CABC123456789");
     expect(result.current.pending[0].severity).toBe("Critical");
   });
 
   it("dismiss removes an alert from pending", async () => {
-    const { useOfflineAlertQueue } = await import("@/hooks/useOfflineAlertQueue");
+    const { useOfflineAlertQueue } =
+      await import("@/hooks/useOfflineAlertQueue");
     const { result } = renderHook(() => useOfflineAlertQueue());
 
     await act(async () => {
@@ -116,7 +123,9 @@ describe("useOfflineAlertQueue", () => {
       });
     });
 
-    await waitFor(() => expect(result.current.pending.length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(result.current.pending.length).toBeGreaterThan(0)
+    );
 
     const id = result.current.pending[0].id;
 
@@ -125,12 +134,13 @@ describe("useOfflineAlertQueue", () => {
     });
 
     await waitFor(() =>
-      expect(result.current.pending.find((a) => a.id === id)).toBeUndefined(),
+      expect(result.current.pending.find((a) => a.id === id)).toBeUndefined()
     );
   });
 
   it("dismissAll empties the pending list", async () => {
-    const { useOfflineAlertQueue } = await import("@/hooks/useOfflineAlertQueue");
+    const { useOfflineAlertQueue } =
+      await import("@/hooks/useOfflineAlertQueue");
     const { result } = renderHook(() => useOfflineAlertQueue());
 
     for (let i = 0; i < 3; i++) {
@@ -146,7 +156,9 @@ describe("useOfflineAlertQueue", () => {
       });
     }
 
-    await waitFor(() => expect(result.current.pending.length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(result.current.pending.length).toBeGreaterThan(0)
+    );
 
     await act(async () => {
       await result.current.dismissAll();
@@ -156,7 +168,8 @@ describe("useOfflineAlertQueue", () => {
   });
 
   it("isOffline is false when navigator.onLine is true", async () => {
-    const { useOfflineAlertQueue } = await import("@/hooks/useOfflineAlertQueue");
+    const { useOfflineAlertQueue } =
+      await import("@/hooks/useOfflineAlertQueue");
     const { result } = renderHook(() => useOfflineAlertQueue());
     await waitFor(() => expect(result.current.isOffline).toBe(false));
   });
@@ -167,7 +180,8 @@ describe("useOfflineAlertQueue", () => {
       configurable: true,
       writable: true,
     });
-    const { useOfflineAlertQueue } = await import("@/hooks/useOfflineAlertQueue");
+    const { useOfflineAlertQueue } =
+      await import("@/hooks/useOfflineAlertQueue");
     const { result } = renderHook(() => useOfflineAlertQueue());
     await waitFor(() => expect(result.current.isOffline).toBe(true));
   });

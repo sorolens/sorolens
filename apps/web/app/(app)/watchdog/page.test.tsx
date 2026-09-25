@@ -68,9 +68,18 @@ function monitored(name: string): MonitoredContract {
 }
 
 // Three pages keyed by the cursor the page must send to get them.
-const PAGES: Record<string, { contracts: MonitoredContract[]; next_cursor: string }> = {
-  first: { contracts: [monitored("alpha"), monitored("bravo")], next_cursor: "cursor-2" },
-  "cursor-2": { contracts: [monitored("charlie"), monitored("delta")], next_cursor: "cursor-3" },
+const PAGES: Record<
+  string,
+  { contracts: MonitoredContract[]; next_cursor: string }
+> = {
+  first: {
+    contracts: [monitored("alpha"), monitored("bravo")],
+    next_cursor: "cursor-2",
+  },
+  "cursor-2": {
+    contracts: [monitored("charlie"), monitored("delta")],
+    next_cursor: "cursor-3",
+  },
   "cursor-3": { contracts: [monitored("echo")], next_cursor: "" },
 };
 
@@ -81,7 +90,9 @@ function nextButton() {
 }
 
 function prevButton() {
-  return screen.getByRole<HTMLButtonElement>("button", { name: "Previous page" });
+  return screen.getByRole<HTMLButtonElement>("button", {
+    name: "Previous page",
+  });
 }
 
 function lastCallCursor(): string | undefined {
@@ -105,7 +116,7 @@ async function renderPage() {
     <NetworkProvider>
       <NetworkSwitcher />
       <WatchdogPage />
-    </NetworkProvider>,
+    </NetworkProvider>
   );
 }
 
@@ -116,7 +127,7 @@ describe("WatchdogPage monitored contracts pagination", () => {
     vi.clearAllMocks();
     mockListMonitoredContracts.mockImplementation(
       (params?: { cursor?: string }) =>
-        Promise.resolve(PAGES[params?.cursor ?? "first"]),
+        Promise.resolve(PAGES[params?.cursor ?? "first"])
     );
   });
 
@@ -214,7 +225,10 @@ describe("WatchdogPage monitored contracts pagination", () => {
   });
 
   it("shows the empty state without pagination when there are no contracts", async () => {
-    mockListMonitoredContracts.mockResolvedValue({ contracts: [], next_cursor: "" });
+    mockListMonitoredContracts.mockResolvedValue({
+      contracts: [],
+      next_cursor: "",
+    });
     await renderPage();
 
     await screen.findByText("No monitored contracts yet");

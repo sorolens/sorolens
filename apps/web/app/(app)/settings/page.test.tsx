@@ -7,7 +7,14 @@
  * page actually persists to.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const setTheme = vi.fn();
@@ -21,8 +28,7 @@ vi.mock("@/components/ThemeProvider", () => ({
 vi.mock("@/lib/network", () => ({
   ALL_NETWORKS: "all",
   NETWORKS: ["all", "testnet", "mainnet", "futurenet"],
-  networkFilter: (network: string) =>
-    network === "all" ? undefined : network,
+  networkFilter: (network: string) => (network === "all" ? undefined : network),
   useNetwork: () => ({ network: "all", setNetwork }),
 }));
 
@@ -33,7 +39,7 @@ async function renderPage() {
   render(<SettingsPage />);
   // The page reads stored preferences in an effect after mount.
   await waitFor(() =>
-    expect(screen.getByTestId("settings-theme")).toBeTruthy(),
+    expect(screen.getByTestId("settings-theme")).toBeTruthy()
   );
 }
 
@@ -79,26 +85,26 @@ describe("SettingsPage", () => {
         },
         apiKey: "sl_live_stored",
         apiKeyCreatedAt: "2026-09-25T00:00:00.000Z",
-      }),
+      })
     );
 
     await renderPage();
 
     expect(
-      (screen.getByLabelText("Default network") as HTMLSelectElement).value,
+      (screen.getByLabelText("Default network") as HTMLSelectElement).value
     ).toBe("mainnet");
     expect(
-      (screen.getByLabelText("Email address") as HTMLInputElement).value,
+      (screen.getByLabelText("Email address") as HTMLInputElement).value
     ).toBe("dev@example.com");
     expect(
-      (screen.getByLabelText("Weekly digest") as HTMLInputElement).checked,
+      (screen.getByLabelText("Weekly digest") as HTMLInputElement).checked
     ).toBe(true);
     expect(
-      (screen.getByLabelText("Health changes") as HTMLInputElement).checked,
+      (screen.getByLabelText("Health changes") as HTMLInputElement).checked
     ).toBe(false);
-    expect(
-      screen.getByTestId("settings-api-key-value").textContent,
-    ).toContain("sl_live_");
+    expect(screen.getByTestId("settings-api-key-value").textContent).toContain(
+      "sl_live_"
+    );
   });
 
   it("saves the default network and switches the header selector", async () => {
@@ -110,12 +116,12 @@ describe("SettingsPage", () => {
     fireEvent.click(cardSave("settings-network"));
 
     await waitFor(() =>
-      expect(screen.getByTestId("settings-network-status")).toBeTruthy(),
+      expect(screen.getByTestId("settings-network-status")).toBeTruthy()
     );
     expect(setNetwork).toHaveBeenCalledWith("futurenet");
     expect(
       JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string)
-        .defaultNetwork,
+        .defaultNetwork
     ).toBe("futurenet");
   });
 
@@ -144,10 +150,10 @@ describe("SettingsPage", () => {
     fireEvent.click(cardSave("settings-notifications"));
 
     await waitFor(() =>
-      expect(screen.getByTestId("settings-notifications-status")).toBeTruthy(),
+      expect(screen.getByTestId("settings-notifications-status")).toBeTruthy()
     );
     const stored = JSON.parse(
-      localStorage.getItem(SETTINGS_STORAGE_KEY) as string,
+      localStorage.getItem(SETTINGS_STORAGE_KEY) as string
     );
     expect(stored.notifications.email).toBe("dev@example.com");
     expect(stored.notifications.channels.weekly_digest).toBe(true);
@@ -161,32 +167,33 @@ describe("SettingsPage", () => {
     fireEvent.click(
       within(screen.getByTestId("settings-api-key")).getByRole("button", {
         name: "Generate key",
-      }),
+      })
     );
-    const generated = screen.getByTestId("settings-api-key-value").textContent
-      ?.trim() as string;
+    const generated = screen
+      .getByTestId("settings-api-key-value")
+      .textContent?.trim() as string;
     expect(generated.startsWith("sl_live_")).toBe(true);
 
     fireEvent.click(cardSave("settings-api-key"));
     await waitFor(() =>
-      expect(screen.getByTestId("settings-api-key-status")).toBeTruthy(),
+      expect(screen.getByTestId("settings-api-key-status")).toBeTruthy()
     );
     expect(
-      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).apiKey,
+      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).apiKey
     ).toBe(generated);
 
     fireEvent.click(
       within(screen.getByTestId("settings-api-key")).getByRole("button", {
         name: "Revoke",
-      }),
+      })
     );
     fireEvent.click(cardSave("settings-api-key"));
 
     await waitFor(() =>
-      expect(screen.getByTestId("settings-api-key-value").textContent).toBe("—"),
+      expect(screen.getByTestId("settings-api-key-value").textContent).toBe("—")
     );
     expect(
-      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).apiKey,
+      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).apiKey
     ).toBeNull();
   });
 

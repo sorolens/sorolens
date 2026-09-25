@@ -40,10 +40,12 @@ export default function OfflineAlertsPage() {
           </svg>
         </Link>
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Offline Alert Queue</h1>
+          <h1 className="text-xl font-bold tracking-tight">
+            Offline Alert Queue
+          </h1>
           <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">
-            Alerts received while offline — backed by IndexedDB, survives
-            page reloads.
+            Alerts received while offline — backed by IndexedDB, survives page
+            reloads.
           </p>
         </div>
       </div>

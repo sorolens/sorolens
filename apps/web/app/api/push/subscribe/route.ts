@@ -24,7 +24,10 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as PushSubscriptionJSON;
 
     if (!body?.endpoint || !body?.keys?.auth || !body?.keys?.p256dh) {
-      return NextResponse.json({ error: "Invalid subscription payload" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid subscription payload" },
+        { status: 400 }
+      );
     }
 
     subscriptions.set(body.endpoint, body);
@@ -99,7 +102,7 @@ export async function PUT(request: NextRequest) {
           subscriptions.delete(sub.endpoint);
         }
       }
-    }),
+    })
   );
 
   return NextResponse.json({ sent, failed });

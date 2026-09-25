@@ -62,7 +62,9 @@ describe("InvocationFrequencyChart", () => {
 
     const chart = screen.getByTestId("bar-chart");
     expect(chart).toHaveAttribute("data-points", "2");
-    expect(screen.queryByText("No invocation data yet")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No invocation data yet")
+    ).not.toBeInTheDocument();
 
     const bar = screen.getByTestId("bar");
     expect(bar).toHaveAttribute("data-key", "count");

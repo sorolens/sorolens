@@ -13,9 +13,7 @@
 export const SETTINGS_STORAGE_KEY = "sorolens_settings";
 
 export type NotificationChannel =
-  | "critical_alerts"
-  | "health_changes"
-  | "weekly_digest";
+  "critical_alerts" | "health_changes" | "weekly_digest";
 
 export interface NotificationChannelMeta {
   id: NotificationChannel;
@@ -85,7 +83,7 @@ export function generateApiKey(): string {
   const bytes = new Uint8Array(24);
   globalThis.crypto.getRandomValues(bytes);
   const body = Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, "0"),
+    byte.toString(16).padStart(2, "0")
   ).join("");
   return `sl_live_${body}`;
 }
@@ -118,11 +116,14 @@ function coerceSettings(raw: unknown): UserSettings {
           : DEFAULT_SETTINGS.notifications.email,
       channels: {
         critical_alerts:
-          channels?.critical_alerts ?? DEFAULT_SETTINGS.notifications.channels.critical_alerts,
+          channels?.critical_alerts ??
+          DEFAULT_SETTINGS.notifications.channels.critical_alerts,
         health_changes:
-          channels?.health_changes ?? DEFAULT_SETTINGS.notifications.channels.health_changes,
+          channels?.health_changes ??
+          DEFAULT_SETTINGS.notifications.channels.health_changes,
         weekly_digest:
-          channels?.weekly_digest ?? DEFAULT_SETTINGS.notifications.channels.weekly_digest,
+          channels?.weekly_digest ??
+          DEFAULT_SETTINGS.notifications.channels.weekly_digest,
       },
     },
     apiKey: typeof value.apiKey === "string" ? value.apiKey : null,
@@ -156,7 +157,10 @@ export function loadSettings(storage?: Storage): UserSettings {
 }
 
 /** Persists preferences. Returns false when storage is unavailable or full. */
-export function saveSettings(settings: UserSettings, storage?: Storage): boolean {
+export function saveSettings(
+  settings: UserSettings,
+  storage?: Storage
+): boolean {
   const store = resolveStorage(storage);
   if (!store) return false;
   try {
