@@ -21,6 +21,15 @@ jobs:
           - services/indexer
           - cli
           - packages/go-client
+        include:
+          - module: apps/api
+            postgres_port: 5432
+          - module: services/indexer
+            postgres_port: 5433
+          - module: cli
+            postgres_port: 5434
+          - module: packages/go-client
+            postgres_port: 5435
     services:
       postgres:
         image: postgres:16-alpine
@@ -29,7 +38,7 @@ jobs:
           POSTGRES_USER: sorolens
           POSTGRES_PASSWORD: sorolens
         ports:
-          - 5432:5432
+          - ${{ matrix.postgres_port }}:5432
         options: >-
           --health-cmd "pg_isready -U sorolens -d sorolens"
           --health-interval 10s
@@ -70,12 +79,12 @@ jobs:
           PGPASSWORD: sorolens
         run: |
           for f in $(ls apps/api/internal/db/migrations/*.up.sql | sort); do
-            psql -h localhost -U sorolens -d sorolens -f "$f"
+            psql -h localhost -p ${{ matrix.postgres_port }} -U sorolens -d sorolens -f "$f"
           done
       - name: go test
         working-directory: ${{ matrix.module }}
         env:
-          POSTGRES_TEST_URL: postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable
+          POSTGRES_TEST_URL: postgres://sorolens:sorolens@localhost:${{ matrix.postgres_port }}/sorolens?sslmode=disable
         run: go test -race -timeout 120s -coverprofile=coverage.out ./...
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
