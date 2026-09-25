@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
+from typing_extensions import Self
 
 from ..models.forecast_series_metric import ForecastSeriesMetric
 
@@ -57,8 +58,8 @@ class ForecastSeries:
         return field_dict
 
     @classmethod
-    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.forecast_point import ForecastPoint  # noqa: PLC0415
+    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+        from ..models.forecast_point import ForecastPoint
 
         d = dict(src_dict)
         metric = ForecastSeriesMetric(d.pop("metric"))
