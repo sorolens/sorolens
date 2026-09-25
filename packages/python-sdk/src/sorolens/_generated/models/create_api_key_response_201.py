@@ -1,38 +1,28 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-from typing import cast
-import datetime
-
-
-
-
-
-
 T = TypeVar("T", bound="CreateApiKeyResponse201")
-
 
 
 @_attrs_define
 class CreateApiKeyResponse201:
-    """ 
-        Attributes:
-            id (str):
-            name (str):
-            key_prefix (str):
-            scopes (list[str]):
-            created_at (datetime.datetime):
-            last_used_at (datetime.datetime | None):
-            revoked_at (datetime.datetime | None):
-            key (str): Plaintext token, shown once.
-     """
+    """
+    Attributes:
+        id (str):
+        name (str):
+        key_prefix (str):
+        scopes (list[str]):
+        created_at (datetime.datetime):
+        last_used_at (datetime.datetime | None):
+        revoked_at (datetime.datetime | None):
+        key (str): Plaintext token, shown once.
+    """
 
     id: str
     name: str
@@ -44,10 +34,6 @@ class CreateApiKeyResponse201:
     key: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
         id = self.id
 
@@ -56,8 +42,6 @@ class CreateApiKeyResponse201:
         key_prefix = self.key_prefix
 
         scopes = self.scopes
-
-
 
         created_at = self.created_at.isoformat()
 
@@ -75,23 +59,22 @@ class CreateApiKeyResponse201:
 
         key = self.key
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "id": id,
-            "name": name,
-            "key_prefix": key_prefix,
-            "scopes": scopes,
-            "created_at": created_at,
-            "last_used_at": last_used_at,
-            "revoked_at": revoked_at,
-            "key": key,
-        })
+        field_dict.update(
+            {
+                "id": id,
+                "name": name,
+                "key_prefix": key_prefix,
+                "scopes": scopes,
+                "created_at": created_at,
+                "last_used_at": last_used_at,
+                "revoked_at": revoked_at,
+                "key": key,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -104,11 +87,7 @@ class CreateApiKeyResponse201:
 
         scopes = cast(list[str], d.pop("scopes"))
 
-
         created_at = datetime.datetime.fromisoformat(d.pop("created_at"))
-
-
-
 
         def _parse_last_used_at(data: object) -> datetime.datetime | None:
             if data is None:
@@ -118,15 +97,12 @@ class CreateApiKeyResponse201:
                     raise TypeError()
                 last_used_at_type_0 = datetime.datetime.fromisoformat(data)
 
-
-
                 return last_used_at_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None, data)
 
         last_used_at = _parse_last_used_at(d.pop("last_used_at"))
-
 
         def _parse_revoked_at(data: object) -> datetime.datetime | None:
             if data is None:
@@ -136,15 +112,12 @@ class CreateApiKeyResponse201:
                     raise TypeError()
                 revoked_at_type_0 = datetime.datetime.fromisoformat(data)
 
-
-
                 return revoked_at_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None, data)
 
         revoked_at = _parse_revoked_at(d.pop("revoked_at"))
-
 
         key = d.pop("key")
 
@@ -158,7 +131,6 @@ class CreateApiKeyResponse201:
             revoked_at=revoked_at,
             key=key,
         )
-
 
         create_api_key_response_201.additional_properties = d
         return create_api_key_response_201

@@ -1,78 +1,67 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-from typing import cast
-
 if TYPE_CHECKING:
-  from ..models.contract_alert import ContractAlert
-
-
-
+    from ..models.contract_alert import ContractAlert
 
 
 T = TypeVar("T", bound="ListWatchdogAlertsResponse200")
 
 
-
 @_attrs_define
 class ListWatchdogAlertsResponse200:
-    """ 
-        Attributes:
-            alerts (list[ContractAlert]):
-     """
+    """
+    Attributes:
+        alerts (list[ContractAlert]):
+        next_cursor (str): Cursor for the next (older) page; empty when no more pages.
+    """
 
     alerts: list[ContractAlert]
+    next_cursor: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.contract_alert import ContractAlert # noqa: PLC0415
         alerts = []
         for alerts_item_data in self.alerts:
             alerts_item = alerts_item_data.to_dict()
             alerts.append(alerts_item)
 
-
-
+        next_cursor = self.next_cursor
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "alerts": alerts,
-        })
+        field_dict.update(
+            {
+                "alerts": alerts,
+                "next_cursor": next_cursor,
+            }
+        )
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.contract_alert import ContractAlert # noqa: PLC0415
+        from ..models.contract_alert import ContractAlert  # noqa: PLC0415
+
         d = dict(src_dict)
         alerts = []
         _alerts = d.pop("alerts")
-        for alerts_item_data in (_alerts):
+        for alerts_item_data in _alerts:
             alerts_item = ContractAlert.from_dict(alerts_item_data)
-
-
 
             alerts.append(alerts_item)
 
+        next_cursor = d.pop("next_cursor")
 
         list_watchdog_alerts_response_200 = cls(
             alerts=alerts,
+            next_cursor=next_cursor,
         )
-
 
         list_watchdog_alerts_response_200.additional_properties = d
         return list_watchdog_alerts_response_200

@@ -1,78 +1,59 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-from typing import cast
-
 if TYPE_CHECKING:
-  from ..models.health_check import HealthCheck
-
-
-
+    from ..models.health_check import HealthCheck
 
 
 T = TypeVar("T", bound="ListContractHealthChecksResponse200")
 
 
-
 @_attrs_define
 class ListContractHealthChecksResponse200:
-    """ 
-        Attributes:
-            health_checks (list[HealthCheck]):
-     """
+    """
+    Attributes:
+        health_checks (list[HealthCheck]):
+    """
 
     health_checks: list[HealthCheck]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.health_check import HealthCheck # noqa: PLC0415
         health_checks = []
         for health_checks_item_data in self.health_checks:
             health_checks_item = health_checks_item_data.to_dict()
             health_checks.append(health_checks_item)
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "health_checks": health_checks,
-        })
+        field_dict.update(
+            {
+                "health_checks": health_checks,
+            }
+        )
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.health_check import HealthCheck # noqa: PLC0415
+        from ..models.health_check import HealthCheck  # noqa: PLC0415
+
         d = dict(src_dict)
         health_checks = []
         _health_checks = d.pop("health_checks")
-        for health_checks_item_data in (_health_checks):
+        for health_checks_item_data in _health_checks:
             health_checks_item = HealthCheck.from_dict(health_checks_item_data)
 
-
-
             health_checks.append(health_checks_item)
-
 
         list_contract_health_checks_response_200 = cls(
             health_checks=health_checks,
         )
-
 
         list_contract_health_checks_response_200.additional_properties = d
         return list_contract_health_checks_response_200

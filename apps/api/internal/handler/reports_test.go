@@ -266,13 +266,14 @@ func TestRenderSLABadgeColourThresholds(t *testing.T) {
 func TestRenderSLABadgeIsWellFormedXML(t *testing.T) {
 	svg := renderSLABadge(sampleReport())
 	// A cheap well-formedness check: tags are balanced for the elements used.
+	// Count "<tag>" and "<tag " as opens (the latter covers attributed tags like
+	// <svg xmlns=...>); self-closing elements such as <rect .../> use neither.
 	for _, tag := range []string{"svg", "g", "title"} {
-		open := strings.Count(svg, "<"+tag)
+		open := strings.Count(svg, "<"+tag+">") + strings.Count(svg, "<"+tag+" ")
 		close := strings.Count(svg, "</"+tag+">")
-		selfClosed := strings.Count(svg, "<"+tag+" ")
-		if open-selfClosed != close {
-			t.Fatalf("unbalanced <%s>: %d open, %d close (self-closing %d)\n%s",
-				tag, open, close, selfClosed, svg)
+		if open != close {
+			t.Fatalf("unbalanced <%s>: %d open, %d close\n%s",
+				tag, open, close, svg)
 		}
 	}
 }

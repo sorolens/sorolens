@@ -1,42 +1,29 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
-
 T = TypeVar("T", bound="GetGlobalStatsResponse200")
-
 
 
 @_attrs_define
 class GetGlobalStatsResponse200:
-    """ 
-        Attributes:
-            tracked_contracts (int):
-            total_events (int):
-            total_invocations (int):
-            total_storage_entries (int):
-     """
+    """
+    Attributes:
+        tracked_contracts (int):
+        total_events (int):
+        total_invocations (int):
+        total_storage_entries (int):
+    """
 
     tracked_contracts: int
     total_events: int
     total_invocations: int
     total_storage_entries: int
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         tracked_contracts = self.tracked_contracts
@@ -47,19 +34,18 @@ class GetGlobalStatsResponse200:
 
         total_storage_entries = self.total_storage_entries
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "tracked_contracts": tracked_contracts,
-            "total_events": total_events,
-            "total_invocations": total_invocations,
-            "total_storage_entries": total_storage_entries,
-        })
+        field_dict.update(
+            {
+                "tracked_contracts": tracked_contracts,
+                "total_events": total_events,
+                "total_invocations": total_invocations,
+                "total_storage_entries": total_storage_entries,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -78,7 +64,6 @@ class GetGlobalStatsResponse200:
             total_invocations=total_invocations,
             total_storage_entries=total_storage_entries,
         )
-
 
         get_global_stats_response_200.additional_properties = d
         return get_global_stats_response_200

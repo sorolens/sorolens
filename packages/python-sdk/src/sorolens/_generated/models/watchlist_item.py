@@ -1,57 +1,42 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-from typing import cast
-import datetime
-
-
-
-
-
-
 T = TypeVar("T", bound="WatchlistItem")
-
 
 
 @_attrs_define
 class WatchlistItem:
-    """ 
-        Attributes:
-            contract_id (str):
-            added_at (datetime.datetime):
-     """
+    """
+    Attributes:
+        contract_id (str):
+        added_at (datetime.datetime):
+    """
 
     contract_id: str
     added_at: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         contract_id = self.contract_id
 
         added_at = self.added_at.isoformat()
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "contract_id": contract_id,
-            "added_at": added_at,
-        })
+        field_dict.update(
+            {
+                "contract_id": contract_id,
+                "added_at": added_at,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -60,14 +45,10 @@ class WatchlistItem:
 
         added_at = datetime.datetime.fromisoformat(d.pop("added_at"))
 
-
-
-
         watchlist_item = cls(
             contract_id=contract_id,
             added_at=added_at,
         )
-
 
         watchlist_item.additional_properties = d
         return watchlist_item

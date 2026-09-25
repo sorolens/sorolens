@@ -1,55 +1,41 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
-
 T = TypeVar("T", bound="ScopeError")
-
 
 
 @_attrs_define
 class ScopeError:
-    """ 
-        Attributes:
-            error (str):
-            required (str):
-     """
+    """
+    Attributes:
+        error (str):
+        required (str):
+    """
 
     error: str
     required: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         error = self.error
 
         required = self.required
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "error": error,
-            "required": required,
-        })
+        field_dict.update(
+            {
+                "error": error,
+                "required": required,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -62,7 +48,6 @@ class ScopeError:
             error=error,
             required=required,
         )
-
 
         scope_error.additional_properties = d
         return scope_error

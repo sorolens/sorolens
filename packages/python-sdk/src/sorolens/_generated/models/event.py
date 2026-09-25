@@ -1,42 +1,32 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-from typing import cast
-import datetime
-
-
-
-
-
-
 T = TypeVar("T", bound="Event")
-
 
 
 @_attrs_define
 class Event:
-    """ 
-        Attributes:
-            id (str):
-            contract_id (str):
-            network (str):
-            ledger (int):
-            ledger_closed_at (datetime.datetime):
-            tx_hash (str):
-            type_ (str):
-            topic_xdr (list[str]):
-            value_xdr (str):
-            topic_decoded (list[Any]):
-            value_decoded (Any):
-            in_successful_call (bool):
-     """
+    """
+    Attributes:
+        id (str):
+        contract_id (str):
+        network (str):
+        ledger (int):
+        ledger_closed_at (datetime.datetime):
+        tx_hash (str):
+        type_ (str):
+        topic_xdr (list[str]):
+        value_xdr (str):
+        topic_decoded (list[Any]):
+        value_decoded (Any):
+        in_successful_call (bool):
+    """
 
     id: str
     contract_id: str
@@ -51,10 +41,6 @@ class Event:
     value_decoded: Any
     in_successful_call: bool
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         id = self.id
@@ -73,39 +59,34 @@ class Event:
 
         topic_xdr = self.topic_xdr
 
-
-
         value_xdr = self.value_xdr
 
         topic_decoded = self.topic_decoded
-
-
 
         value_decoded = self.value_decoded
 
         in_successful_call = self.in_successful_call
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "id": id,
-            "contract_id": contract_id,
-            "network": network,
-            "ledger": ledger,
-            "ledger_closed_at": ledger_closed_at,
-            "tx_hash": tx_hash,
-            "type": type_,
-            "topic_xdr": topic_xdr,
-            "value_xdr": value_xdr,
-            "topic_decoded": topic_decoded,
-            "value_decoded": value_decoded,
-            "in_successful_call": in_successful_call,
-        })
+        field_dict.update(
+            {
+                "id": id,
+                "contract_id": contract_id,
+                "network": network,
+                "ledger": ledger,
+                "ledger_closed_at": ledger_closed_at,
+                "tx_hash": tx_hash,
+                "type": type_,
+                "topic_xdr": topic_xdr,
+                "value_xdr": value_xdr,
+                "topic_decoded": topic_decoded,
+                "value_decoded": value_decoded,
+                "in_successful_call": in_successful_call,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -120,20 +101,15 @@ class Event:
 
         ledger_closed_at = datetime.datetime.fromisoformat(d.pop("ledger_closed_at"))
 
-
-
-
         tx_hash = d.pop("tx_hash")
 
         type_ = d.pop("type")
 
         topic_xdr = cast(list[str], d.pop("topic_xdr"))
 
-
         value_xdr = d.pop("value_xdr")
 
         topic_decoded = cast(list[Any], d.pop("topic_decoded"))
-
 
         value_decoded = d.pop("value_decoded")
 
@@ -153,7 +129,6 @@ class Event:
             value_decoded=value_decoded,
             in_successful_call=in_successful_call,
         )
-
 
         event.additional_properties = d
         return event

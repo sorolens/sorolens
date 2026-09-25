@@ -1,78 +1,60 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-from typing import cast
-
 if TYPE_CHECKING:
-  from ..models.contract import Contract
-
-
-
+    from ..models.contract import Contract
 
 
 T = TypeVar("T", bound="ListContractsResponse200")
 
 
-
 @_attrs_define
 class ListContractsResponse200:
-    """ 
-        Attributes:
-            contracts (list[Contract]):
-            next_cursor (str): Opaque cursor for the next page; empty when no more pages.
-     """
+    """
+    Attributes:
+        contracts (list[Contract]):
+        next_cursor (str): Opaque cursor for the next page; empty when no more pages.
+    """
 
     contracts: list[Contract]
     next_cursor: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.contract import Contract # noqa: PLC0415
         contracts = []
         for contracts_item_data in self.contracts:
             contracts_item = contracts_item_data.to_dict()
             contracts.append(contracts_item)
 
-
-
         next_cursor = self.next_cursor
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "contracts": contracts,
-            "next_cursor": next_cursor,
-        })
+        field_dict.update(
+            {
+                "contracts": contracts,
+                "next_cursor": next_cursor,
+            }
+        )
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.contract import Contract # noqa: PLC0415
+        from ..models.contract import Contract  # noqa: PLC0415
+
         d = dict(src_dict)
         contracts = []
         _contracts = d.pop("contracts")
-        for contracts_item_data in (_contracts):
+        for contracts_item_data in _contracts:
             contracts_item = Contract.from_dict(contracts_item_data)
 
-
-
             contracts.append(contracts_item)
-
 
         next_cursor = d.pop("next_cursor")
 
@@ -80,7 +62,6 @@ class ListContractsResponse200:
             contracts=contracts,
             next_cursor=next_cursor,
         )
-
 
         list_contracts_response_200.additional_properties = d
         return list_contracts_response_200

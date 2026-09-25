@@ -1,35 +1,26 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
-
 T = TypeVar("T", bound="ContractStats")
-
 
 
 @_attrs_define
 class ContractStats:
-    """ 
-        Attributes:
-            event_count (int):
-            invocation_count (int):
-            storage_count (int):
-            last_synced_ledger (int):
-            window_event_count (int):
-            window_invocation_count (int):
-            window_duration (str):
-     """
+    """
+    Attributes:
+        event_count (int):
+        invocation_count (int):
+        storage_count (int):
+        last_synced_ledger (int):
+        window_event_count (int):
+        window_invocation_count (int):
+        window_duration (str):
+    """
 
     event_count: int
     invocation_count: int
@@ -39,10 +30,6 @@ class ContractStats:
     window_invocation_count: int
     window_duration: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         event_count = self.event_count
@@ -59,22 +46,21 @@ class ContractStats:
 
         window_duration = self.window_duration
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "event_count": event_count,
-            "invocation_count": invocation_count,
-            "storage_count": storage_count,
-            "last_synced_ledger": last_synced_ledger,
-            "window_event_count": window_event_count,
-            "window_invocation_count": window_invocation_count,
-            "window_duration": window_duration,
-        })
+        field_dict.update(
+            {
+                "event_count": event_count,
+                "invocation_count": invocation_count,
+                "storage_count": storage_count,
+                "last_synced_ledger": last_synced_ledger,
+                "window_event_count": window_event_count,
+                "window_invocation_count": window_invocation_count,
+                "window_duration": window_duration,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -102,7 +88,6 @@ class ContractStats:
             window_invocation_count=window_invocation_count,
             window_duration=window_duration,
         )
-
 
         contract_stats.additional_properties = d
         return contract_stats

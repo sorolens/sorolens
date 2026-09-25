@@ -1,40 +1,27 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
 from ..models.create_api_key_body_scopes_item import CreateApiKeyBodyScopesItem
-from typing import cast
-
-
-
-
-
 
 T = TypeVar("T", bound="CreateApiKeyBody")
 
 
-
 @_attrs_define
 class CreateApiKeyBody:
-    """ 
-        Attributes:
-            name (str): Human-friendly key name.
-            scopes (list[CreateApiKeyBodyScopesItem]): Scopes granted to the key.
-     """
+    """
+    Attributes:
+        name (str): Human-friendly key name.
+        scopes (list[CreateApiKeyBodyScopesItem]): Scopes granted to the key.
+    """
 
     name: str
     scopes: list[CreateApiKeyBodyScopesItem]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         name = self.name
@@ -44,19 +31,16 @@ class CreateApiKeyBody:
             scopes_item = scopes_item_data.value
             scopes.append(scopes_item)
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "name": name,
-            "scopes": scopes,
-        })
+        field_dict.update(
+            {
+                "name": name,
+                "scopes": scopes,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -65,19 +49,15 @@ class CreateApiKeyBody:
 
         scopes = []
         _scopes = d.pop("scopes")
-        for scopes_item_data in (_scopes):
+        for scopes_item_data in _scopes:
             scopes_item = CreateApiKeyBodyScopesItem(scopes_item_data)
 
-
-
             scopes.append(scopes_item)
-
 
         create_api_key_body = cls(
             name=name,
             scopes=scopes,
         )
-
 
         create_api_key_body.additional_properties = d
         return create_api_key_body

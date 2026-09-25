@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class ContractStatus(StrEnum):
     ACTIVE = "active"
     BACKFILLING = "backfilling"

@@ -1,39 +1,29 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-from typing import cast
-import datetime
-
-
-
-
-
-
 T = TypeVar("T", bound="MonitoredContract")
-
 
 
 @_attrs_define
 class MonitoredContract:
-    """ 
-        Attributes:
-            contract_id (str):
-            network (str):
-            name (str):
-            owner (str):
-            status (str):
-            last_check (datetime.datetime | None):
-            check_interval (int):
-            registered_at (datetime.datetime):
-            updated_at (datetime.datetime):
-     """
+    """
+    Attributes:
+        contract_id (str):
+        network (str):
+        name (str):
+        owner (str):
+        status (str):
+        last_check (datetime.datetime | None):
+        check_interval (int):
+        registered_at (datetime.datetime):
+        updated_at (datetime.datetime):
+    """
 
     contract_id: str
     network: str
@@ -45,10 +35,6 @@ class MonitoredContract:
     registered_at: datetime.datetime
     updated_at: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         contract_id = self.contract_id
@@ -73,24 +59,23 @@ class MonitoredContract:
 
         updated_at = self.updated_at.isoformat()
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "contract_id": contract_id,
-            "network": network,
-            "name": name,
-            "owner": owner,
-            "status": status,
-            "last_check": last_check,
-            "check_interval": check_interval,
-            "registered_at": registered_at,
-            "updated_at": updated_at,
-        })
+        field_dict.update(
+            {
+                "contract_id": contract_id,
+                "network": network,
+                "name": name,
+                "owner": owner,
+                "status": status,
+                "last_check": last_check,
+                "check_interval": check_interval,
+                "registered_at": registered_at,
+                "updated_at": updated_at,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -113,8 +98,6 @@ class MonitoredContract:
                     raise TypeError()
                 last_check_type_0 = datetime.datetime.fromisoformat(data)
 
-
-
                 return last_check_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
@@ -122,18 +105,11 @@ class MonitoredContract:
 
         last_check = _parse_last_check(d.pop("last_check"))
 
-
         check_interval = d.pop("check_interval")
 
         registered_at = datetime.datetime.fromisoformat(d.pop("registered_at"))
 
-
-
-
         updated_at = datetime.datetime.fromisoformat(d.pop("updated_at"))
-
-
-
 
         monitored_contract = cls(
             contract_id=contract_id,
@@ -146,7 +122,6 @@ class MonitoredContract:
             registered_at=registered_at,
             updated_at=updated_at,
         )
-
 
         monitored_contract.additional_properties = d
         return monitored_contract

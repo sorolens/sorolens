@@ -1,48 +1,40 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
-from typing import cast
-import datetime
-
 if TYPE_CHECKING:
-  from ..models.invocation_args_decoded import InvocationArgsDecoded
-
-
-
+    from ..models.invocation_args_decoded import InvocationArgsDecoded
 
 
 T = TypeVar("T", bound="Invocation")
 
 
-
 @_attrs_define
 class Invocation:
-    """ 
-        Attributes:
-            tx_hash (str):
-            contract_id (str):
-            network (str):
-            ledger (int):
-            ledger_closed_at (datetime.datetime):
-            status (str):
-            function_name (str):
-            args_decoded (InvocationArgsDecoded):
-            result_decoded (Any):
-            result_xdr (str):
-            resource_fee_charged (int):
-            cpu_insn (int):
-            mem_byte (int):
-            ledger_read_byte (int):
-            ledger_write_byte (int):
-            application_order (int):
-     """
+    """
+    Attributes:
+        tx_hash (str):
+        contract_id (str):
+        network (str):
+        ledger (int):
+        ledger_closed_at (datetime.datetime):
+        status (str):
+        function_name (str):
+        args_decoded (InvocationArgsDecoded):
+        result_decoded (Any):
+        result_xdr (str):
+        resource_fee_charged (int):
+        cpu_insn (int):
+        mem_byte (int):
+        ledger_read_byte (int):
+        ledger_write_byte (int):
+        application_order (int):
+    """
 
     tx_hash: str
     contract_id: str
@@ -62,12 +54,7 @@ class Invocation:
     application_order: int
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.invocation_args_decoded import InvocationArgsDecoded # noqa: PLC0415
         tx_hash = self.tx_hash
 
         contract_id = self.contract_id
@@ -100,35 +87,37 @@ class Invocation:
 
         application_order = self.application_order
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "tx_hash": tx_hash,
-            "contract_id": contract_id,
-            "network": network,
-            "ledger": ledger,
-            "ledger_closed_at": ledger_closed_at,
-            "status": status,
-            "function_name": function_name,
-            "args_decoded": args_decoded,
-            "result_decoded": result_decoded,
-            "result_xdr": result_xdr,
-            "resource_fee_charged": resource_fee_charged,
-            "cpu_insn": cpu_insn,
-            "mem_byte": mem_byte,
-            "ledger_read_byte": ledger_read_byte,
-            "ledger_write_byte": ledger_write_byte,
-            "application_order": application_order,
-        })
+        field_dict.update(
+            {
+                "tx_hash": tx_hash,
+                "contract_id": contract_id,
+                "network": network,
+                "ledger": ledger,
+                "ledger_closed_at": ledger_closed_at,
+                "status": status,
+                "function_name": function_name,
+                "args_decoded": args_decoded,
+                "result_decoded": result_decoded,
+                "result_xdr": result_xdr,
+                "resource_fee_charged": resource_fee_charged,
+                "cpu_insn": cpu_insn,
+                "mem_byte": mem_byte,
+                "ledger_read_byte": ledger_read_byte,
+                "ledger_write_byte": ledger_write_byte,
+                "application_order": application_order,
+            }
+        )
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.invocation_args_decoded import InvocationArgsDecoded # noqa: PLC0415
+        from ..models.invocation_args_decoded import (
+            InvocationArgsDecoded,  # noqa: PLC0415
+        )
+
         d = dict(src_dict)
         tx_hash = d.pop("tx_hash")
 
@@ -140,17 +129,11 @@ class Invocation:
 
         ledger_closed_at = datetime.datetime.fromisoformat(d.pop("ledger_closed_at"))
 
-
-
-
         status = d.pop("status")
 
         function_name = d.pop("function_name")
 
         args_decoded = InvocationArgsDecoded.from_dict(d.pop("args_decoded"))
-
-
-
 
         result_decoded = d.pop("result_decoded")
 
@@ -186,7 +169,6 @@ class Invocation:
             ledger_write_byte=ledger_write_byte,
             application_order=application_order,
         )
-
 
         invocation.additional_properties = d
         return invocation

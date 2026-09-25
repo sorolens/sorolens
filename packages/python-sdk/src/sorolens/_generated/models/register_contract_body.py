@@ -1,42 +1,30 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
 from ..models.register_contract_body_network import RegisterContractBodyNetwork
 from ..types import UNSET, Unset
-
-
-
-
-
 
 T = TypeVar("T", bound="RegisterContractBody")
 
 
-
 @_attrs_define
 class RegisterContractBody:
-    """ 
-        Attributes:
-            id (str): Stellar contract ID (56 chars, starts with C).
-            network (RegisterContractBodyNetwork):
-            label (str | Unset): Optional human-friendly label.
-     """
+    """
+    Attributes:
+        id (str): Stellar contract ID (56 chars, starts with C).
+        network (RegisterContractBodyNetwork):
+        label (str | Unset): Optional human-friendly label.
+    """
 
     id: str
     network: RegisterContractBodyNetwork
     label: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         id = self.id
@@ -45,19 +33,18 @@ class RegisterContractBody:
 
         label = self.label
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "id": id,
-            "network": network,
-        })
+        field_dict.update(
+            {
+                "id": id,
+                "network": network,
+            }
+        )
         if label is not UNSET:
             field_dict["label"] = label
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
@@ -66,9 +53,6 @@ class RegisterContractBody:
 
         network = RegisterContractBodyNetwork(d.pop("network"))
 
-
-
-
         label = d.pop("label", UNSET)
 
         register_contract_body = cls(
@@ -76,7 +60,6 @@ class RegisterContractBody:
             network=network,
             label=label,
         )
-
 
         register_contract_body.additional_properties = d
         return register_contract_body
