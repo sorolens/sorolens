@@ -40,10 +40,13 @@ func (noLimitRedis) Expire(context.Context, string, time.Duration) (bool, error)
 
 func timeoutTestHandler(st handler.APIStore) *handler.Handler {
 	return &handler.Handler{
-		Store:          st,
-		DB:             &store.MockPinger{Healthy: true},
-		Redis:          &store.MockPinger{Healthy: true},
-		RedisClient:    noLimitRedis{},
+		Store:       st,
+		DB:          &store.MockPinger{Healthy: true},
+		Redis:       &store.MockPinger{Healthy: true},
+		RedisClient: noLimitRedis{},
+		// Set up front: Handler.Hub() initializes lazily without a lock, and
+		// the stream test calls it from a second goroutine.
+		StreamHub:      handler.NewStreamHub(),
 		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 		RequestTimeout: 50 * time.Millisecond,
 		StreamTimeout:  400 * time.Millisecond,
