@@ -30,4 +30,15 @@ describe("MonoId", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(value));
     expect(screen.getByText("Copied")).toBeVisible();
   });
+
+  it("renders a non-interactive span with the full value in the title for the text variant", () => {
+    const value = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQAHHAGQFW2J";
+    render(<MonoId value={value} headChars={8} tailChars={6} variant="text" />);
+
+    const span = screen.getByTitle(value);
+    expect(span.tagName).toBe("SPAN");
+    expect(span).toHaveTextContent("CDLZFC3S...");
+    expect(span).not.toHaveTextContent(value);
+    expect(screen.queryByRole("button")).toBeNull();
+  });
 });

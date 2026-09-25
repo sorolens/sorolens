@@ -16,6 +16,7 @@ import { StatCard } from "@/components/StatCard";
 import { TableSkeleton } from "@/components/Skeleton";
 import { HealthBadge, SeverityBadge } from "@/components/WatchdogBadges";
 import { networkFilter, useNetwork } from "@/lib/network";
+import { MonoId } from "@sorolens/ui";
 
 const ZERO_STATS: WatchdogStats = {
   total_monitored: 0,
@@ -119,7 +120,12 @@ export default function WatchdogPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-[var(--color-text-secondary)]">
-                      {truncate(c.contract_id)}
+                      <MonoId
+                        value={c.contract_id}
+                        headChars={8}
+                        tailChars={6}
+                        variant="text"
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <HealthBadge status={c.status} />
@@ -174,7 +180,12 @@ export default function WatchdogPage() {
                         href={`/watchdog/${a.contract_id}`}
                         className="hover:text-[var(--color-accent)]"
                       >
-                        {truncate(a.contract_id)}
+                        <MonoId
+                          value={a.contract_id}
+                          headChars={8}
+                          tailChars={6}
+                          variant="text"
+                        />
                       </Link>
                     </td>
                     <td className="px-4 py-3">{a.message}</td>
@@ -200,11 +211,6 @@ function EmptyState({ title, body }: { title: string; body: string }) {
       <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{body}</p>
     </div>
   );
-}
-
-function truncate(id: string): string {
-  if (id.length <= 16) return id;
-  return `${id.slice(0, 8)}…${id.slice(-6)}`;
 }
 
 function formatTime(iso: string): string {

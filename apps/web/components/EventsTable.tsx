@@ -16,6 +16,9 @@ function EventRow({ event }: { event: ContractEvent }) {
   const [expanded, setExpanded] = useState(false);
 
   const decodedTopics = event.topic_decoded ?? decodeTopic(event.topic_xdr);
+  const topicLabel = String(decodedTopics?.[0] ?? "");
+  const valueLabel =
+    event.value_decoded != null ? String(event.value_decoded) : "-";
 
   return (
     <>
@@ -27,13 +30,17 @@ function EventRow({ event }: { event: ContractEvent }) {
           <MonoId value={event.tx_hash} headChars={8} tailChars={8} />
         </td>
         <td className="px-4 py-3 text-sm">{event.type}</td>
-        <td className="max-w-xs truncate px-4 py-3 font-mono text-xs text-[var(--color-text-secondary)]">
-          {String(decodedTopics?.[0] ?? "")}
+        <td
+          title={topicLabel || undefined}
+          className="max-w-xs truncate px-4 py-3 font-mono text-xs text-[var(--color-text-secondary)]"
+        >
+          {topicLabel}
         </td>
-        <td className="max-w-[160px] truncate px-4 py-3 font-mono text-xs text-[var(--color-text-secondary)]">
-          {event.value_decoded != null
-            ? String(event.value_decoded)
-            : "-"}
+        <td
+          title={valueLabel}
+          className="max-w-[160px] truncate px-4 py-3 font-mono text-xs text-[var(--color-text-secondary)]"
+        >
+          {valueLabel}
         </td>
         <td className="px-4 py-3 text-right font-mono text-xs text-[var(--color-text-secondary)]">
           {event.ledger}

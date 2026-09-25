@@ -100,6 +100,7 @@ export default function EventsPage() {
           label="Streamed Events"
           value={events.length.toLocaleString()}
           subtext={activeFilter ? `For ${activeFilter.slice(0, 8)}...` : "Across all tracked contracts"}
+          subtextTitle={activeFilter || undefined}
         />
         <StatCard
           label="Stream Connection"
