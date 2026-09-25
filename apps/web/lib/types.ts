@@ -30,6 +30,20 @@ export interface ContractEvent {
   in_successful_call: boolean;
 }
 
+/** An event from the cross-contract feed (GET /api/v1/events). */
+export interface GlobalEvent extends ContractEvent {
+  contract_id: string;
+  network: string;
+}
+
+export interface GlobalEventsResponse {
+  events: GlobalEvent[];
+  /** Opaque cursor for the next (older) page; empty on the last page. */
+  next_cursor: string;
+}
+
+export type EventType = "contract" | "system" | "diagnostic";
+
 export interface EventsResponse {
   events: ContractEvent[];
   cursor: string | null;
@@ -38,6 +52,8 @@ export interface EventsResponse {
 
 export interface Invocation {
   tx_hash: string;
+  contract_id: string;
+  network: string;
   ledger: number;
   ledger_closed_at: string;
   status: string;
@@ -53,8 +69,8 @@ export interface Invocation {
 
 export interface InvocationsResponse {
   invocations: Invocation[];
-  cursor: string | null;
-  has_more: boolean;
+  // The API returns `next_cursor` (empty when there are no further pages).
+  next_cursor: string | null;
 }
 
 export interface StorageEntry {
@@ -86,6 +102,12 @@ export interface ContractStats {
 export interface VolumePoint {
   date: string;
   ledger: number;
+  count: number;
+}
+
+/** One hour bucket of invocation frequency (issue #185). */
+export interface InvocationFrequencyPoint {
+  hour: string; // "HH:00" UTC hour start
   count: number;
 }
 
@@ -125,12 +147,62 @@ export interface TrackContractRequest {
   label?: string;
 }
 
+export interface LabelResolution {
+  label: string;
+  value: string;
+  scope: string;
+}
+
 export type TimeWindow = "24h" | "7d" | "30d" | "all";
 
 // ---- watchdog --------------------------------------------------------------
 
 export type HealthStatus = "Healthy" | "Degraded" | "Unresponsive" | string;
 export type AlertSeverity = "Info" | "Warning" | "Critical";
+export type UptimeWindow = "24h" | "7d" | "30d";
+
+export interface UptimeResponse {
+  contract_id: string;
+  window: UptimeWindow;
+  /** Uptime percentage in the range [0, 100] with up to 2 decimal places. */
+  uptime_pct: number;
+}
+
+/**
+ * One contract's service-level summary for a calendar month (issue #266).
+ * Derived from watchdog health checks and alerts, not from a separate source.
+ */
+export interface MonthlySLA {
+  contract_id: string;
+  /** Reporting period, YYYY-MM (UTC). */
+  month: string;
+  /** Healthy checks / total checks * 100. Zero when there are no checks. */
+  uptime_pct: number;
+  total_checks: number;
+  healthy_checks: number;
+  /** Outages: transitions from Healthy into any other status. */
+  incidents: number;
+  /** Mean time to recovery in seconds, across incidents that recovered. */
+  mttr_seconds: number;
+  total_downtime_seconds: number;
+  longest_outage_seconds: number;
+  /** True when the month ends mid-incident, so MTTR excludes that incident. */
+  ongoing_outage: boolean;
+  critical_alerts: number;
+  warning_alerts: number;
+  info_alerts: number;
+  total_alerts: number;
+  first_check: string | null;
+  last_check: string | null;
+}
+
+export interface SLAHistoryResponse {
+  contract_id: string;
+  /** Oldest first, so it maps straight onto a chart's x-axis. */
+  months: MonthlySLA[];
+}
+
+export type ReportFormat = "json" | "csv" | "pdf";
 
 export interface MonitoredContract {
   contract_id: string;
@@ -304,4 +376,3 @@ export interface AlertSubscription {
 export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
 }
-

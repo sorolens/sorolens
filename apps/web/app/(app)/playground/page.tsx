@@ -13,10 +13,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 export default function PlaygroundPage() {
   const groups = useMemo(() => endpointsByTag(), []);
-  const [selected, setSelected] = useState<EndpointEntry>(groups[0].endpoints[0]);
+  const [selected, setSelected] = useState<EndpointEntry>(
+    groups[0].endpoints[0]
+  );
   const [pathParams, setPathParams] = useState<Record<string, string>>({});
   const [queryParams, setQueryParams] = useState<Record<string, string>>({});
-  const [body, setBody] = useState(groups[0].endpoints[0].operation.requestBody?.example ?? "");
+  const [body, setBody] = useState(
+    groups[0].endpoints[0].operation.requestBody?.example ?? ""
+  );
   const [apiKey, setApiKey] = useState("");
   const [response, setResponse] = useState<ResponseState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,9 +28,15 @@ export default function PlaygroundPage() {
 
   const curl = buildCurl(
     selected.method,
-    buildUrl(API_URL, selected.path, pathParams, queryParams, selected.operation.parameters),
+    buildUrl(
+      API_URL,
+      selected.path,
+      pathParams,
+      queryParams,
+      selected.operation.parameters
+    ),
     apiKey,
-    body,
+    body
   );
 
   function selectEndpoint(entry: EndpointEntry) {
@@ -46,9 +56,11 @@ export default function PlaygroundPage() {
       selected.path,
       pathParams,
       queryParams,
-      selected.operation.parameters,
+      selected.operation.parameters
     );
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
     if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
     const started = Date.now();
@@ -108,7 +120,8 @@ export default function PlaygroundPage() {
               <ul>
                 {group.endpoints.map((entry) => {
                   const active =
-                    entry.method === selected.method && entry.path === selected.path;
+                    entry.method === selected.method &&
+                    entry.path === selected.path;
                   return (
                     <li key={`${entry.method}-${entry.path}`}>
                       <button
@@ -125,7 +138,9 @@ export default function PlaygroundPage() {
                           {entry.method}
                         </span>
                         <span className="font-mono">{entry.path}</span>
-                        <span className="mt-0.5 block">{entry.operation.summary}</span>
+                        <span className="mt-0.5 block">
+                          {entry.operation.summary}
+                        </span>
                       </button>
                     </li>
                   );
@@ -164,8 +179,8 @@ export default function PlaygroundPage() {
                 id={`param-${p.name}`}
                 value={
                   p.in === "path"
-                    ? pathParams[p.name] ?? ""
-                    : queryParams[p.name] ?? p.default ?? ""
+                    ? (pathParams[p.name] ?? "")
+                    : (queryParams[p.name] ?? p.default ?? "")
                 }
                 onChange={(e) => {
                   const value = e.target.value;
@@ -293,9 +308,7 @@ export default function PlaygroundPage() {
                     Headers
                   </div>
                   <pre className="overflow-x-auto rounded-md bg-black/20 p-3 font-mono text-[11px]">
-                    {response.headers
-                      .map(([k, v]) => `${k}: ${v}`)
-                      .join("\n")}
+                    {response.headers.map(([k, v]) => `${k}: ${v}`).join("\n")}
                   </pre>
                 </div>
               )}
@@ -307,7 +320,9 @@ export default function PlaygroundPage() {
                 <pre
                   data-testid="response-body"
                   className="max-h-96 overflow-auto rounded-md bg-black/20 p-3 font-mono text-[11px] leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: highlightJson(response.body) }}
+                  dangerouslySetInnerHTML={{
+                    __html: highlightJson(response.body),
+                  }}
                 />
               </div>
             </div>

@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+
+import { loadSettings } from "./settings";
 
 /** Sentinel value meaning "do not filter by network". */
 export const ALL_NETWORKS = "all";
@@ -39,6 +41,17 @@ export function networkFilter(network: string): string | undefined {
 
 export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [network, setNetwork] = useState<string>(ALL_NETWORKS);
+
+  // Apply the default network saved on /settings once, on first mount. Reading
+  // it in an effect rather than during render keeps server and client markup in
+  // step, and the provider does not remount while the user navigates.
+  useEffect(() => {
+    const stored = loadSettings().defaultNetwork;
+    if (stored && stored !== ALL_NETWORKS) {
+      setNetwork(stored);
+    }
+  }, []);
+
   return (
     <NetworkContext.Provider value={{ network, setNetwork }}>
       {children}

@@ -1,0 +1,41 @@
+{
+  "invocations": [
+    {
+      "tx_hash": "9c1f4e7b0d3c6a9f2e5b8d1c4a7f0e3b6d9c2a5f8e1b4d7c0a3f6e9b2d5c8a1f",
+      "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      "network": "testnet",
+      "ledger": 1234600,
+      "ledger_closed_at": "2026-01-15T11:00:00Z",
+      "status": "SUCCESS",
+      "function_name": "transfer",
+      "args_decoded": { "to": "GAAA", "amount": 10 },
+      "result_decoded": { "ok": true },
+      "result_xdr": "AAAAAw==",
+      "resource_fee_charged": 12000,
+      "cpu_insn": 450000,
+      "mem_byte": 2048,
+      "ledger_read_byte": 512,
+      "ledger_write_byte": 256,
+      "application_order": 1
+    },
+    {
+      "tx_hash": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
+      "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      "network": "testnet",
+      "ledger": 1234550,
+      "ledger_closed_at": "2026-01-15T10:30:00Z",
+      "status": "FAILED",
+      "function_name": "withdraw",
+      "args_decoded": {},
+      "result_decoded": null,
+      "result_xdr": "",
+      "resource_fee_charged": 9000,
+      "cpu_insn": 120000,
+      "mem_byte": 1024,
+      "ledger_read_byte": 128,
+      "ledger_write_byte": 0,
+      "application_order": 0
+    }
+  ],
+  "next_cursor": ""
+}

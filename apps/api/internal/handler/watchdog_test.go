@@ -264,3 +264,87 @@ func TestListAlertsFiltersBySeverity(t *testing.T) {
 		t.Fatalf("expected zero Info alerts, got %d", len(body.Alerts))
 	}
 }
+
+func TestGetContractUptimeDefault(t *testing.T) {
+	ms := seededWatchdogStore(t)
+	srv := newTestHandler(ms, true, true)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/watchdog/contracts/CONTRACT_A/uptime", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["contract_id"] != "CONTRACT_A" {
+		t.Errorf("contract_id: got %v", body["contract_id"])
+	}
+	if body["window"] != "24h" {
+		t.Errorf("window: got %v, want 24h", body["window"])
+	}
+	// CONTRACT_A has 1 health check with status Healthy, so uptime should be 100
+	if body["uptime_pct"].(float64) != 100.0 {
+		t.Errorf("uptime_pct: got %v, want 100.0", body["uptime_pct"])
+	}
+}
+
+func TestGetContractUptimeWindows(t *testing.T) {
+	ms := seededWatchdogStore(t)
+	srv := newTestHandler(ms, true, true)
+
+	for _, window := range []string{"24h", "7d", "30d"} {
+		t.Run(window, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/watchdog/contracts/CONTRACT_A/uptime?window="+window, nil)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
+			}
+			var body map[string]any
+			if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["window"] != window {
+				t.Errorf("window: got %v, want %s", body["window"], window)
+			}
+			if _, ok := body["uptime_pct"]; !ok {
+				t.Error("missing uptime_pct field")
+			}
+		})
+	}
+}
+
+func TestGetContractUptimeInvalidWindow(t *testing.T) {
+	srv := newTestHandler(seededWatchdogStore(t), true, true)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/watchdog/contracts/CONTRACT_A/uptime?window=99d", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestGetContractUptimeNoChecks(t *testing.T) {
+	ms := seededWatchdogStore(t)
+	srv := newTestHandler(ms, true, true)
+	// CONTRACT_B has no health checks seeded, so uptime should be 0
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/watchdog/contracts/CONTRACT_B/uptime?window=24h", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["uptime_pct"].(float64) != 0.0 {
+		t.Errorf("uptime_pct: got %v, want 0.0 for contract with no checks", body["uptime_pct"])
+	}
+}

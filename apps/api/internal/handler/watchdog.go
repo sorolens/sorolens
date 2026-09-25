@@ -207,3 +207,33 @@ func (h *Handler) WatchdogStats(w http.ResponseWriter, r *http.Request) {
 		CriticalAlerts: s.CriticalAlerts,
 	})
 }
+
+// GetContractUptime handles GET /api/v1/watchdog/contracts/{id}/uptime.
+// Query param: window=24h|7d|30d (defaults to 24h).
+// Response: { "contract_id": "...", "window": "24h", "uptime_pct": 99.98 }
+func (h *Handler) GetContractUptime(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	window := r.URL.Query().Get("window")
+	if window == "" {
+		window = "24h"
+	}
+	switch window {
+	case "24h", "7d", "30d":
+		// valid
+	default:
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "window must be one of: 24h, 7d, 30d")
+		return
+	}
+
+	result, err := h.Store.GetContractUptime(r.Context(), id, window)
+	if err != nil {
+		h.Logger.Error("get contract uptime", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to compute contract uptime")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"contract_id": result.ContractID,
+		"window":      result.Window,
+		"uptime_pct":  result.Uptime,
+	})
+}

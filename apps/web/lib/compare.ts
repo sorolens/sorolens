@@ -13,7 +13,11 @@ import type { CompareContractEntry } from "./types";
 export type DeltaTone = "neutral" | "warning" | "danger";
 
 /** Ratio by which `value` is worse than `best` (0 when equal or better). */
-export function worseRatio(value: number, best: number, higherIsBetter: boolean): number {
+export function worseRatio(
+  value: number,
+  best: number,
+  higherIsBetter: boolean
+): number {
   if (!Number.isFinite(value) || !Number.isFinite(best) || best <= 0) return 0;
   const ratio = higherIsBetter ? (best - value) / best : (value - best) / best;
   return ratio > 0 ? ratio : 0;
@@ -23,7 +27,7 @@ export function worseRatio(value: number, best: number, higherIsBetter: boolean)
 export function worsePercent(
   value: number | null,
   best: number | null,
-  higherIsBetter: boolean,
+  higherIsBetter: boolean
 ): number | null {
   if (value === null || best === null) return null;
   const ratio = worseRatio(value, best, higherIsBetter);
@@ -34,7 +38,7 @@ export function worsePercent(
 export function deltaTone(
   value: number | null,
   best: number | null,
-  higherIsBetter: boolean,
+  higherIsBetter: boolean
 ): DeltaTone {
   if (value === null || best === null) return "neutral";
   const ratio = worseRatio(value, best, higherIsBetter);
@@ -104,7 +108,7 @@ export const COMPARE_METRICS: CompareMetricSpec[] = [
  */
 export function metricValue(
   entry: CompareContractEntry,
-  spec: CompareMetricSpec,
+  spec: CompareMetricSpec
 ): number | null {
   if (!entry.has_data) return null;
   return spec.pick(entry);
@@ -113,7 +117,7 @@ export function metricValue(
 /** Best value for a metric across the compared contracts, or null. */
 export function bestFor(
   spec: CompareMetricSpec,
-  entries: CompareContractEntry[],
+  entries: CompareContractEntry[]
 ): number | null {
   let best: number | null = null;
   for (const entry of entries) {

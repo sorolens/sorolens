@@ -1,9 +1,10 @@
 [![CI](https://github.com/sorolens/sorolens/actions/workflows/ci.yml/badge.svg)](https://github.com/sorolens/sorolens/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/sorolens/sorolens/branch/main/graph/badge.svg)](https://codecov.io/gh/sorolens/sorolens)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Release](https://img.shields.io/github/v/release/sorolens/sorolens)](https://github.com/sorolens/sorolens/releases)
+[![Latest Release](https://img.shields.io/github/v/release/sorolens/sorolens)](https://github.com/sorolens/sorolens/releases/latest)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/D9jATUezYX)
 [![Telegram](https://img.shields.io/badge/Telegram-Join-26A5E4?logo=telegram&logoColor=white)](https://t.me/sorolens_community)
+[![Discussions](https://img.shields.io/badge/Discussions-Ask%20a%20question-181717?logo=github&logoColor=white)](https://github.com/sorolens/sorolens/discussions)
 [![Go Report Card (API)](https://goreportcard.com/badge/github.com/sorolens/sorolens/apps/api)](https://goreportcard.com/report/github.com/sorolens/sorolens/apps/api)
 [![Go Report Card (Indexer)](https://goreportcard.com/badge/github.com/sorolens/sorolens/services/indexer)](https://goreportcard.com/report/github.com/sorolens/sorolens/services/indexer)
 # Sorolens
@@ -22,6 +23,7 @@ Soroban's public RPC retains events for 24 hours and transaction data for up to 
 - **Snapshot / replay**: `GET /api/v1/contracts/:id/snapshot?ledger=N` replays a contract's storage state and last known event as of any ledger, with a ledger scrubber on the contract page for time-travel debugging.
 - **Scoped API keys**: per-key permissions (`read:contracts`, `write:contracts`, `read:watchdog`, `admin:*`) enforced by route metadata, so a monitoring bot can hold a read-only watchdog key.
 - **API playground**: an interactive `/playground` page to explore every endpoint, send requests, and copy them as curl.
+- **Build introspection**: `GET /api/version` returns the running API's `version`, `git_sha`, and `built_at` (injected at build time via `-ldflags`, falling back to `dev` locally). It is unauthenticated and does no database or Redis work, so deploy checks and uptime monitors can poll it cheaply.
 
 ## Quickstart
 ### Prerequisites
@@ -34,10 +36,7 @@ docker compose up -d
 ```
 This starts Postgres 16 and Redis locally. The `docker-compose.yml` at the repo root maps Postgres to `localhost:5432` and Redis to `localhost:6379`.
 ### 2. Apply the database schema
-```bash
-cd services/indexer
-go run ./cmd/migrate up
-```
+The one-shot `migrate` service applies `apps/api/internal/db/migrations/*.up.sql` on first start, so the schema is ready once it finishes (`docker compose logs -f migrate`). To reset to an empty database instead, run `docker compose down -v` and start again.
 ### 3. Track a contract and run the indexer
 ```bash
 # Register a contract (uses the local API)
@@ -56,6 +55,19 @@ The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full walkthrough, including local setup, running tests, and the PR checklist.
 
 Real-time chat with maintainers and other contributors: [**join the Sorolens Discord**](https://discord.gg/D9jATUezYX). Announcements, PR reviews, weekly office hours, and a live GitHub activity feed all live there. Prefer Telegram? Mirror is at [t.me/sorolens_community](https://t.me/sorolens_community); Discord is the primary hub.
+
+---
+## Community
+
+Sorolens is developed in the open, and most of the conversation happens in real time:
+
+| Channel | Where | What it is for |
+|---|---|---|
+| **Discord** | [discord.gg/D9jATUezYX](https://discord.gg/D9jATUezYX) | Primary hub — live chat with maintainers, PR reviews, weekly office hours, and the live GitHub activity feed. Setup and code questions go in `#help`; PRs that need eyes in `#reviews-wanted`. |
+| **Telegram** | [t.me/sorolens_community](https://t.me/sorolens_community) | Mirror group with topic-based channels, for those who prefer Telegram. |
+| **GitHub Discussions** | [sorolens/sorolens/discussions](https://github.com/sorolens/sorolens/discussions) | Long-form questions, design proposals, and show-and-tell that should stay searchable beyond chat scrollback. |
+
+The GitHub issue thread remains the source of truth for any individual change. For behaviour expectations in these spaces, see [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 ---
 ## Architecture
@@ -105,6 +117,11 @@ Real-time chat with maintainers and other contributors: [**join the Sorolens Dis
 The **watchdog contract** at `contracts/watchdog/` is the piece that makes Sorolens unique: contracts you operate emit `HealthCheckEvent`, `ContractAlert`, `ContractRegistered`, and `ContractDeregistered` on-chain, the indexer picks them up along with everything else, and the dashboard renders your fleet's live health.
 
 > See `ARCHITECTURE.md` for the full system diagram, data flows, schema DDL, and REST API reference.
+
+### API reference
+
+The REST API is described by an OpenAPI 3.0 spec at [`docs/openapi.yaml`](docs/openapi.yaml). Load it into Swagger UI, Redoc or Postman, or generate a client from it (the Go client in `packages/go-client` is generated this way). Run `make openapi` after changing a route: it fails if any route is undocumented, lints the spec with Redocly, and regenerates the Go client.
+
 ---
 ## Deployed contracts
 
@@ -115,6 +132,14 @@ The **watchdog contract** at `contracts/watchdog/` is the piece that makes Sorol
 | Watchdog | `CACXRL67WL5KRD6HKWGYADHEUF6RQOCODUN26UQE7MGFZEMIR7PAX6R7` | [Stellar Expert](https://stellar.expert/explorer/testnet/contract/CACXRL67WL5KRD6HKWGYADHEUF6RQOCODUN26UQE7MGFZEMIR7PAX6R7) |
 
 Admin: `GAZ3HN2QNDKWLOI2OQEG65KBJEAUP4PROR3FJNXNDY34UH547MN4CJUI`
+
+### Mainnet
+
+| Contract | ID | Explorer | Status |
+|----------|----|----------|--------|
+| Watchdog | _TBA — not deployed yet_ | — | ⏳ Coming soon |
+
+> ⏳ **Coming soon.** Mainnet is on the roadmap. The row above is a placeholder: the mainnet contract ID and explorer link will be published here once the deployment is live.
 
 ---
 ## Tech stack
@@ -128,6 +153,7 @@ Admin: `GAZ3HN2QNDKWLOI2OQEG65KBJEAUP4PROR3FJNXNDY34UH547MN4CJUI`
 | XDR decoder | TypeScript package (`packages/xdr`), wraps `@stellar/stellar-sdk` |
 | CLI | Go 1.23, cobra |
 | Go client | Generated from [`docs/openapi.yaml`](docs/openapi.yaml) into `packages/go-client` |
+| Python client | Generated from [`docs/openapi.yaml`](docs/openapi.yaml) into `packages/python-sdk` (sync + async, published to PyPI as `sorolens`) |
 | Fixture contract | Rust (stable), Soroban SDK, deployed to Stellar testnet |
 | Watchdog contract | Rust (stable), Soroban SDK, on-chain health tracking (`contracts/watchdog`) |
 ---
@@ -143,6 +169,7 @@ sorolens/
     xdr/          TypeScript XDR decoder
     ui/           Shared React UI primitives
     go-client/    Auto-generated Go API client (from docs/openapi.yaml)
+    python-sdk/   Official Python API client, sync + async (from docs/openapi.yaml)
   cli/            Go CLI (cobra)
   contracts/
     counter/      Rust Soroban fixture contract
@@ -150,6 +177,24 @@ sorolens/
   docs/
     screenshots/  Screenshot placeholders
 ```
+
+### Python SDK
+
+[`packages/python-sdk`](./packages/python-sdk) ships the official `sorolens` Python client: a generated
+low-level layer built from [`docs/openapi.yaml`](docs/openapi.yaml) plus a hand-written facade with sync
+and async transports.
+
+```python
+from sorolens import Client
+
+with Client(api_key="sk_live_...") as client:
+    print(client.stats.global_stats().tracked_contracts)
+    for contract in client.contracts.list(limit=10).contracts:
+        print(contract.id, contract.status)
+```
+
+See [`packages/python-sdk/README.md`](./packages/python-sdk/README.md) for the quickstart, API reference
+and release process.
 
 ### The watchdog vertical
 

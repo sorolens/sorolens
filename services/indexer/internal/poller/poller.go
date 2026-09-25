@@ -64,6 +64,7 @@ type Config struct {
 
 // Poller fetches and persists events and invocations for all tracked contracts.
 type Poller struct {
+	rpcClient  RPCClient
 	rpcClients map[string]RPCClient
 	store      Store
 	redis      RedisClient
@@ -78,14 +79,27 @@ type Poller struct {
 // It preserves the existing single-client behavior by using the provided RPC
 // client for all contracts when no network-specific map is needed.
 func New(rpc RPCClient, store Store, redis RedisClient, cfg Config, log *slog.Logger) *Poller {
-	return NewWithRPCClients(map[string]RPCClient{"": rpc}, store, redis, cfg, log)
+	p := NewWithRPCClients(map[string]RPCClient{"": rpc}, store, redis, cfg, log)
+	p.rpcClient = rpc
+	return p
 }
 
 // NewWithRPCClients returns a Poller that routes each contract to the RPC
 // client matching its network. Contracts with an unconfigured network are
 // skipped with a warning.
 func NewWithRPCClients(rpcClients map[string]RPCClient, store Store, redis RedisClient, cfg Config, log *slog.Logger) *Poller {
-	return &Poller{rpcClients: rpcClients, store: store, redis: redis, cfg: cfg, log: log}
+	var defaultClient RPCClient
+	if rpcClients != nil {
+		if c, ok := rpcClients[""]; ok {
+			defaultClient = c
+		} else if len(rpcClients) == 1 {
+			for _, c := range rpcClients {
+				defaultClient = c
+				break
+			}
+		}
+	}
+	return &Poller{rpcClient: defaultClient, rpcClients: rpcClients, store: store, redis: redis, cfg: cfg, log: log}
 }
 
 // SetMetrics attaches the Prometheus recorder the poller updates on every
@@ -579,6 +593,26 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return fmt.Errorf("batch insert with cursor: %w", err)
 	}
 
+	// ---- Wasm hash transition detection (issue #276) ----------------------
+	// Ask the RPC for the current Wasm hash of this contract. When it differs
+	// from the last recorded version, persist a new ContractVersion entry.
+	rpcClient := rpc
+	if rpcClient == nil {
+		rpcClient = p.rpcClient
+	}
+	if rpcClient != nil {
+		if wasmHash, hashErr := rpcClient.GetContractWasmHash(ctx, contractID); hashErr != nil {
+			// Non-fatal: a single RPC miss must not stall the rest of the indexer.
+			p.log.Warn("failed to fetch contract wasm hash, skipping version check",
+				"contract_id", contractID,
+				"err", hashErr,
+			)
+		} else if wasmHash != "" {
+			p.maybeRecordVersion(ctx, contractID, wasmHash, endLedger, invocations)
+		}
+	}
+	// -----------------------------------------------------------------------
+
 	log.Info("contract indexed",
 		"events", len(events),
 		"invocations", len(invocations),
@@ -624,6 +658,7 @@ func (p *Poller) checkWasmHash(ctx context.Context, rpc RPCClient, contract Cont
 		if err := p.store.UpdateContractWasmHash(ctx, contract.ID, currentHash); err != nil {
 			return fmt.Errorf("baseline contract wasm hash: %w", err)
 		}
+		p.maybeRecordVersion(ctx, contract.ID, currentHash, ledgerFromEntry(res), nil)
 		return nil
 	}
 
@@ -644,6 +679,7 @@ func (p *Poller) checkWasmHash(ctx context.Context, rpc RPCClient, contract Cont
 	if err := p.store.UpdateContractWasmHash(ctx, contract.ID, currentHash); err != nil {
 		return fmt.Errorf("update contract wasm hash: %w", err)
 	}
+	p.maybeRecordVersion(ctx, contract.ID, currentHash, ledgerFromEntry(res), nil)
 
 	p.log.Info("contract code upgraded",
 		"contract_id", contract.ID,
@@ -651,6 +687,61 @@ func (p *Poller) checkWasmHash(ctx context.Context, rpc RPCClient, contract Cont
 		"to_hash", currentHash,
 	)
 	return nil
+}
+
+// maybeRecordVersion compares the observed wasmHash against the latest
+// recorded version and appends a new ContractVersion row when a transition is
+// detected. All errors are logged and treated as non-fatal.
+func (p *Poller) maybeRecordVersion(
+	ctx context.Context,
+	contractID, wasmHash string,
+	endLedger uint32,
+	invocations []Invocation,
+) {
+	prev, err := p.store.GetLatestContractVersion(ctx, contractID)
+	if err != nil && err != ErrVersionNotFound {
+		p.log.Warn("failed to get latest contract version",
+			"contract_id", contractID, "err", err)
+		return
+	}
+
+	// No change: the current hash matches the most recently recorded one.
+	if err == nil && prev.WasmHash == wasmHash {
+		return
+	}
+
+	cv := ContractVersion{
+		ContractID:      contractID,
+		WasmHash:        wasmHash,
+		FirstSeenLedger: int64(endLedger),
+		TxHash:          anchorTxHash(invocations),
+	}
+	if recordErr := p.store.RecordContractVersion(ctx, cv); recordErr != nil {
+		p.log.Warn("failed to record contract version",
+			"contract_id", contractID,
+			"wasm_hash", wasmHash,
+			"err", recordErr,
+		)
+		return
+	}
+	p.log.Info("new wasm hash detected, version recorded",
+		"contract_id", contractID,
+		"wasm_hash", wasmHash,
+		"first_seen_ledger", endLedger,
+	)
+}
+
+// anchorTxHash returns the TxHash of the invocation with the highest ledger,
+// which is the best-effort candidate for the upgrade transaction.
+// Returns an empty string when invocations is empty.
+func anchorTxHash(invocations []Invocation) string {
+	var best Invocation
+	for _, inv := range invocations {
+		if inv.Ledger > best.Ledger {
+			best = inv
+		}
+	}
+	return best.TxHash
 }
 
 // ledgerFromEntry returns the modification ledger of the first instance entry

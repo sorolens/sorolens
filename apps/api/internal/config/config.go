@@ -8,7 +8,8 @@
 // Required: DATABASE_URL, REDIS_URL.
 // Optional with defaults: SOROBAN_RPC_URL (testnet), STELLAR_NETWORK (testnet),
 // PORT (8080), LOG_LEVEL (info), INDEXER_POLL_INTERVAL (5m),
-// INDEXER_LEDGER_WINDOW (120960 ledgers ≈ 7 days), INDEXER_MAX_DURATION (270s).
+// INDEXER_LEDGER_WINDOW (120960 ledgers ≈ 7 days), INDEXER_MAX_DURATION (270s),
+// REQUEST_MAX_BODY_BYTES (1048576 bytes = 1 MiB).
 //
 // Load collects every missing required variable into a single error message
 // so the process fails fast with actionable output.
@@ -21,6 +22,10 @@ import (
 	"strings"
 	"time"
 )
+
+// DefaultRequestMaxBodyBytes is the default largest request body the API will
+// read: 1 MiB. It keeps an unbounded body read from exhausting process memory.
+const DefaultRequestMaxBodyBytes int64 = 1 << 20
 
 // Config holds all runtime configuration for the API.
 type Config struct {
@@ -48,6 +53,12 @@ type Config struct {
 	// startup. The user is keyed by this value as both its ID and GitHub ID so
 	// requests authenticated with X-User-ID or X-GitHub-ID resolve to it.
 	InitialAdminGitHubID string
+	// CacheTTL is the lifetime of cached GET responses (API_CACHE_TTL,
+	// default 30s). Zero disables the response cache.
+	CacheTTL time.Duration
+	// SlackSigningSecret verifies Slack slash command requests
+	// (SLACK_SIGNING_SECRET). Empty disables the Slack command endpoint.
+	SlackSigningSecret string
 }
 
 // Load reads configuration from environment variables and returns an error
@@ -63,6 +74,7 @@ func Load() (*Config, error) {
 		Port:                 getEnvDefault("PORT", "8080"),
 		LogLevel:             getEnvDefault("LOG_LEVEL", "info"),
 		InitialAdminGitHubID: os.Getenv("INITIAL_ADMIN_GITHUB_ID"),
+		SlackSigningSecret:   os.Getenv("SLACK_SIGNING_SECRET"),
 	}
 
 	pollStr := getEnvDefault("INDEXER_POLL_INTERVAL", "5m")
@@ -86,6 +98,13 @@ func Load() (*Config, error) {
 	}
 	cfg.IndexerMaxDuration = maxDur
 
+	cacheTTLStr := getEnvDefault("API_CACHE_TTL", "30s")
+	cacheTTL, err := time.ParseDuration(cacheTTLStr)
+	if err != nil || cacheTTL < 0 {
+		return nil, fmt.Errorf("API_CACHE_TTL: invalid duration %q", cacheTTLStr)
+	}
+	cfg.CacheTTL = cacheTTL
+
 	var missing []string
 	if cfg.DatabaseURL == "" {
 		missing = append(missing, "DATABASE_URL")
@@ -98,6 +117,20 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// MaxBodyBytesFromEnv resolves the request body size limit from
+// REQUEST_MAX_BODY_BYTES, falling back to DefaultRequestMaxBodyBytes when the
+// variable is unset. The value must be a positive integer: a non-numeric or
+// non-positive value is rejected so a bad deployment fails fast instead of
+// silently disabling the guard.
+func MaxBodyBytesFromEnv() (int64, error) {
+	raw := getEnvDefault("REQUEST_MAX_BODY_BYTES", strconv.FormatInt(DefaultRequestMaxBodyBytes, 10))
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("REQUEST_MAX_BODY_BYTES: invalid size %q: must be a positive integer", raw)
+	}
+	return n, nil
 }
 
 // getEnvDefault returns the value of the environment variable named by the key.

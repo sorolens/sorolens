@@ -65,11 +65,11 @@ type pagination struct {
 type RPCEvent struct {
 	Type string `json:"type"`
 	// Ledger is the sequence number of the ledger that closed this event.
-	Ledger          uint32 `json:"ledger"`
-	LedgerClosedAt  string `json:"ledgerClosedAt"`
-	ContractID      string `json:"contractId"`
-	ID              string `json:"id"`
-	PagingToken     string `json:"pagingToken"`
+	Ledger         uint32 `json:"ledger"`
+	LedgerClosedAt string `json:"ledgerClosedAt"`
+	ContractID     string `json:"contractId"`
+	ID             string `json:"id"`
+	PagingToken    string `json:"pagingToken"`
 	// InSuccessfulContractCall is deprecated in recent protocol versions;
 	// failed-invocation events are excluded at the protocol level.
 	InSuccessfulContractCall bool     `json:"inSuccessfulContractCall"`
@@ -82,9 +82,9 @@ type RPCEvent struct {
 
 // GetEventsResult is the result of getEvents.
 type GetEventsResult struct {
-	Events        []RPCEvent `json:"events"`
-	LatestLedger  uint32     `json:"latestLedger"`
-	Cursor        string     `json:"cursor"`
+	Events       []RPCEvent `json:"events"`
+	LatestLedger uint32     `json:"latestLedger"`
+	Cursor       string     `json:"cursor"`
 }
 
 // ---- getLedgerEntries -----------------------------------------------------
@@ -125,7 +125,7 @@ type TransactionResult struct {
 	ResultMetaXDR    string `json:"resultMetaXdr"`
 	// DiagnosticEventsXDR is only populated when the RPC node has
 	// ENABLE_SOROBAN_DIAGNOSTIC_EVENTS=true. Most public nodes do not.
-	DiagnosticEventsXDR []string          `json:"diagnosticEventsXdr"`
+	DiagnosticEventsXDR []string           `json:"diagnosticEventsXdr"`
 	Events              *TransactionEvents `json:"events"`
 }
 

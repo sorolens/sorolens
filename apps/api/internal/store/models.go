@@ -77,6 +77,18 @@ type SyncState struct {
 	UpdatedAt    time.Time
 }
 
+// ContractVersion records a single Wasm hash transition observed by the indexer.
+// It corresponds to one row in the contract_versions table.
+type ContractVersion struct {
+	ID                int64
+	ContractID        string
+	WasmHash          string
+	FirstSeenLedger   int64
+	TxHash            string // empty string when not yet linked to a tx
+	VerifiedSourceRef string // empty string when the Wasm is unverified
+	RecordedAt        time.Time
+}
+
 // GlobalStats is a network-wide summary across all tracked contracts.
 type GlobalStats struct {
 	TrackedContracts    int64
@@ -91,8 +103,12 @@ type AlertSubscription struct {
 	ContractID     string
 	WebhookURL     string
 	SeverityFilter string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// ChannelType is webhook | slack | discord | pagerduty (issue #127).
+	ChannelType string
+	// RoutingKey is the PagerDuty integration key (pagerduty only). Secret.
+	RoutingKey string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // Role names for role-based access control.
@@ -133,6 +149,14 @@ type User struct {
 	CreatedAt time.Time
 }
 
+// Label maps a human-readable name to a Stellar account or contract ID.
+type Label struct {
+	Label       string
+	Value       string
+	WorkspaceID string
+	Public      bool
+}
+
 // WatchlistItem represents a contract bookmarked by a user.
 type WatchlistItem struct {
 	UserID     string
@@ -164,10 +188,10 @@ type ContractHealthScore struct {
 
 // HealthScoreInputs holds the raw signals aggregated to compute a health score.
 type HealthScoreInputs struct {
-	HealthyChecks    int64
-	TotalChecks      int64
-	WatchdogStatus   string
-	TotalInvocations int64
+	HealthyChecks     int64
+	TotalChecks       int64
+	WatchdogStatus    string
+	TotalInvocations  int64
 	FailedInvocations int64
 	Activity          []HourlyActivity
 	TotalStorage      int64

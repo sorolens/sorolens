@@ -2,26 +2,17 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://sorolens.dev"),
-  title: {
-    default: "Sorolens — Indexed Observability for Soroban",
-    template: "%s | Sorolens",
-  },
-  description:
-    "Indexed observability for Soroban smart contracts — events, invocations, storage, and anomaly detection on Stellar.",
+  title: "Sorolens",
+  description: "Indexed observability for Soroban smart contracts",
   icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
-  },
-  openGraph: {
-    type: "website",
-    siteName: "Sorolens",
-    title: "Sorolens — Indexed Observability for Soroban",
-    description:
-      "Indexed observability for Soroban smart contracts — events, invocations, storage, and anomaly detection on Stellar.",
-    url: "https://sorolens.dev",
-  },
-  alternates: {
-    canonical: "https://sorolens.dev",
+    icon: [
+      {
+        url: "/favicon.ico",
+        sizes: "16x16 32x32 48x48",
+        type: "image/x-icon",
+      },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
   },
 };
 

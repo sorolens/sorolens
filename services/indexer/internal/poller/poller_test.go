@@ -25,10 +25,11 @@ type fakeRPC struct {
 	latestLedger  *LatestLedger
 	latestErr     error
 	events        map[string]*GetEventsResult // key: "contractID:start-end"
-	transactions  map[string]*TransactionResult
-	ledgerEntries map[string]LedgerEntry // key: base64 LedgerKey
-	txErr         error
-	eventsCalls   []getEventsCall
+	transactions       map[string]*TransactionResult
+	ledgerEntries      map[string]LedgerEntry // key: base64 LedgerKey
+	contractWasmHashes map[string]string
+	txErr              error
+	eventsCalls        []getEventsCall
 	// onGetEvents, if set, runs once GetEvents is called, before it
 	// returns. Tests use this to simulate a shutdown signal arriving
 	// while a contract's batch is already mid-fetch.
@@ -103,6 +104,17 @@ func (f *fakeRPC) GetLedgerEntries(_ context.Context, keys []string) (*GetLedger
 	return res, nil
 }
 
+func (f *fakeRPC) GetContractWasmHash(_ context.Context, contractID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.contractWasmHashes != nil {
+		if h, ok := f.contractWasmHashes[contractID]; ok {
+			return h, nil
+		}
+	}
+	return "", nil
+}
+
 // ---- fake Store -----------------------------------------------------------
 
 type fakeStore struct {
@@ -116,21 +128,23 @@ type fakeStore struct {
 	syncErr      error
 	listErr      error
 	hourly       map[string][]HourlyActivity // contractID -> buckets
-	alerts       []Alert
-	insertErr    error
-	healthInputs   map[string]HealthInputs // contractID -> inputs
-	healthScores   []ContractHealthScore
-	indexerCursors map[string]uint32
+	alerts           []Alert
+	insertErr        error
+	healthInputs     map[string]HealthInputs // contractID -> inputs
+	healthScores     []ContractHealthScore
+	indexerCursors   map[string]uint32
+	contractVersions map[string][]ContractVersion
 }
 
 func newFakeStore(contracts []Contract) *fakeStore {
 	return &fakeStore{
-		contracts:      contracts,
-		syncStates:     make(map[string]SyncState),
-		hourly:         make(map[string][]HourlyActivity),
-		wasmHashes:     make(map[string]string),
-		healthInputs:   make(map[string]HealthInputs),
-		indexerCursors: make(map[string]uint32),
+		contracts:        contracts,
+		syncStates:       make(map[string]SyncState),
+		hourly:           make(map[string][]HourlyActivity),
+		wasmHashes:       make(map[string]string),
+		healthInputs:     make(map[string]HealthInputs),
+		indexerCursors:   make(map[string]uint32),
+		contractVersions: make(map[string][]ContractVersion),
 	}
 }
 
@@ -250,6 +264,26 @@ func (f *fakeStore) UpsertContractHealthScore(_ context.Context, s ContractHealt
 	defer f.mu.Unlock()
 	f.healthScores = append(f.healthScores, s)
 	return nil
+}
+
+func (f *fakeStore) RecordContractVersion(_ context.Context, v ContractVersion) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.insertErr != nil {
+		return f.insertErr
+	}
+	f.contractVersions[v.ContractID] = append(f.contractVersions[v.ContractID], v)
+	return nil
+}
+
+func (f *fakeStore) GetLatestContractVersion(_ context.Context, contractID string) (ContractVersion, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	versions := f.contractVersions[contractID]
+	if len(versions) == 0 {
+		return ContractVersion{}, ErrVersionNotFound
+	}
+	return versions[len(versions)-1], nil
 }
 
 // ---- fake RedisClient -----------------------------------------------------
@@ -1049,5 +1083,57 @@ func TestPoller_MetricsDisabledByDefault(t *testing.T) {
 	p := New(&fakeRPC{}, newFakeStore(nil), newFakeRedis(), testConfig(), testLogger())
 	if err := p.Run(context.Background(), "once"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPoller_recordsContractVersionOnWasmHashTransition(t *testing.T) {
+	t.Parallel()
+
+	contractID := "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
+	hash1 := "1111111111111111111111111111111111111111111111111111111111111111"
+	hash2 := "2222222222222222222222222222222222222222222222222222222222222222"
+
+	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: ""}})
+	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
+
+	rpc := &fakeRPC{
+		latestLedger:       &LatestLedger{Sequence: 500000},
+		contractWasmHashes: map[string]string{contractID: hash1},
+	}
+
+	p := New(rpc, store, newFakeRedis(), testConfig(), testLogger())
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	versions := store.contractVersions[contractID]
+	if len(versions) != 1 {
+		t.Fatalf("expected 1 version recorded, got %d", len(versions))
+	}
+	if versions[0].WasmHash != hash1 {
+		t.Errorf("expected wasm_hash %s, got %s", hash1, versions[0].WasmHash)
+	}
+
+	// Second run with same hash -> no duplicate version recorded.
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(store.contractVersions[contractID]) != 1 {
+		t.Fatalf("expected still 1 version after identical hash, got %d", len(store.contractVersions[contractID]))
+	}
+
+	// Third run with new hash -> second version recorded.
+	rpc.mu.Lock()
+	rpc.contractWasmHashes[contractID] = hash2
+	rpc.latestLedger = &LatestLedger{Sequence: 501000}
+	rpc.mu.Unlock()
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(store.contractVersions[contractID]) != 2 {
+		t.Fatalf("expected 2 versions after transition, got %d", len(store.contractVersions[contractID]))
+	}
+	if store.contractVersions[contractID][1].WasmHash != hash2 {
+		t.Errorf("expected second version wasm_hash %s, got %s", hash2, store.contractVersions[contractID][1].WasmHash)
 	}
 }

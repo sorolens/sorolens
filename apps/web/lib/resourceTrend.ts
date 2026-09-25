@@ -15,7 +15,7 @@ const MAX_PAGES = 10;
 
 /** Groups invocations by UTC day and averages CPU, memory, and fee. */
 export function aggregateResourceTrend(
-  invocations: Invocation[],
+  invocations: Invocation[]
 ): ResourceTrendPoint[] {
   const byDay = new Map<
     string,
@@ -49,7 +49,7 @@ export function aggregateResourceTrend(
  */
 export async function getResourceTrend(
   id: string,
-  days = 30,
+  days = 30
 ): Promise<ResourceTrendPoint[]> {
   const since = new Date(Date.now() - days * DAY_MS).toISOString();
   const invocations: Invocation[] = [];
@@ -62,8 +62,8 @@ export async function getResourceTrend(
       cursor,
     });
     invocations.push(...(res.invocations ?? []));
-    if (!res.has_more || !res.cursor) break;
-    cursor = res.cursor;
+    if (!res.next_cursor) break;
+    cursor = res.next_cursor ?? undefined;
   }
 
   return aggregateResourceTrend(invocations);

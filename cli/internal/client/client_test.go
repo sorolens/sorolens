@@ -135,6 +135,97 @@ func TestListEventsWithTypeFilter(t *testing.T) {
 	}
 }
 
+func TestListContractsSendsAPIKeyAndParsesPage(t *testing.T) {
+	want := client.Contract{ID: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", Status: "active"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/contracts" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get("X-API-Key"); got != "secret-key" {
+			t.Errorf("X-API-Key: got %q, want secret-key", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer secret-key" {
+			t.Errorf("Authorization: got %q, want Bearer secret-key", got)
+		}
+		if got := r.URL.Query().Get("status"); got != "active" {
+			t.Errorf("status query param: got %q, want active", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(client.ContractsResponse{
+			Contracts:  []client.Contract{want},
+			NextCursor: "next",
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, 5*time.Second).WithAPIKey("secret-key")
+	resp, err := c.ListContracts(context.Background(), client.ListContractsOpts{Status: "active", Limit: 10})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Contracts) != 1 || resp.Contracts[0].ID != want.ID {
+		t.Fatalf("contracts = %+v, want one %q", resp.Contracts, want.ID)
+	}
+	if resp.NextCursor != "next" {
+		t.Errorf("next cursor: got %q, want next", resp.NextCursor)
+	}
+}
+
+func TestListInvocationsPathAndFilters(t *testing.T) {
+	contractID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/contracts/"+contractID+"/invocations" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("fn"); got != "transfer" {
+			t.Errorf("fn query param: got %q, want transfer", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(client.InvocationsResponse{
+			Invocations: []client.Invocation{{TxHash: "tx-1", FunctionName: "transfer"}},
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, 5*time.Second)
+	resp, err := c.ListInvocations(context.Background(), contractID, client.ListInvocationsOpts{Fn: "transfer"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Invocations) != 1 || resp.Invocations[0].FunctionName != "transfer" {
+		t.Fatalf("invocations = %+v, want transfer invocation", resp.Invocations)
+	}
+}
+
+func TestListAlertsSeverityFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/watchdog/alerts" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("severity"); got != "Critical" {
+			t.Errorf("severity query param: got %q, want Critical", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(client.AlertsResponse{
+			Alerts: []client.ContractAlert{{ContractID: "C1", Severity: "Critical", Message: "ttl low"}},
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, 5*time.Second)
+	resp, err := c.ListAlerts(context.Background(), client.ListAlertsOpts{Severity: "Critical"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Alerts) != 1 || resp.Alerts[0].Severity != "Critical" {
+		t.Fatalf("alerts = %+v, want one Critical alert", resp.Alerts)
+	}
+}
+
+
 func TestGetMonitoredContractHappyPath(t *testing.T) {
 	want := client.MonitoredContract{
 		ContractID:    "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",

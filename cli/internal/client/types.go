@@ -14,6 +14,13 @@ type Contract struct {
 	AddedAt            time.Time  `json:"added_at"`
 }
 
+// Label mirrors the API label response.
+type Label struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+	Scope string `json:"scope"`
+}
+
 // Event mirrors the API event response.
 type Event struct {
 	ID               string    `json:"id"`
@@ -92,6 +99,34 @@ type StorageResponse struct {
 	Storage    []StorageEntry `json:"storage"`
 	NextCursor string         `json:"next_cursor"`
 }
+
+// ContractsResponse wraps the paginated contracts API response.
+type ContractsResponse struct {
+	Contracts  []Contract `json:"contracts"`
+	NextCursor string     `json:"next_cursor"`
+}
+
+// InvocationsResponse wraps the paginated invocations API response.
+type InvocationsResponse struct {
+	Invocations []Invocation `json:"invocations"`
+	NextCursor  string       `json:"next_cursor"`
+}
+
+// ContractAlert mirrors the watchdog alert response.
+type ContractAlert struct {
+	ContractID string    `json:"contract_id"`
+	Severity   string    `json:"severity"`
+	Message    string    `json:"message"`
+	Ledger     int64     `json:"ledger"`
+	TxHash     string    `json:"tx_hash"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
+// AlertsResponse wraps the watchdog alerts API response.
+type AlertsResponse struct {
+	Alerts []ContractAlert `json:"alerts"`
+}
+
 
 // MonitoredContract mirrors the API watchdog monitored-contract response.
 type MonitoredContract struct {

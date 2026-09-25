@@ -75,7 +75,7 @@ func newSummaryTestHandler(s handler.APIStore) http.Handler {
 		RedisClient: &mockRedisClient{},
 		Logger:      logger,
 	}
-	return router.New(h)
+	return router.New(h, 1<<20)
 }
 
 func doSummaryRequest(srv http.Handler, contractID string) *httptest.ResponseRecorder {

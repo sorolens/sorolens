@@ -24,7 +24,7 @@ function getUrgency(ledgersUntilExpiry: number | null): {
   const warningThreshold = 34560; // ~2 days
   const pct = Math.min(
     100,
-    Math.max(0, ((MAX_THRESHOLD - ledgersUntilExpiry) / MAX_THRESHOLD) * 100),
+    Math.max(0, ((MAX_THRESHOLD - ledgersUntilExpiry) / MAX_THRESHOLD) * 100)
   );
 
   if (ledgersUntilExpiry <= warningThreshold) {
@@ -114,8 +114,7 @@ export function StoragePanel({
 
   const sorted = [...entries]
     .filter(
-      (e) =>
-        durabilityFilter === "all" || e.durability === durabilityFilter,
+      (e) => durabilityFilter === "all" || e.durability === durabilityFilter
     )
     .sort((a, b) => {
       const aOrder = severityOrder[getUrgency(a.ledgers_until_expiry).severity];
