@@ -22,6 +22,11 @@ func New(h *handler.Handler) http.Handler {
 	r.Use(middleware.Logger(h.Logger))
 	r.Use(chiMiddleware.StripSlashes)
 
+	// Emit ETags on cacheable GET/HEAD responses and answer If-None-Match
+	// matches with an empty 304, short-circuiting the body before it
+	// crosses the wire (issue #152).
+	r.Use(middleware.ETag)
+
 	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
 
 	// Health (not rate-limited)
