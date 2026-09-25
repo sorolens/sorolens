@@ -252,12 +252,18 @@ export function listHealthChecks(
 
 export function listAlerts(
   contractId?: string,
-  params?: { severity?: string; limit?: number; network?: string },
+  params?: {
+    severity?: string;
+    limit?: number;
+    network?: string;
+    cursor?: string;
+  },
 ): Promise<AlertsResponse> {
   const search = new URLSearchParams();
   if (params?.severity) search.set("severity", params.severity);
   if (params?.limit) search.set("limit", String(params.limit));
   if (params?.network) search.set("network", params.network);
+  if (params?.cursor) search.set("cursor", params.cursor);
   const qs = search.toString();
   const path = contractId
     ? `/api/v1/watchdog/contracts/${contractId}/alerts`

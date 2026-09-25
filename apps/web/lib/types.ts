@@ -163,6 +163,8 @@ export interface ContractAlert {
 
 export interface AlertsResponse {
   alerts: ContractAlert[];
+  /** Cursor for the next page; empty when the feed is exhausted. */
+  next_cursor: string;
 }
 
 export interface WatchdogStats {

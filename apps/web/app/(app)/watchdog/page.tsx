@@ -31,6 +31,8 @@ export default function WatchdogPage() {
   const [stats, setStats] = useState<WatchdogStats>(ZERO_STATS);
   const [contracts, setContracts] = useState<MonitoredContract[] | null>(null);
   const [alerts, setAlerts] = useState<ContractAlert[] | null>(null);
+  const [alertsCursor, setAlertsCursor] = useState("");
+  const [alertsLoading, setAlertsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,18 +41,42 @@ export default function WatchdogPage() {
       const [s, c, a] = await Promise.all([
         getWatchdogStats(filter).catch(() => ZERO_STATS),
         listMonitoredContracts({ limit: 50, network: filter }).catch(() => ({ contracts: [], next_cursor: "" })),
-        listAlerts(undefined, { limit: 20, network: filter }).catch(() => ({ alerts: [] })),
+        listAlerts(undefined, { limit: 20, network: filter }).catch(() => ({
+          alerts: [],
+          next_cursor: "",
+        })),
       ]);
       if (cancelled) return;
       setStats(s);
       setContracts(c.contracts ?? []);
       setAlerts(a.alerts ?? []);
+      setAlertsCursor(a.next_cursor ?? "");
     }
     load();
     return () => {
       cancelled = true;
     };
   }, [network]);
+
+  // Fetch the next alerts page and append it to the current feed.
+  async function loadMoreAlerts() {
+    if (!alertsCursor || alertsLoading) return;
+    setAlertsLoading(true);
+    try {
+      const filter = networkFilter(network);
+      const a = await listAlerts(undefined, {
+        limit: 20,
+        network: filter,
+        cursor: alertsCursor,
+      });
+      setAlerts((prev) => [...(prev ?? []), ...(a.alerts ?? [])]);
+      setAlertsCursor(a.next_cursor ?? "");
+    } catch {
+      // Keep the current feed on failure; the button stays available.
+    } finally {
+      setAlertsLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -186,6 +212,18 @@ export default function WatchdogPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {alerts !== null && alertsCursor !== "" && (
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={loadMoreAlerts}
+              disabled={alertsLoading}
+              className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm transition-colors hover:bg-[var(--color-bg-card)] disabled:opacity-50"
+            >
+              {alertsLoading ? "Loading…" : "Load more alerts"}
+            </button>
           </div>
         )}
       </section>
