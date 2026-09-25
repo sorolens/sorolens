@@ -52,6 +52,8 @@ export interface EventsResponse {
 
 export interface Invocation {
   tx_hash: string;
+  contract_id: string;
+  network: string;
   ledger: number;
   ledger_closed_at: string;
   status: string;
@@ -67,8 +69,8 @@ export interface Invocation {
 
 export interface InvocationsResponse {
   invocations: Invocation[];
-  cursor: string | null;
-  has_more: boolean;
+  // The API returns `next_cursor` (empty when there are no further pages).
+  next_cursor: string | null;
 }
 
 export interface StorageEntry {
@@ -145,6 +147,14 @@ export type TimeWindow = "24h" | "7d" | "30d" | "all";
 
 export type HealthStatus = "Healthy" | "Degraded" | "Unresponsive" | string;
 export type AlertSeverity = "Info" | "Warning" | "Critical";
+export type UptimeWindow = "24h" | "7d" | "30d";
+
+export interface UptimeResponse {
+  contract_id: string;
+  window: UptimeWindow;
+  /** Uptime percentage in the range [0, 100] with up to 2 decimal places. */
+  uptime_pct: number;
+}
 
 export interface MonitoredContract {
   contract_id: string;

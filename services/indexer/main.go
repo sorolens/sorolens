@@ -267,6 +267,9 @@ func (s *stubRPC) GetLedgerEntries(ctx context.Context, keys []string) (*poller.
 	}
 	return &poller.GetLedgerEntriesResult{}, nil
 }
+func (s *stubRPC) GetContractWasmHash(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
 
 type stubStore struct{}
 
@@ -309,6 +312,12 @@ func (s *stubStore) ContractHealthInputs(_ context.Context, _ string) (poller.He
 }
 func (s *stubStore) UpsertContractHealthScore(_ context.Context, _ poller.ContractHealthScore) error {
 	return nil
+}
+func (s *stubStore) RecordContractVersion(_ context.Context, _ poller.ContractVersion) error {
+	return nil
+}
+func (s *stubStore) GetLatestContractVersion(_ context.Context, _ string) (poller.ContractVersion, error) {
+	return poller.ContractVersion{}, poller.ErrVersionNotFound
 }
 
 type stubRedis struct{}

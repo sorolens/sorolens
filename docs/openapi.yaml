@@ -1981,6 +1981,27 @@ components:
           type: string
           format: date-time
 
+    UptimeResult:
+      type: object
+      required: [contract_id, window, uptime_pct]
+      properties:
+        contract_id:
+          type: string
+          description: The contract ID this uptime figure applies to.
+        window:
+          type: string
+          enum: [24h, 7d, 30d]
+          description: The time window over which uptime was computed.
+        uptime_pct:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: |
+            Uptime percentage with up to two decimal places.
+            Computed as healthy_checks / total_checks × 100.
+            Returns 0 when no health checks were recorded in the window.
+
     MonitoredContract:
       type: object
       required: [contract_id, network, name, owner, status, last_check, check_interval, registered_at, updated_at]

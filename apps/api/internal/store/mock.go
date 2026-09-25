@@ -26,24 +26,28 @@ type MockStore struct {
 	users              map[string]User
 	healthScores       map[string]ContractHealthScore
 	indexerCursors     map[string]uint32
+	contractVersions   map[string][]ContractVersion
 
 	// Error injection
-	UpsertContractErr    error
-	GetContractErr       error
-	ListContractsErr     error
-	GetGlobalStatsErr    error
-	ListEventsErr        error
-	ListInvocationsErr   error
-	ListStorageErr       error
-	GetContractStatsErr  error
-	RecentEventsErr      error
-	RecentInvocationsErr error
-	CreateAPIKeyErr      error
-	GetAPIKeyErr         error
-	UpsertUserErr        error
-	GetUserErr           error
-	ListUpgradesErr      error
-	GetHealthScoreErr    error
+	UpsertContractErr           error
+	GetContractErr              error
+	ListContractsErr            error
+	GetGlobalStatsErr           error
+	ListEventsErr               error
+	ListInvocationsErr          error
+	ListStorageErr              error
+	GetContractStatsErr         error
+	RecentEventsErr             error
+	RecentInvocationsErr        error
+	CreateAPIKeyErr             error
+	GetAPIKeyErr                error
+	UpsertUserErr               error
+	GetUserErr                  error
+	ListUpgradesErr             error
+	GetHealthScoreErr           error
+	RecordContractVersionErr    error
+	ListContractVersionsErr     error
+	GetLatestContractVersionErr error
 }
 
 // NewMockStore returns an initialized MockStore.
@@ -57,6 +61,7 @@ func NewMockStore() *MockStore {
 		alertSubscriptions: make([]AlertSubscription, 0),
 		users:              make(map[string]User),
 		indexerCursors:     make(map[string]uint32),
+		contractVersions:   make(map[string][]ContractVersion),
 	}
 }
 
@@ -280,6 +285,71 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error) {
+	if m.ListInvocationsErr != nil {
+		return nil, 0, "", m.ListInvocationsErr
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	out := make([]Invocation, 0, len(m.invocations))
+	for _, inv := range m.invocations {
+		if f.ContractID != "" && inv.ContractID != f.ContractID {
+			continue
+		}
+		if f.Network != "" && inv.Network != f.Network {
+			continue
+		}
+		if f.Status != "" && inv.Status != f.Status {
+			continue
+		}
+		if f.FunctionName != "" && inv.FunctionName != f.FunctionName {
+			continue
+		}
+		if f.From != 0 && inv.Ledger < f.From {
+			continue
+		}
+		if f.To != 0 && inv.Ledger > f.To {
+			continue
+		}
+		if f.Since != nil && inv.LedgerClosedAt.Before(*f.Since) {
+			continue
+		}
+		if f.Until != nil && inv.LedgerClosedAt.After(*f.Until) {
+			continue
+		}
+		out = append(out, inv)
+	}
+
+	// Mirror the postgres ordering: newest first, tx_hash as the tie-breaker.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Ledger != out[j].Ledger {
+			return out[i].Ledger > out[j].Ledger
+		}
+		return out[i].TxHash > out[j].TxHash
+	})
+
+	if cursorLedger != 0 || cursorTxHash != "" {
+		kept := out[:0]
+		for _, inv := range out {
+			if inv.Ledger < cursorLedger || (inv.Ledger == cursorLedger && inv.TxHash < cursorTxHash) {
+				kept = append(kept, inv)
+			}
+		}
+		out = kept
+	}
+
+	var nextLedger uint32
+	var nextTxHash string
+	if len(out) > limit {
+		last := out[limit-1]
+		nextLedger = last.Ledger
+		nextTxHash = last.TxHash
+		out = out[:limit]
+	}
+	return out, nextLedger, nextTxHash, nil
 }
 
 func (m *MockStore) ListStorageEntries(_ context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error) {
@@ -773,3 +843,56 @@ func (m *MockStore) ComputeAndStoreBaselines(ctx context.Context, snapshotDate t
 func (m *MockStore) CheckAndEmitRegressions(ctx context.Context, snapshotDate time.Time) (int, error) {
 	return 0, nil
 }
+
+// ---- contract versions ---------------------------------------------------
+
+func (m *MockStore) RecordContractVersion(_ context.Context, v ContractVersion) error {
+	if m.RecordContractVersionErr != nil {
+		return m.RecordContractVersionErr
+	}
+	if v.RecordedAt.IsZero() {
+		v.RecordedAt = time.Now()
+	}
+	existing := m.contractVersions[v.ContractID]
+	for _, prev := range existing {
+		if prev.WasmHash == v.WasmHash {
+			return nil // idempotent ON CONFLICT DO NOTHING
+		}
+	}
+	m.contractVersions[v.ContractID] = append(existing, v)
+	return nil
+}
+
+func (m *MockStore) ListContractVersions(_ context.Context, contractID string) ([]ContractVersion, error) {
+	if m.ListContractVersionsErr != nil {
+		return nil, m.ListContractVersionsErr
+	}
+	versions, ok := m.contractVersions[contractID]
+	if !ok {
+		return nil, nil
+	}
+	out := make([]ContractVersion, len(versions))
+	copy(out, versions)
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].FirstSeenLedger < out[j].FirstSeenLedger
+	})
+	return out, nil
+}
+
+func (m *MockStore) GetLatestContractVersion(_ context.Context, contractID string) (ContractVersion, error) {
+	if m.GetLatestContractVersionErr != nil {
+		return ContractVersion{}, m.GetLatestContractVersionErr
+	}
+	versions, ok := m.contractVersions[contractID]
+	if !ok || len(versions) == 0 {
+		return ContractVersion{}, ErrNotFound
+	}
+	latest := versions[0]
+	for _, v := range versions[1:] {
+		if v.FirstSeenLedger > latest.FirstSeenLedger {
+			latest = v
+		}
+	}
+	return latest, nil
+}
+

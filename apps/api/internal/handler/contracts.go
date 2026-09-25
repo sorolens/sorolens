@@ -417,6 +417,114 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ---- global invocations -----------------------------------------------------
+
+// parseInvocationCursor decodes the raw (already base64-decoded) global
+// invocation cursor "<ledger>:<tx_hash>" into its keyset components. An empty
+// cursor means "start at the newest invocation".
+func parseInvocationCursor(raw string) (uint32, string, bool) {
+	if raw == "" {
+		return 0, "", true
+	}
+	ledgerStr, txHash, found := strings.Cut(raw, ":")
+	if !found || txHash == "" {
+		return 0, "", false
+	}
+	n, err := strconv.ParseUint(ledgerStr, 10, 32)
+	if err != nil || n == 0 {
+		return 0, "", false
+	}
+	return uint32(n), txHash, true
+}
+
+// timeParam parses an inclusive date or RFC3339 bound. A plain date is expanded
+// to the start (or, when endOfDay is set, the end) of that UTC day so that
+// ?since=2026-09-01&until=2026-09-30 covers the whole range.
+func timeParam(r *http.Request, key string, endOfDay bool) (*time.Time, bool) {
+	v := strings.TrimSpace(r.URL.Query().Get(key))
+	if v == "" {
+		return nil, true
+	}
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		t = t.UTC()
+		return &t, true
+	}
+	if t, err := time.Parse("2006-01-02", v); err == nil {
+		if endOfDay {
+			t = t.Add(24*time.Hour - time.Nanosecond)
+		}
+		return &t, true
+	}
+	return nil, false
+}
+
+// ListAllInvocations handles GET /api/v1/invocations: the global invocation
+// explorer. It returns invocations across every tracked contract, newest
+// first (ledger DESC, tx_hash DESC).
+//
+// Query params: cursor, limit, contract_id, fn, status, network, from/to
+// (ledger bounds), and since/until (inclusive date or RFC3339 bounds on
+// ledger_closed_at).
+func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
+	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		return
+	}
+	cursorLedger, cursorTxHash, ok := parseInvocationCursor(rawCursor)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		return
+	}
+	network, ok := networkParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	since, ok := timeParam(r, "since", false)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "since must be an RFC3339 timestamp or YYYY-MM-DD date")
+		return
+	}
+	until, ok := timeParam(r, "until", true)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "until must be an RFC3339 timestamp or YYYY-MM-DD date")
+		return
+	}
+
+	f := store.InvocationFilters{
+		ContractID:   strings.TrimSpace(r.URL.Query().Get("contract_id")),
+		Status:       r.URL.Query().Get("status"),
+		FunctionName: r.URL.Query().Get("fn"),
+		Network:      network,
+		From:         uint32Query(r, "from"),
+		To:           uint32Query(r, "to"),
+		Since:        since,
+		Until:        until,
+	}
+	invs, nextLedger, nextTxHash, err := h.Store.ListAllInvocations(
+		r.Context(), cursorLedger, cursorTxHash, intQuery(r, "limit", 50), f,
+	)
+	if err != nil {
+		h.Logger.Error("list all invocations", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list invocations")
+		return
+	}
+
+	resp := make([]invocationResponse, len(invs))
+	for i, inv := range invs {
+		resp[i] = invocationFromStore(inv)
+	}
+	nextRaw := ""
+	if nextTxHash != "" {
+		nextRaw = fmt.Sprintf("%d:%s", nextLedger, nextTxHash)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"invocations": resp,
+		"next_cursor": encodeCursor(nextRaw),
+	})
+}
+
 // ListStorageEntries handles GET /api/v1/contracts/{id}/storage.
 func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")

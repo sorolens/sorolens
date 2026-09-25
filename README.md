@@ -1,7 +1,7 @@
 [![CI](https://github.com/sorolens/sorolens/actions/workflows/ci.yml/badge.svg)](https://github.com/sorolens/sorolens/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/sorolens/sorolens/branch/main/graph/badge.svg)](https://codecov.io/gh/sorolens/sorolens)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Release](https://img.shields.io/github/v/release/sorolens/sorolens)](https://github.com/sorolens/sorolens/releases)
+[![Latest Release](https://img.shields.io/github/v/release/sorolens/sorolens)](https://github.com/sorolens/sorolens/releases/latest)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/D9jATUezYX)
 [![Telegram](https://img.shields.io/badge/Telegram-Join-26A5E4?logo=telegram&logoColor=white)](https://t.me/sorolens_community)
 [![Go Report Card (API)](https://goreportcard.com/badge/github.com/sorolens/sorolens/apps/api)](https://goreportcard.com/report/github.com/sorolens/sorolens/apps/api)

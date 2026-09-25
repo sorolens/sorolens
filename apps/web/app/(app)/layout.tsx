@@ -1,3 +1,4 @@
+import { ThemeToggle } from "@/components/ThemeToggle";
 import Link from "next/link";
 import { NetworkProvider } from "@/lib/network";
 import { NetworkSelector } from "@/components/NetworkSelector";
@@ -43,6 +44,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
             </nav>
             <NetworkSelector />
+            <ThemeToggle />
           </div>
         </header>
         <Breadcrumbs />

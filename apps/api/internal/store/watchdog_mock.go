@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 )
@@ -194,4 +195,45 @@ func (m *MockStore) GetWatchdogStats(_ context.Context, network string) (Watchdo
 		}
 	}
 	return s, nil
+}
+
+// GetContractUptime computes uptime percentage for the mock store by scanning
+// the in-memory health checks for the requested window.
+func (m *MockStore) GetContractUptime(_ context.Context, contractID string, window string) (UptimeResult, error) {
+	var dur time.Duration
+	switch window {
+	case "24h":
+		dur = 24 * time.Hour
+	case "7d":
+		dur = 7 * 24 * time.Hour
+	case "30d":
+		dur = 30 * 24 * time.Hour
+	default:
+		return UptimeResult{}, fmt.Errorf("invalid window %q: must be 24h, 7d, or 30d", window)
+	}
+
+	since := time.Now().UTC().Add(-dur)
+	var total, healthy int64
+	for _, h := range m.healthChecks {
+		if h.ContractID != contractID {
+			continue
+		}
+		if h.Timestamp.Before(since) {
+			continue
+		}
+		total++
+		if h.Status == "Healthy" {
+			healthy++
+		}
+	}
+
+	var uptimePct float64
+	if total > 0 {
+		uptimePct = float64(healthy) / float64(total) * 100.0
+	}
+	return UptimeResult{
+		ContractID: contractID,
+		Window:     window,
+		Uptime:     uptimePct,
+	}, nil
 }

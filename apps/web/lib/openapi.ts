@@ -75,6 +75,25 @@ export const openApiDocument: OpenAPIDocument = {
         parameters: [networkParam],
       },
     },
+    "/api/v1/invocations": {
+      get: {
+        operationId: "listAllInvocations",
+        summary: "Invocations across every tracked contract",
+        tags: ["Invocations"],
+        parameters: [
+          { name: "cursor", in: "query", description: "Opaque pagination cursor" },
+          { name: "limit", in: "query", type: "integer", default: "50" },
+          networkParam,
+          { name: "contract_id", in: "query", description: "Restrict to one contract id" },
+          { name: "fn", in: "query", description: "Filter by function name" },
+          { name: "status", in: "query", description: "SUCCESS | FAILED | NOT_FOUND" },
+          { name: "from", in: "query", type: "integer", description: "Lower ledger bound" },
+          { name: "to", in: "query", type: "integer", description: "Upper ledger bound" },
+          { name: "since", in: "query", description: "Lower bound on ledger_closed_at (YYYY-MM-DD or RFC3339)" },
+          { name: "until", in: "query", description: "Upper bound on ledger_closed_at (YYYY-MM-DD or RFC3339)" },
+        ],
+      },
+    },
     "/api/v1/contracts": {
       get: {
         operationId: "listContracts",

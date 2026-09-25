@@ -239,6 +239,13 @@ const (
 	ListContractAlertsParamsNetworkTestnet    ListContractAlertsParamsNetwork = "testnet"
 )
 
+// Defines values for GetContractUptimeParamsWindow.
+const (
+	GetContractUptimeParamsWindowN24h GetContractUptimeParamsWindow = "24h"
+	GetContractUptimeParamsWindowN30d GetContractUptimeParamsWindow = "30d"
+	GetContractUptimeParamsWindowN7d  GetContractUptimeParamsWindow = "7d"
+)
+
 // Defines values for GetWatchdogStatsParamsNetwork.
 const (
 	Futurenet  GetWatchdogStatsParamsNetwork = "futurenet"
@@ -580,6 +587,23 @@ type StorageEntry struct {
 	ValueXdr           string       `json:"value_xdr"`
 }
 
+// UptimeResult defines model for UptimeResult.
+type UptimeResult struct {
+	// ContractId The contract ID this uptime figure applies to.
+	ContractId string `json:"contract_id"`
+
+	// UptimePct Uptime percentage with up to two decimal places.
+	// Computed as healthy_checks / total_checks × 100.
+	// Returns 0 when no health checks were recorded in the window.
+	UptimePct float64 `json:"uptime_pct"`
+
+	// Window The time window over which uptime was computed.
+	Window UptimeResultWindow `json:"window"`
+}
+
+// UptimeResultWindow The time window over which uptime was computed.
+type UptimeResultWindow string
+
 // WatchdogStats defines model for WatchdogStats.
 type WatchdogStats struct {
 	CriticalAlerts int64 `json:"critical_alerts"`
@@ -916,6 +940,15 @@ type ListContractHealthChecksParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetContractUptimeParams defines parameters for GetContractUptime.
+type GetContractUptimeParams struct {
+	// Window Time window for uptime calculation.
+	Window *GetContractUptimeParamsWindow `form:"window,omitempty" json:"window,omitempty"`
+}
+
+// GetContractUptimeParamsWindow defines parameters for GetContractUptime.
+type GetContractUptimeParamsWindow string
+
 // GetWatchdogStatsParams defines parameters for GetWatchdogStats.
 type GetWatchdogStatsParams struct {
 	// Network Network filter; empty means all networks.
@@ -1213,6 +1246,9 @@ type ClientInterface interface {
 
 	// ListContractHealthChecks request
 	ListContractHealthChecks(ctx context.Context, id ContractID, params *ListContractHealthChecksParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetContractUptime request
+	GetContractUptime(ctx context.Context, id ContractID, params *GetContractUptimeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetWatchdogStats request
 	GetWatchdogStats(ctx context.Context, params *GetWatchdogStatsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1631,6 +1667,18 @@ func (c *Client) ListContractAlerts(ctx context.Context, id ContractID, params *
 
 func (c *Client) ListContractHealthChecks(ctx context.Context, id ContractID, params *ListContractHealthChecksParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListContractHealthChecksRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetContractUptime(ctx context.Context, id ContractID, params *GetContractUptimeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetContractUptimeRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4304,6 +4352,9 @@ type ClientWithResponsesInterface interface {
 	// ListContractHealthChecksWithResponse request
 	ListContractHealthChecksWithResponse(ctx context.Context, id ContractID, params *ListContractHealthChecksParams, reqEditors ...RequestEditorFn) (*ListContractHealthChecksResponse, error)
 
+	// GetContractUptimeWithResponse request
+	GetContractUptimeWithResponse(ctx context.Context, id ContractID, params *GetContractUptimeParams, reqEditors ...RequestEditorFn) (*GetContractUptimeResponse, error)
+
 	// GetWatchdogStatsWithResponse request
 	GetWatchdogStatsWithResponse(ctx context.Context, params *GetWatchdogStatsParams, reqEditors ...RequestEditorFn) (*GetWatchdogStatsResponse, error)
 
@@ -5123,6 +5174,30 @@ func (r ListContractHealthChecksResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ListContractHealthChecksResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetContractUptimeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *UptimeResult
+	JSON422      *InvalidInput
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetContractUptimeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetContractUptimeResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7159,6 +7234,46 @@ func ParseListContractHealthChecksResponse(rsp *http.Response) (*ListContractHea
 			return nil, err
 		}
 		response.JSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetContractUptimeResponse parses an HTTP response from a GetContractUptimeWithResponse call
+func ParseGetContractUptimeResponse(rsp *http.Response) (*GetContractUptimeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetContractUptimeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UptimeResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest InvalidInput
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest InternalError

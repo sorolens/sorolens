@@ -77,6 +77,18 @@ type SyncState struct {
 	UpdatedAt    time.Time
 }
 
+// ContractVersion records a single Wasm hash transition observed by the indexer.
+// It corresponds to one row in the contract_versions table.
+type ContractVersion struct {
+	ID                 int64
+	ContractID         string
+	WasmHash           string
+	FirstSeenLedger    int64
+	TxHash             string // empty string when not yet linked to a tx
+	VerifiedSourceRef  string // empty string when the Wasm is unverified
+	RecordedAt         time.Time
+}
+
 // GlobalStats is a network-wide summary across all tracked contracts.
 type GlobalStats struct {
 	TrackedContracts    int64

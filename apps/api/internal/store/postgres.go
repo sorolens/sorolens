@@ -527,3 +527,72 @@ func (s *postgresStore) IsInWatchlist(ctx context.Context, userID, contractID st
 	}
 	return count > 0, nil
 }
+
+// ---- contract versions ---------------------------------------------------
+
+func (s *postgresStore) RecordContractVersion(ctx context.Context, v ContractVersion) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO contract_versions
+			(contract_id, wasm_hash, first_seen_ledger, tx_hash, verified_source_ref, recorded_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (contract_id, wasm_hash) DO NOTHING`,
+		v.ContractID, v.WasmHash, v.FirstSeenLedger, nullableText(v.TxHash),
+		nullableText(v.VerifiedSourceRef), time.Now(),
+	)
+	return err
+}
+
+func (s *postgresStore) ListContractVersions(ctx context.Context, contractID string) ([]ContractVersion, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, contract_id, wasm_hash, first_seen_ledger,
+		       COALESCE(tx_hash, ''), COALESCE(verified_source_ref, ''), recorded_at
+		FROM contract_versions
+		WHERE contract_id = $1
+		ORDER BY first_seen_ledger ASC`, contractID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ContractVersion
+	for rows.Next() {
+		var cv ContractVersion
+		if err := rows.Scan(
+			&cv.ID, &cv.ContractID, &cv.WasmHash, &cv.FirstSeenLedger,
+			&cv.TxHash, &cv.VerifiedSourceRef, &cv.RecordedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, cv)
+	}
+	return out, rows.Err()
+}
+
+func (s *postgresStore) GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, contract_id, wasm_hash, first_seen_ledger,
+		       COALESCE(tx_hash, ''), COALESCE(verified_source_ref, ''), recorded_at
+		FROM contract_versions
+		WHERE contract_id = $1
+		ORDER BY first_seen_ledger DESC
+		LIMIT 1`, contractID)
+	var cv ContractVersion
+	err := row.Scan(
+		&cv.ID, &cv.ContractID, &cv.WasmHash, &cv.FirstSeenLedger,
+		&cv.TxHash, &cv.VerifiedSourceRef, &cv.RecordedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ContractVersion{}, ErrNotFound
+	}
+	return cv, err
+}
+
+// nullableText converts an empty Go string to a SQL NULL so that optional
+// columns don't store empty strings in the database.
+func nullableText(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
