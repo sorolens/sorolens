@@ -65,6 +65,24 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestHealthV1Alias(t *testing.T) {
+	srv := newTestHandler(store.NewMockStore(), true, true)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["status"] != "ok" {
+		t.Errorf("want status=ok, got %q", body["status"])
+	}
+}
+
 func TestReadyzHealthy(t *testing.T) {
 	srv := newTestHandler(store.NewMockStore(), true, true)
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)

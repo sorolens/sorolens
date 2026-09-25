@@ -1,5 +1,5 @@
 -- ============================================================
--- 000004_api_key_scopes
+-- 000006_api_key_scopes
 --
 -- User API keys with scoped permissions. Keys are stored as
 -- SHA-256 hashes; the plaintext token is shown to the caller once at

@@ -1,5 +1,5 @@
 -- ============================================================
--- 000005_storage_entry_history
+-- 000007_storage_entry_history
 --
 -- Append-only history of storage entries so the snapshot/replay
 -- endpoint (#124) can answer "what did this contract's storage look

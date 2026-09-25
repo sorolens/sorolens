@@ -1,5 +1,5 @@
 -- ============================================================
--- 000006_user_roles
+-- 000011_user_roles
 --
 -- Role-based access control. Users get one of:
 --   viewer      - read-only (default)

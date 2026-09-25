@@ -1,5 +1,5 @@
 -- ============================================================
--- 000006_contract_upgrades
+-- 000009_contract_upgrades
 --
 -- Append-only history of contract upgrades. Every time an indexer
 -- poll observes that a tracked contract's Wasm hash changed since the

@@ -1,5 +1,5 @@
 -- ============================================================
--- 000008_indexer_cursors
+-- 000013_indexer_cursors
 --
 -- Tracks the last successfully committed ledger sequence per network
 -- for indexer crash recovery.

@@ -1,5 +1,5 @@
 -- ============================================================
--- 000007_contract_health_scores
+-- 000012_contract_health_scores
 --
 -- Cached composite 0-100 health score per contract (issue #137).
 -- The indexer recomputes the score every poll cycle from four
