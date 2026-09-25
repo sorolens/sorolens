@@ -1,3 +1,17 @@
+# Local development stack for Sorolens.
+#
+#   docker compose up -d      # start Postgres 16 + Redis and apply the schema
+#   docker compose down       # stop everything (the data volumes are kept)
+#   docker compose down -v    # ...and delete the data volumes too
+#
+# The Postgres and Redis settings below match the defaults in .env.example, so
+# the Go API connects to them without editing any environment variables:
+#
+#   DATABASE_URL=postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable
+#   DIRECT_DATABASE_URL=postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable
+#   REDIS_URL=redis://localhost:6379
+#
+# Run `make api` to start the API with exactly those values.
 services:
   postgres:
     image: postgres:16-alpine
@@ -5,6 +19,11 @@ services:
       POSTGRES_DB: sorolens
       POSTGRES_USER: sorolens
       POSTGRES_PASSWORD: sorolens
+    # WAL archiving keeps local Postgres shaped like the environment the
+    # backup/restore scripts (scripts/backup.sh, scripts/restore.sh) expect.
+    # CI installs scripts/aws-mock.sh as `aws` inside this container so the
+    # archive_command below succeeds there; locally it only logs a failure and
+    # Postgres keeps serving.
     command: ["postgres", "-c", "wal_level=replica", "-c", "archive_mode=on", "-c", "archive_command=aws s3 cp %p s3://sorolens-backups/wal/%f"]
     ports:
       - "5432:5432"
@@ -22,8 +41,11 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
+    volumes:
+      - sorolens_redis_data:/data
     networks:
       - sorolens_net
     healthcheck:
@@ -33,17 +55,61 @@ services:
       retries: 5
       start_period: 5s
 
+  # One-shot job that applies the SQL schema on first start, so a fresh clone is
+  # usable right after `docker compose up -d`. It applies the migrations exactly
+  # the way CI does (.github/workflows/ci.yml): every *.up.sql, in sorted order,
+  # via psql. golang-migrate (`make migrate-up`) cannot read this directory until
+  # the duplicate migration versions (e.g. 000002_contract_versions and
+  # 000002_watchdog) are renumbered, so psql is used here instead.
+  #
+  # Like CI, psql is run without ON_ERROR_STOP so that one failing statement does
+  # not stop the remaining migrations; 000003_partition_events logs a pre-existing
+  # "idx_events_contract_ledger already exists" error that CI's migration step
+  # logs as well and that does not affect the resulting schema.
+  #
+  # It shares the Postgres network namespace and connects over localhost, so it
+  # does not depend on service-name DNS or on inter-container networking being
+  # permitted.
+  migrate:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    network_mode: "service:postgres"
+    environment:
+      PGPASSWORD: sorolens
+      PGCONNECT_TIMEOUT: "10"
+    volumes:
+      - ./apps/api/internal/db/migrations:/migrations:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        if psql -h localhost -U sorolens -d sorolens -tAc "SELECT to_regclass('public.contracts')" | grep -q contracts; then
+          echo "schema already present; skipping migrations"
+          exit 0
+        fi
+        for f in $$(ls /migrations/*.up.sql | sort); do
+          echo "applying $$f"
+          psql -q -h localhost -U sorolens -d sorolens -f "$$f"
+        done
+        echo "migrations applied"
+    restart: "no"
+
+  # Small web UI for browsing the local database at http://localhost:8081.
   adminer:
     image: adminer
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "8081:8080"
     networks:
       - sorolens_net
-    depends_on:
-      - postgres
 
 volumes:
   sorolens_postgres_data:
+  sorolens_redis_data:
 
 networks:
   sorolens_net:

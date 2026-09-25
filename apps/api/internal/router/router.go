@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/http"
+	"net/http/pprof"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -42,6 +43,16 @@ func New(h *handler.Handler) http.Handler {
 	// form-encoded bodies, which the JSON content-type guard would reject;
 	// every request is authenticated by its Slack signature instead.
 	r.Post("/integrations/slack/commands", h.SlackCommand)
+
+	// pprof (issue #157). Gated behind admin role so probing always gets 403
+	// rather than 401, avoiding path enumeration by unauthenticated callers.
+	adminOnly := middleware.RequireRoleOrForbidden(h.Store, h.Logger, middleware.RoleAdmin)
+	r.With(adminOnly).HandleFunc("/debug/pprof", pprof.Index)
+	r.With(adminOnly).HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	r.With(adminOnly).HandleFunc("/debug/pprof/profile", pprof.Profile)
+	r.With(adminOnly).HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	r.With(adminOnly).HandleFunc("/debug/pprof/trace", pprof.Trace)
+	r.With(adminOnly).HandleFunc("/debug/pprof/{name}", pprof.Index)
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {

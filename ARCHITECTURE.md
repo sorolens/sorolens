@@ -356,6 +356,15 @@ A presented key that lacks the required scope receives `403` with
 receive `401`. Requests that present no credential keep the public v0.1 read
 surface open; API key management always requires a credential.
 
+#### Profiling: `/debug/pprof/*`
+
+The Go runtime profiling handlers (`net/http/pprof`) are mounted on the same
+router at `/debug/pprof/*` but are admin-only. Every request from a caller
+without the `admin` role — anonymous requests included — receives `403`, so
+the surface is not advertised. An admin gets the standard pprof index at
+`/debug/pprof/` and the named profiles (`goroutine`, `heap`, `allocs`, …),
+`cmdline`, `profile`, `symbol` and `trace` beneath it.
+
 ---
 
 ### 4.1 Contracts
