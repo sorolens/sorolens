@@ -30,9 +30,25 @@ describe("route handling", () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllEnvs();
   });
 
-  it("publishes canonical crawler rules and the sitemap", () => {
+  it("derives the crawler rules and sitemap from NEXT_PUBLIC_APP_URL", () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://staging.sorolens.dev/");
+
+    expect(robots()).toEqual({
+      rules: {
+        userAgent: "*",
+        allow: "/",
+      },
+      sitemap: "https://staging.sorolens.dev/sitemap.xml",
+      host: "https://staging.sorolens.dev",
+    });
+  });
+
+  it("falls back to the production origin when NEXT_PUBLIC_APP_URL is unset", () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", undefined);
+
     expect(robots()).toEqual({
       rules: {
         userAgent: "*",
