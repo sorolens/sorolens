@@ -356,6 +356,15 @@ A presented key that lacks the required scope receives `403` with
 receive `401`. Requests that present no credential keep the public v0.1 read
 surface open; API key management always requires a credential.
 
+#### Profiling: `/debug/pprof/*`
+
+The Go runtime profiling handlers (`net/http/pprof`) are mounted on the same
+router at `/debug/pprof/*` but are admin-only. Every request from a caller
+without the `admin` role — anonymous requests included — receives `403`, so
+the surface is not advertised. An admin gets the standard pprof index at
+`/debug/pprof/` and the named profiles (`goroutine`, `heap`, `allocs`, …),
+`cmdline`, `profile`, `symbol` and `trace` beneath it.
+
 ---
 
 ### 4.1 Contracts
@@ -759,6 +768,22 @@ checks run before the cache. A successful `POST /api/v1/contracts` purges the
 stats are written by the indexer, so they expire by TTL. Redis errors fail
 open. Responses carry `X-Cache: HIT|MISS`, and hit/miss counters are exposed
 on `GET /metrics` (see `docs/metrics.md`).
+
+### 4.11 Request timeouts
+
+Every `/api/v1` route runs under `API_REQUEST_TIMEOUT` (default 30s,
+`middleware.Timeout`, built on `http.TimeoutHandler`). The request context is
+cancelled at the deadline so in-flight store queries abort, and a handler that
+has not finished gets a `503` with the standard error envelope
+(`code: TIMEOUT`). The response is buffered, so late writes from a slow handler
+are discarded instead of racing the 503.
+
+`GET /api/v1/stream/events` (SSE) is registered outside that cap and runs
+under `API_STREAM_TIMEOUT` (default 5m, `middleware.StreamTimeout`): the
+response is not buffered, the connection write deadline is extended to match,
+and at the deadline the context is cancelled so the stream closes and
+`EventSource` reconnects. The server `WriteTimeout` is set to
+`API_REQUEST_TIMEOUT + 5s` so it never cuts off the 503.
 
 The full machine-readable reference is [`docs/openapi.yaml`](docs/openapi.yaml);
 `make openapi` checks it covers every route, lints it, and regenerates the Go

@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import type { Icons } from "next/dist/lib/metadata/types/metadata-types";
 import { metadata } from "./layout";
 
 // The layout pulls in the Tailwind entrypoint; it is irrelevant here.
@@ -29,7 +30,7 @@ describe("apple-touch-icon (#220)", () => {
   });
 
   it("is referenced from the root layout metadata", () => {
-    expect(metadata.icons?.apple).toEqual([
+    expect((metadata.icons as Icons)?.apple).toEqual([
       { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ]);
   });

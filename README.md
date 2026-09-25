@@ -34,10 +34,7 @@ docker compose up -d
 ```
 This starts Postgres 16 and Redis locally. The `docker-compose.yml` at the repo root maps Postgres to `localhost:5432` and Redis to `localhost:6379`.
 ### 2. Apply the database schema
-```bash
-cd services/indexer
-go run ./cmd/migrate up
-```
+The one-shot `migrate` service applies `apps/api/internal/db/migrations/*.up.sql` on first start, so the schema is ready once it finishes (`docker compose logs -f migrate`). To reset to an empty database instead, run `docker compose down -v` and start again.
 ### 3. Track a contract and run the indexer
 ```bash
 # Register a contract (uses the local API)

@@ -141,11 +141,19 @@ export function watchdogDetailHandlers(
   return {
     "watchdog/contracts/": (route) => {
       const path = new URL(route.request().url()).pathname;
+      const qs = new URL(route.request().url()).searchParams;
       if (path.endsWith("/health")) {
         return { status: 200, body: { health_checks: healthChecks } };
       }
       if (path.endsWith("/alerts")) {
         return { status: 200, body: { alerts: [] } };
+      }
+      if (path.endsWith("/uptime")) {
+        const window = qs.get("window") ?? "24h";
+        return {
+          status: 200,
+          body: { contract_id: CONTRACT_ID, window, uptime_pct: 99.85 },
+        };
       }
       return { status: 200, body: monitoredContract() };
     },

@@ -62,8 +62,8 @@ export async function getResourceTrend(
       cursor,
     });
     invocations.push(...(res.invocations ?? []));
-    if (!res.has_more || !res.cursor) break;
-    cursor = res.cursor;
+    if (!res.next_cursor) break;
+    cursor = res.next_cursor ?? undefined;
   }
 
   return aggregateResourceTrend(invocations);

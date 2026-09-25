@@ -289,6 +289,95 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/invocations:
+    get:
+      tags: [Invocations]
+      summary: List invocations across all tracked contracts
+      operationId: listAllInvocations
+      description: Cross-contract invocation explorer, newest first (ledger DESC).
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: contract_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter to a specific contract ID.
+        - name: fn
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Function name filter.
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [SUCCESS, FAILED, NOT_FOUND]
+          description: Invocation status filter.
+        - $ref: "#/components/parameters/NetworkParam"
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Lower ledger bound (inclusive).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Upper ledger bound (inclusive).
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound on ledger_closed_at (RFC 3339).
+        - name: until
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on ledger_closed_at (RFC 3339).
+      responses:
+        "200":
+          description: Page of invocations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invocations, next_cursor]
+                properties:
+                  invocations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Invocation"
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor for the next (older) page; empty when no more pages.
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/compare:
     get:
       tags: [Stats]
@@ -1372,6 +1461,45 @@ paths:
                   next_cursor:
                     type: string
                     description: Cursor for the next (older) page; empty when no more pages.
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/contracts/{id}/uptime:
+    get:
+      tags: [Watchdog]
+      summary: Get uptime percentage for a monitored contract
+      operationId: getContractUptime
+      security:
+        - ApiKeyAuth: [read:watchdog]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: window
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [24h, 7d, 30d]
+            default: 24h
+          description: Time window for uptime calculation (default 24h).
+      responses:
+        "200":
+          description: Uptime result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contract_id, window, uptime_pct]
+                properties:
+                  contract_id:
+                    type: string
+                  window:
+                    type: string
+                  uptime_pct:
+                    type: number
+                    format: double
+                    description: Percentage of checks with Healthy status (0–100).
         "422":
           $ref: "#/components/responses/InvalidInput"
         "500":

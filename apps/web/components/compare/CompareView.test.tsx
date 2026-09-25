@@ -53,6 +53,7 @@ function contract(
     status: "active",
     wasm_hash: null,
     added_at: "2026-09-01T00:00:00Z",
+    last_activity_at: null,
   };
 }
 

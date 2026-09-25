@@ -12,7 +12,7 @@ OAPI_CODEGEN := $(CURDIR)/.bin/oapi-codegen
 OAPI_SPEC    := docs/openapi.yaml
 CLIENT_DIR   := packages/go-client
 
-.PHONY: up down logs psql migrate-up migrate-down migrate-new test lint dev build client-go openapi lint-openapi
+.PHONY: up down logs psql migrate-up migrate-down migrate-new test lint dev api build client-go openapi lint-openapi
 
 ## up: start all Docker services in the background
 up:
@@ -100,6 +100,14 @@ lint:
 ## dev: start the Next.js dev server (and any other parallel dev scripts)
 dev:
 	pnpm dev
+
+## api: run the Go API against the Docker services, using the .env.example defaults
+api:
+	cd apps/api && \
+		DATABASE_URL="$(DB_URL_LOCAL)" \
+		DIRECT_DATABASE_URL="$(DB_URL_LOCAL)" \
+		REDIS_URL="redis://localhost:6379" \
+		go run .
 
 ## build: build all Go binaries and TypeScript packages
 build:

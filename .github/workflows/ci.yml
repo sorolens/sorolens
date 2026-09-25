@@ -4,7 +4,6 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-
 jobs:
   # ------------------------------------------------------------
   # Go: API, indexer, CLI
@@ -21,30 +20,6 @@ jobs:
           - services/indexer
           - cli
           - packages/go-client
-        include:
-          - module: apps/api
-            postgres_port: 5432
-          - module: services/indexer
-            postgres_port: 5433
-          - module: cli
-            postgres_port: 5434
-          - module: packages/go-client
-            postgres_port: 5435
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: sorolens
-          POSTGRES_USER: sorolens
-          POSTGRES_PASSWORD: sorolens
-        ports:
-          - ${{ matrix.postgres_port }}:5432
-        options: >-
-          --health-cmd "pg_isready -U sorolens -d sorolens"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --health-start-period 10s
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,18 +48,31 @@ jobs:
           version: latest
           working-directory: ${{ matrix.module }}
           args: --timeout=10m
+      - name: Start Postgres
+        working-directory: ./
+        run: |
+          chmod +x scripts/aws-mock.sh
+          docker compose up -d postgres
+          DB_CONTAINER=$(docker compose ps -q postgres)
+          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
+      - name: Wait for Postgres
+        working-directory: ./
+        run: |
+          echo "Waiting for PostgreSQL..."
+          DB_CONTAINER=$(docker compose ps -q postgres)
+          until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
       - name: Run DB migrations
         if: matrix.module == 'apps/api'
         env:
           PGPASSWORD: sorolens
         run: |
           for f in $(ls apps/api/internal/db/migrations/*.up.sql | sort); do
-            psql -h localhost -p ${{ matrix.postgres_port }} -U sorolens -d sorolens -f "$f"
+            psql -h localhost -U sorolens -d sorolens -f "$f"
           done
       - name: go test
         working-directory: ${{ matrix.module }}
         env:
-          POSTGRES_TEST_URL: postgres://sorolens:sorolens@localhost:${{ matrix.postgres_port }}/sorolens?sslmode=disable
+          POSTGRES_TEST_URL: postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable
         run: go test -race -timeout 120s -coverprofile=coverage.out ./...
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -92,7 +80,6 @@ jobs:
           files: ${{ matrix.module }}/coverage.out
           flags: go
           token: ${{ secrets.CODECOV_TOKEN }}
-
   # ------------------------------------------------------------
   # Go client regeneration (issue #149): fail if the checked-in generated
   # code under packages/go-client is out of date with docs/openapi.yaml.
@@ -115,7 +102,6 @@ jobs:
         run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
       - name: Verify no diff
         run: git diff --exit-code -- packages/go-client/internal
-
   # ------------------------------------------------------------
   # Node: XDR decoder package and shared packages
   # ------------------------------------------------------------
@@ -147,7 +133,38 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Lint
         run: pnpm --filter "./packages/**" lint
-
+  # ------------------------------------------------------------
+  # TypeScript type-check (fast, no build output needed)
+  # ------------------------------------------------------------
+  typecheck:
+    name: TypeScript type-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 11
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "store=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.store }}
+          key: pnpm-node22-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-node22-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Type-check dashboard
+        working-directory: apps/web
+        run: pnpm exec tsc --noEmit
   # ------------------------------------------------------------
   # Next.js dashboard build
   # ------------------------------------------------------------
@@ -185,7 +202,6 @@ jobs:
           # at build time. Real values are set in Vercel project settings.
           NEXT_PUBLIC_API_URL: http://localhost:8080
         run: pnpm build
-
   # ------------------------------------------------------------
   # Rust: fixture contract
   # ------------------------------------------------------------
@@ -230,43 +246,27 @@ jobs:
   backup-test:
     name: Backup and Restore Scripts
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: sorolens
-          POSTGRES_USER: sorolens
-          POSTGRES_PASSWORD: sorolens
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U sorolens -d sorolens"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --health-start-period 10s
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Configure Postgres for archive_mode
-        env:
-          PGPASSWORD: sorolens
+      - name: Start Postgres
         run: |
-          psql -h localhost -U sorolens -d sorolens -c "ALTER SYSTEM SET wal_level = replica;"
-          psql -h localhost -U sorolens -d sorolens -c "ALTER SYSTEM SET archive_mode = on;"
-          psql -h localhost -U sorolens -d sorolens -c "ALTER SYSTEM SET archive_command = 'aws s3 cp %p s3://sorolens-backups/wal/%f';"
-          # Restart postgres to pick up archive_mode (run as postgres user)
-          docker exec -u postgres $(docker ps -qf ancestor=postgres:16-alpine) pg_ctl restart -D /var/lib/postgresql/data -m fast
+          chmod +x scripts/aws-mock.sh
+          docker compose up -d postgres
+          DB_CONTAINER=$(docker compose ps -q postgres)
+          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
       - name: Wait for Postgres
         run: |
           echo "Waiting for PostgreSQL..."
-          until pg_isready -h localhost -U sorolens -d sorolens; do sleep 1; done
+          DB_CONTAINER=$(docker compose ps -q postgres)
+          until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
       - name: Setup Mock S3 Bucket
         run: |
           mkdir -p /tmp/s3/sorolens-backups/logical /tmp/s3/sorolens-backups/base /tmp/s3/sorolens-backups/wal
           install -m 755 scripts/aws-mock.sh /usr/local/bin/aws
       - name: Run Backup Script
         run: |
+          export DB_CONTAINER=$(docker compose ps -q postgres)
           ./scripts/backup.sh
       - name: Run Restore Script
         run: |
