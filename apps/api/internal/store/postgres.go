@@ -488,14 +488,14 @@ func (s *postgresStore) GetGlobalStats(ctx context.Context) (GlobalStats, error)
 func (s *postgresStore) Search(ctx context.Context, query string) ([]SearchResult, error) {
 	rows, err := s.pool.Query(ctx, `
 		(SELECT 'contract'::text AS type, id, COALESCE(label, ''), network,
-		        NULL::text AS contract_id, NULL::text AS tx_hash, NULL::text AS function_name
+		        ''::text AS contract_id, ''::text AS tx_hash, ''::text AS function_name
 		 FROM contracts
 		 WHERE id ILIKE '%' || $1 || '%' OR COALESCE(label, '') ILIKE '%' || $1 || '%'
 		 ORDER BY id
 		 LIMIT 10)
 		UNION ALL
-		(SELECT 'event'::text, NULL::text, NULL::text, network,
-		        contract_id, tx_hash, NULL::text
+		(SELECT 'event'::text, ''::text, ''::text, network,
+		        contract_id, tx_hash, ''::text
 		 FROM (SELECT DISTINCT ON (tx_hash) network, contract_id, tx_hash
 		       FROM events
 		       WHERE tx_hash ILIKE '%' || $1 || '%'
@@ -503,8 +503,8 @@ func (s *postgresStore) Search(ctx context.Context, query string) ([]SearchResul
 		 ORDER BY tx_hash
 		 LIMIT 10)
 		UNION ALL
-		(SELECT 'function'::text, NULL::text, NULL::text, network,
-		        contract_id, NULL::text, function_name
+		(SELECT 'function'::text, ''::text, ''::text, network,
+		        contract_id, ''::text, function_name
 		 FROM (SELECT DISTINCT ON (contract_id, function_name)
 		              network, contract_id, function_name
 		       FROM invocations
