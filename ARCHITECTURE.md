@@ -356,7 +356,7 @@ keyed by the chi route pattern (`internal/middleware/scopes.go`):
 
 | Scope | Grants |
 |---|---|
-| `read:contracts` | contract, event, invocation, storage, stats, and snapshot reads |
+| `read:contracts` | contract, event, invocation, storage, stats, snapshot, and storage-diff reads |
 | `write:contracts` | `POST /api/v1/contracts` |
 | `read:watchdog` | all `/api/v1/watchdog/*` reads |
 | `admin:*` | everything, including API key management |
@@ -663,6 +663,21 @@ ledger `N`. Used by the ledger scrubber on the contract detail page.
 - `404`: contract is unknown, or `N` precedes the first ledger the contract
   was tracked at (the message names that ledger).
 - `422`: `ledger` is missing or not a positive integer.
+
+#### `GET /api/v1/contracts/:id/storage/diff?from=N&to=M`
+
+Diffs the contract's storage between ledgers `N` and `M`: every key that was
+created, updated, deleted, or expired in between. Temporary, persistent, and
+instance entries are all covered because the change set is computed from the
+same per-key historical snapshot used for replay. Powers the two-column
+storage-diff view on the contract detail page.
+
+**Responses:**
+- `200`: `{ contract_id, from_ledger, to_ledger, counts, changes }`, where
+  each change carries `kind`, `durability`, optional `changed_fields`, and the
+  `before`/`after` entry versions (`null` on the absent side).
+- `404`: contract is unknown.
+- `422`: `from`/`to` missing, not positive integers, or `from > to`.
 
 ---
 

@@ -30,6 +30,7 @@ import { getResourceTrend } from "@/lib/resourceTrend";
 import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
+import { StorageDiffPanel } from "@/components/StorageDiffPanel";
 import { HealthScoreCard } from "@/components/HealthScoreCard";
 import { useEventStream } from "@/hooks/useEventStream";
 
@@ -426,6 +427,11 @@ function ContractDetailContent({ id }: { id: string }) {
       <section className="mb-8">
         <h2 className="mb-4 text-xl font-semibold">Snapshot / replay</h2>
         <SnapshotPanel contractId={id} currentLedger={currentLedger} />
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-4 text-xl font-semibold">Storage diff</h2>
+        <StorageDiffPanel contractId={id} currentLedger={currentLedger} />
       </section>
 
       <section className="mb-8">

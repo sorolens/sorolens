@@ -31,6 +31,22 @@ type MockStore struct {
 	alertGroups        []AlertGroup
 
 	// Error injection
+	UpsertContractErr   error
+	GetContractErr      error
+	ListContractsErr    error
+	GetGlobalStatsErr   error
+	ListEventsErr       error
+	ListInvocationsErr  error
+	ListStorageErr      error
+	StorageDiffErr      error
+	GetContractStatsErr error
+	RecentEventsErr     error
+	CreateAPIKeyErr     error
+	GetAPIKeyErr        error
+	UpsertUserErr       error
+	GetUserErr          error
+	ListUpgradesErr     error
+	GetHealthScoreErr   error
 	UpsertContractErr           error
 	GetContractErr              error
 	ListContractsErr            error
@@ -600,6 +616,24 @@ func (m *MockStore) GetStorageSnapshot(_ context.Context, contractID string, led
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].KeyXDR < out[j].KeyXDR })
 	return out, nil
+}
+
+// GetStorageDiff returns the per-key storage changes between two ledgers. The
+// mock keeps append-only storage history, so it diffs the two snapshots with
+// the exact same logic as the Postgres store.
+func (m *MockStore) GetStorageDiff(ctx context.Context, contractID string, from, to uint32) (StorageDiff, error) {
+	if m.StorageDiffErr != nil {
+		return StorageDiff{}, m.StorageDiffErr
+	}
+	before, err := m.GetStorageSnapshot(ctx, contractID, from)
+	if err != nil {
+		return StorageDiff{}, err
+	}
+	after, err := m.GetStorageSnapshot(ctx, contractID, to)
+	if err != nil {
+		return StorageDiff{}, err
+	}
+	return BuildStorageDiff(contractID, from, to, before, after), nil
 }
 
 // LastEventAtOrBefore returns the most recent event with ledger <= ledger.
