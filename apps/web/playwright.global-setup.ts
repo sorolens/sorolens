@@ -35,7 +35,9 @@ export default async function globalSetup(): Promise<void> {
     }
 
     if (!warmed) {
-      throw new Error(`[e2e warmup] failed for ${path} after 3 attempts: ${lastFailure}`);
+      throw new Error(
+        `[e2e warmup] failed for ${path} after 3 attempts: ${lastFailure}`
+      );
     }
   }
 }

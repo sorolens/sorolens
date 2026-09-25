@@ -6,7 +6,9 @@
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r --if-present build",
-    "dev": "pnpm -r --parallel --if-present dev"
+    "dev": "pnpm -r --parallel --if-present dev",
+    "format": "prettier --write apps/web package.json eslint.config.mjs",
+    "format:check": "prettier --check apps/web package.json eslint.config.mjs"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -6,8 +6,7 @@ export const metadata: Metadata = {
     "Real-time feed of Soroban contract events streamed via SSE. Filter by contract ID and watch decoded topics arrive live.",
   openGraph: {
     title: "Event Stream — Sorolens",
-    description:
-      "Real-time feed of Soroban contract events streamed via SSE.",
+    description: "Real-time feed of Soroban contract events streamed via SSE.",
     url: "https://sorolens.dev/events",
   },
   alternates: {

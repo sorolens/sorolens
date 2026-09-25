@@ -28,7 +28,7 @@ describe("truncateMiddle", () => {
   it("returns values that exactly fit unchanged", () => {
     // 8 head + 8 tail + 3 ellipsis characters === 19.
     const exact = "C".repeat(
-      CONTRACT_ID_HEAD_CHARS + CONTRACT_ID_TAIL_CHARS + 3,
+      CONTRACT_ID_HEAD_CHARS + CONTRACT_ID_TAIL_CHARS + 3
     );
     expect(exact).toHaveLength(19);
     expect(truncateMiddle(exact)).toBe(exact);
@@ -41,14 +41,14 @@ describe("truncateMiddle", () => {
 
   it("renders a 56-character Soroban contract ID in the shared shape", () => {
     expect(SOROBAN_CONTRACT_ID).toHaveLength(56);
-    expect(truncateMiddle(SOROBAN_CONTRACT_ID)).toBe(
-      "CDLZFC3S...HAGQFW2J",
-    );
+    expect(truncateMiddle(SOROBAN_CONTRACT_ID)).toBe("CDLZFC3S...HAGQFW2J");
   });
 
   it("honours custom head and tail lengths", () => {
     const value = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQAHHAGQFW2J";
-    expect(truncateMiddle(value, 24, 8)).toBe("CDLZFC3SYJYDZT7K67VZ75HP...HAGQFW2J");
+    expect(truncateMiddle(value, 24, 8)).toBe(
+      "CDLZFC3SYJYDZT7K67VZ75HP...HAGQFW2J"
+    );
     expect(truncateMiddle(value, 4, 4)).toBe("CDLZ...FW2J");
   });
 });

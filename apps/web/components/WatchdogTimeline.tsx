@@ -115,9 +115,9 @@ export function WatchdogTimeline({ checks }: WatchdogTimelineProps) {
             data-testid="timeline-segment"
             data-status={segment.status}
             title={`${segment.status} · ${segment.checks.length} check(s) · ${formatTimestamp(
-              segment.checks[0].timestamp,
+              segment.checks[0].timestamp
             )} → ${formatTimestamp(
-              segment.checks[segment.checks.length - 1].timestamp,
+              segment.checks[segment.checks.length - 1].timestamp
             )}`}
             style={{
               flexGrow: segment.weight,
