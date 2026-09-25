@@ -153,6 +153,37 @@ export function getContractInvocations(
   );
 }
 
+// ---- global invocations ----------------------------------------------------
+
+/**
+ * Lists invocations across every tracked contract (newest first). Backs the
+ * /invocations explorer. All filters are optional.
+ */
+export function listInvocations(params?: {
+  cursor?: string;
+  limit?: number;
+  contract_id?: string;
+  fn?: string;
+  status?: string;
+  network?: string;
+  since?: string;
+  until?: string;
+}): Promise<InvocationsResponse> {
+  const search = new URLSearchParams();
+  if (params?.cursor) search.set("cursor", params.cursor);
+  if (params?.limit) search.set("limit", String(params.limit));
+  if (params?.contract_id) search.set("contract_id", params.contract_id);
+  if (params?.fn) search.set("fn", params.fn);
+  if (params?.status) search.set("status", params.status);
+  if (params?.network) search.set("network", params.network);
+  if (params?.since) search.set("since", params.since);
+  if (params?.until) search.set("until", params.until);
+  const qs = search.toString();
+  return fetchJson<InvocationsResponse>(
+    `${API_URL}/api/v1/invocations${qs ? "?" + qs : ""}`,
+  );
+}
+
 export function getContractStorage(
   id: string,
   params?: {
