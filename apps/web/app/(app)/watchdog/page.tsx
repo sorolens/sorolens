@@ -49,7 +49,7 @@ export default function WatchdogPage() {
     let cancelled = false;
     async function load() {
       const filter = networkFilter(network);
-      const [s, , a] = await Promise.all([
+      const [s, a] = await Promise.all([
         getWatchdogStats(filter).catch(() => ZERO_STATS),
         listAlerts(undefined, { limit: 20, network: filter }).catch(() => ({
           alerts: [],
