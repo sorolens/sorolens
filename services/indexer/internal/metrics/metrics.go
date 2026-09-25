@@ -1,89 +1,97 @@
-// Package metrics owns the Prometheus collectors the Sorolens indexer exposes
-// on its /metrics endpoint (issue #198).
+// Package metrics defines the Prometheus collectors the indexer publishes and
+// the HTTP handler that serves them.
 //
-// Every collector is registered on a dedicated registry owned by Recorder so
-// callers can run more than one recorder (for example in tests) without
-// colliding on the process-wide default registry. HTTP handlers are produced
-// with promhttp, the standard Prometheus exposition handler.
+// The collectors live on a dedicated registry (not the process-wide
+// prometheus.DefaultRegisterer) so tests can assert on a known set of series
+// and repeated construction can never panic on duplicate registration.
+//
+// See docs/metrics.md for the full metric catalogue.
 package metrics
 
 import (
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// namespace is the metric namespace shared by every Sorolens metric. It is the
-// "<prefix>" in names such as sorolens_indexer_lag_ledgers.
 const namespace = "sorolens"
 
-// Recorder registers and updates the indexer's Prometheus metrics.
-// The zero value is not usable; construct one with New.
-type Recorder struct {
-	registry *prometheus.Registry
+// Registry holds every collector the indexer exposes.
+var Registry = prometheus.NewRegistry()
 
-	lagLedgers        *prometheus.GaugeVec
-	headLedger        *prometheus.GaugeVec
-	lastIndexedLedger *prometheus.GaugeVec
+// Handler serves Registry in the Prometheus text exposition format.
+var Handler = promhttp.HandlerFor(Registry, promhttp.HandlerOpts{})
+
+var (
+	// LedgerLag is how far behind the chain head the indexer currently is, in
+	// ledgers. 0 means the pass caught up to the ledger it observed via
+	// getLatestLedger; a growing value means indexing is falling behind.
+	LedgerLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: "indexer",
+		Name:      "ledger_lag",
+		Help:      "Number of ledgers between the latest known ledger and the last ledger processed, by network.",
+	}, []string{"network"})
+
+	// EventsProcessedTotal counts contract events successfully written.
+	EventsProcessedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: "indexer",
+		Name:      "events_processed_total",
+		Help:      "Total number of contract events processed and persisted, by network.",
+	}, []string{"network"})
+
+	// RunDuration observes the wall-clock duration of a complete indexer pass.
+	RunDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Subsystem: "indexer",
+		Name:      "run_duration_seconds",
+		Help:      "Duration of a full indexer pass in seconds, by run mode.",
+		Buckets:   []float64{0.5, 1, 2.5, 5, 10, 30, 60, 120, 270, 300},
+	}, []string{"mode"})
+)
+
+func init() {
+	Registry.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+
+		LedgerLag,
+		EventsProcessedTotal,
+		RunDuration,
+	)
 }
 
-// New returns a Recorder with all indexer collectors registered on a new
-// registry. The returned Recorder is safe for concurrent use.
-func New() *Recorder {
-	r := &Recorder{
-		registry: prometheus.NewRegistry(),
-		lagLedgers: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Subsystem: "indexer",
-			Name:      "lag_ledgers",
-			Help: "Number of ledgers the indexer is behind the network head " +
-				"(latest_ledger - last_indexed_ledger) for the network.",
-		}, []string{"network"}),
-		headLedger: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Subsystem: "indexer",
-			Name:      "head_ledger",
-			Help:      "Latest ledger sequence reported by the Soroban RPC for the network.",
-		}, []string{"network"}),
-		lastIndexedLedger: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Subsystem: "indexer",
-			Name:      "last_indexed_ledger",
-			Help:      "Last ledger sequence committed by the indexer for the network.",
-		}, []string{"network"}),
+// ObserveLedgerLag records how far the indexer is behind the chain head for a
+// network. Negative values are clamped to 0 so a reorg or an out-of-order RPC
+// response cannot produce a misleading negative lag.
+func ObserveLedgerLag(network string, lag int64) {
+	if lag < 0 {
+		lag = 0
 	}
-	r.registry.MustRegister(r.lagLedgers, r.headLedger, r.lastIndexedLedger)
-	return r
+	LedgerLag.WithLabelValues(network).Set(float64(lag))
 }
 
-// ObserveNetwork records one lag sample for a network. head is the latest
-// ledger reported by the network's RPC and lastIndexed is the last ledger the
-// indexer has committed for that network (its network cursor). Lag is clamped
-// at zero so a regressed cursor never reports a negative gauge.
-func (r *Recorder) ObserveNetwork(network string, head, lastIndexed uint32) {
-	if r == nil {
+// AddEventsProcessed adds n successfully persisted events for a network.
+func AddEventsProcessed(network string, n int) {
+	if n <= 0 {
 		return
 	}
-	var lag uint32
-	if head > lastIndexed {
-		lag = head - lastIndexed
-	}
-	r.headLedger.WithLabelValues(network).Set(float64(head))
-	r.lastIndexedLedger.WithLabelValues(network).Set(float64(lastIndexed))
-	r.lagLedgers.WithLabelValues(network).Set(float64(lag))
+	EventsProcessedTotal.WithLabelValues(network).Add(float64(n))
 }
 
-// Registry returns the registry holding the indexer collectors.
-func (r *Recorder) Registry() *prometheus.Registry {
-	if r == nil {
-		return nil
-	}
-	return r.registry
+// ObserveRunDuration records the duration of a completed pass.
+func ObserveRunDuration(mode string, seconds float64) {
+	RunDuration.WithLabelValues(mode).Observe(seconds)
 }
 
-// Handler returns the HTTP handler that serves the Prometheus text exposition
-// on the /metrics endpoint.
-func (r *Recorder) Handler() http.Handler {
-	return promhttp.HandlerFor(r.Registry(), promhttp.HandlerOpts{})
+// NewAdminMux returns a mux serving only the metrics endpoint. It backs the
+// optional METRICS_PORT listener so the indexer can be scraped without
+// exposing anything else.
+func NewAdminMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", Handler)
+	return mux
 }

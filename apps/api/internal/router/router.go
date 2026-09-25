@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
+	"github.com/sorolens/sorolens/apps/api/internal/metrics"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 )
 
@@ -28,6 +29,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(middleware.BodyLimit(maxBodyBytes))
 	r.Use(middleware.Logger(h.Logger))
 	r.Use(chiMiddleware.StripSlashes)
+	r.Use(middleware.Metrics)
 
 	// Emit ETags on cacheable GET/HEAD responses and answer If-None-Match
 	// matches with an empty 304, short-circuiting the body before it
@@ -35,6 +37,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(middleware.ETag)
 
 	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
+
+	// Prometheus scrape endpoint. It sits outside /api/v1 so it needs no API
+	// key, and the rate limiter skips it explicitly (see middleware.RateLimit)
+	// so a scrape is never throttled.
+	r.Method(http.MethodGet, "/metrics", metrics.Handler)
 
 	// Health (not rate-limited)
 	r.Get("/health", h.Health)

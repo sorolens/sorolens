@@ -1,92 +1,79 @@
-package metrics
+package metrics_test
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 )
 
-func TestRecorderObserveNetwork(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name        string
-		head        uint32
-		lastIndexed uint32
-		wantLag     float64
-	}{
-		{name: "behind", head: 1000, lastIndexed: 940, wantLag: 60},
-		{name: "caught up", head: 1000, lastIndexed: 1000, wantLag: 0},
-		{name: "cursor ahead of head clamps to zero", head: 1000, lastIndexed: 1010, wantLag: 0},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			r := New()
-			r.ObserveNetwork("testnet", tc.head, tc.lastIndexed)
-
-			if got := testutil.ToFloat64(r.lagLedgers.WithLabelValues("testnet")); got != tc.wantLag {
-				t.Fatalf("lag = %v, want %v", got, tc.wantLag)
-			}
-			if got := testutil.ToFloat64(r.headLedger.WithLabelValues("testnet")); got != float64(tc.head) {
-				t.Fatalf("head ledger = %v, want %v", got, tc.head)
-			}
-			if got := testutil.ToFloat64(r.lastIndexedLedger.WithLabelValues("testnet")); got != float64(tc.lastIndexed) {
-				t.Fatalf("last indexed ledger = %v, want %v", got, tc.lastIndexed)
-			}
-		})
-	}
+// requiredMetrics are the three indexer-owned series named in the acceptance
+// criteria for the metrics endpoint.
+var requiredMetrics = []string{
+	"sorolens_indexer_ledger_lag",
+	"sorolens_indexer_events_processed_total",
+	"sorolens_indexer_run_duration_seconds",
 }
 
-func TestRecorderObserveNetworkIsPerNetwork(t *testing.T) {
-	t.Parallel()
+// TestIndexerMetricsExposeRequiredNames scrapes the indexer metrics mux and
+// asserts every required metric name is present in a valid exposition.
+func TestIndexerMetricsExposeRequiredNames(t *testing.T) {
+	// Populate each series: a GaugeVec/CounterVec/HistogramVec emits nothing
+	// until it has been observed at least once.
+	metrics.ObserveLedgerLag("testnet", 42)
+	metrics.AddEventsProcessed("testnet", 3)
+	metrics.ObserveRunDuration("once", 1.5)
 
-	r := New()
-	r.ObserveNetwork("testnet", 1000, 900)
-	r.ObserveNetwork("mainnet", 2000, 1990)
+	rr := httptest.NewRecorder()
+	metrics.NewAdminMux().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 
-	if got := testutil.ToFloat64(r.lagLedgers.WithLabelValues("testnet")); got != 100 {
-		t.Fatalf("testnet lag = %v, want 100", got)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /metrics: got status %d, want 200", rr.Code)
 	}
-	if got := testutil.ToFloat64(r.lagLedgers.WithLabelValues("mainnet")); got != 10 {
-		t.Fatalf("mainnet lag = %v, want 10", got)
-	}
-}
-
-func TestRecorderNilObserveNetworkIsNoop(t *testing.T) {
-	t.Parallel()
-
-	var r *Recorder
-	r.ObserveNetwork("testnet", 1000, 900) // must not panic
-}
-
-func TestHandlerExposesLagMetric(t *testing.T) {
-	t.Parallel()
-
-	r := New()
-	r.ObserveNetwork("mainnet", 5000, 4880)
-
-	req := httptest.NewRequest("GET", "/metrics", nil)
-	rec := httptest.NewRecorder()
-	r.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != 200 {
-		t.Fatalf("status = %d, want 200", rec.Code)
+	if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Errorf("GET /metrics: got Content-Type %q, want a text/plain exposition", ct)
 	}
 
-	body := rec.Body.String()
-	for _, want := range []string{
-		"sorolens_indexer_lag_ledgers{network=\"mainnet\"} 120",
-		"sorolens_indexer_head_ledger{network=\"mainnet\"} 5000",
-		"sorolens_indexer_last_indexed_ledger{network=\"mainnet\"} 4880",
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("/metrics body missing %q\nbody:\n%s", want, body)
+	body := rr.Body.String()
+	for _, name := range requiredMetrics {
+		if !strings.Contains(body, name) {
+			t.Errorf("GET /metrics: exposition is missing metric %q; body:\n%s", name, body)
 		}
+	}
+
+	// Spot-check that the values recorded actually reach the exposition.
+	if !strings.Contains(body, `sorolens_indexer_ledger_lag{network="testnet"} 42`) {
+		t.Errorf("expected ledger lag 42 for testnet in exposition; body:\n%s", body)
+	}
+	if !strings.Contains(body, "sorolens_indexer_run_duration_seconds_count{mode=\"once\"}") {
+		t.Errorf("expected a run-duration observation for mode=once; body:\n%s", body)
+	}
+}
+
+// TestObserveLedgerLagClampsNegative documents that a negative lag (a reorg, or
+// an RPC response that reports a lower head than the ledger just processed) is
+// clamped to 0 rather than reported as a meaningless negative value.
+func TestObserveLedgerLagClampsNegative(t *testing.T) {
+	metrics.ObserveLedgerLag("mainnet", -5)
+
+	rr := httptest.NewRecorder()
+	metrics.NewAdminMux().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	if body := rr.Body.String(); !strings.Contains(body, `sorolens_indexer_ledger_lag{network="mainnet"} 0`) {
+		t.Errorf("expected negative lag clamped to 0; body:\n%s", body)
+	}
+}
+
+// TestAddEventsProcessedIgnoresZero guards against noisy zero increments.
+func TestAddEventsProcessedIgnoresZero(t *testing.T) {
+	metrics.AddEventsProcessed("futurenet", 0)
+
+	rr := httptest.NewRecorder()
+	metrics.NewAdminMux().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	if body := rr.Body.String(); strings.Contains(body, `network="futurenet"`) {
+		t.Errorf("zero increments should not create a series; body:\n%s", body)
 	}
 }
