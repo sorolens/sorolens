@@ -37,9 +37,10 @@ type EventFilters struct {
 	Network string
 	// Topic matches events whose decoded topic list contains the given value
 	// (JSONB containment). See topicFilterJSON for the accepted encodings.
-	Topic string
-	From  uint32
-	To    uint32
+	Topic            string
+	From             uint32
+	To               uint32
+	InSuccessfulCall *bool
 }
 
 // InvocationFilters holds optional query filters for listing invocations.
@@ -139,10 +140,14 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 	// like the other filters would hide the containment operator behind a
 	// disjunction and force a sequential scan.
 	args := []any{contractID, cursor, f.Network, f.Type, f.From, f.To, limit + 1}
-	topicClause := ""
+	dynamicClauses := ""
 	if f.Topic != "" {
 		args = append(args, topicFilterJSON(f.Topic))
-		topicClause = fmt.Sprintf("  AND topic_decoded @> $%d::jsonb\n", len(args))
+		dynamicClauses += fmt.Sprintf("  AND topic_decoded @> $%d::jsonb\n", len(args))
+	}
+	if f.InSuccessfulCall != nil {
+		args = append(args, *f.InSuccessfulCall)
+		dynamicClauses += fmt.Sprintf("  AND in_successful_call = $%d\n", len(args))
 	}
 
 	rows, err := s.pool.Query(ctx, `
@@ -156,7 +161,7 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 		  AND ($4 = '' OR type = $4)
 		  AND ($5 = 0   OR ledger >= $5)
 		  AND ($6 = 0   OR ledger <= $6)
-`+topicClause+`		ORDER BY ledger ASC, id ASC
+`+dynamicClauses+`		ORDER BY ledger ASC, id ASC
 		LIMIT $7`,
 		args...,
 	)

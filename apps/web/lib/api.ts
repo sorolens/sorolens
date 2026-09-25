@@ -109,6 +109,7 @@ export function getContractEvents(
     tx_hash?: string;
     since?: string;
     until?: string;
+    in_successful_call?: boolean;
   },
 ): Promise<EventsResponse> {
   const search = new URLSearchParams();
@@ -118,6 +119,7 @@ export function getContractEvents(
   if (params?.tx_hash) search.set("tx_hash", params.tx_hash);
   if (params?.since) search.set("since", params.since);
   if (params?.until) search.set("until", params.until);
+  if (params?.in_successful_call !== undefined) search.set("in_successful_call", String(params.in_successful_call));
   const qs = search.toString();
   return fetchJson<EventsResponse>(
     `${API_URL}/api/v1/contracts/${id}/events${qs ? "?" + qs : ""}`,

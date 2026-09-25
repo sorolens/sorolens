@@ -42,7 +42,7 @@ func TestListEventsTopicFilter(t *testing.T) {
 	})
 
 	now := time.Now().UTC()
-	insertEvent := func(id string, topics []any) {
+	insertEvent := func(id string, topics []any, success bool) {
 		t.Helper()
 		topicJSON, err := json.Marshal(topics)
 		if err != nil {
@@ -54,18 +54,18 @@ func TestListEventsTopicFilter(t *testing.T) {
 				 topic_xdr, value_xdr, topic_decoded, value_decoded,
 				 in_successful_call, inserted_at)
 			VALUES ($1, $2, 'testnet', 1, $3, $4, 'contract',
-			        '[]'::jsonb, '', $5::jsonb, '{}'::jsonb, TRUE, NOW())`,
-			id, contractID, now, "tx_"+id, string(topicJSON),
+			        '[]'::jsonb, '', $5::jsonb, '{}'::jsonb, $6, NOW())`,
+			id, contractID, now, "tx_"+id, string(topicJSON), success,
 		)
 		if err != nil {
 			t.Fatalf("insert event %s: %v", id, err)
 		}
 	}
 
-	insertEvent("evt_transfer_1", []any{"transfer", "1"})
-	insertEvent("evt_approve_1", []any{"approve"})
-	insertEvent("evt_transfer_2", []any{"transfer", "2"})
-	insertEvent("evt_numeric_1", []any{float64(7)})
+	insertEvent("evt_transfer_1", []any{"transfer", "1"}, true)
+	insertEvent("evt_approve_1", []any{"approve"}, true)
+	insertEvent("evt_transfer_2", []any{"transfer", "2"}, false)
+	insertEvent("evt_numeric_1", []any{float64(7)}, true)
 
 	t.Run("matches string topic element", func(t *testing.T) {
 		got, _, err := s.ListEvents(ctx, contractID, "", 50, store.EventFilters{Topic: "transfer"})
@@ -114,6 +114,31 @@ func TestListEventsTopicFilter(t *testing.T) {
 		}
 		if len(got) != 4 {
 			t.Fatalf("no topic filter: got %d events, want 4", len(got))
+		}
+	})
+
+	t.Run("in_successful_call = true", func(t *testing.T) {
+		v := true
+		got, _, err := s.ListEvents(ctx, contractID, "", 50, store.EventFilters{InSuccessfulCall: &v})
+		if err != nil {
+			t.Fatalf("ListEvents: %v", err)
+		}
+		if len(got) != 3 {
+			t.Fatalf("in_successful_call=true: got %d events, want 3", len(got))
+		}
+	})
+
+	t.Run("in_successful_call = false", func(t *testing.T) {
+		v := false
+		got, _, err := s.ListEvents(ctx, contractID, "", 50, store.EventFilters{InSuccessfulCall: &v})
+		if err != nil {
+			t.Fatalf("ListEvents: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("in_successful_call=false: got %d events, want 1", len(got))
+		}
+		if got[0].ID != "evt_transfer_2" {
+			t.Fatalf("want evt_transfer_2, got %s", got[0].ID)
 		}
 	})
 }

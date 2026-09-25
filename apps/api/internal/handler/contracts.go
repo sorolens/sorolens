@@ -325,12 +325,23 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	var inSuccess *bool
+	if param := r.URL.Query().Get("in_successful_call"); param != "" {
+		if param == "true" {
+			v := true
+			inSuccess = &v
+		} else if param == "false" {
+			v := false
+			inSuccess = &v
+		}
+	}
 	f := store.EventFilters{
-		Type:    r.URL.Query().Get("type"),
-		Network: network,
-		Topic:   strings.TrimSpace(r.URL.Query().Get("topic")),
-		From:    uint32Query(r, "from"),
-		To:      uint32Query(r, "to"),
+		Type:             r.URL.Query().Get("type"),
+		Network:          network,
+		Topic:            strings.TrimSpace(r.URL.Query().Get("topic")),
+		From:             uint32Query(r, "from"),
+		To:               uint32Query(r, "to"),
+		InSuccessfulCall: inSuccess,
 	}
 	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
 	if err != nil {
