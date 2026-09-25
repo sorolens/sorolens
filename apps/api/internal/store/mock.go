@@ -241,6 +241,9 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 		if f.Network != "" && inv.Network != f.Network {
 			continue
 		}
+		if f.FunctionName != "" && inv.FunctionName != f.FunctionName {
+			continue
+		}
 		out = append(out, inv)
 		if len(out) > limit {
 			break

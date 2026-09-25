@@ -362,7 +362,7 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 	f := store.InvocationFilters{
 		Status:       r.URL.Query().Get("status"),
-		FunctionName: r.URL.Query().Get("fn"),
+		FunctionName: r.URL.Query().Get("function_name"),
 		Network:      network,
 		From:         uint32Query(r, "from"),
 		To:           uint32Query(r, "to"),
