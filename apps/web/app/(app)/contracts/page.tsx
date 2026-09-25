@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { DataTable, MonoId, Toast } from "@sorolens/ui";
-import type { Column } from "@sorolens/ui";
+import type { Column, ToastVariant } from "@sorolens/ui";
+import type { ReactNode } from "react";
 import { listContracts } from "@/lib/api";
 import type { TrackContractRequest } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
@@ -305,7 +306,7 @@ export default function ContractsPage() {
 
   // Track state: one request in flight at a time, errors surface as a toast.
   const [trackPending, setTrackPending] = useState(false);
-  const [toast, setToast] = useState<{ id: number; message: string } | null>(
+  const [toast, setToast] = useState<{ id: number; message: ReactNode; variant?: ToastVariant } | null>(
     null,
   );
   const toastSeq = useRef(0);
@@ -459,10 +460,57 @@ export default function ContractsPage() {
       handleTrackSuccess();
       return;
     }
-    setToast({ id: ++toastSeq.current, message: result.message });
+    setToast({ id: ++toastSeq.current, message: result.message, variant: "error" });
     // The superseded load never landed, so fetch the page it was loading.
     if (interruptedLoad && listIsCurrent()) load(cursors[cursorIndex]);
   };
+
+
+  // ---------------------------------------------------------------------------
+  // Paste-to-add contract listener
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      
+      const pastedText = e.clipboardData?.getData("text")?.trim();
+      if (!pastedText || !CONTRACT_ID_RE.test(pastedText)) return;
+      
+      const trackId = pastedText;
+      const tId = ++toastSeq.current;
+      setToast({
+        id: tId,
+        variant: "info",
+        message: (
+          <div className="flex flex-col gap-2">
+            <div>
+              Track this contract?
+              <br />
+              <span className="font-mono text-xs opacity-70">{trackId}</span>
+            </div>
+            <button
+              type="button"
+              className="self-start rounded bg-[var(--color-accent)] px-3 py-1 text-xs font-semibold text-[var(--color-bg-page)] hover:opacity-90 transition-opacity"
+              onClick={() => {
+                dismissToast();
+                handleTrackSubmit({ id: trackId });
+              }}
+            >
+              Confirm
+            </button>
+          </div>
+        ),
+      });
+    };
+    
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
+  }, [handleTrackSubmit]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -481,7 +529,7 @@ export default function ContractsPage() {
         <Toast
           key={toast.id}
           message={toast.message}
-          variant="error"
+          variant={toast.variant || "error"}
           onDismiss={dismissToast}
         />
       )}
