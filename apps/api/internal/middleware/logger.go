@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"bufio"
+	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 )
@@ -14,6 +17,16 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack delegates to the underlying writer so protocol upgrades (WebSocket
+// handshake in the /subscribe handler) work through the logger middleware.
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := r.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("middleware: underlying ResponseWriter does not implement http.Hijacker")
+	}
+	return h.Hijack()
 }
 
 // Logger logs each request with method, path, status, duration, and request ID.
