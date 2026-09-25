@@ -298,6 +298,15 @@ export function getMonitoredContract(
   );
 }
 
+export function getContractUptime(
+  contractId: string,
+  window: UptimeWindow = "24h",
+): Promise<UptimeResponse> {
+  return fetchJson<UptimeResponse>(
+    `${API_URL}/api/v1/watchdog/contracts/${contractId}/uptime?window=${window}`,
+  );
+}
+
 export function listHealthChecks(
   contractId: string,
   limit = 100,

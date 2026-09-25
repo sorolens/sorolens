@@ -129,6 +129,7 @@ func New(h *handler.Handler) http.Handler {
 		get("/watchdog/contracts/{id}", h.GetMonitoredContract)
 		get("/watchdog/contracts/{id}/health", h.ListHealthChecks)
 		get("/watchdog/contracts/{id}/alerts", h.ListWatchdogAlerts)
+		get("/watchdog/contracts/{id}/uptime", h.GetContractUptime)
 
 		// Alert notification subscriptions (issue #127). They hold
 		// integration secrets, so reading them also needs contributor.
