@@ -133,6 +133,29 @@ jobs:
       - name: Lint
         run: pnpm --filter "./packages/**" lint
   # ------------------------------------------------------------
+  # Prettier formatting (issue #216). Runs the acceptance criterion
+  # verbatim: `pnpm prettier --check` must pass in CI.
+  # ------------------------------------------------------------
+  format:
+    name: Prettier format check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 11
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: prettier --check
+        run: pnpm exec prettier --check apps/web package.json eslint.config.mjs
+
+  # ------------------------------------------------------------
   # TypeScript type-check (fast, no build output needed)
   # ------------------------------------------------------------
   typecheck:

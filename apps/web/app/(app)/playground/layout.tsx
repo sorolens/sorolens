@@ -6,8 +6,7 @@ export const metadata: Metadata = {
     "Interactive API explorer for the Sorolens REST API. Select an endpoint, fill parameters, and execute requests directly from the browser.",
   openGraph: {
     title: "API Playground — Sorolens",
-    description:
-      "Interactive API explorer for the Sorolens REST API.",
+    description: "Interactive API explorer for the Sorolens REST API.",
     url: "https://sorolens.dev/playground",
   },
   alternates: {

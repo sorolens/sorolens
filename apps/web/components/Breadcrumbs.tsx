@@ -56,8 +56,8 @@ export function Breadcrumbs() {
 
   const paramValues = new Set(
     Object.values(params ?? {}).flatMap((value) =>
-      (Array.isArray(value) ? value : [value]).map(String),
-    ),
+      (Array.isArray(value) ? value : [value]).map(String)
+    )
   );
 
   const crumbs = segments.map((segment, index) => {

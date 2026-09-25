@@ -15,7 +15,10 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "."),
       "@sorolens/ui": path.resolve(__dirname, "../../packages/ui/src/index.ts"),
-      "@sorolens/xdr": path.resolve(__dirname, "../../packages/xdr/src/index.ts"),
+      "@sorolens/xdr": path.resolve(
+        __dirname,
+        "../../packages/xdr/src/index.ts"
+      ),
     },
   },
 });

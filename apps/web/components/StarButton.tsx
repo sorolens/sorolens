@@ -7,7 +7,11 @@ interface StarButtonProps {
   initialInWatchlist?: boolean;
 }
 
-export function StarButton({ contractId, userId, initialInWatchlist = false }: StarButtonProps) {
+export function StarButton({
+  contractId,
+  userId,
+  initialInWatchlist = false,
+}: StarButtonProps) {
   const [inWatchlist, setInWatchlist] = useState(initialInWatchlist);
   const [pending, startTransition] = useTransition();
 
@@ -37,9 +41,7 @@ export function StarButton({ contractId, userId, initialInWatchlist = false }: S
     >
       <span
         className={
-          inWatchlist
-            ? "text-yellow-400"
-            : "text-[var(--color-text-secondary)]"
+          inWatchlist ? "text-yellow-400" : "text-[var(--color-text-secondary)]"
         }
       >
         ★

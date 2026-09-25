@@ -94,7 +94,7 @@ describe("UptimeBadge", () => {
         {windows.map(({ window, pct }) => (
           <UptimeBadge key={window} window={window} pct={pct} />
         ))}
-      </div>,
+      </div>
     );
     expect(container.textContent).toContain("99.98%");
     expect(container.textContent).toContain("99.85%");

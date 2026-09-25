@@ -7,7 +7,13 @@
  */
 
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mock @sorolens/ui (DataTable renders sortable headers) ──────────────────
@@ -70,7 +76,9 @@ vi.mock("@sorolens/ui", () => ({
             >
               {columns.map((col) => (
                 <td key={col.key}>
-                  {col.accessor ? col.accessor(item) : String((item as Record<string, unknown>)[col.key] ?? "")}
+                  {col.accessor
+                    ? col.accessor(item)
+                    : String((item as Record<string, unknown>)[col.key] ?? "")}
                 </td>
               ))}
             </tr>
@@ -160,9 +168,8 @@ function rowTexts(): string[] {
 }
 
 async function renderPage() {
-  const { default: InvocationsPage } = await import(
-    "@/app/(app)/invocations/page"
-  );
+  const { default: InvocationsPage } =
+    await import("@/app/(app)/invocations/page");
   return render(<InvocationsPage />);
 }
 
@@ -184,9 +191,7 @@ describe("InvocationsPage", () => {
   it("renders the heading and a row per invocation", async () => {
     await renderPage();
 
-    expect(
-      screen.getByRole("heading", { name: /invocations/i }),
-    ).toBeDefined();
+    expect(screen.getByRole("heading", { name: /invocations/i })).toBeDefined();
 
     await waitFor(() => {
       expect(screen.getAllByTestId("data-table-row")).toHaveLength(3);
@@ -198,13 +203,16 @@ describe("InvocationsPage", () => {
 
     await waitFor(() => {
       expect(mockListInvocations).toHaveBeenCalledWith(
-        expect.objectContaining({ cursor: undefined, limit: 20 }),
+        expect.objectContaining({ cursor: undefined, limit: 20 })
       );
     });
   });
 
   it("shows the empty state when the API returns no invocations", async () => {
-    mockListInvocations.mockResolvedValue({ invocations: [], next_cursor: null });
+    mockListInvocations.mockResolvedValue({
+      invocations: [],
+      next_cursor: null,
+    });
 
     await renderPage();
 
@@ -214,7 +222,10 @@ describe("InvocationsPage", () => {
   });
 
   it("shows a distinct empty state when filters are active", async () => {
-    mockListInvocations.mockResolvedValue({ invocations: [], next_cursor: null });
+    mockListInvocations.mockResolvedValue({
+      invocations: [],
+      next_cursor: null,
+    });
 
     await renderPage();
 
@@ -222,17 +233,17 @@ describe("InvocationsPage", () => {
       target: { value: "CBBB" },
     });
     fireEvent.submit(
-      document.getElementById("invocations-apply-filter")!.closest("form")!,
+      document.getElementById("invocations-apply-filter")!.closest("form")!
     );
 
     await waitFor(() => {
       expect(mockListInvocations).toHaveBeenLastCalledWith(
-        expect.objectContaining({ contract_id: "CBBB" }),
+        expect.objectContaining({ contract_id: "CBBB" })
       );
     });
     await waitFor(() => {
       expect(
-        screen.getByText(/no invocations match your filters/i),
+        screen.getByText(/no invocations match your filters/i)
       ).toBeDefined();
     });
   });
@@ -250,7 +261,7 @@ describe("InvocationsPage", () => {
       target: { value: "2026-09-30" },
     });
     fireEvent.submit(
-      document.getElementById("invocations-apply-filter")!.closest("form")!,
+      document.getElementById("invocations-apply-filter")!.closest("form")!
     );
 
     await waitFor(() => {
@@ -259,7 +270,7 @@ describe("InvocationsPage", () => {
           fn: "mint",
           since: "2026-09-01",
           until: "2026-09-30",
-        }),
+        })
       );
     });
   });
@@ -271,19 +282,19 @@ describe("InvocationsPage", () => {
       target: { value: "mint" },
     });
     fireEvent.submit(
-      document.getElementById("invocations-apply-filter")!.closest("form")!,
+      document.getElementById("invocations-apply-filter")!.closest("form")!
     );
     await waitFor(() =>
       expect(mockListInvocations).toHaveBeenLastCalledWith(
-        expect.objectContaining({ fn: "mint" }),
-      ),
+        expect.objectContaining({ fn: "mint" })
+      )
     );
 
     fireEvent.click(document.getElementById("invocations-clear-filter")!);
 
     await waitFor(() => {
       expect(mockListInvocations).toHaveBeenLastCalledWith(
-        expect.objectContaining({ fn: undefined, contract_id: undefined }),
+        expect.objectContaining({ fn: undefined, contract_id: undefined })
       );
     });
   });
@@ -291,7 +302,7 @@ describe("InvocationsPage", () => {
   it("sorts by CPU instructions ascending then descending", async () => {
     await renderPage();
     await waitFor(() =>
-      expect(screen.getAllByTestId("data-table-row")).toHaveLength(3),
+      expect(screen.getAllByTestId("data-table-row")).toHaveLength(3)
     );
 
     // Initially newest first (mint is oldest of the three? no: burn is newest).
@@ -311,7 +322,7 @@ describe("InvocationsPage", () => {
   it("sorts by fee charged", async () => {
     await renderPage();
     await waitFor(() =>
-      expect(screen.getAllByTestId("data-table-row")).toHaveLength(3),
+      expect(screen.getAllByTestId("data-table-row")).toHaveLength(3)
     );
 
     // Ascending fee: bb(10), aa(30), cc(50).
@@ -322,31 +333,44 @@ describe("InvocationsPage", () => {
 
   it("paginates forward and back with the cursor", async () => {
     mockListInvocations
-      .mockResolvedValueOnce({ invocations: [INVOCATIONS[2]], next_cursor: "200:bb" })
-      .mockResolvedValueOnce({ invocations: [INVOCATIONS[1]], next_cursor: null })
-      .mockResolvedValue({ invocations: [INVOCATIONS[2]], next_cursor: "200:bb" });
+      .mockResolvedValueOnce({
+        invocations: [INVOCATIONS[2]],
+        next_cursor: "200:bb",
+      })
+      .mockResolvedValueOnce({
+        invocations: [INVOCATIONS[1]],
+        next_cursor: null,
+      })
+      .mockResolvedValue({
+        invocations: [INVOCATIONS[2]],
+        next_cursor: "200:bb",
+      });
 
     await renderPage();
     await waitFor(() =>
-      expect(screen.getAllByTestId("data-table-row")).toHaveLength(1),
+      expect(screen.getAllByTestId("data-table-row")).toHaveLength(1)
     );
 
-    const next = document.getElementById("invocations-next-page") as HTMLButtonElement;
+    const next = document.getElementById(
+      "invocations-next-page"
+    ) as HTMLButtonElement;
     expect(next.disabled).toBe(false);
 
     fireEvent.click(next);
     await waitFor(() => {
       expect(mockListInvocations).toHaveBeenLastCalledWith(
-        expect.objectContaining({ cursor: "200:bb" }),
+        expect.objectContaining({ cursor: "200:bb" })
       );
     });
 
-    const prev = document.getElementById("invocations-prev-page") as HTMLButtonElement;
+    const prev = document.getElementById(
+      "invocations-prev-page"
+    ) as HTMLButtonElement;
     expect(prev.disabled).toBe(false);
     fireEvent.click(prev);
     await waitFor(() => {
       expect(mockListInvocations).toHaveBeenLastCalledWith(
-        expect.objectContaining({ cursor: undefined }),
+        expect.objectContaining({ cursor: undefined })
       );
     });
   });
@@ -354,10 +378,12 @@ describe("InvocationsPage", () => {
   it("disables Next on the last page", async () => {
     await renderPage();
     await waitFor(() =>
-      expect(screen.getAllByTestId("data-table-row")).toHaveLength(3),
+      expect(screen.getAllByTestId("data-table-row")).toHaveLength(3)
     );
 
-    const next = document.getElementById("invocations-next-page") as HTMLButtonElement;
+    const next = document.getElementById(
+      "invocations-next-page"
+    ) as HTMLButtonElement;
     expect(next.disabled).toBe(true);
   });
 });

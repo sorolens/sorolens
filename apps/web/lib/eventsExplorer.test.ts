@@ -59,7 +59,7 @@ describe("dateRangeToBounds", () => {
 describe("event data formatting", () => {
   it("pretty-prints nested values", () => {
     expect(formatEventData({ amount: 5, to: ["G1"] })).toBe(
-      '{\n  "amount": 5,\n  "to": [\n    "G1"\n  ]\n}',
+      '{\n  "amount": 5,\n  "to": [\n    "G1"\n  ]\n}'
     );
     expect(formatEventData(null)).toBe("null");
     expect(formatEventData(BigInt(7))).toBe('"7"');

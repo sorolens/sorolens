@@ -25,10 +25,7 @@ vi.mock("next/navigation", () => ({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Re-renders the component after updating the mocked route. */
-function navigate(
-  pathname: string,
-  params: Record<string, string> = {},
-): void {
+function navigate(pathname: string, params: Record<string, string> = {}): void {
   route.pathname = pathname;
   route.searchParams = new URLSearchParams(params);
 }

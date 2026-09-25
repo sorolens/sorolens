@@ -35,7 +35,7 @@ describe("AppLayout", () => {
     return render(
       <AppLayout>
         <p>page content</p>
-      </AppLayout>,
+      </AppLayout>
     );
   }
 
@@ -43,7 +43,7 @@ describe("AppLayout", () => {
     await renderLayout();
     const footer = screen.getByRole("contentinfo");
     expect(footer.textContent).toContain(
-      "Built for the Stellar developer community.",
+      "Built for the Stellar developer community."
     );
   });
 
@@ -52,8 +52,7 @@ describe("AppLayout", () => {
     const content = screen.getByText("page content");
     const footer = screen.getByRole("contentinfo");
     expect(
-      content.compareDocumentPosition(footer) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      content.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   });
 });
