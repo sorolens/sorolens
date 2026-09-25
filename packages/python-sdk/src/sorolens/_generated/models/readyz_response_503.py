@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
+from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
@@ -45,9 +46,9 @@ class ReadyzResponse503:
         return field_dict
 
     @classmethod
-    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         from ..models.readyz_response_503_checks import (
-            ReadyzResponse503Checks,  # noqa: PLC0415
+            ReadyzResponse503Checks,
         )
 
         d = dict(src_dict)

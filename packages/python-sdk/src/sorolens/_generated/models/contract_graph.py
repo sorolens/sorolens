@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
+from typing_extensions import Self
 
 if TYPE_CHECKING:
     from ..models.contract_graph_edges_type_0_item import ContractGraphEdgesType0Item
@@ -59,12 +60,12 @@ class ContractGraph:
         return field_dict
 
     @classmethod
-    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         from ..models.contract_graph_edges_type_0_item import (
-            ContractGraphEdgesType0Item,  # noqa: PLC0415
+            ContractGraphEdgesType0Item,
         )
         from ..models.contract_graph_nodes_type_0_item import (
-            ContractGraphNodesType0Item,  # noqa: PLC0415
+            ContractGraphNodesType0Item,
         )
 
         d = dict(src_dict)
