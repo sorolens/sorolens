@@ -31,13 +31,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	config, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		logger.Error("parse config", "err", err)
 		os.Exit(1)
 	}
-	config.ConnConfig.Tracer = otelpgx.NewTracer()
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
 	if err != nil {
 		logger.Error("postgres connect", "err", err)
 		os.Exit(1)
@@ -69,9 +69,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	maxBodyBytes, err := config.MaxBodyBytesFromEnv()
+	if err != nil {
+		logger.Error("config", "err", err)
+		os.Exit(1)
+	}
+
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),
-		Handler:      router.New(h, cfg.RequestMaxBodyBytes),
+		Handler:      router.New(h, maxBodyBytes),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,

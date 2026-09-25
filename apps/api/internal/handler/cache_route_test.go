@@ -30,7 +30,7 @@ func newCachedServer(t *testing.T, ms *store.MockStore) http.Handler {
 		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Cache:       &middleware.RedisCache{Client: client},
 		CacheTTL:    30 * time.Second,
-	})
+	}, 1<<20)
 }
 
 func TestResponseCacheOnContractRoutes(t *testing.T) {
