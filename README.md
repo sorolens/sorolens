@@ -4,6 +4,8 @@
 [![Release](https://img.shields.io/github/v/release/sorolens/sorolens)](https://github.com/sorolens/sorolens/releases)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/D9jATUezYX)
 [![Telegram](https://img.shields.io/badge/Telegram-Join-26A5E4?logo=telegram&logoColor=white)](https://t.me/sorolens_community)
+[![Go Report Card (API)](https://goreportcard.com/badge/github.com/sorolens/sorolens/apps/api)](https://goreportcard.com/report/github.com/sorolens/sorolens/apps/api)
+[![Go Report Card (Indexer)](https://goreportcard.com/badge/github.com/sorolens/sorolens/services/indexer)](https://goreportcard.com/report/github.com/sorolens/sorolens/services/indexer)
 # Sorolens
 Real-time monitoring, alerting, and on-chain health checks for Soroban smart contracts on Stellar. The only observability tool in the Stellar ecosystem with a deployed Soroban **watchdog** contract for proactive contract monitoring.
 ---

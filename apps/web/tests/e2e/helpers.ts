@@ -124,6 +124,7 @@ export function contractSummary() {
     status: "active",
     wasm_hash: "3c1b2d9f",
     added_at: "2026-07-02T10:15:00Z",
+    last_activity_at: "2026-07-02T10:14:00Z",
   };
 }
 

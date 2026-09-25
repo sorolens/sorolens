@@ -627,6 +627,24 @@ Network-wide summary across all tracked contracts.
 
 ---
 
+### 4.8 Dashboard summary
+
+#### `GET /api/v1/contracts/:id/summary`
+
+Composite document for the contract dashboard: totals, the newest event, the
+newest invocation, and the cached health score, so a page load costs one
+request instead of four. Each sub-query is an aggregate or a `LIMIT 1` newest-row
+lookup, so the work per request is constant (no per-row queries). Responses are
+memoized in-process for 5 seconds.
+
+**Responses:**
+- `200`: `{ contract_id, network, label, status, generated_at, stats, latest_event, latest_invocation, health_score }`.
+  `latest_event`, `latest_invocation`, and `health_score` are `null` until the
+  indexer has produced the corresponding data.
+- `404`: the contract is unknown.
+
+---
+
 ## 5. Design Decisions with Rationale
 
 ### 5.1 Cron-driven indexer over a persistent worker

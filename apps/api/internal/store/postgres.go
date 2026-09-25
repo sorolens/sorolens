@@ -64,13 +64,22 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 	}
 	// cursor is the last-seen contract ID (lexicographic order).
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, network, label, wasm_hash, created_at_ledger,
-		       backfill_complete_at, status, added_at
-		FROM contracts
-		WHERE ($1 = '' OR id > $1)
-		  AND ($2 = '' OR network = $2)
-		  AND ($3 = '' OR status = $3)
-		ORDER BY id ASC
+		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at
+		FROM contracts c
+		LEFT JOIN (
+			SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
+			FROM (
+				SELECT contract_id, ledger_closed_at FROM events
+				UNION ALL
+				SELECT contract_id, ledger_closed_at FROM invocations
+			) activity_rows
+			GROUP BY contract_id
+		) activity ON activity.contract_id = c.id
+		WHERE ($1 = '' OR c.id > $1)
+		  AND ($2 = '' OR c.network = $2)
+		  AND ($3 = '' OR c.status = $3)
+		ORDER BY c.id ASC
 		LIMIT $4`, cursor, f.Network, f.Status, limit+1)
 	if err != nil {
 		return nil, "", err
@@ -82,7 +91,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 		var c Contract
 		if err := rows.Scan(
 			&c.ID, &c.Network, &c.Label, &c.WasmHash, &c.CreatedAtLedger,
-			&c.BackfillCompleteAt, &c.Status, &c.AddedAt,
+			&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.LastActivityAt,
 		); err != nil {
 			return nil, "", err
 		}

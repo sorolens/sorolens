@@ -7,11 +7,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"log/slog"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
 )
 
@@ -994,5 +997,57 @@ func TestPollerCrashRecovery_ResumeFromNetworkCursor(t *testing.T) {
 	cursor, _ := store.GetIndexerCursor(context.Background(), network)
 	if cursor != 1050 {
 		t.Fatalf("expected network cursor 1050, got %d", cursor)
+	}
+}
+
+// TestPoller_RecordsPerNetworkLagMetric verifies the issue #198 acceptance
+// criterion end to end: after a pass, /metrics reports the lag between the
+// network head and the last committed ledger for that network.
+func TestPoller_RecordsPerNetworkLagMetric(t *testing.T) {
+	t.Parallel()
+
+	network := "mainnet"
+	contractID := "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+
+	// The contract is already caught up with the head, so this pass does not
+	// advance the network cursor: the indexer stays 40 ledgers behind.
+	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: network}})
+	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 1000}
+	_ = store.SetIndexerCursor(context.Background(), network, 960)
+
+	rpc := &fakeRPC{latestLedger: &LatestLedger{Sequence: 1000}}
+
+	recorder := metrics.New()
+	p := NewWithRPCClients(map[string]RPCClient{network: rpc}, store, newFakeRedis(), testConfig(), testLogger())
+	p.SetMetrics(recorder)
+
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("run error: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/metrics", nil)
+	rr := httptest.NewRecorder()
+	recorder.Handler().ServeHTTP(rr, req)
+
+	body := rr.Body.String()
+	for _, want := range []string{
+		`sorolens_indexer_lag_ledgers{network="mainnet"} 40`,
+		`sorolens_indexer_head_ledger{network="mainnet"} 1000`,
+		`sorolens_indexer_last_indexed_ledger{network="mainnet"} 960`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("/metrics missing %q\nbody:\n%s", want, body)
+		}
+	}
+}
+
+// TestPoller_MetricsDisabledByDefault guards existing callers: a poller with no
+// recorder attached still runs a pass cleanly.
+func TestPoller_MetricsDisabledByDefault(t *testing.T) {
+	t.Parallel()
+
+	p := New(&fakeRPC{}, newFakeStore(nil), newFakeRedis(), testConfig(), testLogger())
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

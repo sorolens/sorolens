@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { NetworkProvider } from "@/lib/network";
 import { NetworkSelector } from "@/components/NetworkSelector";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -38,6 +39,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <NetworkSelector />
           </div>
         </header>
+        <Breadcrumbs />
         <main>{children}</main>
       </div>
     </NetworkProvider>

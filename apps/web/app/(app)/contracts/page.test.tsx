@@ -112,6 +112,7 @@ const CONTRACT_A = {
   status: "active",
   wasm_hash: null,
   added_at: "2024-01-01T00:00:00Z",
+  last_activity_at: "2024-01-01T00:03:00Z",
 };
 
 const CONTRACT_B = {
@@ -121,6 +122,7 @@ const CONTRACT_B = {
   status: "backfilling",
   wasm_hash: null,
   added_at: "2024-02-01T00:00:00Z",
+  last_activity_at: null,
 };
 
 const VALID_CONTRACT_ID =
@@ -133,6 +135,7 @@ const NEW_CONTRACT = {
   network: "testnet",
   wasm_hash: null,
   added_at: "2024-03-01T00:00:00Z",
+  last_activity_at: null,
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -221,6 +224,36 @@ describe("ContractsPage", () => {
     expect(screen.getByTestId("data-table")).toBeDefined();
   });
 
+  it("renders and updates relative last activity", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const now = new Date("2024-01-01T00:06:00Z").getTime();
+      vi.setSystemTime(now);
+
+      await act(async () => {
+        await renderPage();
+      });
+
+      expect(screen.getByTestId("data-table")).toBeDefined();
+      const activityRow = screen
+        .getAllByTestId("data-table-row")
+        .find((row) => row.textContent?.includes(CONTRACT_A.id.slice(0, 8)));
+
+      expect(activityRow).toBeDefined();
+      expect(activityRow).toHaveTextContent("3m ago");
+
+      vi.setSystemTime(new Date("2024-01-01T00:07:00Z").getTime());
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+
+      expect(activityRow).toHaveTextContent("4m ago");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   // ── Happy path: search filters by label ───────────────────────────────────
 
   it("filters contracts by label when searching", async () => {

@@ -45,6 +45,7 @@ export function buildOptimisticContract(
     status: "pending",
     wasm_hash: null,
     added_at: new Date().toISOString(),
+    last_activity_at: null,
     optimisticId: `optimistic-${optimisticCounter}`,
   };
 }

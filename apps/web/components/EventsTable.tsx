@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MonoId } from "@sorolens/ui";
+import { CopyButton, MonoId } from "@sorolens/ui";
 import { decodeTopic } from "@sorolens/xdr";
 import type { ContractEvent } from "@/lib/types";
 
@@ -16,6 +16,14 @@ function EventRow({ event }: { event: ContractEvent }) {
   const [expanded, setExpanded] = useState(false);
 
   const decodedTopics = event.topic_decoded ?? decodeTopic(event.topic_xdr);
+
+  // Fully-decoded event as pretty-printed JSON for pasting into decoders or
+  // bug reports (issue #183).
+  const decodedEventJson = JSON.stringify(
+    { ...event, topic_decoded: decodedTopics },
+    null,
+    2
+  );
 
   return (
     <>
@@ -49,10 +57,16 @@ function EventRow({ event }: { event: ContractEvent }) {
             {event.in_successful_call ? "OK" : "FAIL"}
           </span>
         </td>
+        <td className="px-4 py-3 text-right">
+          <CopyButton
+            text={decodedEventJson}
+            label={`Copy JSON for event ${event.id}`}
+          />
+        </td>
       </tr>
       {expanded && (
         <tr className="bg-white/[0.02]">
-          <td colSpan={6} className="border-b border-[var(--color-border)] px-8 py-4">
+          <td colSpan={7} className="border-b border-[var(--color-border)] px-8 py-4">
             <div className="space-y-3">
               <div>
                 <div className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
@@ -114,6 +128,7 @@ export function EventsTable({
               <th className="px-4 py-3">Value</th>
               <th className="px-4 py-3 text-right">Ledger</th>
               <th className="px-4 py-3 text-right">Status</th>
+              <th className="px-4 py-3 text-right">Copy</th>
             </tr>
           </thead>
           <tbody>

@@ -2,6 +2,7 @@ import type {
   AlertsResponse,
   AlertSubscription,
   ContractDetail,
+  CompareResponse,
   ContractSnapshot,
   ContractSummary,
   ContractsListResponse,
@@ -108,6 +109,7 @@ export function getContractEvents(
     tx_hash?: string;
     since?: string;
     until?: string;
+    in_successful_call?: boolean;
   },
 ): Promise<EventsResponse> {
   const search = new URLSearchParams();
@@ -117,6 +119,7 @@ export function getContractEvents(
   if (params?.tx_hash) search.set("tx_hash", params.tx_hash);
   if (params?.since) search.set("since", params.since);
   if (params?.until) search.set("until", params.until);
+  if (params?.in_successful_call !== undefined) search.set("in_successful_call", String(params.in_successful_call));
   const qs = search.toString();
   return fetchJson<EventsResponse>(
     `${API_URL}/api/v1/contracts/${id}/events${qs ? "?" + qs : ""}`,
@@ -183,6 +186,26 @@ export function getContractStats(
 
 export function getGlobalStats(): Promise<GlobalStats> {
   return fetchJson<GlobalStats>(`${API_URL}/api/v1/stats/global`);
+}
+
+// ---- comparison -------------------------------------------------------------
+
+/**
+ * Fetch unified stats for up to 4 contracts in a single round-trip. The API
+ * fans out to the per-contract lookups in parallel and returns one entry per
+ * requested contract; a contract with no data yet still gets an entry with
+ * zeroed metrics rather than an error.
+ */
+export function getCompare(
+  ids: string[],
+  window: TimeWindow = "7d",
+): Promise<CompareResponse> {
+  const search = new URLSearchParams();
+  search.set("ids", ids.join(","));
+  search.set("window", window);
+  return fetchJson<CompareResponse>(
+    `${API_URL}/api/v1/compare?${search.toString()}`,
+  );
 }
 
 // ---- snapshot / replay ------------------------------------------------------
@@ -252,12 +275,18 @@ export function listHealthChecks(
 
 export function listAlerts(
   contractId?: string,
-  params?: { severity?: string; limit?: number; network?: string },
+  params?: {
+    severity?: string;
+    limit?: number;
+    network?: string;
+    cursor?: string;
+  },
 ): Promise<AlertsResponse> {
   const search = new URLSearchParams();
   if (params?.severity) search.set("severity", params.severity);
   if (params?.limit) search.set("limit", String(params.limit));
   if (params?.network) search.set("network", params.network);
+  if (params?.cursor) search.set("cursor", params.cursor);
   const qs = search.toString();
   const path = contractId
     ? `/api/v1/watchdog/contracts/${contractId}/alerts`
