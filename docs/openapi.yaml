@@ -1069,6 +1069,36 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/contracts/{id}/spec:
+    get:
+      tags: [Contracts]
+      summary: Get a contract's parsed SEP-48 interface spec
+      operationId: getContractSpec
+      description: >
+        The interface spec extracted from the contract's `contractspecv0` Wasm
+        custom section: every callable function with its argument and return
+        type tree. Returns 404 both for an untracked contract and for a tracked
+        contract whose spec has not been parsed yet.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The cached interface spec
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractSpec"
+        "404":
+          description: Contract not found, or its interface spec has not been parsed yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/stream/events:
     get:
       tags: [Events]
@@ -2438,6 +2468,86 @@ components:
                 type: string
               count:
                 type: integer
+
+    ContractSpec:
+      type: object
+      required: [contract_id, parsed_at, spec]
+      properties:
+        contract_id:
+          type: string
+        wasm_hash:
+          type: string
+        parsed_at:
+          type: string
+          format: date-time
+        spec:
+          $ref: "#/components/schemas/ContractSpecTree"
+
+    ContractSpecTree:
+      type: object
+      required: [functions]
+      properties:
+        functions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractSpecFunction"
+
+    ContractSpecFunction:
+      type: object
+      required: [name, inputs, outputs]
+      properties:
+        name:
+          type: string
+        doc:
+          type: string
+        inputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractSpecInput"
+        outputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractSpecType"
+
+    ContractSpecInput:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        doc:
+          type: string
+        type:
+          $ref: "#/components/schemas/ContractSpecType"
+
+    # A node in the argument/return type tree. `kind` is a scalar ("address",
+    # "u32", "i128", "string", …), a composite ("vec", "option", "map",
+    # "result", "tuple", "bytes_n"), or "udt" for a user-defined reference.
+    ContractSpecType:
+      type: object
+      required: [kind]
+      additionalProperties: true
+      properties:
+        kind:
+          type: string
+        name:
+          type: string
+        elem:
+          $ref: "#/components/schemas/ContractSpecType"
+        key:
+          $ref: "#/components/schemas/ContractSpecType"
+        value:
+          $ref: "#/components/schemas/ContractSpecType"
+        ok:
+          $ref: "#/components/schemas/ContractSpecType"
+        err:
+          $ref: "#/components/schemas/ContractSpecType"
+        tuple:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractSpecType"
+        n:
+          type: integer
 
     CompareResponse:
       type: object
