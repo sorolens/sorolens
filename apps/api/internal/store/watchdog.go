@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -57,6 +59,39 @@ type WatchdogStats struct {
 
 // ---- interface -------------------------------------------------------------
 
+// ErrInvalidCursor is returned when a pagination cursor cannot be decoded
+// into the (timestamp, id) keyset pair it must carry.
+var ErrInvalidCursor = errors.New("store: invalid pagination cursor")
+
+// encodeAlertsCursor builds the opaque cursor for the alerts feed: a
+// base64-encoded "<RFC3339Nano timestamp>|<contract_id>" pair pointing at
+// the last row of the returned page (issue #150).
+func encodeAlertsCursor(ts time.Time, contractID string) string {
+	raw := ts.UTC().Format(time.RFC3339Nano) + "|" + contractID
+	return base64.StdEncoding.EncodeToString([]byte(raw))
+}
+
+// decodeAlertsCursor parses a cursor produced by encodeAlertsCursor back
+// into its (timestamp, contractID) pair.
+func decodeAlertsCursor(cursor string) (time.Time, string, error) {
+	if cursor == "" {
+		return time.Time{}, "", ErrInvalidCursor
+	}
+	raw, err := base64.StdEncoding.DecodeString(cursor)
+	if err != nil {
+		return time.Time{}, "", ErrInvalidCursor
+	}
+	parts := strings.SplitN(string(raw), "|", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return time.Time{}, "", ErrInvalidCursor
+	}
+	ts, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return time.Time{}, "", ErrInvalidCursor
+	}
+	return ts, parts[1], nil
+}
+
 // WatchdogStore is the read/write surface for watchdog data. Kept as its own
 // interface so the API can be wired without pulling watchdog handlers into
 // tests that don't need them.
@@ -69,7 +104,7 @@ type WatchdogStore interface {
 	ListMonitoredContracts(ctx context.Context, cursor string, limit int, network string) ([]MonitoredContract, string, error)
 	GetMonitoredContract(ctx context.Context, contractID string) (MonitoredContract, error)
 	ListHealthChecks(ctx context.Context, contractID string, limit int) ([]HealthCheck, error)
-	ListAlerts(ctx context.Context, contractID, severity, network string, limit int) ([]ContractAlert, error)
+	ListAlerts(ctx context.Context, contractID, severity, network, cursor string, limit int) ([]ContractAlert, string, error)
 	GetWatchdogStats(ctx context.Context, network string) (WatchdogStats, error)
 }
 
@@ -198,9 +233,25 @@ func (s *postgresStore) ListHealthChecks(ctx context.Context, contractID string,
 	return out, rows.Err()
 }
 
-func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, network string, limit int) ([]ContractAlert, error) {
+// ListAlerts returns one page of the alerts feed, newest first. The
+// optional cursor ("" for the first page) is a (timestamp, contract_id)
+// keyset pair; rows strictly older than the pair are returned, so paging
+// stays stable when new alerts arrive between requests (issue #150).
+//
+// The returned cursor points at the last row of this page and is empty when
+// the feed is exhausted. An undecodable cursor yields ErrInvalidCursor.
+func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, network, cursor string, limit int) ([]ContractAlert, string, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
+	}
+	var cursorTS time.Time
+	var cursorID string
+	if cursor != "" {
+		ts, id, err := decodeAlertsCursor(cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		cursorTS, cursorID = ts, id
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT a.contract_id, a.severity, a.message, a.ledger, a.tx_hash, a.timestamp
@@ -209,10 +260,12 @@ func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, ne
 		WHERE ($1 = '' OR a.contract_id = $1)
 		  AND ($2 = '' OR a.severity = $2)
 		  AND ($3 = '' OR m.network = $3)
-		ORDER BY a.timestamp DESC
-		LIMIT $4`, contractID, severity, network, limit)
+		  AND ($4 = '' OR (a.timestamp, a.contract_id) < ($4::timestamptz, $5))
+		ORDER BY a.timestamp DESC, a.contract_id DESC
+		LIMIT $6`, contractID, severity, network,
+		cursorTS.Format(time.RFC3339Nano), cursorID, limit+1)
 	if err != nil {
-		return nil, fmt.Errorf("list alerts: %w", err)
+		return nil, "", fmt.Errorf("list alerts: %w", err)
 	}
 	defer rows.Close()
 
@@ -220,11 +273,19 @@ func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, ne
 	for rows.Next() {
 		var a ContractAlert
 		if err := rows.Scan(&a.ContractID, &a.Severity, &a.Message, &a.Ledger, &a.TxHash, &a.Timestamp); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		out = append(out, a)
 	}
-	return out, rows.Err()
+	if rows.Err() != nil {
+		return nil, "", rows.Err()
+	}
+	var next string
+	if len(out) > limit {
+		next = encodeAlertsCursor(out[limit-1].Timestamp, out[limit-1].ContractID)
+		out = out[:limit]
+	}
+	return out, next, nil
 }
 
 func (s *postgresStore) GetWatchdogStats(ctx context.Context, network string) (WatchdogStats, error) {

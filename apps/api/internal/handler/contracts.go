@@ -29,6 +29,16 @@ type contractResponse struct {
 	AddedAt            time.Time  `json:"added_at"`
 }
 
+type contractListResponse struct {
+	ID             string     `json:"id"`
+	Network        string     `json:"network"`
+	Label          string     `json:"label"`
+	WasmHash       string     `json:"wasm_hash"`
+	Status         string     `json:"status"`
+	AddedAt        time.Time  `json:"added_at"`
+	LastActivityAt *time.Time `json:"last_activity_at"`
+}
+
 type eventResponse struct {
 	ID               string    `json:"id"`
 	ContractID       string    `json:"contract_id"`
@@ -152,6 +162,18 @@ func contractFromStore(c store.Contract) contractResponse {
 		BackfillCompleteAt: c.BackfillCompleteAt,
 		Status:             c.Status,
 		AddedAt:            c.AddedAt,
+	}
+}
+
+func contractListFromStore(c store.Contract) contractListResponse {
+	return contractListResponse{
+		ID:             c.ID,
+		Network:        c.Network,
+		Label:          c.Label,
+		WasmHash:       c.WasmHash,
+		Status:         c.Status,
+		AddedAt:        c.AddedAt,
+		LastActivityAt: c.LastActivityAt,
 	}
 }
 
@@ -286,9 +308,9 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := make([]contractResponse, len(contracts))
+	resp := make([]contractListResponse, len(contracts))
 	for i, c := range contracts {
-		resp[i] = contractFromStore(c)
+		resp[i] = contractListFromStore(c)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"contracts":   resp,
@@ -325,11 +347,23 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	var inSuccess *bool
+	if param := r.URL.Query().Get("in_successful_call"); param != "" {
+		if param == "true" {
+			v := true
+			inSuccess = &v
+		} else if param == "false" {
+			v := false
+			inSuccess = &v
+		}
+	}
 	f := store.EventFilters{
-		Type:    r.URL.Query().Get("type"),
-		Network: network,
-		From:    uint32Query(r, "from"),
-		To:      uint32Query(r, "to"),
+		Type:             r.URL.Query().Get("type"),
+		Network:          network,
+		Topic:            strings.TrimSpace(r.URL.Query().Get("topic")),
+		From:             uint32Query(r, "from"),
+		To:               uint32Query(r, "to"),
+		InSuccessfulCall: inSuccess,
 	}
 	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
 	if err != nil {

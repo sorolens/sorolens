@@ -12,6 +12,7 @@ type Contract struct {
 	BackfillCompleteAt *time.Time
 	Status             string // pending | backfilling | active | paused | error
 	AddedAt            time.Time
+	LastActivityAt     *time.Time
 }
 
 // Event is a single contract event indexed from the Soroban RPC.
@@ -90,8 +91,12 @@ type AlertSubscription struct {
 	ContractID     string
 	WebhookURL     string
 	SeverityFilter string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// ChannelType is webhook | slack | discord | pagerduty (issue #127).
+	ChannelType string
+	// RoutingKey is the PagerDuty integration key (pagerduty only). Secret.
+	RoutingKey string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // Role names for role-based access control.

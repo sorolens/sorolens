@@ -63,6 +63,23 @@ pub struct Registration {
     pub check_interval: u64,
 }
 
+/// A third-party address authorised to push status updates and alerts for a
+/// monitored contract on its owner's behalf.
+///
+/// This lets a monitoring service (an OpsGenie bot, a CI runner, ...) report
+/// health without ever holding the owner's key. The capability is bounded by
+/// `expires_at` and revocable early via `remove_delegate`, so an owner never
+/// has to hand over long-lived credentials to a third party.
+///
+/// Authority holds while `ledger.timestamp() < expires_at`: at `expires_at`
+/// exactly the delegate is already expired.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Delegate {
+    pub delegate: Address,
+    pub expires_at: u64,
+}
+
 /// Outcome of a single registration within a batch.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -81,6 +98,11 @@ enum DataKey {
     Health(Address), // ContractHealth by contract id
     Alerts(Address), // Vec<Alert> by contract id
     Paused,          // bool: emergency stop flag; absent means not paused
+    // Delegates is appended last on purpose: DataKey is stored as an XDR union
+    // whose variants are discriminated by position, so inserting a variant
+    // anywhere above would renumber Paused and silently invalidate state
+    // written by an already-deployed contract.
+    Delegates(Address), // Vec<Delegate> by contract id
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +157,27 @@ pub struct ContractAlert {
     #[topic]
     pub severity: AlertSeverity,
     pub message: String,
+    pub timestamp: u64,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DelegateSet {
+    #[topic]
+    pub contract_id: Address,
+    #[topic]
+    pub delegate: Address,
+    pub expires_at: u64,
+    pub timestamp: u64,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DelegateRemoved {
+    #[topic]
+    pub contract_id: Address,
+    #[topic]
+    pub delegate: Address,
     pub timestamp: u64,
 }
 
@@ -261,6 +304,11 @@ impl WatchdogContract {
         env.storage()
             .persistent()
             .remove(&DataKey::Alerts(contract_id.clone()));
+        // Drop delegated authority along with the registration so a re-registered
+        // contract can never inherit the previous owner's delegates.
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Delegates(contract_id.clone()));
 
         let registry: Vec<Address> = env
             .storage()
@@ -301,9 +349,7 @@ impl WatchdogContract {
             .get(&health_key)
             .unwrap_or_else(|| panic!("contract not registered"));
 
-        if caller != record.owner {
-            Self::require_admin_only(&env, &caller);
-        }
+        Self::require_owner_admin_or_delegate(&env, &caller, &record.owner, &contract_id);
 
         let now = env.ledger().timestamp();
         record.status = status.clone();
@@ -338,9 +384,7 @@ impl WatchdogContract {
             .get(&health_key)
             .unwrap_or_else(|| panic!("contract not registered"));
 
-        if caller != record.owner {
-            Self::require_admin_only(&env, &caller);
-        }
+        Self::require_owner_admin_or_delegate(&env, &caller, &record.owner, &contract_id);
 
         let now = env.ledger().timestamp();
         let alert = Alert {
@@ -369,6 +413,128 @@ impl WatchdogContract {
             timestamp: now,
         }
         .publish(&env);
+    }
+
+    // ---- third-party delegates ---------------------------------------------
+
+    /// Authorise `delegate` to push status updates and alerts for
+    /// `contract_id` until `expires_at` (a ledger timestamp).
+    ///
+    /// Only the contract's recorded owner or the admin may set a delegate.
+    /// Setting a delegate that already exists replaces its expiry, so an owner
+    /// can extend or shorten an existing grant without removing it first.
+    ///
+    /// # Errors
+    ///
+    /// Panics with `"contract not registered"` for an unknown contract and
+    /// `"expires_at must be in the future"` when `expires_at` is not strictly
+    /// later than the current ledger time.
+    pub fn set_delegate(
+        env: Env,
+        caller: Address,
+        contract_id: Address,
+        delegate: Address,
+        expires_at: u64,
+    ) {
+        Self::ensure_not_paused(&env);
+        caller.require_auth();
+
+        let health_key = DataKey::Health(contract_id.clone());
+        let record: ContractHealth = env
+            .storage()
+            .persistent()
+            .get(&health_key)
+            .unwrap_or_else(|| panic!("contract not registered"));
+
+        if caller != record.owner {
+            Self::require_admin_only(&env, &caller);
+        }
+
+        let now = env.ledger().timestamp();
+        if expires_at <= now {
+            panic!("expires_at must be in the future");
+        }
+
+        let key = DataKey::Delegates(contract_id.clone());
+        let existing: Vec<Delegate> = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        // Replace any prior grant for this delegate rather than appending a
+        // duplicate, so the effective expiry is always unambiguous.
+        let mut updated: Vec<Delegate> = Vec::new(&env);
+        for entry in existing.iter() {
+            if entry.delegate != delegate {
+                updated.push_back(entry);
+            }
+        }
+        updated.push_back(Delegate {
+            delegate: delegate.clone(),
+            expires_at,
+        });
+        env.storage().persistent().set(&key, &updated);
+
+        DelegateSet {
+            contract_id,
+            delegate,
+            expires_at,
+            timestamp: now,
+        }
+        .publish(&env);
+    }
+
+    /// Revoke `delegate`'s authority for `contract_id` before it expires.
+    /// Only the recorded owner or the admin may revoke. Revoking a delegate
+    /// that is not present is a no-op, which keeps the call idempotent.
+    pub fn remove_delegate(env: Env, caller: Address, contract_id: Address, delegate: Address) {
+        Self::ensure_not_paused(&env);
+        caller.require_auth();
+
+        let health_key = DataKey::Health(contract_id.clone());
+        let record: ContractHealth = env
+            .storage()
+            .persistent()
+            .get(&health_key)
+            .unwrap_or_else(|| panic!("contract not registered"));
+
+        if caller != record.owner {
+            Self::require_admin_only(&env, &caller);
+        }
+
+        let key = DataKey::Delegates(contract_id.clone());
+        let existing: Vec<Delegate> = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        let mut updated: Vec<Delegate> = Vec::new(&env);
+        for entry in existing.iter() {
+            if entry.delegate != delegate {
+                updated.push_back(entry);
+            }
+        }
+        env.storage().persistent().set(&key, &updated);
+
+        DelegateRemoved {
+            contract_id,
+            delegate,
+            timestamp: env.ledger().timestamp(),
+        }
+        .publish(&env);
+    }
+
+    /// List every delegate ever set for a contract, including expired ones.
+    /// Expired entries are returned as-is so a dashboard can show when a grant
+    /// lapsed; callers decide whether a grant is still active by comparing
+    /// `expires_at` with the current ledger timestamp.
+    pub fn get_delegates(env: Env, contract_id: Address) -> Vec<Delegate> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Delegates(contract_id))
+            .unwrap_or_else(|| Vec::new(&env))
     }
 
     // ---- admin: emergency stop ---------------------------------------------
@@ -531,6 +697,41 @@ impl WatchdogContract {
         if caller != &admin {
             panic!("only admin or owner may perform this action");
         }
+    }
+
+    /// Authorise a caller to publish telemetry for a contract. The recorded
+    /// owner and the admin are always accepted; anyone else must hold an
+    /// unexpired delegation for that contract.
+    fn require_owner_admin_or_delegate(
+        env: &Env,
+        caller: &Address,
+        owner: &Address,
+        contract_id: &Address,
+    ) {
+        if caller == owner {
+            return;
+        }
+        if Self::is_active_delegate(env, contract_id, caller) {
+            return;
+        }
+        Self::require_admin_only(env, caller);
+    }
+
+    /// True when `caller` holds a delegation for `contract_id` that has not
+    /// expired yet. Authority holds while `now < expires_at`.
+    fn is_active_delegate(env: &Env, contract_id: &Address, caller: &Address) -> bool {
+        let delegates: Vec<Delegate> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Delegates(contract_id.clone()))
+            .unwrap_or_else(|| Vec::new(env));
+        let now = env.ledger().timestamp();
+        for entry in delegates.iter() {
+            if &entry.delegate == caller && now < entry.expires_at {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -1097,5 +1298,259 @@ mod test {
 
         assert!(client.try_pause(&admin).is_err());
         assert!(!client.is_paused());
+    }
+
+    // ---- third-party delegates (issue #128) --------------------------------
+
+    #[test]
+    fn delegate_can_report_status_and_alerts() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_003_600u64);
+
+        let delegates = client.get_delegates(&monitored);
+        assert_eq!(delegates.len(), 1);
+        assert_eq!(delegates.get(0).unwrap().delegate, delegate);
+        assert_eq!(delegates.get(0).unwrap().expires_at, 1_700_003_600);
+
+        set_timestamp(&env, 1_700_000_600);
+        let metadata = SString::from_str(&env, "pushed by ops bot");
+        client.report_status(&delegate, &monitored, &HealthStatus::Degraded, &metadata);
+        assert_eq!(client.get_status(&monitored).status, HealthStatus::Degraded);
+
+        let msg = SString::from_str(&env, "latency spike");
+        client.report_alert(&delegate, &monitored, &AlertSeverity::Warning, &msg);
+        assert_eq!(client.get_alerts(&monitored).len(), 1);
+    }
+
+    #[test]
+    fn delegate_works_immediately_before_expiry() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_000_600u64);
+
+        // One second before expires_at the grant is still valid.
+        set_timestamp(&env, 1_700_000_599);
+        let metadata = SString::from_str(&env, "still valid");
+        client.report_status(&delegate, &monitored, &HealthStatus::Degraded, &metadata);
+        assert_eq!(client.get_status(&monitored).status, HealthStatus::Degraded);
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner")]
+    fn delegate_authority_expires_at_expires_at() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_000_600u64);
+
+        // At expires_at exactly the delegation is already expired.
+        set_timestamp(&env, 1_700_000_600);
+        let metadata = SString::from_str(&env, "too late");
+        client.report_status(&delegate, &monitored, &HealthStatus::Degraded, &metadata);
+    }
+
+    #[test]
+    fn owner_can_revoke_delegate_early() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_003_600u64);
+        assert_eq!(client.get_delegates(&monitored).len(), 1);
+
+        // Revoke long before expires_at.
+        set_timestamp(&env, 1_700_000_060);
+        client.remove_delegate(&owner, &monitored, &delegate);
+
+        assert_eq!(client.get_delegates(&monitored).len(), 0);
+        // Revoking twice is a no-op, not an error.
+        client.remove_delegate(&owner, &monitored, &delegate);
+        assert_eq!(client.get_delegates(&monitored).len(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner")]
+    fn revoked_delegate_cannot_report() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_003_600u64);
+        client.remove_delegate(&owner, &monitored, &delegate);
+
+        let metadata = SString::from_str(&env, "revoked");
+        client.report_status(&delegate, &monitored, &HealthStatus::Degraded, &metadata);
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner")]
+    fn non_owner_cannot_set_delegate() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let stranger = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.set_delegate(&stranger, &monitored, &delegate, &1_700_003_600u64);
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner")]
+    fn non_owner_cannot_remove_delegate() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let stranger = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_003_600u64);
+        client.remove_delegate(&stranger, &monitored, &delegate);
+    }
+
+    #[test]
+    fn admin_can_set_delegate() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        client.set_delegate(&admin, &monitored, &delegate, &1_700_003_600u64);
+        assert_eq!(client.get_delegates(&monitored).len(), 1);
+
+        set_timestamp(&env, 1_700_000_600);
+        let metadata = SString::from_str(&env, "admin granted");
+        client.report_status(&delegate, &monitored, &HealthStatus::Healthy, &metadata);
+        assert_eq!(client.get_status(&monitored).status, HealthStatus::Healthy);
+    }
+
+    #[test]
+    #[should_panic(expected = "expires_at must be in the future")]
+    fn set_delegate_rejects_past_expiry() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        // expires_at equal to now is not "in the future".
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_000_000u64);
+    }
+
+    #[test]
+    fn set_delegate_replaces_previous_expiry() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_000_600u64);
+        // Extend the same delegate: the list must not grow a second entry.
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_009_600u64);
+
+        let delegates = client.get_delegates(&monitored);
+        assert_eq!(delegates.len(), 1);
+        assert_eq!(delegates.get(0).unwrap().expires_at, 1_700_009_600);
+
+        // The extended expiry is honoured where the original one had lapsed.
+        set_timestamp(&env, 1_700_005_000);
+        let metadata = SString::from_str(&env, "extended");
+        client.report_status(&delegate, &monitored, &HealthStatus::Degraded, &metadata);
+        assert_eq!(client.get_status(&monitored).status, HealthStatus::Degraded);
+    }
+
+    #[test]
+    fn delegate_authority_is_limited_to_telemetry() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_003_600u64);
+
+        // Telemetry works...
+        let metadata = SString::from_str(&env, "ok");
+        client.report_status(&delegate, &monitored, &HealthStatus::Healthy, &metadata);
+
+        // ...but a delegate cannot deregister the contract.
+        assert!(client
+            .try_deregister_contract(&delegate, &monitored)
+            .is_err());
+    }
+
+    #[test]
+    fn deregister_clears_delegates() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_003_600u64);
+
+        client.deregister_contract(&owner, &monitored);
+        assert_eq!(client.get_delegates(&monitored).len(), 0);
+    }
+
+    #[test]
+    fn pause_blocks_set_and_remove_delegate() {
+        let env = Env::default();
+        set_timestamp(&env, 1_700_000_000);
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        let delegate = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.set_delegate(&owner, &monitored, &delegate, &1_700_003_600u64);
+
+        client.pause(&admin);
+
+        let res = client.try_set_delegate(
+            &owner,
+            &monitored,
+            &Address::generate(&env),
+            &1_700_003_600u64,
+        );
+        assert_eq!(res, Err(Ok(paused_error())));
+
+        let res = client.try_remove_delegate(&owner, &monitored, &delegate);
+        assert_eq!(res, Err(Ok(paused_error())));
+
+        // The pre-existing delegation is untouched.
+        assert_eq!(client.get_delegates(&monitored).len(), 1);
     }
 }

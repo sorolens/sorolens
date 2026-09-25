@@ -11,10 +11,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
+	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
 	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
 )
@@ -26,6 +28,11 @@ const (
 
 	// lockKeyPrefix is the Redis key prefix for per-contract indexer locks.
 	lockKeyPrefix = "sorolens:lock:indexer:"
+
+	// defaultNetworkLabel is the value used for the "network" metric label
+	// when the poller is wired with the single unnamed RPC client (no
+	// per-network SOROBAN_RPC_URL_* variables configured), issue #198.
+	defaultNetworkLabel = "default"
 
 	// newContractBackfillWindow is how many ledgers back to start a backfill
 	// for a contract with no prior sync state. At ~5s per ledger this is
@@ -62,6 +69,9 @@ type Poller struct {
 	redis      RedisClient
 	cfg        Config
 	log        *slog.Logger
+	// metrics records the per-network lag gauges on every pass (issue #198).
+	// It is nil unless SetMetrics is called; nil disables metric recording.
+	metrics *metrics.Recorder
 }
 
 // New returns a Poller wired with the given dependencies.
@@ -76,6 +86,13 @@ func New(rpc RPCClient, store Store, redis RedisClient, cfg Config, log *slog.Lo
 // skipped with a warning.
 func NewWithRPCClients(rpcClients map[string]RPCClient, store Store, redis RedisClient, cfg Config, log *slog.Logger) *Poller {
 	return &Poller{rpcClients: rpcClients, store: store, redis: redis, cfg: cfg, log: log}
+}
+
+// SetMetrics attaches the Prometheus recorder the poller updates on every
+// pass (issue #198). It must be called before Run; when it is never called
+// metric recording is skipped, so existing callers are unaffected.
+func (p *Poller) SetMetrics(r *metrics.Recorder) {
+	p.metrics = r
 }
 
 // Run starts the poller in the given mode.
@@ -181,11 +198,73 @@ func (p *Poller) processAll(ctx context.Context) error {
 		cursor = next
 	}
 
+	// Record per-network lag after the contract batches have committed their
+	// cursors so the gauge reflects the tip reached by this pass (issue #198).
+	p.observeNetworkLag(ctx)
+
 	if p.cfg.AnomalyEnabled {
 		p.runAnomalyDetection(ctx)
 	}
 	p.runHealthScores(ctx)
 	return nil
+}
+
+// observeNetworkLag records the per-network indexer lag (issue #198), defined
+// as the network head ledger minus the last ledger committed for that network
+// (its indexer cursor). It runs once per pass for every configured network, so
+// both the currently active and merely cached networks report a value rather
+// than a single hard-coded one.
+//
+// Best-effort by design: a transient RPC or store error for one network is
+// logged and skipped without failing the indexing pass.
+func (p *Poller) observeNetworkLag(ctx context.Context) {
+	if p.metrics == nil {
+		return
+	}
+
+	networks := make([]string, 0, len(p.rpcClients))
+	for network := range p.rpcClients {
+		networks = append(networks, network)
+	}
+	sort.Strings(networks)
+
+	for _, network := range networks {
+		if ctx.Err() != nil {
+			return
+		}
+		rpc := p.rpcClients[network]
+		if rpc == nil {
+			continue
+		}
+
+		label := network
+		if label == "" {
+			label = defaultNetworkLabel
+		}
+
+		head, err := rpc.GetLatestLedger(ctx)
+		if err != nil {
+			p.log.Warn("metrics: latest ledger unavailable",
+				"network", label,
+				"err", err,
+			)
+			continue
+		}
+		if head == nil {
+			continue
+		}
+
+		cursor, err := p.store.GetIndexerCursor(ctx, network)
+		if err != nil {
+			p.log.Warn("metrics: indexer cursor unavailable",
+				"network", label,
+				"err", err,
+			)
+			continue
+		}
+
+		p.metrics.ObserveNetwork(label, head.Sequence, cursor)
+	}
 }
 
 // alertTxKey builds the deterministic de-duplication key for an anomaly alert.
