@@ -1,0 +1,171 @@
+# Sorolens GraphQL schema (issue #125).
+#
+# Read-only mirror of the REST surface under /api/v1: contracts, events,
+# invocations, storage and the on-chain watchdog. Every resolver is backed
+# by an existing store method; relationship fields (Alert.contract,
+# Contract.monitor, Contract.stats, ...) go through per-request dataloaders
+# so a list of N parents costs one batch per field instead of N round trips.
+#
+# List arguments are capped (see MaxListLimit in resolver.go) and every
+# operation is subject to a complexity limit, so arbitrarily deep or wide
+# queries are rejected before execution.
+
+scalar Time
+scalar Any
+scalar Map
+
+type Query {
+  "Tracked contracts, ordered by ID. Pass pageInfo.nextCursor as `after`."
+  contracts(network: String, status: String, first: Int = 50, after: String): ContractConnection!
+  "One tracked contract, or null when it is not tracked."
+  contract(id: ID!): Contract
+  "Data from the on-chain sorolens-watchdog contract."
+  watchdog: Watchdog!
+}
+
+type PageInfo {
+  "Opaque cursor for the next page; null on the last page."
+  nextCursor: String
+}
+
+type ContractConnection {
+  nodes: [Contract!]!
+  pageInfo: PageInfo!
+}
+
+type Contract {
+  id: ID!
+  network: String!
+  label: String!
+  wasmHash: String!
+  createdAtLedger: Int!
+  backfillCompleteAt: Time
+  status: String!
+  addedAt: Time!
+
+  events(first: Int = 20, type: String): [Event!]!
+  invocations(first: Int = 20, status: String, functionName: String): [Invocation!]!
+  storage(first: Int = 20, durability: String, status: String): [StorageEntry!]!
+  "Aggregate counts; window is a Go duration such as 1h or 24h."
+  stats(window: String = "24h"): ContractStats!
+  "The watchdog registration for this contract, or null if unmonitored."
+  monitor: MonitoredContract
+  "Watchdog alerts raised against this contract, newest first."
+  alerts(first: Int = 20, severity: String): [Alert!]!
+}
+
+type Event {
+  id: ID!
+  contractId: ID!
+  network: String!
+  ledger: Int!
+  ledgerClosedAt: Time!
+  txHash: String!
+  type: String!
+  topicXdr: [String!]!
+  valueXdr: String!
+  topicDecoded: [Any]
+  valueDecoded: Any
+  inSuccessfulCall: Boolean!
+  contract: Contract
+}
+
+type Invocation {
+  txHash: String!
+  contractId: ID!
+  network: String!
+  ledger: Int!
+  ledgerClosedAt: Time!
+  status: String!
+  functionName: String!
+  argsDecoded: Map
+  resultDecoded: Any
+  resultXdr: String!
+  resourceFeeCharged: Int!
+  cpuInsn: Int!
+  memByte: Int!
+  ledgerReadByte: Int!
+  ledgerWriteByte: Int!
+  applicationOrder: Int!
+  contract: Contract
+}
+
+type StorageEntry {
+  contractId: ID!
+  network: String!
+  keyXdr: String!
+  keyDecoded: Any
+  valueXdr: String!
+  valueDecoded: Any
+  durability: String!
+  liveUntilLedger: Int!
+  lastModifiedLedger: Int!
+  status: String!
+  lastSeenAt: Time!
+}
+
+type ContractStats {
+  eventCount: Int!
+  invocationCount: Int!
+  storageCount: Int!
+  lastSyncedLedger: Int!
+  windowEventCount: Int!
+  windowInvocationCount: Int!
+  windowDuration: String!
+}
+
+type Watchdog {
+  stats(network: String): WatchdogStats!
+  alerts(severity: String, network: String, first: Int = 50): [Alert!]!
+  contracts(network: String, first: Int = 50, after: String): MonitoredContractConnection!
+}
+
+type WatchdogStats {
+  totalMonitored: Int!
+  healthy: Int!
+  degraded: Int!
+  unresponsive: Int!
+  totalAlerts: Int!
+  criticalAlerts: Int!
+}
+
+type MonitoredContractConnection {
+  nodes: [MonitoredContract!]!
+  pageInfo: PageInfo!
+}
+
+type MonitoredContract {
+  contractId: ID!
+  network: String!
+  name: String!
+  owner: String!
+  status: String!
+  lastCheck: Time
+  checkInterval: Int!
+  registeredAt: Time!
+  updatedAt: Time!
+  healthChecks(first: Int = 20): [HealthCheck!]!
+  alerts(first: Int = 20, severity: String): [Alert!]!
+  "The indexed contract, or null when it is monitored but not tracked."
+  contract: Contract
+}
+
+type HealthCheck {
+  contractId: ID!
+  status: String!
+  metadata: String!
+  ledger: Int!
+  txHash: String!
+  timestamp: Time!
+}
+
+type Alert {
+  contractId: ID!
+  severity: String!
+  message: String!
+  ledger: Int!
+  txHash: String!
+  timestamp: Time!
+  contract: Contract
+  monitor: MonitoredContract
+}

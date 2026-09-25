@@ -171,6 +171,10 @@ type watchdogInterceptor struct {
 	log      *slog.Logger
 }
 
+// Unwrap exposes the wrapped client so the poller can reach its optional
+// capabilities (getTransactions for contract discovery).
+func (w *watchdogInterceptor) Unwrap() poller.RPCClient { return w.RPCClient }
+
 func (w *watchdogInterceptor) GetEvents(ctx context.Context, start, end uint32, filters []poller.EventFilter) (*poller.GetEventsResult, error) {
 	res, err := w.RPCClient.GetEvents(ctx, start, end, filters)
 	if err != nil || res == nil || !w.enabled || w.contract == "" || w.store == nil {
@@ -267,6 +271,16 @@ func (s *stubRPC) GetLedgerEntries(ctx context.Context, keys []string) (*poller.
 	return &poller.GetLedgerEntriesResult{}, nil
 }
 
+func (s *stubRPC) GetTransactions(ctx context.Context, startLedger uint32, cursor string, limit int) (*poller.GetTransactionsResult, error) {
+	if s.endpoint == "" {
+		return nil, fmt.Errorf("stub: RPC not wired")
+	}
+	return &poller.GetTransactionsResult{}, nil
+}
+
+// stubStore does not implement poller.DiscoveryStore yet, so contract
+// discovery (issue #123) stays off until the real FullStore is wired here,
+// like the watchdog surface above.
 type stubStore struct{}
 
 func (s *stubStore) ListContracts(ctx context.Context, cursor string, limit int) ([]poller.Contract, string, error) {

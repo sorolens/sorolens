@@ -2,11 +2,9 @@ package store
 
 import (
 	"context"
-	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -26,7 +24,8 @@ type FullStore interface {
 	WatchlistStore
 	UserStore
 	PerformanceStore
-	ContractNoteStore
+	WatchedAccountStore
+	AuditStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
@@ -97,12 +96,6 @@ type QueryStore interface {
 	ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error)
 	GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error)
 	RecentEvents(ctx context.Context, contractID string, limit int) ([]Event, error)
-
-	// StreamEventsCSV streams events for a contract as CSV to the provided
-	// writer. It applies the same filters as ListEvents but does not buffer
-	// all rows in memory. The caller is responsible for setting appropriate
-	// HTTP headers (Content-Type: text/csv, Content-Disposition).
-	StreamEventsCSV(ctx context.Context, contractID string, f EventFilters, w io.Writer) error
 
 	// ContractFirstLedger returns the earliest ledger for which the contract
 	// has indexed data (events or invocations). It returns 0 when nothing has
@@ -180,75 +173,6 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
-}
-
-func (s *postgresStore) StreamEventsCSV(ctx context.Context, contractID string, f EventFilters, w io.Writer) error {
-	rows, err := s.pool.Query(ctx, `
-		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
-		       topic_xdr, value_xdr, topic_decoded, value_decoded,
-		       in_successful_call, inserted_at
-		FROM events
-		WHERE contract_id = $1
-		  AND ($2 = '' OR network = $2)
-		  AND ($3 = '' OR type = $3)
-		  AND ($4 = 0   OR ledger >= $4)
-		  AND ($5 = 0   OR ledger <= $5)
-		ORDER BY ledger ASC, id ASC`,
-		contractID, f.Network, f.Type, f.From, f.To,
-	)
-	if err != nil {
-		return fmt.Errorf("stream events csv: %w", err)
-	}
-	defer rows.Close()
-
-	csvWriter := csv.NewWriter(w)
-	defer csvWriter.Flush()
-
-	// Write header
-	if err := csvWriter.Write([]string{
-		"id", "contract_id", "network", "ledger", "ledger_closed_at", "tx_hash",
-		"type", "topic_xdr", "value_xdr", "topic_decoded", "value_decoded", "in_successful_call",
-	}); err != nil {
-		return err
-	}
-
-	for rows.Next() {
-		var e Event
-		var topicXDR, topicDec, valDec []byte
-		if err := rows.Scan(
-			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
-			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
-			&e.InSuccessfulCall, &e.InsertedAt,
-		); err != nil {
-			return err
-		}
-
-		topicXDRStr := string(topicXDR)
-		topicDecStr := string(topicDec)
-		valDecStr := string(valDec)
-
-		record := []string{
-			e.ID,
-			e.ContractID,
-			e.Network,
-			fmt.Sprintf("%d", e.Ledger),
-			e.LedgerClosedAt.UTC().Format(time.RFC3339),
-			e.TxHash,
-			e.Type,
-			topicXDRStr,
-			e.ValueXDR,
-			topicDecStr,
-			valDecStr,
-			fmt.Sprintf("%t", e.InSuccessfulCall),
-		}
-		if err := csvWriter.Write(record); err != nil {
-			return err
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	return csvWriter.Error()
 }
 
 // ---- RecentEvents -----------------------------------------------------------

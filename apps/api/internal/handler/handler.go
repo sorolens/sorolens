@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sorolens/sorolens/apps/api/internal/graph"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
@@ -29,6 +30,8 @@ type APIStore interface {
 	store.GlobalEventStore
 	store.LabelStore
 	store.RuleStore
+	store.WatchedAccountStore
+	store.AuditStore
 }
 
 // Pinger is implemented by both the postgres pool and the Redis client.
@@ -62,6 +65,9 @@ type Handler struct {
 	// reporting handlers fall back to REPORT_SIGNING_KEY; with neither set the
 	// reports are emitted unsigned and every response says so.
 	ReportSigningKey string
+
+	// GraphQL configures the /graphql endpoint (issue #125).
+	GraphQL graph.Options
 
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.

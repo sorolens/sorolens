@@ -2,9 +2,11 @@ package soroban
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -359,5 +361,48 @@ func TestDecodeScVal(t *testing.T) {
 				t.Errorf("Human: want %q, got %q", tc.wantHuman, got.Human)
 			}
 		})
+	}
+}
+
+// ---- GetTransactions tests ------------------------------------------------
+
+func TestGetTransactions(t *testing.T) {
+	t.Parallel()
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(fixture(t, "gettransactions_ok.json")) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 0)
+	got, err := c.GetTransactions(context.Background(), 1888539, "", 200)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(gotBody, `"method":"getTransactions"`) ||
+		!strings.Contains(gotBody, `"startLedger":1888539`) ||
+		!strings.Contains(gotBody, `"limit":200`) {
+		t.Errorf("unexpected request body: %s", gotBody)
+	}
+	if len(got.Transactions) != 1 {
+		t.Fatalf("want 1 transaction, got %d", len(got.Transactions))
+	}
+	tx := got.Transactions[0]
+	if tx.Status != "SUCCESS" || tx.Ledger != 1888539 || tx.EnvelopeXDR != "AAAAAgAAAAA=" {
+		t.Errorf("unexpected transaction: %+v", tx)
+	}
+	if got.LatestLedger != 1888600 || got.Cursor != "8111217537191937" {
+		t.Errorf("unexpected page metadata: latest=%d cursor=%q", got.LatestLedger, got.Cursor)
+	}
+
+	// With a cursor, startLedger is omitted (the RPC rejects both).
+	if _, err := c.GetTransactions(context.Background(), 1888539, "8111217537191937", 200); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(gotBody, "startLedger") || !strings.Contains(gotBody, `"cursor":"8111217537191937"`) {
+		t.Errorf("cursor page must not send startLedger: %s", gotBody)
 	}
 }

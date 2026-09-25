@@ -232,6 +232,22 @@ func (c *Client) GetTransaction(ctx context.Context, hash string) (*TransactionR
 	return &result, nil
 }
 
+// GetTransactions returns up to limit transactions in ledger order, starting
+// at startLedger for the first page or after cursor for later pages (pass the
+// previous result's Cursor; startLedger is then ignored). Used by contract
+// discovery to scan every ledger for contract deployments.
+func (c *Client) GetTransactions(ctx context.Context, startLedger uint32, cursor string, limit int) (*GetTransactionsResult, error) {
+	params := getTransactionsParams{Pagination: &pagination{Cursor: cursor, Limit: limit}}
+	if cursor == "" {
+		params.StartLedger = startLedger
+	}
+	var result GetTransactionsResult
+	if err := c.call(ctx, "getTransactions", params, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // GetNetwork returns the network passphrase and protocol version reported by
 // the node. Used to confirm the node is reachable and on the right network.
 func (c *Client) GetNetwork(ctx context.Context) (*NetworkInfo, error) {

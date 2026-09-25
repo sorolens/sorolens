@@ -30,6 +30,8 @@ const (
 // present to hit that route. Routes absent from this table are unscoped
 // (e.g. /health, /readyz) and are reachable by any authenticated key.
 var routeScopes = map[string]string{
+	"POST /graphql": ScopeReadContracts,
+
 	"GET /api/v1/stats/global": ScopeReadContracts,
 	"GET /api/v1/compare":      ScopeReadContracts,
 	"GET /api/v1/search":       ScopeReadContracts,
@@ -59,6 +61,10 @@ var routeScopes = map[string]string{
 	"POST /api/v1/watchdog/subscriptions":        ScopeWriteContracts,
 	"GET /api/v1/watchdog/subscriptions":         ScopeReadWatchdog,
 	"DELETE /api/v1/watchdog/subscriptions/{id}": ScopeWriteContracts,
+
+	"POST /api/v1/watched-accounts":        ScopeWriteContracts,
+	"GET /api/v1/watched-accounts":         ScopeReadContracts,
+	"DELETE /api/v1/watched-accounts/{id}": ScopeWriteContracts,
 
 	"GET /api/v1/watchdog/stats":                 ScopeReadWatchdog,
 	"GET /api/v1/watchdog/alerts":                ScopeReadWatchdog,

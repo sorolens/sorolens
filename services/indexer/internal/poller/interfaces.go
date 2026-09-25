@@ -225,6 +225,35 @@ type HealthInputs struct {
 	ExpiringStorage   int64
 }
 
+// LedgerTransaction is one entry of a getTransactions page.
+type LedgerTransaction struct {
+	Status      string // SUCCESS | FAILED
+	Ledger      uint32
+	TxHash      string
+	EnvelopeXDR string // base64 TransactionEnvelope
+}
+
+// GetTransactionsResult mirrors a getTransactions response page.
+type GetTransactionsResult struct {
+	Transactions []LedgerTransaction
+	LatestLedger uint32
+	// Cursor continues pagination after the last returned transaction.
+	Cursor string
+}
+
+// WatchedAccount mirrors store.WatchedAccount (fields discovery needs).
+type WatchedAccount struct {
+	AccountID string
+}
+
+// DiscoveredContract mirrors store.DiscoveredContract.
+type DiscoveredContract struct {
+	ContractID string
+	Network    string
+	AccountID  string
+	Ledger     int64
+}
+
 // ContractHealthScore mirrors store.ContractHealthScore.
 type ContractHealthScore struct {
 	ContractID           string

@@ -135,6 +135,40 @@ type TransactionEvents struct {
 	ContractEventsXDR    [][]string `json:"contractEventsXdr"`
 }
 
+// ---- getTransactions ------------------------------------------------------
+
+// getTransactionsParams is the request for getTransactions. StartLedger and
+// a pagination cursor are mutually exclusive.
+type getTransactionsParams struct {
+	StartLedger uint32      `json:"startLedger,omitempty"`
+	Pagination  *pagination `json:"pagination,omitempty"`
+}
+
+// LedgerTransaction is one transaction in a getTransactions page.
+type LedgerTransaction struct {
+	// Status is "SUCCESS" or "FAILED".
+	Status           string `json:"status"`
+	TxHash           string `json:"txHash"`
+	ApplicationOrder int    `json:"applicationOrder"`
+	FeeBump          bool   `json:"feeBump"`
+	EnvelopeXDR      string `json:"envelopeXdr"`
+	ResultXDR        string `json:"resultXdr"`
+	ResultMetaXDR    string `json:"resultMetaXdr"`
+	Ledger           uint32 `json:"ledger"`
+	CreatedAt        int64  `json:"createdAt"`
+}
+
+// GetTransactionsResult is the result of getTransactions.
+type GetTransactionsResult struct {
+	Transactions          []LedgerTransaction `json:"transactions"`
+	LatestLedger          uint32              `json:"latestLedger"`
+	LatestLedgerCloseTime int64               `json:"latestLedgerCloseTimestamp"`
+	OldestLedger          uint32              `json:"oldestLedger"`
+	OldestLedgerCloseTime int64               `json:"oldestLedgerCloseTimestamp"`
+	// Cursor continues pagination after the last returned transaction.
+	Cursor string `json:"cursor"`
+}
+
 // ---- getNetwork -----------------------------------------------------------
 
 // NetworkInfo is the result of getNetwork.
