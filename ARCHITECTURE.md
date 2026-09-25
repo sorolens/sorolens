@@ -1,4 +1,4 @@
-# ARCHITECTURE.md
+# Architecture
 ## Sorolens System Architecture
 
 ---
@@ -55,7 +55,7 @@ This flow runs when a contract ID is first submitted to the system (either via t
    - Calls RPC getLedgerEntries for the contract instance entry
      - If not found: return 404 (contract does not exist on-chain)
    - Inserts row into `contracts` table with status = "backfilling"
-   - Returns 201 Accepted
+   - Returns 201 Created
 
 2. On next cron run (at most 5 minutes later), the indexer sees
    the contract in "backfilling" status.
@@ -176,7 +176,7 @@ CREATE TABLE events (
 -- Primary query pattern: all events for a contract, newest first.
 CREATE INDEX idx_events_contract_ledger ON events (contract_id, ledger DESC);
 
--- Support filtering by transaction hash (e.g. "show all events in this tx").
+-- Support filtering by transaction hash (e.g., "show all events in this tx").
 CREATE INDEX idx_events_tx_hash ON events (tx_hash);
 
 -- Time-range queries from the dashboard.
