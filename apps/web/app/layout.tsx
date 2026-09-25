@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://sorolens.dev"),
+  manifest: "/manifest.json",
   title: {
     default: "Sorolens — Indexed Observability for Soroban",
     template: "%s | Sorolens",
