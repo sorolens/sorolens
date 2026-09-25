@@ -26,6 +26,7 @@ type FullStore interface {
 	UserStore
 	PerformanceStore
 	GlobalEventStore
+	ContractVerificationStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.

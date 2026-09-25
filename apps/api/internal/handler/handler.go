@@ -24,6 +24,7 @@ type APIStore interface {
 	store.UserStore
 	store.PerformanceStore
 	store.GlobalEventStore
+	store.ContractVerificationStore
 }
 
 // Pinger is implemented by both the postgres pool and the Redis client.
@@ -44,6 +45,12 @@ type Handler struct {
 	RedisClient RedisClient
 	Logger      *slog.Logger
 	StreamHub   *StreamHub
+
+	// Verifier rebuilds submitted contract source and compares the resulting
+	// Wasm hash against the on-chain hash (issue #263). It is nil on
+	// deployments without a build sandbox (for example the Vercel serverless
+	// entrypoint), in which case POST /contracts/{id}/verify answers 503.
+	Verifier ContractVerifier
 
 	// Cache stores hot GET responses (issue #143). Nil disables caching.
 	Cache middleware.ResponseCache

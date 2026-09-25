@@ -122,6 +122,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/summary", h.ContractSummary)
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
+
+		// Source verification (issue #263). Submitting source mutates the
+		// verification record, so it requires at least contributor role;
+		// reading the cached verdict stays open.
+		r.With(scope, contributor).Post("/contracts/{id}/verify", h.VerifyContract)
+		get("/contracts/{id}/verification", h.GetContractVerification)
 		get("/stream/events", h.StreamEventsSSE)
 
 		// API keys (admin scope + admin role).

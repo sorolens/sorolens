@@ -9,6 +9,8 @@
 // Optional with defaults: SOROBAN_RPC_URL (testnet), STELLAR_NETWORK (testnet),
 // PORT (8080), LOG_LEVEL (info), INDEXER_POLL_INTERVAL (5m),
 // INDEXER_LEDGER_WINDOW (120960 ledgers ≈ 7 days), INDEXER_MAX_DURATION (270s),
+// VERIFY_BUILD_COMMAND (stellar contract build), VERIFY_TIMEOUT (10m),
+// VERIFY_WORKSPACE_DIR (OS temp directory).
 // REQUEST_MAX_BODY_BYTES (1048576 bytes = 1 MiB).
 //
 // Load collects every missing required variable into a single error message
@@ -49,6 +51,15 @@ type Config struct {
 	IndexerLedgerWindow int
 	// IndexerMaxDuration is the wall-clock budget for a single indexer run.
 	IndexerMaxDuration time.Duration
+	// VerifyBuildCommand is the deterministic build invocation used for
+	// contract source verification (issue #263), parsed from a space-separated
+	// string. It is executed directly, never through a shell.
+	VerifyBuildCommand []string
+	// VerifyTimeout bounds a single verification build.
+	VerifyTimeout time.Duration
+	// VerifyWorkspaceDir is the parent directory for verification workspaces.
+	// Empty means the OS temporary directory.
+	VerifyWorkspaceDir string
 	// InitialAdminGitHubID, when set, seeds a user with the admin role on
 	// startup. The user is keyed by this value as both its ID and GitHub ID so
 	// requests authenticated with X-User-ID or X-GitHub-ID resolve to it.
@@ -97,6 +108,20 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("INDEXER_MAX_DURATION: invalid duration %q: %w", maxDurStr, err)
 	}
 	cfg.IndexerMaxDuration = maxDur
+
+	cfg.VerifyBuildCommand = strings.Fields(getEnvDefault("VERIFY_BUILD_COMMAND", "stellar contract build"))
+	if len(cfg.VerifyBuildCommand) == 0 {
+		return nil, fmt.Errorf("VERIFY_BUILD_COMMAND: must contain at least one argument")
+	}
+
+	verifyTimeoutStr := getEnvDefault("VERIFY_TIMEOUT", "10m")
+	verifyTimeout, err := time.ParseDuration(verifyTimeoutStr)
+	if err != nil {
+		return nil, fmt.Errorf("VERIFY_TIMEOUT: invalid duration %q: %w", verifyTimeoutStr, err)
+	}
+	cfg.VerifyTimeout = verifyTimeout
+
+	cfg.VerifyWorkspaceDir = os.Getenv("VERIFY_WORKSPACE_DIR")
 
 	cacheTTLStr := getEnvDefault("API_CACHE_TTL", "30s")
 	cacheTTL, err := time.ParseDuration(cacheTTLStr)
