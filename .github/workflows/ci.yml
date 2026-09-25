@@ -4,6 +4,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
 jobs:
   # ------------------------------------------------------------
   # Go: API, indexer, CLI
@@ -20,6 +21,21 @@ jobs:
           - services/indexer
           - cli
           - packages/go-client
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sorolens
+          POSTGRES_USER: sorolens
+          POSTGRES_PASSWORD: sorolens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sorolens -d sorolens"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 10s
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,29 +64,6 @@ jobs:
           version: latest
           working-directory: ${{ matrix.module }}
           args: --timeout=10m
-      - name: Start Postgres
-        working-directory: ./
-        run: |
-          # Start postgres without archive_mode for CI (aws mock copied after startup)
-          docker run -d --name sorolens-postgres \
-            -e POSTGRES_DB=sorolens \
-            -e POSTGRES_USER=sorolens \
-            -e POSTGRES_PASSWORD=sorolens \
-            -p 5432:5432 \
-            -v sorolens_postgres_data:/var/lib/postgresql/data \
-            --network sorolens_net \
-            postgres:16-alpine \
-            postgres -c wal_level=replica
-          DB_CONTAINER=$(docker ps -qf name=sorolens-postgres)
-          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
-          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
-          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
-      - name: Wait for Postgres
-        working-directory: ./
-        run: |
-          echo "Waiting for PostgreSQL..."
-          DB_CONTAINER=$(docker ps -qf name=sorolens-postgres)
-          until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
       - name: Run DB migrations
         if: matrix.module == 'apps/api'
         env:
@@ -90,6 +83,7 @@ jobs:
           files: ${{ matrix.module }}/coverage.out
           flags: go
           token: ${{ secrets.CODECOV_TOKEN }}
+
   # ------------------------------------------------------------
   # Go client regeneration (issue #149): fail if the checked-in generated
   # code under packages/go-client is out of date with docs/openapi.yaml.
@@ -112,6 +106,7 @@ jobs:
         run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
       - name: Verify no diff
         run: git diff --exit-code -- packages/go-client/internal
+
   # ------------------------------------------------------------
   # Node: XDR decoder package and shared packages
   # ------------------------------------------------------------
@@ -143,6 +138,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Lint
         run: pnpm --filter "./packages/**" lint
+
   # ------------------------------------------------------------
   # Next.js dashboard build
   # ------------------------------------------------------------
@@ -180,14 +176,8 @@ jobs:
           # at build time. Real values are set in Vercel project settings.
           NEXT_PUBLIC_API_URL: http://localhost:8080
         run: pnpm build
-  # ------------------------------------------------------------
-  # Rust: fixture contract
-  # ------------------------------------------------------------
-    # ------------------------------------------------------------
-  # Rust: fixture contract
-  # --------------------------------------------------------------
 
-    # ------------------------------------------------------------
+  # ------------------------------------------------------------
   # Rust: fixture contract
   # ------------------------------------------------------------
   rust:
@@ -231,39 +221,43 @@ jobs:
   backup-test:
     name: Backup and Restore Scripts
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sorolens
+          POSTGRES_USER: sorolens
+          POSTGRES_PASSWORD: sorolens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sorolens -d sorolens"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 10s
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Start Postgres
+      - name: Configure Postgres for archive_mode
+        env:
+          PGPASSWORD: sorolens
         run: |
-          # Start postgres with archive_mode for backup test
-          docker run -d --name sorolens-postgres \
-            -e POSTGRES_DB=sorolens \
-            -e POSTGRES_USER=sorolens \
-            -e POSTGRES_PASSWORD=sorolens \
-            -p 5432:5432 \
-            -v sorolens_postgres_data:/var/lib/postgresql/data \
-            --network sorolens_net \
-            postgres:16-alpine \
-            postgres -c wal_level=replica -c archive_mode=on -c "archive_command=aws s3 cp %p s3://sorolens-backups/wal/%f"
-          DB_CONTAINER=$(docker ps -qf name=sorolens-postgres)
-          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
-          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
-          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
-          # Restart to pick up archive_command with aws mock available
-          docker restart "$DB_CONTAINER"
+          psql -h localhost -U sorolens -d sorolens -c "ALTER SYSTEM SET wal_level = replica;"
+          psql -h localhost -U sorolens -d sorolens -c "ALTER SYSTEM SET archive_mode = on;"
+          psql -h localhost -U sorolens -d sorolens -c "ALTER SYSTEM SET archive_command = 'aws s3 cp %p s3://sorolens-backups/wal/%f';"
+          # Restart postgres to pick up archive_mode
+          docker exec $(docker ps -qf ancestor=postgres:16-alpine) pg_ctl restart -D /var/lib/postgresql/data -m fast
       - name: Wait for Postgres
         run: |
           echo "Waiting for PostgreSQL..."
-          DB_CONTAINER=$(docker ps -qf name=sorolens-postgres)
-          until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
+          until pg_isready -h localhost -U sorolens -d sorolens; do sleep 1; done
       - name: Setup Mock S3 Bucket
         run: |
           mkdir -p /tmp/s3/sorolens-backups/logical /tmp/s3/sorolens-backups/base /tmp/s3/sorolens-backups/wal
           install -m 755 scripts/aws-mock.sh /usr/local/bin/aws
       - name: Run Backup Script
         run: |
-          export DB_CONTAINER=$(docker ps -qf name=sorolens-postgres)
           ./scripts/backup.sh
       - name: Run Restore Script
         run: |
