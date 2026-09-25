@@ -175,7 +175,10 @@ func (m *MockStore) SetIndexerCursor(_ context.Context, network string, ledger u
 	if m.indexerCursors == nil {
 		m.indexerCursors = make(map[string]uint32)
 	}
-	m.indexerCursors[networkOrDefault(network)] = ledger
+	key := networkOrDefault(network)
+	if ledger > m.indexerCursors[key] {
+		m.indexerCursors[key] = ledger
+	}
 	return nil
 }
 

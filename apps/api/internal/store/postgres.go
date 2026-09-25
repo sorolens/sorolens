@@ -307,7 +307,7 @@ func (s *postgresStore) SetIndexerCursor(ctx context.Context, network string, le
 		INSERT INTO indexer_cursors (network, ledger, updated_at)
 		VALUES ($1, $2, NOW())
 		ON CONFLICT (network) DO UPDATE SET
-			ledger = EXCLUDED.ledger,
+			ledger = GREATEST(indexer_cursors.ledger, EXCLUDED.ledger),
 			updated_at = NOW()`, networkOrDefault(network), ledger)
 	if err != nil {
 		return fmt.Errorf("set indexer cursor: %w", err)
@@ -383,7 +383,7 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 		INSERT INTO indexer_cursors (network, ledger, updated_at)
 		VALUES ($1, $2, NOW())
 		ON CONFLICT (network) DO UPDATE SET
-			ledger     = EXCLUDED.ledger,
+			ledger     = GREATEST(indexer_cursors.ledger, EXCLUDED.ledger),
 			updated_at = NOW()`,
 		networkOrDefault(network), ledger,
 	)

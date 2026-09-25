@@ -46,6 +46,10 @@ go run ./cmd/sorolens track CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHG
 go run ./cmd/sorolens index --once
 ```
 The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
+
+The indexer processes contracts concurrently. Set `INDEXER_WORKERS` to tune
+the worker count; it defaults to `GOMAXPROCS`. Each contract is handled by one
+worker at a time, preserving that contract's processing order.
 ---
 ## How to contribute
 

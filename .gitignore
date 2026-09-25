@@ -5,6 +5,7 @@
 
 # Node
 node_modules/
+.pnpm-store/
 dist/
 .next/
 .turbo/
