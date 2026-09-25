@@ -581,6 +581,59 @@ Paginated storage entry list.
 
 ---
 
+### 4.5 Snapshot / replay
+
+#### `GET /api/v1/contracts/:id/snapshot?ledger=N`
+
+Replays the contract's storage state and last known event as they were at
+ledger `N`. Used by the ledger scrubber on the contract detail page.
+
+**Responses:**
+- `200`: `{ contract_id, network, ledger, first_tracked_ledger, storage, last_event }`.
+- `404`: contract is unknown, or `N` precedes the first ledger the contract
+  was tracked at (the message names that ledger).
+- `422`: `ledger` is missing or not a positive integer.
+
+---
+
+#### `GET /api/v1/contracts/:id/snapshot.json`
+
+Portable JSON export of the contract's current state: the four sections
+`metadata`, `storage`, `events`, and `summary`, wrapped in a versioned
+envelope (`schema_version`, `contract_id`, `network`, `ledger`). The document
+is deterministic for an unchanged store (stable field order, sorted
+collections, no wall-clock fields), so exports can be archived or diffed.
+Served with `Content-Type: application/json; charset=utf-8` and
+`Content-Disposition: attachment; filename="<id>-snapshot.json"`; when the
+client sends `Accept-Encoding: gzip` the body is gzip-compressed.
+
+**Responses:**
+- `200`: the four-section export described above.
+- `404`: contract is unknown.
+
+---
+
+### 4.6 API keys
+
+Scoped credentials are managed under `/api/v1/api-keys` and require the
+`admin:*` scope.
+
+#### `POST /api/v1/api-keys`
+
+Create a key. Body: `{ "name": string, "scopes": string[] }`. Returns `201`
+with the plaintext `key` exactly once; only its SHA-256 hash is persisted.
+
+#### `GET /api/v1/api-keys`
+
+List key metadata (never the token).
+
+#### `DELETE /api/v1/api-keys/:id`
+
+Revoke a key. Returns `204`.
+
+---
+
+### 4.7 Stats
 ### 4.5 Stats
 
 #### `GET /api/v1/stats/global`

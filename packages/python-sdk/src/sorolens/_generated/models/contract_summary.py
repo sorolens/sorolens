@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
@@ -93,11 +92,11 @@ class ContractSummary:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.contract_stats import ContractStats
-        from ..models.event import Event
-        from ..models.health_score import HealthScore
-        from ..models.invocation import Invocation
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.contract_stats import ContractStats  # noqa: PLC0415
+        from ..models.event import Event  # noqa: PLC0415
+        from ..models.health_score import HealthScore  # noqa: PLC0415
+        from ..models.invocation import Invocation  # noqa: PLC0415
 
         d = dict(src_dict)
         contract_id = d.pop("contract_id")

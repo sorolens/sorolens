@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 if TYPE_CHECKING:
     from ..models.api_key import APIKey
@@ -46,8 +45,8 @@ class ListApiKeysAdminResponse200:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.api_key import APIKey
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.api_key import APIKey  # noqa: PLC0415
 
         d = dict(src_dict)
         api_keys = []

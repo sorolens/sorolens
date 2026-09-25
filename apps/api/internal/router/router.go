@@ -15,7 +15,7 @@ import (
 
 // New builds and returns the HTTP router with all middleware and routes wired.
 // maxBodyBytes caps the request body size in bytes; values of zero or less
-// disable the limit. Callers normally pass cfg.RequestMaxBodyBytes.
+// disable the limit. Callers normally pass config.MaxBodyBytesFromEnv().
 func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r := chi.NewRouter()
 
@@ -24,6 +24,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.CORS)
+	// Sentry must run before Recoverer: it reports a panic and re-panics so
+	// Recoverer still produces the standard 500 response.
+	r.Use(middleware.Sentry)
 	r.Use(middleware.Recoverer(h.Logger))
 	r.Use(middleware.BodyLimit(maxBodyBytes))
 	r.Use(middleware.Logger(h.Logger))
@@ -82,6 +85,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
 
+		// Liveness probe with dependency reachability. It always returns 200
+		// and carries no scope rule, so uptime monitors can poll it without a
+		// credential.
+		r.Get("/health", h.HealthCheck)
+
 		// Scoped API key auth. It is applied per route with r.With so chi has
 		// already resolved the leaf route pattern when the middleware runs; the
 		// required scope is looked up from the metadata table in
@@ -138,12 +146,16 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/stats", h.ContractStats)
 		get("/contracts/{id}/forecast", h.ContractForecast)
 		get("/contracts/{id}/snapshot", h.ContractSnapshot)
+		get("/contracts/{id}/snapshot.json", h.ContractSnapshotExport)
 		get("/contracts/{id}/upgrades", h.ListContractUpgrades)
 		get("/contracts/{id}/health-score", h.GetContractHealthScore)
 		get("/contracts/{id}/summary", h.ContractSummary)
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
 		get("/stream/events", h.StreamEventsSSE)
+		// Dead-letter queue for events that failed processing (issue #202).
+		get("/dlq", h.ListFailedEvents)
+		r.With(scope, contributor).Post("/dlq/{id}/requeue", h.RequeueFailedEvent)
 
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)

@@ -133,7 +133,7 @@ func TestRenderReportCSVEscapesContractIDThatLooksNumeric(t *testing.T) {
 }
 
 func TestRenderReportPDFHasValidStructure(t *testing.T) {
-	body, err := renderReportPDF(sampleReport(), "deadbeef")
+	body, err := renderReportPDF(sampleReport(), strings.Repeat("deadbeef", 8))
 	if err != nil {
 		t.Fatalf("renderReportPDF: %v", err)
 	}

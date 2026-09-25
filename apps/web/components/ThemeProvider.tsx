@@ -13,6 +13,14 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>("system");
+  // Guards the localStorage write below until the initial read (the effect
+  // right under this one) has run. Without it, the write fires on mount with
+  // the "system" default before the saved value has been read back into
+  // state, clobbering it - fine normally, since the effect re-runs once the
+  // read lands, but React Strict Mode's mount/unmount/remount in development
+  // can discard that pending update before it commits, so the remount reads
+  // back the clobbered value and the real preference never sticks.
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     // Read theme from localStorage on mount
@@ -20,6 +28,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (savedTheme) {
       setTheme(savedTheme);
     }
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -37,7 +46,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     };
 
     applyTheme(theme);
-    localStorage.setItem("theme", theme);
+    if (hydrated) {
+      localStorage.setItem("theme", theme);
+    }
 
     // Listen for system theme changes if set to system
     if (theme === "system") {
@@ -46,7 +57,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       mediaQuery.addEventListener("change", handleChange);
       return () => mediaQuery.removeEventListener("change", handleChange);
     }
-  }, [theme]);
+  }, [theme, hydrated]);
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>

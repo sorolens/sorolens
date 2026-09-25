@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..models.compare_response_window import CompareResponseWindow
 
@@ -48,9 +47,9 @@ class CompareResponse:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.compare_contract_entry import (
-            CompareContractEntry,
+            CompareContractEntry,  # noqa: PLC0415
         )
 
         d = dict(src_dict)

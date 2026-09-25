@@ -63,7 +63,7 @@ export async function getInvocationFrequency(
     });
     invocations.push(...(res.invocations ?? []));
     if (!res.next_cursor) break;
-    cursor = res.next_cursor;
+    cursor = res.next_cursor ?? undefined;
   }
 
   return aggregateInvocationFrequency(invocations, hours);
