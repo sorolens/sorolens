@@ -1,5 +1,62 @@
 # Contributing to Sorolens
 Thank you for your interest. This document covers everything you need to make a contribution: local setup, how to claim an issue, branch naming, commit format, PR requirements, and a full walkthrough of the most common first contribution (adding an XDR type decoder).
+
+## Quickstart: your first PR in 15 minutes
+
+New here? This section gets you from `git clone` to an open pull request in about 15 minutes. Each step links to the detailed section further down if you need more depth.
+
+### 1. Clone and enter the repo (~1 min)
+
+```bash
+git clone https://github.com/sorolens/sorolens.git
+cd sorolens
+```
+
+### 2. Install the prerequisites (~5 min)
+
+You need Go 1.23, Node 22, pnpm 9, and a running Docker daemon. Exact versions and install links are in [Prerequisite versions](#prerequisite-versions); the short check:
+
+```bash
+go version       # go1.23.x
+node --version   # v22.x.x
+pnpm --version   # 9.x.x
+docker info      # daemon must be running
+```
+
+Missing pnpm? `npm install -g pnpm@9`. For Go, Node, or Docker, use the install links in [Prerequisite versions](#prerequisite-versions).
+
+### 3. Start the infrastructure and run the test suite (~4 min)
+
+```bash
+docker compose up -d                                # Postgres 16 + Redis on localhost
+cd apps/api && go test -race ./...                  # Go API tests
+cd ../../services/indexer && go test -race ./...    # indexer tests
+cd ../../packages/xdr && pnpm install && pnpm vitest run   # XDR decoder tests
+cd ../..
+```
+
+Or, after a one-time `pnpm install` at the repo root, run everything at once with `make test`. If all tests pass before you changed anything, your environment is ready.
+
+### 4. Pick an issue and claim it (~2 min)
+
+1. Browse the [open issues](https://github.com/sorolens/sorolens/issues) and filter by `good first issue` or `help wanted`.
+2. Comment **"I'd like to work on this"** and wait for a maintainer to assign it. Details and etiquette: [How to claim an issue](#how-to-claim-an-issue).
+
+### 5. Branch, code, commit, open the PR (the rest is your change)
+
+```bash
+git checkout -b feat/your-short-description
+# ...make your change and add tests...
+git commit -m "feat(scope): short imperative description"
+git push origin feat/your-short-description
+```
+
+Then open a PR against `main` with `Closes #<issue-number>` in the description. The [Branch naming](#branch-naming), [Commit format](#commit-format), and [PR checklist](#pr-checklist) sections are short and strictly enforced by CI and reviewers — give them a skim before you push.
+
+### Stuck?
+
+Ask in the [Sorolens Discord](https://discord.gg/D9jATUezYX): setup and code questions in `#help`, PRs that need eyes in `#reviews-wanted`. You'll get help there faster than in an issue thread. For deeper setup, see [Local setup per package](#local-setup-per-package).
+
 ---
 ## Table of contents
 1. [Prerequisite versions](#prerequisite-versions)
