@@ -123,6 +123,10 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
 		get("/stream/events", h.StreamEventsSSE)
+		// Dry-run an invocation against indexed state. Read-only: it never
+		// broadcasts, so it sits at the read scope alongside the other
+		// contract queries.
+		r.With(scope).Post("/simulate", h.Simulate)
 
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
