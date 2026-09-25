@@ -67,6 +67,9 @@ func New(h *handler.Handler) http.Handler {
 		get("/contracts/{id}/graph", h.ContractGraph)
 		get("/stream/events", h.StreamEventsSSE)
 
+		// WebSocket subscriptions (issue #126): real-time push with live
+		// filter changes, complementary to the SSE stream above.
+		get("/subscribe", h.SubscribeEventsWS)
 
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)

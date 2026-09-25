@@ -3,6 +3,7 @@ module github.com/sorolens/sorolens/apps/api
 go 1.25.0
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/exaring/otelpgx v0.12.0
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.10.0
