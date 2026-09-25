@@ -95,6 +95,15 @@ export interface StatsResponse {
   stats: ContractStats;
 }
 
+/** One day of averaged per-invocation resource usage (issue #184). */
+export interface ResourceTrendPoint {
+  date: string;
+  avg_cpu_insn: number;
+  avg_mem_byte: number;
+  avg_fee: number;
+  count: number;
+}
+
 export interface ContractSummary {
   id: string;
   network: string;
