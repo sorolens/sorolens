@@ -182,6 +182,9 @@ CREATE INDEX idx_events_tx_hash ON events (tx_hash);
 -- Time-range queries from the dashboard.
 CREATE INDEX idx_events_ledger_closed_at ON events (ledger_closed_at DESC);
 
+-- "Events for contract X within time range Y" (migration 000009).
+CREATE INDEX idx_events_contract_id_ledger_closed_at ON events (contract_id, ledger_closed_at);
+
 -- ============================================================
 -- invocations
 -- One row per transaction that invoked (or attempted to invoke)
@@ -313,6 +316,7 @@ CREATE INDEX idx_api_keys_hash ON api_keys (key_hash) WHERE revoked_at IS NULL;
 | `idx_events_contract_ledger` | The most common dashboard query: "show me recent events for contract X." Composite index with ledger DESC avoids sort. |
 | `idx_events_tx_hash` | Supports the invocation-detail page which shows all events emitted in a given transaction. |
 | `idx_events_ledger_closed_at` | Time-range filtering on the events feed. |
+| `idx_events_contract_id_ledger_closed_at` | Backs "events for contract X within time range Y" (contract stats window, daily activity aggregate). Leading on both columns bounds the scan; the contract/ledger index still reads every event for the contract and filters on `ledger_closed_at`. |
 | `idx_invocations_contract_ledger` | Same pattern as events; the invocation list is paginated with newest-first ordering. |
 | `idx_invocations_ledger_closed_at` | Time-range filter for resource-usage charts. |
 | `idx_invocations_status` | Supports the "show only failures" filter on the invocations list. |
