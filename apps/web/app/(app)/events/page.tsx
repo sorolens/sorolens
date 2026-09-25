@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { EventsTable } from "@/components/EventsTable";
 import { StatCard } from "@/components/StatCard";
 import { useEventStream } from "@/hooks/useEventStream";
+import { truncateMiddle } from "@/lib/format";
 import type { ContractEvent } from "@/lib/types";
 
 export default function EventsPage() {
@@ -99,7 +100,7 @@ export default function EventsPage() {
         <StatCard
           label="Streamed Events"
           value={events.length.toLocaleString()}
-          subtext={activeFilter ? `For ${activeFilter.slice(0, 8)}...` : "Across all tracked contracts"}
+          subtext={activeFilter ? `For ${truncateMiddle(activeFilter)}` : "Across all tracked contracts"}
         />
         <StatCard
           label="Stream Connection"
