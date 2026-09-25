@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -156,6 +158,13 @@ func (c *Client) GetGlobalStats(ctx context.Context) (GlobalStats, error) {
 	return out, err
 }
 
+// GetMonitoredContract fetches the watchdog's on-chain health status for a monitored contract.
+func (c *Client) GetMonitoredContract(ctx context.Context, contractID string) (MonitoredContract, error) {
+	var out MonitoredContract
+	err := c.do(ctx, http.MethodGet, "/api/v1/watchdog/contracts/"+contractID, nil, &out)
+	return out, err
+}
+
 // GetContractStats fetches per-contract statistics for the given window ("24h", "7d", "30d").
 func (c *Client) GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error) {
 	if window == "" {
@@ -165,4 +174,90 @@ func (c *Client) GetContractStats(ctx context.Context, contractID, window string
 	var out ContractStats
 	err := c.do(ctx, http.MethodGet, path, nil, &out)
 	return out, err
+}
+
+// StreamEvents opens the server-sent events stream at
+// /api/v1/stream/events and invokes onMessage for every data frame received.
+// When contractID is empty the stream carries events for all contracts.
+//
+// StreamEvents blocks until ctx is cancelled, the server closes the stream, or
+// onMessage returns an error. A cancellation through ctx is reported as a nil
+// error so callers can treat Ctrl-C as a clean shutdown. SSE comment frames
+// (heartbeats) and malformed frames are skipped rather than terminating the
+// stream.
+func (c *Client) StreamEvents(ctx context.Context, contractID string, onMessage func(StreamMessage) error) error {
+	q := url.Values{}
+	if contractID != "" {
+		q.Set("contract_id", contractID)
+	}
+	path := "/api/v1/stream/events"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "text/event-stream")
+
+	// The stream is long-lived, so it must not inherit the shared client's
+	// request timeout. The request context governs the connection lifetime.
+	streamClient := &http.Client{}
+	resp, err := streamClient.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var env struct {
+			Error struct {
+				Code      string `json:"code"`
+				Message   string `json:"message"`
+				RequestID string `json:"request_id"`
+			} `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&env)
+		return &SorolensError{
+			Code:      env.Error.Code,
+			Message:   env.Error.Message,
+			RequestID: env.Error.RequestID,
+			Status:    resp.StatusCode,
+		}
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	// SSE frames can exceed bufio.Scanner's 64 KiB default; allow up to 1 MiB.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			// Comment frames such as ": ping" and other SSE fields keep the
+			// connection alive but carry no payload for the CLI.
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "" {
+			continue
+		}
+		var msg StreamMessage
+		if err := json.Unmarshal([]byte(payload), &msg); err != nil {
+			continue
+		}
+		if err := onMessage(msg); err != nil {
+			return err
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("read stream: %w", err)
+	}
+	return nil
 }

@@ -5,6 +5,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 )
@@ -28,6 +31,18 @@ func New(h *handler.Handler) http.Handler {
 	r.Get("/health", h.Health)
 	r.Get("/readyz", h.Readyz)
 
+	// Prometheus metrics (issue #143: response cache hit/miss counters). A
+	// registry per router keeps tests that build many routers independent.
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	reg.MustRegister(middleware.CacheCollectors()...)
+	r.Get("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP)
+
+	// Slack slash commands (issue #127). Outside /api/v1 because Slack posts
+	// form-encoded bodies, which the JSON content-type guard would reject;
+	// every request is authenticated by its Slack signature instead.
+	r.Post("/integrations/slack/commands", h.SlackCommand)
+
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
@@ -50,11 +65,24 @@ func New(h *handler.Handler) http.Handler {
 		// Stats
 		get("/stats/global", h.GlobalStats)
 
+		// Response cache (issue #143): hot reads are cached for CacheTTL and
+		// a successful write purges the namespace it changes.
+		cacheContracts := middleware.Cache(h.Cache, middleware.CacheNamespaceContracts, h.CacheTTL, h.Logger)
+		cacheWatchdog := middleware.Cache(h.Cache, middleware.CacheNamespaceWatchdog, h.CacheTTL, h.Logger)
+		purgeContracts := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceContracts)
+
+		// Cross-contract events explorer feed (issue #97).
+		get("/events", h.ListAllEvents)
+
+		// Cross-contract comparison (issue #324): one round-trip that fans
+		// out to the per-contract stats/health lookups in parallel.
+		get("/compare", h.CompareContracts)
+
 		// Contracts. Registration mutates shared state, so it requires at
 		// least contributor role. Reads stay open.
-		r.With(scope, contributor).Post("/contracts", h.RegisterContract)
-		get("/contracts", h.ListContracts)
-		get("/contracts/{id}", h.GetContract)
+		r.With(scope, contributor, purgeContracts).Post("/contracts", h.RegisterContract)
+		r.With(scope, cacheContracts).Get("/contracts", h.ListContracts)
+		r.With(scope, cacheContracts).Get("/contracts/{id}", h.GetContract)
 		get("/contracts/{id}/events", h.ListEvents)
 		get("/contracts/{id}/invocations", h.ListInvocations)
 		get("/contracts/{id}/storage", h.ListStorageEntries)
@@ -63,6 +91,7 @@ func New(h *handler.Handler) http.Handler {
 		get("/contracts/{id}/snapshot", h.ContractSnapshot)
 		get("/contracts/{id}/upgrades", h.ListContractUpgrades)
 		get("/contracts/{id}/health-score", h.GetContractHealthScore)
+		get("/contracts/{id}/summary", h.ContractSummary)
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
 		get("/stream/events", h.StreamEventsSSE)
@@ -90,12 +119,20 @@ func New(h *handler.Handler) http.Handler {
 		})
 
 		// Watchdog: data from the on-chain sorolens-watchdog contract.
-		get("/watchdog/stats", h.WatchdogStats)
+		// Watchdog stats are written by the indexer, not the API, so they
+		// rely on the TTL rather than write invalidation.
+		r.With(scope, cacheWatchdog).Get("/watchdog/stats", h.WatchdogStats)
 		get("/watchdog/alerts", h.ListWatchdogAlerts)
 		get("/watchdog/contracts", h.ListMonitoredContracts)
 		get("/watchdog/contracts/{id}", h.GetMonitoredContract)
 		get("/watchdog/contracts/{id}/health", h.ListHealthChecks)
 		get("/watchdog/contracts/{id}/alerts", h.ListWatchdogAlerts)
+
+		// Alert notification subscriptions (issue #127). They hold
+		// integration secrets, so reading them also needs contributor.
+		r.With(scope, contributor).Post("/watchdog/subscriptions", h.CreateSubscription)
+		r.With(scope, contributor).Get("/watchdog/subscriptions", h.ListSubscriptions)
+		r.With(scope, contributor).Delete("/watchdog/subscriptions/{id}", h.DeleteSubscription)
 	})
 
 	return r

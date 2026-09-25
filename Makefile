@@ -61,15 +61,28 @@ test:
 	cd cli && go test -race ./...
 	pnpm test
 
-## openapi: regenerate the Go client from the OpenAPI spec
+## openapi: check docs/openapi.yaml covers every live API route, lint it,
+## and regenerate the Go client from it. The spec is hand-maintained; the
+## route check (apps/api/internal/router/openapi_test.go) fails when a route
+## is added without documenting it, or documented without existing.
+openapi:
+	cd apps/api && go test -count=1 -run TestOpenAPICoversEveryRoute ./internal/router
+	$(MAKE) lint-openapi
+	$(MAKE) client-go
+
+## client-go: regenerate the Go client from the OpenAPI spec
 client-go:
 	@command -v $(OAPI_CODEGEN) >/dev/null 2>&1 || go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1
 	cd $(CLIENT_DIR) && $(OAPI_CODEGEN) --config oapi-codegen.yaml ../../$(OAPI_SPEC)
 	cd $(CLIENT_DIR) && go mod tidy
 
-## openapi: validate the OpenAPI spec with redocly (if installed)
+## lint-openapi: validate the OpenAPI spec with redocly (skipped without npx)
 lint-openapi:
-	@command -v npx >/dev/null 2>&1 && npx --yes @redocly/cli lint $(OAPI_SPEC) || echo "npx unavailable; skipped redocly lint"
+	@if command -v npx >/dev/null 2>&1; then \
+		npx --yes @redocly/cli lint $(OAPI_SPEC); \
+	else \
+		echo "npx unavailable; skipped redocly lint"; \
+	fi
 
 ## lint: run golangci-lint and pnpm lint across the monorepo
 lint:

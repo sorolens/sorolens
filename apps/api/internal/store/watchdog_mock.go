@@ -113,13 +113,26 @@ func (m *MockStore) ListHealthChecks(_ context.Context, contractID string, limit
 	return out, nil
 }
 
-func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network string, limit int) ([]ContractAlert, error) {
+// ListAlerts mirrors the postgres keyset pagination: rows are ordered
+// newest first by (timestamp desc, contract_id desc) and the optional
+// cursor selects strictly older rows. The returned cursor points at the
+// last row of the page and is empty when the feed is exhausted.
+func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network, cursor string, limit int) ([]ContractAlert, string, error) {
 	if limit <= 0 {
 		limit = 100
 	}
+	var cursorTS time.Time
+	var cursorID string
+	if cursor != "" {
+		ts, id, err := decodeAlertsCursor(cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		cursorTS, cursorID = ts, id
+	}
 	m.ensureWatchdog()
 	out := make([]ContractAlert, 0)
-	for i := len(m.alerts) - 1; i >= 0 && len(out) < limit; i-- {
+	for i := len(m.alerts) - 1; i >= 0; i-- {
 		a := m.alerts[i]
 		if contractID != "" && a.ContractID != contractID {
 			continue
@@ -130,9 +143,28 @@ func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network 
 		if network != "" && m.monitored[a.ContractID].Network != network {
 			continue
 		}
+		if cursor != "" {
+			// Keyset: keep rows strictly older than the (timestamp, id) pair
+			// under (timestamp DESC, contract_id DESC) ordering.
+			if a.Timestamp.After(cursorTS) {
+				continue
+			}
+			if a.Timestamp.Equal(cursorTS) && a.ContractID >= cursorID {
+				continue
+			}
+		}
 		out = append(out, a)
+		if len(out) > limit {
+			break
+		}
 	}
-	return out, nil
+	var next string
+	if len(out) > limit {
+		last := out[limit-1]
+		next = encodeAlertsCursor(last.Timestamp, last.ContractID)
+		out = out[:limit]
+	}
+	return out, next, nil
 }
 
 func (m *MockStore) GetWatchdogStats(_ context.Context, network string) (WatchdogStats, error) {
