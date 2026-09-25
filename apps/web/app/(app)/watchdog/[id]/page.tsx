@@ -17,7 +17,7 @@ import type {
   UptimeWindow,
 } from "@/lib/types";
 import { CardSkeleton, TableSkeleton } from "@/components/Skeleton";
-import { HealthBadge, SeverityBadge } from "@/components/WatchdogBadges";
+import { HealthBadge, SeverityBadge, UptimeBadge } from "@/components/WatchdogBadges";
 import { WatchdogTimeline } from "@/components/WatchdogTimeline";
 
 interface Props {

@@ -18,6 +18,8 @@ vi.mock("@/lib/api", () => ({
 function invocation(overrides: Partial<Invocation>): Invocation {
   return {
     tx_hash: "a1b2c3",
+    contract_id: "CAVRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C33",
+    network: "testnet",
     ledger: 120_400,
     ledger_closed_at: "2026-07-03T08:00:00Z",
     status: "success",
