@@ -29,6 +29,7 @@ import type {
   WatchlistStatusResponse,
   HealthScoreResponse,
 } from "./types";
+import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
 
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -62,6 +63,9 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     }
     throw new ApiError(res.status, body.error || res.statusText, body.code);
   }
+
+  // A usable payload is on the wire, so the footer can report a fresh view.
+  recordLastUpdated(resourceFromUrl(url));
 
   return res.json();
 }
