@@ -24,6 +24,7 @@ type FullStore interface {
 	WatchlistStore
 	UserStore
 	PerformanceStore
+	GlobalEventStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.

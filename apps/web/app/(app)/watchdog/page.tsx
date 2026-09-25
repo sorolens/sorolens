@@ -92,6 +92,12 @@ export default function WatchdogPage() {
           on the deployed watchdog contract, then push status updates on your
           own schedule.
         </p>
+        <Link
+          href="/watchdog/notifications"
+          className="mt-3 inline-block text-sm text-[var(--color-accent)] hover:underline"
+        >
+          Notification channels (Slack, Discord, PagerDuty) →
+        </Link>
       </div>
 
       {/* Summary cards: always render values, defaulting to 0 when the

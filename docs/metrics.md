@@ -49,6 +49,27 @@ Notes:
   being indexed at that moment, so a network that has stalled is visible even
   while the others are healthy.
 
+## API metrics
+
+The API serves its own Prometheus endpoint at `GET /metrics` on the API port
+(alongside `/health`), with Go runtime and process metrics plus:
+
+| Metric | Type | Labels | Description |
+| --- | --- | --- | --- |
+| `sorolens_api_cache_requests_total` | Counter | `namespace`, `result` | Response cache lookups. `namespace` is `contracts` or `watchdog`; `result` is `hit` or `miss`. |
+| `sorolens_api_cache_purges_total` | Counter | `namespace` | Cache namespace purges triggered by a successful write (e.g. `POST /api/v1/contracts` purges `contracts`). |
+
+Hit ratio per namespace:
+
+```promql
+sum by (namespace) (rate(sorolens_api_cache_requests_total{result="hit"}[5m]))
+  /
+sum by (namespace) (rate(sorolens_api_cache_requests_total[5m]))
+```
+
+Cached responses also carry an `X-Cache: HIT|MISS` header, which is handy
+when checking a single request with `curl -i`.
+
 ## Alerting
 
 A minimal alert fires when the indexer falls behind the chain and stays there:
