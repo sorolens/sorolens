@@ -17,25 +17,18 @@ import type {
   ContractEvent,
   StorageEntry,
   StatsResponse,
-  ResourceTrendPoint,
   TimeWindow,
 } from "@/lib/types";
 import { StatCard } from "@/components/StatCard";
-import {
-  CardSkeleton,
-  ChartSkeleton,
-  TableSkeleton,
-} from "@/components/Skeleton";
+import { CardSkeleton, ChartSkeleton, TableSkeleton } from "@/components/Skeleton";
 import { WindowSelector } from "@/components/WindowSelector";
 import { EventVolumeChart } from "@/components/EventVolumeChart";
 import { InvocationChart } from "@/components/InvocationChart";
-import { ResourceTrendChart } from "@/components/ResourceTrendChart";
-import { getResourceTrend } from "@/lib/resourceTrend";
 import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
 import { HealthScoreCard } from "@/components/HealthScoreCard";
-import { ContractNotes } from "@/components/ContractNotes";
+import { AddToGroup } from "@/components/AddToGroup";
 import { useEventStream } from "@/hooks/useEventStream";
 
 interface Props {
@@ -56,14 +49,10 @@ function ContractDetailContent({ id }: { id: string }) {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  const [trend, setTrend] = useState<ResourceTrendPoint[]>([]);
-  const [trendLoading, setTrendLoading] = useState(true);
-
   const [events, setEvents] = useState<ContractEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventsCursor, setEventsCursor] = useState<string | null>(null);
   const [eventsHasMore, setEventsHasMore] = useState(false);
-  const [showFailedOnly, setShowFailedOnly] = useState(false);
 
   const [storage, setStorage] = useState<StorageEntry[]>([]);
   const [storageLoading, setStorageLoading] = useState(true);
@@ -133,34 +122,10 @@ function ContractDetailContent({ id }: { id: string }) {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadTrend() {
-      setTrendLoading(true);
-      try {
-        const data = await getResourceTrend(id, 30);
-        if (!cancelled) setTrend(data);
-      } catch {
-        // non-critical
-      } finally {
-        if (!cancelled) setTrendLoading(false);
-      }
-    }
-
-    loadTrend();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  useEffect(() => {
-    let cancelled = false;
-
     async function loadEvents() {
       setEventsLoading(true);
       try {
-        const data = await getContractEvents(id, {
-          limit: 50,
-          in_successful_call: showFailedOnly ? false : undefined,
-        });
+        const data = await getContractEvents(id, { limit: 50 });
         if (!cancelled) {
           setEvents(data.events);
           setEventsCursor(data.cursor);
@@ -177,7 +142,7 @@ function ContractDetailContent({ id }: { id: string }) {
     return () => {
       cancelled = true;
     };
-  }, [id, showFailedOnly]);
+  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,26 +173,19 @@ function ContractDetailContent({ id }: { id: string }) {
   const handleLoadMoreEvents = useCallback(async () => {
     if (!eventsCursor) return;
     try {
-      const data = await getContractEvents(id, {
-        cursor: eventsCursor,
-        limit: 50,
-        in_successful_call: showFailedOnly ? false : undefined,
-      });
+      const data = await getContractEvents(id, { cursor: eventsCursor, limit: 50 });
       setEvents((prev) => [...prev, ...data.events]);
       setEventsCursor(data.cursor);
       setEventsHasMore(data.has_more);
     } catch {
       // non-critical
     }
-  }, [id, eventsCursor, showFailedOnly]);
+  }, [id, eventsCursor]);
 
   const handleLoadMoreStorage = useCallback(async () => {
     if (!storageCursor) return;
     try {
-      const data = await getContractStorage(id, {
-        cursor: storageCursor,
-        limit: 100,
-      });
+      const data = await getContractStorage(id, { cursor: storageCursor, limit: 100 });
       setStorage((prev) => [...prev, ...data.entries]);
       setStorageCursor(data.cursor);
       setStorageHasMore(data.has_more);
@@ -309,6 +267,7 @@ function ContractDetailContent({ id }: { id: string }) {
           >
             {contract?.status}
           </span>
+          <AddToGroup contractId={id} />
         </div>
         {contract?.sync && (
           <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-secondary)]">
@@ -317,7 +276,8 @@ function ContractDetailContent({ id }: { id: string }) {
               Last ledger: {contract.sync.last_ledger.toLocaleString()}
             </span>
             <span>
-              Last sync: {new Date(contract.sync.last_run_at).toLocaleString()}
+              Last sync:{" "}
+              {new Date(contract.sync.last_run_at).toLocaleString()}
             </span>
           </div>
         )}
@@ -382,27 +342,14 @@ function ContractDetailContent({ id }: { id: string }) {
       </section>
 
       <section className="mb-8">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold">Events</h2>
-            {isStreamConnected && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/40 px-2.5 py-0.5 text-xs font-medium text-green-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-                Live
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowFailedOnly(!showFailedOnly)}
-            className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-              showFailedOnly
-                ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
-                : "bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] hover:text-[var(--color-text-primary)]"
-            }`}
-          >
-            Failed Only
-          </button>
+        <div className="mb-4 flex items-center gap-3">
+          <h2 className="text-xl font-semibold">Events</h2>
+          {isStreamConnected && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/40 px-2.5 py-0.5 text-xs font-medium text-green-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+              Live
+            </span>
+          )}
         </div>
         {eventsLoading ? (
           <TableSkeleton />
@@ -436,11 +383,6 @@ function ContractDetailContent({ id }: { id: string }) {
 
       <section className="mb-8">
         <HealthScoreCard contractId={id} />
-      </section>
-
-      <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Notes</h2>
-        <ContractNotes contractId={id} />
       </section>
     </div>
   );

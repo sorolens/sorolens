@@ -275,18 +275,52 @@ export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
 }
 
-// ---- contract notes --------------------------------------------------------
+// ---- groups (contract portfolios) ------------------------------------------
 
-export interface ContractNote {
+export interface Group {
   id: string;
-  contract_id: string;
-  author: string;
-  body: string;
+  owner_id: string;
+  name: string;
   created_at: string;
-  updated_at: string;
 }
 
-export interface ContractNotesResponse {
-  notes: ContractNote[];
+export interface GroupStats {
+  group_id: string;
+  contract_count: number;
+  event_count: number;
+  invocation_count: number;
+  storage_entry_count: number;
+  average_health_score: number;
 }
+
+export interface GroupSummary extends Group {
+  stats: GroupStats;
+}
+
+export interface GroupContract {
+  contract_id: string;
+  network: string;
+  label: string;
+  status: string;
+  health_score: number | null;
+  last_activity_at: string | null;
+}
+
+export interface GroupDetail extends Group {
+  contracts: GroupContract[];
+}
+
+export interface GroupsListResponse {
+  groups: GroupSummary[];
+}
+
+export interface GroupMembershipResponse {
+  group_id: string;
+  contract_id: string;
+}
+
+export interface GroupDeletedResponse {
+  deleted: boolean;
+}
+
 

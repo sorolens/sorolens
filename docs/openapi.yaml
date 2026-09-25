@@ -45,6 +45,8 @@ tags:
     description: Scoped API key management (admin only)
   - name: Watchlist
     description: Per-user contract watchlists
+  - name: Groups
+    description: Per-user contract groups (portfolios) with aggregate statistics
   - name: Watchdog
     description: On-chain watchdog monitoring data
   - name: Notifications
@@ -1487,6 +1489,274 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/groups:
+    get:
+      tags: [Groups]
+      summary: List the caller's contract groups with aggregate statistics
+      operationId: listGroups
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+      responses:
+        "200":
+          description: Groups owned by the caller, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Groups]
+      summary: Create a contract group
+      operationId: createGroup
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/groups/{id}:
+    get:
+      tags: [Groups]
+      summary: Get a group with its member contracts
+      operationId: getGroup
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+        - $ref: "#/components/parameters/GroupID"
+      responses:
+        "200":
+          description: Group detail with per-contract health and last activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      tags: [Groups]
+      summary: Rename a group
+      operationId: updateGroup
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+        - $ref: "#/components/parameters/GroupID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+      responses:
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Groups]
+      summary: Delete a group and its memberships
+      operationId: deleteGroup
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+        - $ref: "#/components/parameters/GroupID"
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupDeleted"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/groups/{id}/contracts:
+    post:
+      tags: [Groups]
+      summary: Add a contract to a group
+      description: |
+        Membership is many-to-many and idempotent: a contract may belong to any
+        number of groups, and re-adding an existing member succeeds.
+      operationId: addGroupContract
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+        - $ref: "#/components/parameters/GroupID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract_id]
+              properties:
+                contract_id:
+                  type: string
+      responses:
+        "201":
+          description: Contract added (or already a member)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMembership"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Groups]
+      summary: Remove a contract from a group
+      operationId: removeGroupContract
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+        - $ref: "#/components/parameters/GroupID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract_id]
+              properties:
+                contract_id:
+                  type: string
+      responses:
+        "200":
+          description: Contract removed (or was not a member)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMembership"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/groups/{id}/contracts/{contractId}:
+    delete:
+      tags: [Groups]
+      summary: Remove a contract from a group (path form)
+      operationId: removeGroupContractByPath
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+        - $ref: "#/components/parameters/GroupID"
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Contract removed (or was not a member)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMembership"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/groups/{id}/stats:
+    get:
+      tags: [Groups]
+      summary: Aggregate statistics across a group's contracts
+      description: |
+        Aggregates the event count, invocation count, storage entry count, and
+        average cached health score across every contract in the group. The
+        average is taken over members that have a cached health score.
+      operationId: getGroupStats
+      security:
+        - IdentityHeaderAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+        - $ref: "#/components/parameters/GroupID"
+      responses:
+        "200":
+          description: Aggregate group statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/watchdog/stats:
     get:
       tags: [Watchdog]
@@ -1825,7 +2095,7 @@ components:
       type: apiKey
       in: header
       name: X-User-ID
-      description: Watchlist endpoints read the user ID from X-User-ID.
+      description: Watchlist and contract-group endpoints read the user ID from X-User-ID.
 
   parameters:
     ContractID:
@@ -1866,6 +2136,14 @@ components:
       schema:
         type: string
       description: Caller user ID.
+    GroupID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Group ID.
 
     AlertCursor:
       name: cursor
@@ -2333,6 +2611,111 @@ components:
       required: [in_watchlist]
       properties:
         in_watchlist:
+          type: boolean
+
+    Group:
+      type: object
+      required: [id, owner_id, name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    GroupStats:
+      type: object
+      required: [group_id, contract_count, event_count, invocation_count, storage_entry_count, average_health_score]
+      properties:
+        group_id:
+          type: string
+          format: uuid
+        contract_count:
+          type: integer
+          format: int64
+        event_count:
+          type: integer
+          format: int64
+        invocation_count:
+          type: integer
+          format: int64
+        storage_entry_count:
+          type: integer
+          format: int64
+        average_health_score:
+          type: number
+          format: double
+          description: Mean cached health score across members that have one; 0 when none do.
+
+    GroupSummary:
+      allOf:
+        - $ref: "#/components/schemas/Group"
+        - type: object
+          required: [stats]
+          properties:
+            stats:
+              $ref: "#/components/schemas/GroupStats"
+
+    GroupList:
+      type: object
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupSummary"
+
+    GroupContract:
+      type: object
+      required: [contract_id, network, label, status, health_score, last_activity_at]
+      properties:
+        contract_id:
+          type: string
+        network:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+        health_score:
+          type: integer
+          nullable: true
+        last_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    GroupDetail:
+      allOf:
+        - $ref: "#/components/schemas/Group"
+        - type: object
+          required: [contracts]
+          properties:
+            contracts:
+              type: array
+              items:
+                $ref: "#/components/schemas/GroupContract"
+
+    GroupMembership:
+      type: object
+      required: [group_id, contract_id]
+      properties:
+        group_id:
+          type: string
+          format: uuid
+        contract_id:
+          type: string
+
+    GroupDeleted:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
           type: boolean
 
     WatchdogStats:

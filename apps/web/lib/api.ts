@@ -1,11 +1,7 @@
 import type {
   AlertsResponse,
   AlertSubscription,
-  BatchContractsRequest,
-  BatchContractsResponse,
   ContractDetail,
-  ContractNote,
-  ContractNotesResponse,
   ContractSnapshot,
   ContractSummary,
   ContractsListResponse,
@@ -26,6 +22,12 @@ import type {
   WatchlistResponse,
   WatchlistStatusResponse,
   HealthScoreResponse,
+  Group,
+  GroupDeletedResponse,
+  GroupDetail,
+  GroupMembershipResponse,
+  GroupsListResponse,
+  GroupStats,
 } from "./types";
 
 
@@ -70,21 +72,14 @@ export function listContractsAll(): Promise<ContractsListResponse> {
   );
 }
 
-export function listContracts(params?: {
-  cursor?: string;
-  limit?: number;
-  network?: string;
-  status?: string;
-  sort?: string;
-  dir?: "asc" | "desc";
-}): Promise<ContractsListResponse> {
+export function listContracts(
+  params?: { cursor?: string; limit?: number; network?: string; status?: string },
+): Promise<ContractsListResponse> {
   const search = new URLSearchParams();
   if (params?.cursor) search.set("cursor", params.cursor);
   if (params?.limit) search.set("limit", String(params.limit));
   if (params?.network) search.set("network", params.network);
   if (params?.status) search.set("status", params.status);
-  if (params?.sort) search.set("sort", params.sort);
-  if (params?.dir) search.set("dir", params.dir);
   const qs = search.toString();
   return fetchJson<ContractsListResponse>(
     `${API_URL}/api/v1/contracts${qs ? "?" + qs : ""}`,
@@ -104,25 +99,6 @@ export function trackContract(
     body: JSON.stringify(req),
     headers,
   });
-}
-
-// batchContracts applies one bulk action (untrack | tag) to many contracts.
-// Like trackContract it forwards the browser identity so the API's RBAC layer
-// can require the contributor role.
-export function batchContracts(
-  req: BatchContractsRequest,
-  userId?: string,
-): Promise<BatchContractsResponse> {
-  const headers: Record<string, string> = {};
-  if (userId) headers["X-User-ID"] = userId;
-  return fetchJson<BatchContractsResponse>(
-    `${API_URL}/api/v1/contracts/batch`,
-    {
-      method: "POST",
-      body: JSON.stringify(req),
-      headers,
-    },
-  );
 }
 
 export function getContract(id: string): Promise<ContractDetail> {
@@ -355,35 +331,87 @@ export function watchlistStatus(
   );
 }
 
-// ---- contract notes --------------------------------------------------------
+// ---- groups (contract portfolios) ------------------------------------------
+//
+// Groups are owned by the X-User-ID caller, the same identity contract the
+// watchlist uses, so every call forwards the browser identity header.
 
-export function getContractNotes(
-  contractId: string,
-): Promise<ContractNotesResponse> {
-  return fetchJson<ContractNotesResponse>(
-    `${API_URL}/api/v1/contracts/${contractId}/notes`,
-  );
+export function listGroups(userId: string): Promise<GroupsListResponse> {
+  return fetchJson<GroupsListResponse>(`${API_URL}/api/v1/groups`, {
+    headers: { "X-User-ID": userId },
+  });
 }
 
-export function createContractNote(
+export function createGroup(name: string, userId: string): Promise<Group> {
+  return fetchJson<Group>(`${API_URL}/api/v1/groups`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+    headers: { "X-User-ID": userId },
+  });
+}
+
+export function getGroup(id: string, userId: string): Promise<GroupDetail> {
+  return fetchJson<GroupDetail>(`${API_URL}/api/v1/groups/${id}`, {
+    headers: { "X-User-ID": userId },
+  });
+}
+
+export function renameGroup(
+  id: string,
+  name: string,
+  userId: string,
+): Promise<Group> {
+  return fetchJson<Group>(`${API_URL}/api/v1/groups/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+    headers: { "X-User-ID": userId },
+  });
+}
+
+export function deleteGroup(
+  id: string,
+  userId: string,
+): Promise<GroupDeletedResponse> {
+  return fetchJson<GroupDeletedResponse>(`${API_URL}/api/v1/groups/${id}`, {
+    method: "DELETE",
+    headers: { "X-User-ID": userId },
+  });
+}
+
+export function getGroupStats(
+  id: string,
+  userId: string,
+): Promise<GroupStats> {
+  return fetchJson<GroupStats>(`${API_URL}/api/v1/groups/${id}/stats`, {
+    headers: { "X-User-ID": userId },
+  });
+}
+
+export function addContractToGroup(
+  groupId: string,
   contractId: string,
-  note: { author: string; body: string },
-): Promise<ContractNote> {
-  return fetchJson<ContractNote>(
-    `${API_URL}/api/v1/contracts/${contractId}/notes`,
+  userId: string,
+): Promise<GroupMembershipResponse> {
+  return fetchJson<GroupMembershipResponse>(
+    `${API_URL}/api/v1/groups/${groupId}/contracts`,
     {
       method: "POST",
-      body: JSON.stringify(note),
+      body: JSON.stringify({ contract_id: contractId }),
+      headers: { "X-User-ID": userId },
     },
   );
 }
 
-export function deleteContractNote(
+export function removeContractFromGroup(
+  groupId: string,
   contractId: string,
-  noteId: string,
-): Promise<{ deleted: boolean; id: string }> {
-  return fetchJson<{ deleted: boolean; id: string }>(
-    `${API_URL}/api/v1/contracts/${contractId}/notes/${noteId}`,
-    { method: "DELETE" },
+  userId: string,
+): Promise<GroupMembershipResponse> {
+  return fetchJson<GroupMembershipResponse>(
+    `${API_URL}/api/v1/groups/${groupId}/contracts/${contractId}`,
+    {
+      method: "DELETE",
+      headers: { "X-User-ID": userId },
+    },
   );
 }
