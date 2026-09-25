@@ -812,6 +812,43 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/contracts/{id}/snapshot.json:
+    get:
+      tags: [Snapshots]
+      summary: Portable JSON export of a contract's current state
+      operationId: exportContractSnapshot
+      description: |
+        Returns the contract's current state as a single versioned JSON
+        document: metadata, storage, recent events, and summary. The shape is
+        frozen by `schema_version` and is deterministic for an unchanged store
+        (stable field order, sorted collections, no wall-clock fields), so
+        exports can be archived or diffed. When the client advertises
+        `Accept-Encoding: gzip` the body is gzip-compressed.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: Versioned contract snapshot export
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: attachment; filename="<contract_id>-snapshot.json"
+            Content-Encoding:
+              schema:
+                type: string
+              description: gzip when the client advertises Accept-Encoding gzip.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractSnapshotExport"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/contracts/{id}/stream:
     get:
       tags: [Events]
@@ -2036,6 +2073,54 @@ components:
             - $ref: "#/components/schemas/Event"
           nullable: true
           type: object
+
+    ContractSnapshotExport:
+      type: object
+      required: [schema_version, contract_id, network, ledger, metadata, storage, events, summary]
+      properties:
+        schema_version:
+          type: integer
+          description: Version of the export shape; currently 1.
+        contract_id:
+          type: string
+        network:
+          type: string
+        ledger:
+          type: integer
+          format: int32
+          description: Newest indexed ledger the export is keyed to.
+        metadata:
+          $ref: "#/components/schemas/Contract"
+        storage:
+          type: array
+          description: Live storage entries, one per key, sorted by key_xdr.
+          items:
+            $ref: "#/components/schemas/StorageEntry"
+        events:
+          type: array
+          description: Most recent events, newest first (up to 50).
+          items:
+            $ref: "#/components/schemas/Event"
+        summary:
+          type: object
+          required: [storage_count, event_count, first_tracked_ledger]
+          properties:
+            storage_count:
+              type: integer
+            event_count:
+              type: integer
+            first_tracked_ledger:
+              type: integer
+              format: int32
+            last_event_id:
+              type: string
+              description: Omitted when the contract has no events.
+            last_event_ledger:
+              type: integer
+              format: int32
+            storage_truncated:
+              type: boolean
+              description: Present and true only when storage hit the 1000-entry cap.
 
     APIKey:
       type: object
