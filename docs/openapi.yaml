@@ -56,42 +56,6 @@ tags:
 
 paths:
 
-  /debug/pprof:
-    get:
-      summary: Admin pprof index
-  /debug/pprof/allocs:
-    get:
-      summary: Admin pprof allocs profile
-  /debug/pprof/block:
-    get:
-      summary: Admin pprof block profile
-  /debug/pprof/cmdline:
-    get:
-      summary: Admin pprof command line
-  /debug/pprof/goroutine:
-    get:
-      summary: Admin pprof goroutine profile
-  /debug/pprof/heap:
-    get:
-      summary: Admin pprof heap profile
-  /debug/pprof/mutex:
-    get:
-      summary: Admin pprof mutex profile
-  /debug/pprof/profile:
-    get:
-      summary: Admin pprof CPU profile
-  /debug/pprof/symbol:
-    get:
-      summary: Admin pprof symbol lookup
-    post:
-      summary: Admin pprof symbol lookup
-  /debug/pprof/threadcreate:
-    get:
-      summary: Admin pprof thread profile
-  /debug/pprof/trace:
-    get:
-      summary: Admin pprof execution trace
-
   /api/v1/labels:
     get:
       summary: Search visible account labels

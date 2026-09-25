@@ -153,7 +153,6 @@ function ContractDetailContent({ id }: { id: string }) {
   useEffect(() => {
     let cancelled = false;
 
-
     async function loadEvents() {
       setEventsLoading(true);
       try {

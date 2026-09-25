@@ -15,7 +15,7 @@ import {
 import type { ContractRow } from "@/lib/optimisticTrack";
 import { TableSkeleton } from "@/components/Skeleton";
 import ImportContractsCsv from "@/components/ImportContractsCsv";
-import LabelledId from "@/components/LabelledId";
+import { LabelledId } from "@/components/LabelledId";
 
 // RBAC identity: same localStorage key the watchlist page uses, so the UI
 // registers a contract under the same user identity. Must map to a user
