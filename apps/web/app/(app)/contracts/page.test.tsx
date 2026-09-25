@@ -41,14 +41,19 @@ vi.mock("@sorolens/ui", async (importOriginal) => ({
     onRowClick,
   }: {
     data: T[];
-    columns: { key: string; header: string; accessor?: (item: T) => React.ReactNode }[];
+    columns: {
+      key: string;
+      header: string;
+      accessor?: (item: T) => React.ReactNode;
+    }[];
     rowKey: (item: T) => string;
     loading?: boolean;
     emptyState?: React.ReactNode;
     onRowClick?: (item: T) => void;
   }) => {
     if (loading) return <div data-testid="data-table-loading">loading</div>;
-    if (data.length === 0) return <div data-testid="data-table-empty">{emptyState}</div>;
+    if (data.length === 0)
+      return <div data-testid="data-table-empty">{emptyState}</div>;
     return (
       <table data-testid="data-table">
         <tbody>
@@ -72,7 +77,9 @@ vi.mock("@sorolens/ui", async (importOriginal) => ({
     );
   },
   MonoId: ({ value }: { value: string }) => (
-    <span data-testid="mono-id">{value.slice(0, 8)}…{value.slice(-8)}</span>
+    <span data-testid="mono-id">
+      {value.slice(0, 8)}…{value.slice(-8)}
+    </span>
   ),
 }));
 
@@ -86,7 +93,7 @@ vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
     constructor(
       public status: number,
-      message: string,
+      message: string
     ) {
       super(message);
       this.name = "ApiError";
@@ -97,7 +104,9 @@ vi.mock("@/lib/api", () => ({
 // ── Mock @/components/Skeleton ───────────────────────────────────────────────
 vi.mock("@/components/Skeleton", () => ({
   TableSkeleton: ({ rows }: { rows?: number }) => (
-    <div data-testid="table-skeleton" data-rows={rows}>skeleton</div>
+    <div data-testid="table-skeleton" data-rows={rows}>
+      skeleton
+    </div>
   ),
 }));
 
@@ -169,7 +178,7 @@ function submitTrack(contractId: string, label?: string) {
     });
   }
   const submitEl = document.getElementById(
-    "track-modal-submit",
+    "track-modal-submit"
   ) as HTMLButtonElement;
   fireEvent.submit(submitEl.closest("form")!);
 }
@@ -192,9 +201,8 @@ describe("ContractsPage", () => {
 
   // Helper: dynamic import so mocks are in place before module loads
   async function renderPage() {
-    const { default: ContractsPage } = await import(
-      "@/app/(app)/contracts/page"
-    );
+    const { default: ContractsPage } =
+      await import("@/app/(app)/contracts/page");
     return render(<ContractsPage />);
   }
 
@@ -219,7 +227,7 @@ describe("ContractsPage", () => {
   it("renders the DataTable with contracts after loading", async () => {
     await renderPage();
     await waitFor(() =>
-      expect(screen.queryByTestId("table-skeleton")).toBeNull(),
+      expect(screen.queryByTestId("table-skeleton")).toBeNull()
     );
     expect(screen.getByTestId("data-table")).toBeDefined();
   });
@@ -261,7 +269,7 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const search = screen.getByPlaceholderText(
-      /search by alias or contract id/i,
+      /search by alias or contract id/i
     );
     fireEvent.change(search, { target: { value: "My Contract" } });
 
@@ -279,7 +287,7 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const search = screen.getByPlaceholderText(
-      /search by alias or contract id/i,
+      /search by alias or contract id/i
     );
     // CONTRACT_A id starts with CAAAA, CONTRACT_B with CBBBB
     fireEvent.change(search, { target: { value: "CBBBB" } });
@@ -298,11 +306,9 @@ describe("ContractsPage", () => {
     });
     await renderPage();
     await waitFor(() =>
-      expect(screen.queryByTestId("table-skeleton")).toBeNull(),
+      expect(screen.queryByTestId("table-skeleton")).toBeNull()
     );
-    expect(
-      screen.getByText(/no contracts tracked yet/i),
-    ).toBeDefined();
+    expect(screen.getByText(/no contracts tracked yet/i)).toBeDefined();
   });
 
   // ── Happy path: track contract modal open/close ────────────────────────────
@@ -324,9 +330,7 @@ describe("ContractsPage", () => {
     expect(screen.getByRole("dialog")).toBeDefined();
 
     fireEvent.keyDown(window, { key: "Escape" });
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog")).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   // ── Validation: invalid contract ID is rejected ────────────────────────────
@@ -341,7 +345,7 @@ describe("ContractsPage", () => {
     fireEvent.change(input, { target: { value: "NOT_A_VALID_ID" } });
 
     expect(
-      screen.getByText(/contract id must be 56 characters/i),
+      screen.getByText(/contract id must be 56 characters/i)
     ).toBeDefined();
   });
 
@@ -354,7 +358,9 @@ describe("ContractsPage", () => {
     const input = screen.getByLabelText(/contract id/i);
     fireEvent.change(input, { target: { value: "BAD" } });
 
-    const submitEl = document.getElementById("track-modal-submit") as HTMLButtonElement;
+    const submitEl = document.getElementById(
+      "track-modal-submit"
+    ) as HTMLButtonElement;
     expect(submitEl?.disabled).toBe(true);
   });
 
@@ -374,8 +380,8 @@ describe("ContractsPage", () => {
           id: VALID_CONTRACT_ID,
           label: undefined,
         },
-        "",
-      ),
+        ""
+      )
     );
     // Modal closes on submit
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -411,7 +417,7 @@ describe("ContractsPage", () => {
     expect(screen.getByRole("link", { name: "My Contract" })).toBeDefined();
     expect(
       (document.getElementById("track-contract-btn") as HTMLButtonElement)
-        .disabled,
+        .disabled
     ).toBe(true);
 
     await act(async () => track.resolve(NEW_CONTRACT));
@@ -441,7 +447,7 @@ describe("ContractsPage", () => {
     const rows = rowTexts();
     expect(rows).toHaveLength(3);
     expect(
-      rows.filter((r) => r.includes(VALID_CONTRACT_ID.slice(0, 8))),
+      rows.filter((r) => r.includes(VALID_CONTRACT_ID.slice(0, 8)))
     ).toHaveLength(1);
     expect(rows.some((r) => r.includes("pending"))).toBe(false);
     expect(rows.slice(1)).toEqual(before);
@@ -462,12 +468,12 @@ describe("ContractsPage", () => {
     expect(rowTexts()).toHaveLength(3);
 
     await act(async () =>
-      track.reject(new ApiError(409, "Contract already tracked")),
+      track.reject(new ApiError(409, "Contract already tracked"))
     );
 
     const toast = await screen.findByRole("alert");
     expect(toast.textContent).toContain(
-      "Couldn't track contract: Contract already tracked",
+      "Couldn't track contract: Contract already tracked"
     );
     expect(rowTexts()).toEqual(before);
     // Rolled back locally, not refetched.
@@ -475,7 +481,7 @@ describe("ContractsPage", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(
       (document.getElementById("track-contract-btn") as HTMLButtonElement)
-        .disabled,
+        .disabled
     ).toBe(false);
   });
 
@@ -490,7 +496,7 @@ describe("ContractsPage", () => {
 
     const toast = await screen.findByRole("alert");
     expect(toast.textContent).toContain(
-      "Couldn't track contract. Please try again.",
+      "Couldn't track contract. Please try again."
     );
     expect(rowTexts()).toEqual(before);
   });
@@ -506,7 +512,7 @@ describe("ContractsPage", () => {
     expect(screen.getByRole("dialog")).toBeDefined();
     // The only alert is the inline validation message, not a toast.
     expect(screen.getByRole("alert").textContent).toMatch(
-      /contract id must be 56 characters/i,
+      /contract id must be 56 characters/i
     );
     expect(screen.queryByText(/couldn't track contract/i)).toBeNull();
     expect(rowTexts()).toEqual(before);
@@ -531,7 +537,7 @@ describe("ContractsPage", () => {
         contracts: [CONTRACT_A, CONTRACT_B],
         cursor: null,
         has_more: false,
-      }),
+      })
     );
     expect(rowTexts()).toHaveLength(1);
     expect(rowTexts()[0]).toContain("New Contract");
@@ -551,7 +557,7 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const prevBtn = document.getElementById(
-      "contracts-prev-page",
+      "contracts-prev-page"
     ) as HTMLButtonElement;
     expect(prevBtn?.disabled).toBe(true);
   });
@@ -563,7 +569,7 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const nextBtn = document.getElementById(
-      "contracts-next-page",
+      "contracts-next-page"
     ) as HTMLButtonElement;
     expect(nextBtn?.disabled).toBe(true);
   });
@@ -587,15 +593,13 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const nextBtn = document.getElementById(
-      "contracts-next-page",
+      "contracts-next-page"
     ) as HTMLButtonElement;
     expect(nextBtn?.disabled).toBe(false);
 
     fireEvent.click(nextBtn);
 
     // listContracts should be called a second time for page 2
-    await waitFor(() =>
-      expect(mockListContracts).toHaveBeenCalledTimes(2),
-    );
+    await waitFor(() => expect(mockListContracts).toHaveBeenCalledTimes(2));
   });
 });

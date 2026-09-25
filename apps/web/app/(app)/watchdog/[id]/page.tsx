@@ -17,7 +17,11 @@ import type {
   UptimeWindow,
 } from "@/lib/types";
 import { CardSkeleton, TableSkeleton } from "@/components/Skeleton";
-import { HealthBadge, SeverityBadge, UptimeBadge } from "@/components/WatchdogBadges";
+import {
+  HealthBadge,
+  SeverityBadge,
+  UptimeBadge,
+} from "@/components/WatchdogBadges";
 import { WatchdogTimeline } from "@/components/WatchdogTimeline";
 
 interface Props {
@@ -125,10 +129,14 @@ function Content({ id }: { id: string }) {
           <dl className="mt-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
             <div>
               <dt className="text-[var(--color-text-secondary)]">Owner</dt>
-              <dd className="mt-1 truncate font-mono text-xs">{contract.owner}</dd>
+              <dd className="mt-1 truncate font-mono text-xs">
+                {contract.owner}
+              </dd>
             </div>
             <div>
-              <dt className="text-[var(--color-text-secondary)]">Check interval</dt>
+              <dt className="text-[var(--color-text-secondary)]">
+                Check interval
+              </dt>
               <dd className="mt-1 tabular-nums">{contract.check_interval}s</dd>
             </div>
             <div>

@@ -19,10 +19,13 @@ type APIStore interface {
 	store.HealthScoreStore
 	store.APIKeyStore
 	store.AlertSubscriptionStore
+	store.AlertGroupStore
 	store.WatchlistStore
 	store.UserStore
 	store.PerformanceStore
+	store.FailedEventStore
 	store.GlobalEventStore
+	store.LabelStore
 }
 
 // Pinger is implemented by both the postgres pool and the Redis client.
@@ -57,6 +60,11 @@ type Handler struct {
 	// StreamTimeout bounds one SSE connection. Zero means
 	// middleware.DefaultStreamTimeout.
 	StreamTimeout time.Duration
+
+	// ReportSigningKey signs exported SLA reports (issue #266). When empty the
+	// reporting handlers fall back to REPORT_SIGNING_KEY; with neither set the
+	// reports are emitted unsigned and every response says so.
+	ReportSigningKey string
 
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.

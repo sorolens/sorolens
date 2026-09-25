@@ -117,12 +117,12 @@ describe("getResourceTrend", () => {
     mockGetContractInvocations
       .mockResolvedValueOnce({
         invocations: [invocation({ ledger_closed_at: "2026-07-01T08:00:00Z" })],
-        cursor: "next",
+        next_cursor: "next",
         has_more: true,
       })
       .mockResolvedValueOnce({
         invocations: [invocation({ ledger_closed_at: "2026-07-02T08:00:00Z" })],
-        cursor: null,
+        next_cursor: null,
         has_more: false,
       });
 

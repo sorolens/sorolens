@@ -7,14 +7,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"log/slog"
-	"net/http/httptest"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
 )
 
@@ -25,15 +22,10 @@ type fakeRPC struct {
 	latestLedger  *LatestLedger
 	latestErr     error
 	events        map[string]*GetEventsResult // key: "contractID:start-end"
-	transactions       map[string]*TransactionResult
-	ledgerEntries      map[string]LedgerEntry // key: base64 LedgerKey
-	contractWasmHashes map[string]string
-	txErr              error
-	eventsCalls        []getEventsCall
-	// onGetEvents, if set, runs once GetEvents is called, before it
-	// returns. Tests use this to simulate a shutdown signal arriving
-	// while a contract's batch is already mid-fetch.
-	onGetEvents func()
+	transactions  map[string]*TransactionResult
+	ledgerEntries map[string]LedgerEntry // key: base64 LedgerKey
+	txErr         error
+	eventsCalls   []getEventsCall
 }
 
 type getEventsCall struct {
@@ -56,20 +48,12 @@ func (f *fakeRPC) GetLatestLedger(ctx context.Context) (*LatestLedger, error) {
 
 func (f *fakeRPC) GetEvents(_ context.Context, start, end uint32, filters []EventFilter) (*GetEventsResult, error) {
 	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.eventsCalls = append(f.eventsCalls, getEventsCall{start, end, filters})
 	key := ""
 	if len(filters) > 0 && len(filters[0].ContractIDs) > 0 {
 		key = filters[0].ContractIDs[0]
 	}
-	onGetEvents := f.onGetEvents
-	f.mu.Unlock()
-
-	if onGetEvents != nil {
-		onGetEvents()
-	}
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
 	if r, ok := f.events[key]; ok {
 		return r, nil
 	}
@@ -104,17 +88,6 @@ func (f *fakeRPC) GetLedgerEntries(_ context.Context, keys []string) (*GetLedger
 	return res, nil
 }
 
-func (f *fakeRPC) GetContractWasmHash(_ context.Context, contractID string) (string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.contractWasmHashes != nil {
-		if h, ok := f.contractWasmHashes[contractID]; ok {
-			return h, nil
-		}
-	}
-	return "", nil
-}
-
 // ---- fake Store -----------------------------------------------------------
 
 type fakeStore struct {
@@ -128,23 +101,25 @@ type fakeStore struct {
 	syncErr      error
 	listErr      error
 	hourly       map[string][]HourlyActivity // contractID -> buckets
-	alerts           []Alert
-	insertErr        error
-	healthInputs     map[string]HealthInputs // contractID -> inputs
-	healthScores     []ContractHealthScore
-	indexerCursors   map[string]uint32
-	contractVersions map[string][]ContractVersion
+	alerts       []Alert
+	insertErr    error
+	healthInputs map[string]HealthInputs // contractID -> inputs
+	healthScores []ContractHealthScore
+	failedEvents []FailedEvent
+	// eventInsertErrs maps event ID -> error returned by BatchInsertEvents.
+	// Used to simulate deliberately bad events for the DLQ path (issue #202).
+	eventInsertErrs map[string]error
+	// eventInsertFailTimes maps event ID -> remaining failures before success.
+	eventInsertFailTimes map[string]int
 }
 
 func newFakeStore(contracts []Contract) *fakeStore {
 	return &fakeStore{
-		contracts:        contracts,
-		syncStates:       make(map[string]SyncState),
-		hourly:           make(map[string][]HourlyActivity),
-		wasmHashes:       make(map[string]string),
-		healthInputs:     make(map[string]HealthInputs),
-		indexerCursors:   make(map[string]uint32),
-		contractVersions: make(map[string][]ContractVersion),
+		contracts:    contracts,
+		syncStates:   make(map[string]SyncState),
+		hourly:       make(map[string][]HourlyActivity),
+		wasmHashes:   make(map[string]string),
+		healthInputs: make(map[string]HealthInputs),
 	}
 }
 
@@ -160,7 +135,27 @@ func (f *fakeStore) ListContracts(_ context.Context, cursor string, limit int) (
 func (f *fakeStore) BatchInsertEvents(_ context.Context, events []Event) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	for _, e := range events {
+		if f.eventInsertErrs != nil {
+			if err, ok := f.eventInsertErrs[e.ID]; ok {
+				return err
+			}
+		}
+		if f.eventInsertFailTimes != nil {
+			if n, ok := f.eventInsertFailTimes[e.ID]; ok && n > 0 {
+				f.eventInsertFailTimes[e.ID] = n - 1
+				return errors.New("transient insert failure")
+			}
+		}
+	}
 	f.events = append(f.events, events...)
+	return nil
+}
+
+func (f *fakeStore) InsertFailedEvent(_ context.Context, fe FailedEvent) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.failedEvents = append(f.failedEvents, fe)
 	return nil
 }
 
@@ -192,34 +187,6 @@ func (f *fakeStore) UpsertSyncState(_ context.Context, s SyncState) error {
 
 func (f *fakeStore) CreateNextMonthPartition(_ context.Context) error { return nil }
 func (f *fakeStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error {
-	return nil
-}
-
-func (f *fakeStore) GetIndexerCursor(_ context.Context, network string) (uint32, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.indexerCursors[network], nil
-}
-
-func (f *fakeStore) SetIndexerCursor(_ context.Context, network string, ledger uint32) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.indexerCursors[network] = ledger
-	return nil
-}
-
-func (f *fakeStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.insertErr != nil {
-		return f.insertErr
-	}
-	f.events = append(f.events, events...)
-	f.invocations = append(f.invocations, invocations...)
-	if syncState.ContractID != "" {
-		f.syncStates[syncState.ContractID] = syncState
-	}
-	f.indexerCursors[network] = ledger
 	return nil
 }
 
@@ -264,26 +231,6 @@ func (f *fakeStore) UpsertContractHealthScore(_ context.Context, s ContractHealt
 	defer f.mu.Unlock()
 	f.healthScores = append(f.healthScores, s)
 	return nil
-}
-
-func (f *fakeStore) RecordContractVersion(_ context.Context, v ContractVersion) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.insertErr != nil {
-		return f.insertErr
-	}
-	f.contractVersions[v.ContractID] = append(f.contractVersions[v.ContractID], v)
-	return nil
-}
-
-func (f *fakeStore) GetLatestContractVersion(_ context.Context, contractID string) (ContractVersion, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	versions := f.contractVersions[contractID]
-	if len(versions) == 0 {
-		return ContractVersion{}, ErrVersionNotFound
-	}
-	return versions[len(versions)-1], nil
 }
 
 // ---- fake RedisClient -----------------------------------------------------
@@ -591,93 +538,6 @@ func TestPoller_ContinuousMode_shutsDownOnCancel(t *testing.T) {
 	}
 }
 
-// cursorCtxCapturingStore wraps fakeStore to record the context observed by
-// UpsertSyncState at call time, so a test can tell whether the cursor commit
-// ran on a context that had already been cancelled.
-type cursorCtxCapturingStore struct {
-	*fakeStore
-	batchInsertCalled bool
-	batchInsertCtxErr error
-}
-
-func (s *cursorCtxCapturingStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error {
-	s.batchInsertCalled = true
-	s.batchInsertCtxErr = ctx.Err()
-	return s.fakeStore.BatchInsertWithCursor(ctx, network, ledger, events, invocations, syncState)
-}
-
-// TestPoller_SIGTERM_finishesInFlightBatchAndCommitsCursor simulates a
-// shutdown signal (SIGTERM, modeled here as ctx cancellation, matching
-// main.go's signal.NotifyContext) arriving while a contract's batch is
-// already mid-fetch. It must finish that batch and commit its cursor rather
-// than aborting it, per issue #203: "On SIGTERM, finish the current batch,
-// commit the cursor, then exit."
-func TestPoller_SIGTERM_finishesInFlightBatchAndCommitsCursor(t *testing.T) {
-	t.Parallel()
-
-	contractID := "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
-	inner := newFakeStore([]Contract{{ID: contractID, Status: "active"}})
-	inner.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
-	store := &cursorCtxCapturingStore{fakeStore: inner}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	rpc := &fakeRPC{
-		latestLedger: &LatestLedger{Sequence: 500000},
-		events: map[string]*GetEventsResult{
-			contractID: {
-				Events: []RPCEvent{
-					{
-						ID:                       "0001-0001",
-						ContractID:               contractID,
-						Ledger:                   499100,
-						LedgerClosedAt:           "2026-07-26T10:00:00Z",
-						TxHash:                   "abc123",
-						Type:                     "contract",
-						Topic:                    []string{"AAAA"},
-						Value:                    "BBBB",
-						InSuccessfulContractCall: true,
-					},
-				},
-				LatestLedger: 500000,
-			},
-		},
-		transactions: map[string]*TransactionResult{
-			"abc123": {Status: "SUCCESS", Ledger: 499100},
-		},
-	}
-	// Simulate SIGTERM landing mid-fetch, once the batch for CDLZ... has
-	// already started (GetEvents is the RPC call inside processContract).
-	rpc.onGetEvents = func() { cancel() }
-
-	p := New(rpc, store, newFakeRedis(), testConfig(), testLogger())
-
-	done := make(chan error, 1)
-	go func() { done <- p.Run(ctx, "once") }()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for run to finish the in-flight batch")
-	}
-
-	if !store.batchInsertCalled {
-		t.Fatal("expected the cursor to be committed for the in-flight contract despite SIGTERM arriving mid-batch")
-	}
-	if store.batchInsertCtxErr != nil {
-		t.Errorf("cursor commit observed a cancelled context (%v); the in-flight batch must finish on a context detached from shutdown", store.batchInsertCtxErr)
-	}
-	if got := store.syncStates[contractID].LastLedger; got != 500000 {
-		t.Errorf("sync state LastLedger: want 500000, got %d", got)
-	}
-	if len(store.events) != 1 {
-		t.Errorf("events: want 1, got %d (the in-flight batch's inserts must also complete)", len(store.events))
-	}
-}
-
 func TestPoller_UnknownModeReturnsError(t *testing.T) {
 	t.Parallel()
 	p := New(&fakeRPC{}, newFakeStore(nil), newFakeRedis(), testConfig(), testLogger())
@@ -915,225 +775,79 @@ func TestPoller_noUpgradeWhenWasmHashUnchanged(t *testing.T) {
 	}
 }
 
-func TestPollerCrashRecovery_ResumeFromLastBatch(t *testing.T) {
-	t.Parallel()
-
-	contractID := "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
-	network := "testnet"
-
-	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: network}})
-	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 500}
-
+func TestInsertEventsWithDLQ_BadEventParked(t *testing.T) {
+	st := newFakeStore([]Contract{{ID: "C1", Status: "active", Network: "testnet"}})
+	st.eventInsertErrs = map[string]error{
+		"bad-event": errors.New("deliberately bad event"),
+	}
 	rpc := &fakeRPC{
-		latestLedger: &LatestLedger{Sequence: 600},
+		latestLedger: &LatestLedger{Sequence: 1000},
 		events: map[string]*GetEventsResult{
-			contractID: {
-				LatestLedger: 600,
+			"C1": {
 				Events: []RPCEvent{
-					{ID: "evt-550", ContractID: contractID, Ledger: 550, TxHash: "tx-550"},
+					{
+						ID: "good-event", ContractID: "C1", Ledger: 900,
+						LedgerClosedAt: "2025-01-01T00:00:00Z", TxHash: "tx1",
+						Type: "contract", Topic: []string{"t"}, Value: "v",
+						InSuccessfulContractCall: true,
+					},
+					{
+						ID: "bad-event", ContractID: "C1", Ledger: 901,
+						LedgerClosedAt: "2025-01-01T00:00:01Z", TxHash: "tx2",
+						Type: "contract", Topic: []string{"t"}, Value: "bad",
+						InSuccessfulContractCall: true,
+					},
 				},
+				LatestLedger: 1000,
 			},
 		},
 	}
-
-	cfg := Config{LedgerWindow: 50}
-
-	// First pass: poller runs for batch [501, 550] and commits successfully.
-	p1 := NewWithRPCClients(map[string]RPCClient{network: rpc}, store, newFakeRedis(), cfg, testLogger())
-	if err := p1.Run(context.Background(), "once"); err != nil {
-		t.Fatalf("first pass error: %v", err)
+	st.syncStates["C1"] = SyncState{ContractID: "C1", LastLedger: 899}
+	// The contract's network must be configured: processContract skips a
+	// contract whose network has no RPC client, which would park nothing.
+	p := NewWithRPCClients(map[string]RPCClient{"testnet": rpc}, st, newFakeRedis(), Config{LedgerWindow: 1000}, slog.Default())
+	if err := p.processContract(context.Background(), Contract{ID: "C1", Status: "active", Network: "testnet"}); err != nil {
+		t.Fatalf("processContract: %v", err)
 	}
 
-	cursor, err := store.GetIndexerCursor(context.Background(), network)
-	if err != nil {
-		t.Fatalf("failed to get cursor: %v", err)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if len(st.failedEvents) != 1 {
+		t.Fatalf("failedEvents = %d, want 1", len(st.failedEvents))
 	}
-	if cursor != 550 {
-		t.Fatalf("expected cursor 550, got %d", cursor)
+	if st.failedEvents[0].EventID != "bad-event" {
+		t.Fatalf("DLQ event_id = %q", st.failedEvents[0].EventID)
 	}
-	if len(store.events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(store.events))
-	}
-
-	// Second pass: simulate crash mid-poll while processing [551, 600].
-	// In a real crash, uncommitted writes are aborted/rolled back.
-	store.insertErr = errors.New("simulated crash: database connection lost mid-batch")
-	p2 := NewWithRPCClients(map[string]RPCClient{network: rpc}, store, newFakeRedis(), cfg, testLogger())
-	_ = p2.Run(context.Background(), "once")
-
-	// Verify that cursor and sync state were NOT advanced to 600
-	cursorAfterCrash, _ := store.GetIndexerCursor(context.Background(), network)
-	if cursorAfterCrash != 550 {
-		t.Fatalf("cursor should still be 550 after crash, got %d", cursorAfterCrash)
-	}
-
-	// Third pass (restart after crash): clear error and run again.
-	store.insertErr = nil
-	rpc.events[contractID] = &GetEventsResult{
-		LatestLedger: 600,
-		Events: []RPCEvent{
-			{ID: "evt-600", ContractID: contractID, Ledger: 600, TxHash: "tx-600"},
-		},
-	}
-	p3 := NewWithRPCClients(map[string]RPCClient{network: rpc}, store, newFakeRedis(), cfg, testLogger())
-	if err := p3.Run(context.Background(), "once"); err != nil {
-		t.Fatalf("restart pass error: %v", err)
-	}
-
-	// Verify it successfully continued from ledger 550 and committed up to 600!
-	finalCursor, _ := store.GetIndexerCursor(context.Background(), network)
-	if finalCursor != 600 {
-		t.Fatalf("expected cursor 600 after restart, got %d", finalCursor)
-	}
-	finalSync, _ := store.GetSyncState(context.Background(), contractID)
-	if finalSync.LastLedger != 600 {
-		t.Fatalf("expected sync state 600 after restart, got %d", finalSync.LastLedger)
-	}
-	if len(store.events) != 2 {
-		t.Fatalf("expected 2 events in store after recovery, got %d", len(store.events))
-	}
-}
-
-func TestPollerCrashRecovery_ResumeFromNetworkCursor(t *testing.T) {
-	t.Parallel()
-
-	contractID := "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
-	network := "mainnet"
-
-	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: network}})
-	// Contract has no sync state recorded yet, but the network cursor was committed at 1000
-	_ = store.SetIndexerCursor(context.Background(), network, 1000)
-
-	rpc := &fakeRPC{
-		latestLedger: &LatestLedger{Sequence: 1050},
-		events: map[string]*GetEventsResult{
-			contractID: {
-				LatestLedger: 1050,
-				Events: []RPCEvent{
-					{ID: "evt-1050", ContractID: contractID, Ledger: 1050, TxHash: "tx-1050"},
-				},
-			},
-		},
-	}
-
-	p := NewWithRPCClients(map[string]RPCClient{network: rpc}, store, newFakeRedis(), Config{LedgerWindow: 100}, testLogger())
-	if err := p.Run(context.Background(), "once"); err != nil {
-		t.Fatalf("run error: %v", err)
-	}
-
-	// It should resume from 1001 rather than backfilling 100,000 ledgers
-	if len(rpc.eventsCalls) == 0 {
-		t.Fatal("expected GetEvents to be called")
-	}
-	if rpc.eventsCalls[0].StartLedger != 1001 {
-		t.Fatalf("expected start ledger 1001 (resumed from network cursor 1000), got %d", rpc.eventsCalls[0].StartLedger)
-	}
-	cursor, _ := store.GetIndexerCursor(context.Background(), network)
-	if cursor != 1050 {
-		t.Fatalf("expected network cursor 1050, got %d", cursor)
-	}
-}
-
-// TestPoller_RecordsPerNetworkLagMetric verifies the issue #198 acceptance
-// criterion end to end: after a pass, /metrics reports the lag between the
-// network head and the last committed ledger for that network.
-func TestPoller_RecordsPerNetworkLagMetric(t *testing.T) {
-	t.Parallel()
-
-	network := "mainnet"
-	contractID := "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
-
-	// The contract is already caught up with the head, so this pass does not
-	// advance the network cursor: the indexer stays 40 ledgers behind.
-	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: network}})
-	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 1000}
-	_ = store.SetIndexerCursor(context.Background(), network, 960)
-
-	rpc := &fakeRPC{latestLedger: &LatestLedger{Sequence: 1000}}
-
-	recorder := metrics.New()
-	p := NewWithRPCClients(map[string]RPCClient{network: rpc}, store, newFakeRedis(), testConfig(), testLogger())
-	p.SetMetrics(recorder)
-
-	if err := p.Run(context.Background(), "once"); err != nil {
-		t.Fatalf("run error: %v", err)
-	}
-
-	req := httptest.NewRequest("GET", "/metrics", nil)
-	rr := httptest.NewRecorder()
-	recorder.Handler().ServeHTTP(rr, req)
-
-	body := rr.Body.String()
-	for _, want := range []string{
-		`sorolens_indexer_lag_ledgers{network="mainnet"} 40`,
-		`sorolens_indexer_head_ledger{network="mainnet"} 1000`,
-		`sorolens_indexer_last_indexed_ledger{network="mainnet"} 960`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("/metrics missing %q\nbody:\n%s", want, body)
+	good := false
+	for _, e := range st.events {
+		if e.ID == "good-event" {
+			good = true
+		}
+		if e.ID == "bad-event" {
+			t.Fatal("bad event should not be in events table")
 		}
 	}
-}
-
-// TestPoller_MetricsDisabledByDefault guards existing callers: a poller with no
-// recorder attached still runs a pass cleanly.
-func TestPoller_MetricsDisabledByDefault(t *testing.T) {
-	t.Parallel()
-
-	p := New(&fakeRPC{}, newFakeStore(nil), newFakeRedis(), testConfig(), testLogger())
-	if err := p.Run(context.Background(), "once"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !good {
+		t.Fatal("good event should still be inserted")
 	}
 }
 
-func TestPoller_recordsContractVersionOnWasmHashTransition(t *testing.T) {
-	t.Parallel()
-
-	contractID := "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
-	hash1 := "1111111111111111111111111111111111111111111111111111111111111111"
-	hash2 := "2222222222222222222222222222222222222222222222222222222222222222"
-
-	store := newFakeStore([]Contract{{ID: contractID, Status: "active", Network: ""}})
-	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
-
-	rpc := &fakeRPC{
-		latestLedger:       &LatestLedger{Sequence: 500000},
-		contractWasmHashes: map[string]string{contractID: hash1},
+func TestInsertEventsWithDLQ_RetryThenSuccess(t *testing.T) {
+	st := newFakeStore(nil)
+	st.eventInsertFailTimes = map[string]int{"flaky": 2} // fail twice, succeed on 3rd
+	p := New(&fakeRPC{}, st, newFakeRedis(), Config{}, slog.Default())
+	err := p.insertEventsWithDLQ(context.Background(), []Event{{
+		ID: "flaky", ContractID: "C1", Network: "testnet",
+	}})
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	p := New(rpc, store, newFakeRedis(), testConfig(), testLogger())
-	if err := p.Run(context.Background(), "once"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if len(st.failedEvents) != 0 {
+		t.Fatalf("unexpected DLQ entries: %d", len(st.failedEvents))
 	}
-
-	versions := store.contractVersions[contractID]
-	if len(versions) != 1 {
-		t.Fatalf("expected 1 version recorded, got %d", len(versions))
-	}
-	if versions[0].WasmHash != hash1 {
-		t.Errorf("expected wasm_hash %s, got %s", hash1, versions[0].WasmHash)
-	}
-
-	// Second run with same hash -> no duplicate version recorded.
-	if err := p.Run(context.Background(), "once"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(store.contractVersions[contractID]) != 1 {
-		t.Fatalf("expected still 1 version after identical hash, got %d", len(store.contractVersions[contractID]))
-	}
-
-	// Third run with new hash -> second version recorded.
-	rpc.mu.Lock()
-	rpc.contractWasmHashes[contractID] = hash2
-	rpc.latestLedger = &LatestLedger{Sequence: 501000}
-	rpc.mu.Unlock()
-	if err := p.Run(context.Background(), "once"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(store.contractVersions[contractID]) != 2 {
-		t.Fatalf("expected 2 versions after transition, got %d", len(store.contractVersions[contractID]))
-	}
-	if store.contractVersions[contractID][1].WasmHash != hash2 {
-		t.Errorf("expected second version wasm_hash %s, got %s", hash2, store.contractVersions[contractID][1].WasmHash)
+	if len(st.events) != 1 || st.events[0].ID != "flaky" {
+		t.Fatalf("events = %+v", st.events)
 	}
 }

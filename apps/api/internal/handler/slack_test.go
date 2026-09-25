@@ -37,7 +37,7 @@ func newSlackServer(ms *store.MockStore, secret string) http.Handler {
 		RedisClient:        &mockRedisClient{},
 		Logger:             slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 		SlackSigningSecret: secret,
-	})
+	}, 1<<20)
 }
 
 func slackCommand(srv http.Handler, body, ts, sig string) *httptest.ResponseRecorder {

@@ -67,7 +67,8 @@ func (m *MockStore) InsertContractAlert(_ context.Context, a ContractAlert) erro
 
 func (m *MockStore) ListMonitoredContracts(_ context.Context, cursor string, limit int, network string) ([]MonitoredContract, string, error) {
 	m.ensureWatchdog()
-	if limit <= 0 {
+	// Same page-size bounds as the postgres implementation.
+	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	ids := make([]string, 0, len(m.monitored))

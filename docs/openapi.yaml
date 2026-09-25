@@ -25,6 +25,8 @@ servers:
 tags:
   - name: Health
     description: Liveness and readiness probes
+  - name: Version
+    description: Build metadata for the running API instance
   - name: Stats
     description: Global and per-contract statistics
   - name: Contracts
@@ -53,6 +55,159 @@ tags:
     description: Prometheus metrics
 
 paths:
+
+  /api/v1/alerts:
+    get:
+      tags: [Watchdog]
+      summary: List alert groups (or raw alerts with ?flat=true)
+      operationId: listAlerts
+      security:
+        - ApiKeyAuth: [read:watchdog]
+      parameters:
+        - name: flat
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: Return raw alert feed instead of grouped view.
+        - name: contract_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: severity
+          in: query
+          required: false
+          schema: { type: string, enum: [Info, Warning, Critical] }
+        - name: network
+          in: query
+          required: false
+          schema: { type: string, enum: [testnet, mainnet, futurenet, standalone] }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 100, maximum: 500 }
+      responses:
+        '200':
+          description: Alert groups or raw alerts.
+        '422':
+          $ref: '#/components/responses/InvalidInput'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/reports/{contract_id}:
+    get:
+      tags: [Watchdog]
+      summary: Get the monthly SLA report for a contract
+      operationId: getContractReport
+      security:
+        - ApiKeyAuth: [read:watchdog]
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: month
+          in: query
+          required: false
+          schema: { type: string }
+          description: "Month in YYYY-MM format (default: current month)."
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, pdf] }
+      responses:
+        '200':
+          description: Monthly SLA report.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/reports/{contract_id}/history:
+    get:
+      tags: [Watchdog]
+      summary: List historical monthly SLA reports for a contract
+      operationId: getContractReportHistory
+      security:
+        - ApiKeyAuth: [read:watchdog]
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 12 }
+      responses:
+        '200':
+          description: List of monthly SLA report summaries.
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/reports/{contract_id}/badge.svg:
+    get:
+      tags: [Watchdog]
+      summary: SVG uptime badge for a contract
+      operationId: getContractSLABadge
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: month
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: SVG badge.
+          content:
+            image/svg+xml:
+              schema: { type: string }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/labels:
+    get:
+      summary: Search visible account labels
+      parameters:
+        - in: query
+          name: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Visible public and workspace labels
+    post:
+      summary: Create or update an account label
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label, value, scope]
+              properties:
+                label: { type: string }
+                value: { type: string, minLength: 56, maxLength: 56 }
+                scope: { type: string, enum: [public, workspace] }
+      responses:
+        '201': { description: Label saved }
+
+  /api/v1/resolve:
+    get:
+      summary: Resolve a visible label to its Stellar identifier
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Resolved label }
+        '404': { description: Label not found }
   /health:
     get:
       tags: [Health]
@@ -106,6 +261,22 @@ paths:
                     type: object
                     additionalProperties:
                       type: string
+
+  /api/version:
+    get:
+      tags: [Version]
+      summary: Build metadata for the running API instance
+      operationId: getVersion
+      security: []
+      responses:
+        "200":
+          description: Version, git SHA, and build timestamp (fall back to "dev" when not injected)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuildInfo"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /metrics:
     get:
@@ -378,6 +549,40 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/search:
+    get:
+      tags:
+        - Contracts
+      summary: Search contracts
+      description: Search contracts by ID or label
+      parameters:
+        - name: q
+          in: query
+          description: Search query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of results
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Contract"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/compare:
     get:
       tags: [Stats]
@@ -589,7 +794,7 @@ paths:
             type: string
             enum: [SUCCESS, FAILED, NOT_FOUND]
           description: Invocation status filter.
-        - name: fn
+        - name: function_name
           in: query
           required: false
           schema:
@@ -775,6 +980,43 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/snapshot.json:
+    get:
+      tags: [Snapshots]
+      summary: Portable JSON export of a contract's current state
+      operationId: exportContractSnapshot
+      description: |
+        Returns the contract's current state as a single versioned JSON
+        document: metadata, storage, recent events, and summary. The shape is
+        frozen by `schema_version` and is deterministic for an unchanged store
+        (stable field order, sorted collections, no wall-clock fields), so
+        exports can be archived or diffed. When the client advertises
+        `Accept-Encoding: gzip` the body is gzip-compressed.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: Versioned contract snapshot export
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: attachment; filename="<contract_id>-snapshot.json"
+            Content-Encoding:
+              schema:
+                type: string
+              description: gzip when the client advertises Accept-Encoding gzip.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractSnapshotExport"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1481,25 +1723,14 @@ paths:
           schema:
             type: string
             enum: [24h, 7d, 30d]
-            default: 24h
-          description: Time window for uptime calculation (default 24h).
+          description: Time window over which to compute uptime (default 24h).
       responses:
         "200":
-          description: Uptime result
+          description: Uptime statistics for the specified window
           content:
             application/json:
               schema:
-                type: object
-                required: [contract_id, window, uptime_pct]
-                properties:
-                  contract_id:
-                    type: string
-                  window:
-                    type: string
-                  uptime_pct:
-                    type: number
-                    format: double
-                    description: Percentage of checks with Healthy status (0–100).
+                $ref: "#/components/schemas/UptimeResult"
         "422":
           $ref: "#/components/responses/InvalidInput"
         "500":
@@ -1724,6 +1955,23 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    BuildInfo:
+      type: object
+      required: [version, git_sha, built_at]
+      properties:
+        version:
+          type: string
+          description: Semantic version injected at build time; "dev" when unset.
+          example: 1.4.2
+        git_sha:
+          type: string
+          description: Git commit SHA injected at build time; "dev" when unset.
+          example: abc1234
+        built_at:
+          type: string
+          description: RFC3339 build timestamp injected at build time; "dev" when unset or malformed.
+          example: "2026-01-02T15:04:05Z"
+
     Error:
       type: object
       required: [error]
@@ -2013,6 +2261,54 @@ components:
             - $ref: "#/components/schemas/Event"
           nullable: true
           type: object
+
+    ContractSnapshotExport:
+      type: object
+      required: [schema_version, contract_id, network, ledger, metadata, storage, events, summary]
+      properties:
+        schema_version:
+          type: integer
+          description: Version of the export shape; currently 1.
+        contract_id:
+          type: string
+        network:
+          type: string
+        ledger:
+          type: integer
+          format: int32
+          description: Newest indexed ledger the export is keyed to.
+        metadata:
+          $ref: "#/components/schemas/Contract"
+        storage:
+          type: array
+          description: Live storage entries, one per key, sorted by key_xdr.
+          items:
+            $ref: "#/components/schemas/StorageEntry"
+        events:
+          type: array
+          description: Most recent events, newest first (up to 50).
+          items:
+            $ref: "#/components/schemas/Event"
+        summary:
+          type: object
+          required: [storage_count, event_count, first_tracked_ledger]
+          properties:
+            storage_count:
+              type: integer
+            event_count:
+              type: integer
+            first_tracked_ledger:
+              type: integer
+              format: int32
+            last_event_id:
+              type: string
+              description: Omitted when the contract has no events.
+            last_event_ledger:
+              type: integer
+              format: int32
+            storage_truncated:
+              type: boolean
+              description: Present and true only when storage hit the 1000-entry cap.
 
     APIKey:
       type: object

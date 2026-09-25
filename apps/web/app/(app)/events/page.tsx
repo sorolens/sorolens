@@ -56,7 +56,9 @@ function EventRow({ event }: { event: GlobalEvent }) {
           <MonoId value={event.contract_id} headChars={6} tailChars={6} />
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-sm">
-          <span className="rounded bg-white/5 px-2 py-0.5 text-xs">{event.type}</span>
+          <span className="rounded bg-white/5 px-2 py-0.5 text-xs">
+            {event.type}
+          </span>
         </td>
         <td className="px-4 py-3">
           <button
@@ -84,13 +86,17 @@ function EventRow({ event }: { event: GlobalEvent }) {
           <td colSpan={5} className="px-4 py-3">
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <p className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">Topics</p>
+                <p className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
+                  Topics
+                </p>
                 <pre className="max-h-64 overflow-auto rounded bg-black/30 p-3 font-mono text-xs">
                   {formatEventData(event.topic_decoded ?? event.topic_xdr)}
                 </pre>
               </div>
               <div>
-                <p className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">Value</p>
+                <p className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
+                  Value
+                </p>
                 <pre className="max-h-64 overflow-auto rounded bg-black/30 p-3 font-mono text-xs">
                   {formatEventData(data)}
                 </pre>
@@ -99,7 +105,10 @@ function EventRow({ event }: { event: GlobalEvent }) {
             <p className="mt-2 font-mono text-xs text-[var(--color-text-secondary)]">
               tx <MonoId value={event.tx_hash} headChars={10} tailChars={10} />
               {" · "}
-              <Link href={`/contracts/${event.contract_id}`} className="text-[var(--color-accent)] hover:underline">
+              <Link
+                href={`/contracts/${event.contract_id}`}
+                className="text-[var(--color-accent)] hover:underline"
+              >
                 Open contract
               </Link>
             </p>
@@ -136,7 +145,7 @@ export default function EventsExplorerPage() {
         network: networkFilter(network),
         ...dateRangeToBounds(filters.from, filters.to),
       },
-      { signal: controller.signal },
+      { signal: controller.signal }
     )
       .then((res) => {
         setEvents(res.events ?? []);
@@ -169,7 +178,7 @@ export default function EventsExplorerPage() {
       setFilters({ ...draft, contractId: draft.contractId.trim() });
       setHistory(FIRST_PAGE);
     },
-    [draft, rangeError],
+    [draft, rangeError]
   );
 
   const clearFilters = () => {
@@ -187,7 +196,10 @@ export default function EventsExplorerPage() {
             Every indexed event across all tracked contracts, newest first.
           </p>
         </div>
-        <Link href="/events/live" className="text-sm text-[var(--color-accent)] hover:underline">
+        <Link
+          href="/events/live"
+          className="text-sm text-[var(--color-accent)] hover:underline"
+        >
           Live stream →
         </Link>
       </div>
@@ -211,7 +223,9 @@ export default function EventsExplorerPage() {
           Event type
           <select
             value={draft.type}
-            onChange={(e) => setDraft({ ...draft, type: e.target.value as Filters["type"] })}
+            onChange={(e) =>
+              setDraft({ ...draft, type: e.target.value as Filters["type"] })
+            }
             className={inputClass}
           >
             {EVENT_TYPES.map((t) => (
@@ -249,8 +263,13 @@ export default function EventsExplorerPage() {
           >
             Apply
           </button>
-          {(hasFilters || JSON.stringify(draft) !== JSON.stringify(NO_FILTERS)) && (
-            <button type="button" onClick={clearFilters} className={buttonClass}>
+          {(hasFilters ||
+            JSON.stringify(draft) !== JSON.stringify(NO_FILTERS)) && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className={buttonClass}
+            >
               Clear
             </button>
           )}
@@ -263,10 +282,17 @@ export default function EventsExplorerPage() {
       </form>
 
       {error ? (
-        <div role="alert" className="rounded-lg border border-red-900/60 bg-red-950/30 p-6 text-sm">
+        <div
+          role="alert"
+          className="rounded-lg border border-red-900/60 bg-red-950/30 p-6 text-sm"
+        >
           <p className="font-medium text-red-300">Couldn&apos;t load events.</p>
           <p className="mt-1 text-[var(--color-text-secondary)]">{error}</p>
-          <button type="button" onClick={() => setReloadKey((k) => k + 1)} className={`${buttonClass} mt-4`}>
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className={`${buttonClass} mt-4`}
+          >
             Try again
           </button>
         </div>
@@ -277,14 +303,21 @@ export default function EventsExplorerPage() {
           {hasFilters ? (
             <>
               <p>No events match these filters.</p>
-              <button type="button" onClick={clearFilters} className={`${buttonClass} mt-4`}>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className={`${buttonClass} mt-4`}
+              >
                 Clear filters
               </button>
             </>
           ) : (
             <p>
               No events indexed yet.{" "}
-              <Link href="/contracts" className="text-[var(--color-accent)] hover:underline">
+              <Link
+                href="/contracts"
+                className="text-[var(--color-accent)] hover:underline"
+              >
                 Track a contract
               </Link>{" "}
               to start seeing events here.
@@ -292,16 +325,28 @@ export default function EventsExplorerPage() {
           )}
         </div>
       ) : (
-        <div className={`overflow-hidden rounded-lg border border-[var(--color-border)] ${loading ? "opacity-60" : ""}`}>
+        <div
+          className={`overflow-hidden rounded-lg border border-[var(--color-border)] ${loading ? "opacity-60" : ""}`}
+        >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left">
               <thead className="border-b border-[var(--color-border)] text-xs uppercase tracking-wide text-[var(--color-text-secondary)]">
                 <tr>
-                  <th scope="col" className="px-4 py-3 font-medium">Contract</th>
-                  <th scope="col" className="px-4 py-3 font-medium">Type</th>
-                  <th scope="col" className="px-4 py-3 font-medium">Data</th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">Ledger</th>
-                  <th scope="col" className="px-4 py-3 font-medium">Timestamp</th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Contract
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Type
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Data
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">
+                    Ledger
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Timestamp
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -317,7 +362,10 @@ export default function EventsExplorerPage() {
       )}
 
       {!error && (events.length > 0 || pageNumber(history) > 1) && (
-        <nav className="flex items-center justify-between" aria-label="Pagination">
+        <nav
+          className="flex items-center justify-between"
+          aria-label="Pagination"
+        >
           <button
             type="button"
             onClick={() => setHistory(popPage)}
@@ -326,7 +374,9 @@ export default function EventsExplorerPage() {
           >
             ← Previous
           </button>
-          <span className="text-xs text-[var(--color-text-secondary)]">Page {pageNumber(history)}</span>
+          <span className="text-xs text-[var(--color-text-secondary)]">
+            Page {pageNumber(history)}
+          </span>
           <button
             type="button"
             onClick={() => setHistory((h) => pushPage(h, nextCursor))}

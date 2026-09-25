@@ -74,7 +74,7 @@ func TestOpenAPICoversEveryRoute(t *testing.T) {
 		DB:     &store.MockPinger{Healthy: true},
 		Redis:  &store.MockPinger{Healthy: true},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	})
+	}, 1<<20)
 	routes, ok := r.(chi.Routes)
 	if !ok {
 		t.Fatalf("router is %T, want chi.Routes", r)

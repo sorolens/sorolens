@@ -14,6 +14,13 @@ type Contract struct {
 	AddedAt            time.Time  `json:"added_at"`
 }
 
+// Label mirrors the API label response.
+type Label struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+	Scope string `json:"scope"`
+}
+
 // Event mirrors the API event response.
 type Event struct {
 	ID               string    `json:"id"`

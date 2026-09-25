@@ -55,7 +55,7 @@ func timeoutTestHandler(st handler.APIStore) *handler.Handler {
 // sees its context cancelled so the DB connection is released.
 func TestRouter_SlowRouteReturns503(t *testing.T) {
 	st := &stuckStore{MockStore: store.NewMockStore(), cancelled: make(chan struct{})}
-	srv := httptest.NewServer(router.New(timeoutTestHandler(st)))
+	srv := httptest.NewServer(router.New(timeoutTestHandler(st), 1<<20))
 	defer srv.Close()
 
 	start := time.Now()
@@ -88,7 +88,7 @@ func TestRouter_SlowRouteReturns503(t *testing.T) {
 // the handler answers 500 "streaming unsupported".
 func TestRouter_StreamIsNotCappedByRequestTimeout(t *testing.T) {
 	h := timeoutTestHandler(store.NewMockStore())
-	srv := httptest.NewServer(router.New(h))
+	srv := httptest.NewServer(router.New(h, 1<<20))
 	defer srv.Close()
 
 	start := time.Now()

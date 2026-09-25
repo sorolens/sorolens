@@ -39,9 +39,7 @@ function EventRow({ event }: { event: ContractEvent }) {
           {String(decodedTopics?.[0] ?? "")}
         </td>
         <td className="max-w-[160px] truncate px-4 py-3 font-mono text-xs text-[var(--color-text-secondary)]">
-          {event.value_decoded != null
-            ? String(event.value_decoded)
-            : "-"}
+          {event.value_decoded != null ? String(event.value_decoded) : "-"}
         </td>
         <td className="px-4 py-3 text-right font-mono text-xs text-[var(--color-text-secondary)]">
           {event.ledger}
@@ -66,7 +64,10 @@ function EventRow({ event }: { event: ContractEvent }) {
       </tr>
       {expanded && (
         <tr className="bg-white/[0.02]">
-          <td colSpan={7} className="border-b border-[var(--color-border)] px-8 py-4">
+          <td
+            colSpan={7}
+            className="border-b border-[var(--color-border)] px-8 py-4"
+          >
             <div className="space-y-3">
               <div>
                 <div className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
@@ -90,8 +91,7 @@ function EventRow({ event }: { event: ContractEvent }) {
                 <span>Event ID: {event.id}</span>
                 <span>Ledger: {event.ledger}</span>
                 <span>
-                  Time:{" "}
-                  {new Date(event.ledger_closed_at).toLocaleString()}
+                  Time: {new Date(event.ledger_closed_at).toLocaleString()}
                 </span>
               </div>
             </div>

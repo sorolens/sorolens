@@ -14,9 +14,12 @@ export interface UseEventStreamOptions {
   onAlert?: (alert: unknown) => void;
 }
 
-export type StreamStatus = "connecting" | "connected" | "polling" | "disconnected";
+export type StreamStatus =
+  "connecting" | "connected" | "polling" | "disconnected";
 
-export function useEventStream(contractIdOrOptions?: string | UseEventStreamOptions) {
+export function useEventStream(
+  contractIdOrOptions?: string | UseEventStreamOptions
+) {
   const options =
     typeof contractIdOrOptions === "string"
       ? { contractId: contractIdOrOptions }

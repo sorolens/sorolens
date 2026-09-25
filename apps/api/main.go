@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/exaring/otelpgx"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sorolens/sorolens/apps/api/internal/config"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
@@ -31,13 +31,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	config, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		logger.Error("parse config", "err", err)
-	os.Exit(1)
+		os.Exit(1)
 	}
-	config.ConnConfig.Tracer = otelpgx.NewTracer()
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
 	if err != nil {
 		logger.Error("postgres connect", "err", err)
 		os.Exit(1)
@@ -71,9 +71,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	maxBodyBytes, err := config.MaxBodyBytesFromEnv()
+	if err != nil {
+		logger.Error("config", "err", err)
+		os.Exit(1)
+	}
+
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),
-		Handler:      router.New(h),
+		Handler:     router.New(h, maxBodyBytes),
 		ReadTimeout: 15 * time.Second,
 		// WriteTimeout starts before the handler's own timer, so it must
 		// outlast API_REQUEST_TIMEOUT or the 503 is cut off mid-write and the
