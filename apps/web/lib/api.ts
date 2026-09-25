@@ -476,6 +476,17 @@ export async function deleteSubscription(
   }
 }
 
+export function getSubscriptionDeliveries(
+  id: string,
+  page = 1,
+  limit = 20,
+): Promise<WebhookDeliveriesResponse> {
+  return fetchJson<WebhookDeliveriesResponse>(
+    `${API_URL}/api/v1/subscriptions/${id}/deliveries?page=${page}&limit=${limit}`,
+  );
+}
+
+
 // ---- watchlist ------------------------------------------------------------
 
 export function addToWatchlist(

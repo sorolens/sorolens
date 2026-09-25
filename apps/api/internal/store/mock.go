@@ -24,6 +24,7 @@ type MockStore struct {
 	contractUpgrades   []ContractUpgrade
 	watchlist          map[string]map[string]bool
 	alertSubscriptions []AlertSubscription
+	webhookDeliveries  []WebhookDelivery
 	users              map[string]User
 	healthScores       map[string]ContractHealthScore
 	indexerCursors     map[string]uint32
@@ -85,6 +86,7 @@ func NewMockStore() *MockStore {
 		watchlist:          make(map[string]map[string]bool),
 		alerts:             make([]ContractAlert, 0),
 		alertSubscriptions: make([]AlertSubscription, 0),
+		webhookDeliveries:  make([]WebhookDelivery, 0),
 		users:              make(map[string]User),
 		indexerCursors:     make(map[string]uint32),
 		contractVersions:   make(map[string][]ContractVersion),
@@ -727,6 +729,15 @@ func (m *MockStore) Create(_ context.Context, s AlertSubscription) error {
 	return nil
 }
 
+func (m *MockStore) GetByID(_ context.Context, id string) (AlertSubscription, error) {
+	for _, s := range m.alertSubscriptions {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return AlertSubscription{}, ErrNotFound
+}
+
 func (m *MockStore) ListByContract(_ context.Context, contractID string) ([]AlertSubscription, error) {
 	out := make([]AlertSubscription, 0)
 	for _, s := range m.alertSubscriptions {
@@ -738,22 +749,94 @@ func (m *MockStore) ListByContract(_ context.Context, contractID string) ([]Aler
 }
 
 func (m *MockStore) Delete(_ context.Context, id string) error {
+	found := false
 	filtered := make([]AlertSubscription, 0, len(m.alertSubscriptions))
 	for _, s := range m.alertSubscriptions {
 		if s.ID != id {
 			filtered = append(filtered, s)
+		} else {
+			found = true
 		}
 	}
 	if len(filtered) == len(m.alertSubscriptions) {
 		return ErrNotFound
 	}
 	m.alertSubscriptions = filtered
+	if !found {
+		return ErrNotFound
+	}
 	return nil
 }
 
 func (m *MockStore) ListAll(_ context.Context) ([]AlertSubscription, error) {
 	out := make([]AlertSubscription, len(m.alertSubscriptions))
 	copy(out, m.alertSubscriptions)
+	return out, nil
+}
+
+func (m *MockStore) UpdateDeliveryStatus(_ context.Context, subscriptionID string, status string, at time.Time) error {
+	for i, s := range m.alertSubscriptions {
+		if s.ID == subscriptionID {
+			m.alertSubscriptions[i].LastDeliveryStatus = &status
+			m.alertSubscriptions[i].LastDeliveryAt = &at
+			m.alertSubscriptions[i].UpdatedAt = time.Now().UTC()
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (m *MockStore) CreateDelivery(_ context.Context, d WebhookDelivery) error {
+	m.webhookDeliveries = append(m.webhookDeliveries, d)
+	return nil
+}
+
+func (m *MockStore) UpdateDelivery(_ context.Context, d WebhookDelivery) error {
+	for i, existing := range m.webhookDeliveries {
+		if existing.ID == d.ID {
+			m.webhookDeliveries[i] = d
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (m *MockStore) ListDeliveriesBySubscription(_ context.Context, subscriptionID string, page int, limit int) ([]WebhookDelivery, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 50
+	}
+	var matched []WebhookDelivery
+	for _, d := range m.webhookDeliveries {
+		if d.SubscriptionID == subscriptionID {
+			matched = append(matched, d)
+		}
+	}
+	total := len(matched)
+	start := (page - 1) * limit
+	if start >= total {
+		return []WebhookDelivery{}, total, nil
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	return matched[start:end], total, nil
+}
+
+func (m *MockStore) GetPendingDeliveries(_ context.Context, limit int) ([]WebhookDelivery, error) {
+	now := time.Now()
+	var out []WebhookDelivery
+	for _, d := range m.webhookDeliveries {
+		if d.Status == "pending" && (d.NextAttemptAt.Before(now) || d.NextAttemptAt.Equal(now)) {
+			out = append(out, d)
+			if limit > 0 && len(out) >= limit {
+				break
+			}
+		}
+	}
 	return out, nil
 }
 

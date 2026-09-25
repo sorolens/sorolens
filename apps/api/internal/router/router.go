@@ -215,6 +215,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Post("/watchdog/subscriptions", h.CreateSubscription)
 		r.With(scope, contributor).Get("/watchdog/subscriptions", h.ListSubscriptions)
 		r.With(scope, contributor).Delete("/watchdog/subscriptions/{id}", h.DeleteSubscription)
+		r.With(scope, contributor).Get("/watchdog/subscriptions/{id}/deliveries", h.ListSubscriptionDeliveries)
 	})
 
 	return r

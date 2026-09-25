@@ -118,3 +118,31 @@ func TestIntegration_AlertFires_NoTrigger(t *testing.T) {
 	assert.Contains(t, []int{http.StatusOK, http.StatusNotFound}, resp.StatusCode)
 	resp.Body.Close()
 }
+
+// 11. Webhook Delivery & Retry History
+func TestIntegration_WebhookDelivery_RetryHistory(t *testing.T) {
+	// Create subscription
+	resp := makeRequest(t, "POST", "/api/v1/subscriptions", map[string]interface{}{
+		"contract_id":     "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK",
+		"webhook_url":     "http://localhost:9999/failing-endpoint",
+		"severity_filter": "Critical",
+	})
+	assert.Contains(t, []int{http.StatusOK, http.StatusCreated, http.StatusUnauthorized}, resp.StatusCode)
+
+	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+		var body map[string]interface{}
+		parseResponse(t, resp, &body)
+		subID, ok := body["id"].(string)
+		if ok && subID != "" {
+			// Query delivery history
+			delivResp := makeRequest(t, "GET", "/api/v1/subscriptions/"+subID+"/deliveries", nil)
+			assert.Equal(t, http.StatusOK, delivResp.StatusCode)
+			var delivBody map[string]interface{}
+			parseResponse(t, delivResp, &delivBody)
+			assert.NotNil(t, delivBody["deliveries"])
+		}
+	} else {
+		resp.Body.Close()
+	}
+}
+

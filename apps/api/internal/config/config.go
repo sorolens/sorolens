@@ -67,6 +67,10 @@ type Config struct {
 	// SlackSigningSecret verifies Slack slash command requests
 	// (SLACK_SIGNING_SECRET). Empty disables the Slack command endpoint.
 	SlackSigningSecret string
+	// WebhookMaxRetries is the maximum number of webhook delivery attempts.
+	WebhookMaxRetries int
+	// WebhookBackoffSchedule specifies backoff durations between attempts.
+	WebhookBackoffSchedule []time.Duration
 }
 
 // Load reads configuration from environment variables and returns an error
@@ -107,12 +111,36 @@ func Load() (*Config, error) {
 	}
 	cfg.IndexerMaxDuration = maxDur
 
+<<<<<<< HEAD
 	cacheTTLStr := getEnvDefault("API_CACHE_TTL", "30s")
 	cacheTTL, err := time.ParseDuration(cacheTTLStr)
 	if err != nil || cacheTTL < 0 {
 		return nil, fmt.Errorf("API_CACHE_TTL: invalid duration %q", cacheTTLStr)
 	}
 	cfg.CacheTTL = cacheTTL
+
+	maxRetriesStr := getEnvDefault("WEBHOOK_MAX_RETRIES", "5")
+	maxRetries, err := strconv.Atoi(maxRetriesStr)
+	if err != nil {
+		return nil, fmt.Errorf("WEBHOOK_MAX_RETRIES: invalid integer %q: %w", maxRetriesStr, err)
+	}
+	cfg.WebhookMaxRetries = maxRetries
+
+	backoffStr := getEnvDefault("WEBHOOK_BACKOFF_SCHEDULE", "1m,5m,15m,1h,6h")
+	parts := strings.Split(backoffStr, ",")
+	schedule := make([]time.Duration, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		d, err := time.ParseDuration(p)
+		if err != nil {
+			return nil, fmt.Errorf("WEBHOOK_BACKOFF_SCHEDULE: invalid duration %q: %w", p, err)
+		}
+		schedule = append(schedule, d)
+	}
+	cfg.WebhookBackoffSchedule = schedule
 
 	var missing []string
 	if cfg.DatabaseURL == "" {

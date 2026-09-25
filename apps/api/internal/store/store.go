@@ -18,6 +18,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -97,9 +98,17 @@ type Store interface {
 // AlertSubscriptionStore is the read/write surface for alert webhook subscriptions.
 type AlertSubscriptionStore interface {
 	Create(ctx context.Context, s AlertSubscription) error
+	GetByID(ctx context.Context, id string) (AlertSubscription, error)
 	ListByContract(ctx context.Context, contractID string) ([]AlertSubscription, error)
 	Delete(ctx context.Context, id string) error
 	ListAll(ctx context.Context) ([]AlertSubscription, error)
+	UpdateDeliveryStatus(ctx context.Context, subscriptionID string, status string, at time.Time) error
+
+	// Delivery operations
+	CreateDelivery(ctx context.Context, d WebhookDelivery) error
+	UpdateDelivery(ctx context.Context, d WebhookDelivery) error
+	ListDeliveriesBySubscription(ctx context.Context, subscriptionID string, page int, limit int) ([]WebhookDelivery, int, error)
+	GetPendingDeliveries(ctx context.Context, limit int) ([]WebhookDelivery, error)
 }
 
 // WatchlistStore is the interface for per-user watchlist (bookmark) operations.

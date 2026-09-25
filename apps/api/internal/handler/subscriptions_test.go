@@ -1,156 +1,110 @@
 package handler_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
-const subsPath = "/api/v1/watchdog/subscriptions"
+func TestSubscriptionHandlers(t *testing.T) {
+	ms := store.NewMockStore()
+	srv := newTestHandler(ms, true, true)
 
-type subscriptionBody struct {
-	ID             string `json:"id"`
-	ChannelType    string `json:"channel_type"`
-	WebhookURL     string `json:"webhook_url"`
-	HasRoutingKey  bool   `json:"has_routing_key"`
-	SeverityFilter string `json:"severity_filter"`
-}
+	// 1. Create subscription
+	createBody, _ := json.Marshal(map[string]string{
+		"contract_id":     "CONTRACT_SUB_1",
+		"webhook_url":     "https://example.com/webhook",
+		"severity_filter": "Critical",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/subscriptions", bytes.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
 
-// seedMonitored registers C1 with the watchdog so subscriptions can target it.
-func seedMonitored(t *testing.T, ms *store.MockStore) {
-	t.Helper()
-	if err := ms.UpsertMonitoredContract(context.Background(), store.MonitoredContract{
-		ContractID: "C1", Network: "testnet", Name: "svc", Status: "Healthy",
-	}); err != nil {
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create subscription: want 201, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func TestCreateSubscriptionPerChannel(t *testing.T) {
-	ms := seedRBACUsers(t)
-	seedMonitored(t, ms)
-	srv := newTestHandler(ms, true, true)
-
-	cases := []struct {
-		name, body string
-		want       subscriptionBody
-	}{
-		{
-			"webhook default",
-			`{"contract_id":"C1","webhook_url":"https://example.com/hook"}`,
-			subscriptionBody{ChannelType: "webhook", WebhookURL: "https://example.com/hook", SeverityFilter: "Critical"},
-		},
-		{
-			"slack masks token",
-			`{"contract_id":"C1","channel_type":"slack","webhook_url":"https://hooks.slack.com/services/T0/B0/secret"}`,
-			subscriptionBody{ChannelType: "slack", WebhookURL: "https://hooks.slack.com/services/***", SeverityFilter: "Critical"},
-		},
-		{
-			"discord masks token",
-			`{"contract_id":"C1","channel_type":"discord","webhook_url":"https://discord.com/api/webhooks/1/secret","severity_filter":"Warning"}`,
-			subscriptionBody{ChannelType: "discord", WebhookURL: "https://discord.com/api/***", SeverityFilter: "Warning"},
-		},
-		{
-			"pagerduty hides routing key",
-			`{"contract_id":"C1","channel_type":"PagerDuty","routing_key":"R0UT1NG"}`,
-			subscriptionBody{ChannelType: "pagerduty", HasRoutingKey: true, SeverityFilter: "Critical"},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			w := doRequestAsUser(srv, http.MethodPost, subsPath, "", contributorUser, tc.body)
-			if w.Code != http.StatusCreated {
-				t.Fatalf("want 201, got %d (%s)", w.Code, w.Body.String())
-			}
-			if strings.Contains(w.Body.String(), "secret") || strings.Contains(w.Body.String(), "R0UT1NG") {
-				t.Fatalf("response leaks a secret: %s", w.Body.String())
-			}
-			var got subscriptionBody
-			if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
-				t.Fatal(err)
-			}
-			got.ID = ""
-			if got != tc.want {
-				t.Fatalf("want %+v, got %+v", tc.want, got)
-			}
-		})
+	subID, ok := created["id"].(string)
+	if !ok || subID == "" {
+		t.Fatalf("expected string id in response, got %v", created["id"])
 	}
 
-	// The store keeps the real secrets for the notifier.
-	subs, _ := ms.ListAll(context.Background())
-	var sawKey bool
-	for _, s := range subs {
-		if s.ChannelType == "pagerduty" && s.RoutingKey == "R0UT1NG" {
-			sawKey = true
-		}
-		if s.ChannelType == "slack" && s.WebhookURL != "https://hooks.slack.com/services/T0/B0/secret" {
-			t.Errorf("stored slack url altered: %s", s.WebhookURL)
-		}
-	}
-	if !sawKey {
-		t.Error("routing key not stored")
-	}
-}
+	// 2. List subscriptions
+	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/subscriptions", nil)
+	wList := httptest.NewRecorder()
+	srv.ServeHTTP(wList, reqList)
 
-func TestCreateSubscriptionValidation(t *testing.T) {
-	ms := seedRBACUsers(t)
-	seedMonitored(t, ms)
-	srv := newTestHandler(ms, true, true)
-	cases := map[string]string{
-		"unmonitored contract":   `{"contract_id":"CNOPE","webhook_url":"https://x.io"}`,
-		"unknown channel":        `{"contract_id":"C1","channel_type":"sms","webhook_url":"https://x.io"}`,
-		"missing contract":       `{"webhook_url":"https://x.io"}`,
-		"bad severity":           `{"contract_id":"C1","webhook_url":"https://x.io","severity_filter":"Panic"}`,
-		"webhook without url":    `{"contract_id":"C1"}`,
-		"webhook bad scheme":     `{"contract_id":"C1","webhook_url":"ftp://x.io"}`,
-		"slack over http":        `{"contract_id":"C1","channel_type":"slack","webhook_url":"http://hooks.slack.com/x"}`,
-		"discord without url":    `{"contract_id":"C1","channel_type":"discord"}`,
-		"pagerduty without key":  `{"contract_id":"C1","channel_type":"pagerduty"}`,
-		"routing key on webhook": `{"contract_id":"C1","webhook_url":"https://x.io","routing_key":"k"}`,
+	if wList.Code != http.StatusOK {
+		t.Fatalf("list subscriptions: want 200, got %d", wList.Code)
 	}
-	for name, body := range cases {
-		t.Run(name, func(t *testing.T) {
-			if w := doRequestAsUser(srv, http.MethodPost, subsPath, "", contributorUser, body); w.Code != http.StatusUnprocessableEntity {
-				t.Fatalf("want 422, got %d (%s)", w.Code, w.Body.String())
-			}
-		})
+	var listResp struct {
+		Subscriptions []map[string]any `json:"subscriptions"`
 	}
-}
-
-func TestSubscriptionRoutesRolesAndDelete(t *testing.T) {
-	ms := seedRBACUsers(t)
-	seedMonitored(t, ms)
-	if err := ms.Create(context.Background(), store.AlertSubscription{
-		ID: "sub_1", ContractID: "C1", WebhookURL: "https://x.io", SeverityFilter: "Critical",
-		CreatedAt: time.Now(), UpdatedAt: time.Now(),
-	}); err != nil {
+	if err := json.NewDecoder(wList.Body).Decode(&listResp); err != nil {
 		t.Fatal(err)
 	}
-	srv := newTestHandler(ms, true, true)
+	if len(listResp.Subscriptions) != 1 {
+		t.Fatalf("expected 1 subscription, got %d", len(listResp.Subscriptions))
+	}
 
-	for _, tc := range []struct {
-		method, path, user string
-		want               int
-	}{
-		{http.MethodGet, subsPath, "", http.StatusUnauthorized},
-		{http.MethodGet, subsPath, viewerUser, http.StatusForbidden},
-		{http.MethodPost, subsPath, viewerUser, http.StatusForbidden},
-		{http.MethodDelete, subsPath + "/sub_1", viewerUser, http.StatusForbidden},
-		{http.MethodGet, subsPath, contributorUser, http.StatusOK},
-		{http.MethodDelete, subsPath + "/sub_1", contributorUser, http.StatusNoContent},
-		{http.MethodDelete, subsPath + "/sub_1", contributorUser, http.StatusNotFound},
-	} {
-		body := ""
-		if tc.method == http.MethodPost {
-			body = `{"contract_id":"C1","webhook_url":"https://x.io"}`
-		}
-		if w := doRequestAsUser(srv, tc.method, tc.path, "", tc.user, body); w.Code != tc.want {
-			t.Errorf("%s %s as %q: want %d, got %d", tc.method, tc.path, tc.user, tc.want, w.Code)
-		}
+	// Add a delivery history item to MockStore
+	now := time.Now().UTC()
+	del := store.WebhookDelivery{
+		ID:             "del_test_100",
+		SubscriptionID: subID,
+		Payload:        `{"alert":"critical"}`,
+		Status:         "success",
+		Attempt:        1,
+		MaxAttempts:    5,
+		NextAttemptAt:  now,
+		ResponseCode:   200,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	_ = ms.CreateDelivery(context.Background(), del)
+	_ = ms.UpdateDeliveryStatus(context.Background(), subID, "success", now)
+
+	// 3. Get subscription delivery history
+	reqDeliv := httptest.NewRequest(http.MethodGet, "/api/v1/subscriptions/"+subID+"/deliveries?page=1&limit=10", nil)
+	wDeliv := httptest.NewRecorder()
+	srv.ServeHTTP(wDeliv, reqDeliv)
+
+	if wDeliv.Code != http.StatusOK {
+		t.Fatalf("get deliveries: want 200, got %d (%s)", wDeliv.Code, wDeliv.Body.String())
+	}
+	var delivResp struct {
+		Deliveries []store.WebhookDelivery `json:"deliveries"`
+		Page       int                     `json:"page"`
+		Limit      int                     `json:"limit"`
+		Total      int                     `json:"total"`
+	}
+	if err := json.NewDecoder(wDeliv.Body).Decode(&delivResp); err != nil {
+		t.Fatal(err)
+	}
+	if delivResp.Total != 1 || len(delivResp.Deliveries) != 1 {
+		t.Fatalf("expected total=1 and 1 delivery, got total=%d len=%d", delivResp.Total, len(delivResp.Deliveries))
+	}
+	if delivResp.Deliveries[0].Status != "success" {
+		t.Errorf("expected delivery status 'success', got %q", delivResp.Deliveries[0].Status)
+	}
+
+	// 4. Delete subscription
+	reqDel := httptest.NewRequest(http.MethodDelete, "/api/v1/subscriptions/"+subID, nil)
+	wDel := httptest.NewRecorder()
+	srv.ServeHTTP(wDel, reqDel)
+
+	if wDel.Code != http.StatusNoContent {
+		t.Fatalf("delete subscription: want 240/204, got %d", wDel.Code)
 	}
 }

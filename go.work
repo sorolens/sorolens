@@ -5,4 +5,5 @@ use (
 	./cli
 	./packages/go-client
 	./services/indexer
+	./tests/integration
 )
