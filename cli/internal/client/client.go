@@ -248,6 +248,13 @@ func (c *Client) TrackContract(ctx context.Context, contractID, alias, network s
 	return out, err
 }
 
+// SaveLabel creates or updates a public or workspace label.
+func (c *Client) SaveLabel(ctx context.Context, label, value, scope string) (Label, error) {
+	var out Label
+	err := c.do(ctx, http.MethodPost, "/api/v1/labels", map[string]string{"label": label, "value": value, "scope": scope}, &out)
+	return out, err
+}
+
 // GetGlobalStats fetches network-wide aggregate statistics.
 func (c *Client) GetGlobalStats(ctx context.Context) (GlobalStats, error) {
 	var out GlobalStats

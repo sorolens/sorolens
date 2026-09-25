@@ -149,6 +149,14 @@ type User struct {
 	CreatedAt time.Time
 }
 
+// Label maps a human-readable name to a Stellar account or contract ID.
+type Label struct {
+	Label       string
+	Value       string
+	WorkspaceID string
+	Public      bool
+}
+
 // WatchlistItem represents a contract bookmarked by a user.
 type WatchlistItem struct {
 	UserID     string

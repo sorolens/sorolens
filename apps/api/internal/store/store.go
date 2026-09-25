@@ -130,6 +130,13 @@ type UserStore interface {
 	GetUserByGitHubID(ctx context.Context, githubID string) (User, error)
 }
 
+// LabelStore persists public and workspace-scoped human-readable identifiers.
+type LabelStore interface {
+	UpsertLabel(ctx context.Context, label Label) error
+	ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error)
+	ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error)
+}
+
 // ContractFilters holds optional query filters for listing contracts.
 type ContractFilters struct {
 	// Network restricts results to one of testnet | mainnet | futurenet.
