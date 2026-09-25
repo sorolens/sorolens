@@ -50,6 +50,10 @@ func New(h *handler.Handler) http.Handler {
 		// Stats
 		get("/stats/global", h.GlobalStats)
 
+		// Cross-contract comparison (issue #324): one round-trip that fans
+		// out to the per-contract stats/health lookups in parallel.
+		get("/compare", h.CompareContracts)
+
 		// Contracts. Registration mutates shared state, so it requires at
 		// least contributor role. Reads stay open.
 		r.With(scope, contributor).Post("/contracts", h.RegisterContract)
