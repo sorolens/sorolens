@@ -40,6 +40,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Get("/health", h.Health)
 	r.Get("/readyz", h.Readyz)
 
+	// Version (public, not rate-limited, no DB access). Mounted at /api/version
+	// rather than under /api/v1 so it stays reachable without a versioned client
+	// and without the v1 scope/role middleware.
+	r.Get("/api/version", h.Version)
+
 	// Prometheus metrics (issue #143: response cache hit/miss counters). A
 	// registry per router keeps tests that build many routers independent.
 	reg := prometheus.NewRegistry()
