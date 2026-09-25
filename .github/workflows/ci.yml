@@ -59,8 +59,7 @@ jobs:
         working-directory: ./
         run: |
           echo "Waiting for PostgreSQL..."
-          DB_CONTAINER=$(docker compose ps -q postgres)
-          until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
+          until PGPASSWORD=sorolens psql -h 127.0.0.1 -U sorolens -d sorolens -c "SELECT 1" > /dev/null 2>&1; do sleep 1; done
       - name: Run DB migrations
         if: matrix.module == 'apps/api'
         env:
@@ -258,8 +257,7 @@ jobs:
       - name: Wait for Postgres
         run: |
           echo "Waiting for PostgreSQL..."
-          DB_CONTAINER=$(docker compose ps -q postgres)
-          until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
+          until PGPASSWORD=sorolens psql -h 127.0.0.1 -U sorolens -d sorolens -c "SELECT 1" > /dev/null 2>&1; do sleep 1; done
       - name: Setup Mock S3 Bucket
         run: |
           mkdir -p /tmp/s3/sorolens-backups/logical /tmp/s3/sorolens-backups/base /tmp/s3/sorolens-backups/wal
