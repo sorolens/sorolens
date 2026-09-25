@@ -10,12 +10,20 @@ const WINDOWS: { label: string; value: TimeWindow }[] = [
 interface WindowSelectorProps {
   selected: TimeWindow;
   onChange: (window: TimeWindow) => void;
+  /** Optional subset/order of windows to show. Defaults to all of them. */
+  options?: TimeWindow[];
 }
 
-export function WindowSelector({ selected, onChange }: WindowSelectorProps) {
+export function WindowSelector({ selected, onChange, options }: WindowSelectorProps) {
+  const windows = options
+    ? options
+        .map((value) => WINDOWS.find((w) => w.value === value))
+        .filter((w): w is { label: string; value: TimeWindow } => Boolean(w))
+    : WINDOWS;
+
   return (
     <div className="flex gap-1 rounded-lg bg-[var(--color-bg-card)] p-1">
-      {WINDOWS.map((w) => (
+      {windows.map((w) => (
         <button
           key={w.value}
           type="button"

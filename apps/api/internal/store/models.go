@@ -12,6 +12,7 @@ type Contract struct {
 	BackfillCompleteAt *time.Time
 	Status             string // pending | backfilling | active | paused | error
 	AddedAt            time.Time
+	LastActivityAt     *time.Time
 }
 
 // Event is a single contract event indexed from the Soroban RPC.
@@ -76,6 +77,18 @@ type SyncState struct {
 	UpdatedAt    time.Time
 }
 
+// ContractVersion records a single Wasm hash transition observed by the indexer.
+// It corresponds to one row in the contract_versions table.
+type ContractVersion struct {
+	ID                 int64
+	ContractID         string
+	WasmHash           string
+	FirstSeenLedger    int64
+	TxHash             string // empty string when not yet linked to a tx
+	VerifiedSourceRef  string // empty string when the Wasm is unverified
+	RecordedAt         time.Time
+}
+
 // GlobalStats is a network-wide summary across all tracked contracts.
 type GlobalStats struct {
 	TrackedContracts    int64
@@ -90,8 +103,12 @@ type AlertSubscription struct {
 	ContractID     string
 	WebhookURL     string
 	SeverityFilter string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// ChannelType is webhook | slack | discord | pagerduty (issue #127).
+	ChannelType string
+	// RoutingKey is the PagerDuty integration key (pagerduty only). Secret.
+	RoutingKey string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // Role names for role-based access control.

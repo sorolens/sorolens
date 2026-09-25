@@ -70,6 +70,32 @@ function formatDate(iso: string) {
   });
 }
 
+function formatRelativeTime(iso: string, now = Date.now()) {
+  const diffSeconds = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 1000));
+  if (diffSeconds < 60) return "just now";
+  const minutes = Math.floor(diffSeconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function RelativeTime({ iso }: { iso: string | null }) {
+  const [, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  if (!iso) {
+    return <span className="text-[var(--color-text-secondary)]">No activity</span>;
+  }
+
+  return <span>{formatRelativeTime(iso)}</span>;
+}
+
 // ---------------------------------------------------------------------------
 // Track Contract Modal
 // ---------------------------------------------------------------------------
@@ -136,6 +162,7 @@ function TrackContractModal({ onClose, onSubmit }: TrackModalProps) {
             onClick={onClose}
             className="rounded-md p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
             aria-label="Close modal"
+            title="Close modal"
           >
             ✕
           </button>
@@ -261,6 +288,16 @@ const COLUMNS: Column<ContractRow>[] = [
     accessor: (c) => (
       <span className="text-xs text-[var(--color-text-secondary)]">
         {formatDate(c.added_at)}
+      </span>
+    ),
+  },
+  {
+    key: "last_activity_at",
+    header: "Last activity",
+    sortable: true,
+    accessor: (c) => (
+      <span className="text-xs text-[var(--color-text-secondary)]">
+        <RelativeTime iso={c.last_activity_at} />
       </span>
     ),
   },

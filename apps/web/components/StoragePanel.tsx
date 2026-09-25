@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { truncateMiddle } from "@/lib/format";
 import type { StorageEntry } from "@/lib/types";
 
 interface StoragePanelProps {
@@ -55,7 +56,7 @@ function StorageRow({
   return (
     <tr className="border-b border-[var(--color-border)] transition-colors hover:bg-white/5">
       <td className="max-w-[180px] truncate px-4 py-3 font-mono text-xs">
-        {entry.key_decoded || entry.key_xdr.slice(0, 24) + "..."}
+        {entry.key_decoded || truncateMiddle(entry.key_xdr, 24, 8)}
       </td>
       <td className="px-4 py-3 text-sm capitalize">
         <span

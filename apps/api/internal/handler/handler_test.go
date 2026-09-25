@@ -206,6 +206,148 @@ func TestGlobalStatsShape(t *testing.T) {
 	}
 }
 
+func seedInvocationStore(t *testing.T) *store.MockStore {
+	t.Helper()
+	ms := store.NewMockStore()
+	t0 := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	err := ms.BatchInsertInvocations(context.Background(), []store.Invocation{
+		{TxHash: "aa", ContractID: "CAAA", Network: "testnet", Ledger: 100, LedgerClosedAt: t0, Status: "SUCCESS", FunctionName: "transfer", CPUInsn: 10, MemByte: 1, ResourceFeeCharged: 5},
+		{TxHash: "bb", ContractID: "CBBB", Network: "testnet", Ledger: 200, LedgerClosedAt: t0.Add(24 * time.Hour), Status: "FAILED", FunctionName: "mint", CPUInsn: 99, MemByte: 2, ResourceFeeCharged: 7},
+		{TxHash: "cc", ContractID: "CAAA", Network: "mainnet", Ledger: 300, LedgerClosedAt: t0.Add(48 * time.Hour), Status: "SUCCESS", FunctionName: "transfer", CPUInsn: 50, MemByte: 3, ResourceFeeCharged: 11},
+	})
+	if err != nil {
+		t.Fatalf("seed invocations: %v", err)
+	}
+	return ms
+}
+
+type invocationsBody struct {
+	Invocations []map[string]any `json:"invocations"`
+	NextCursor  string           `json:"next_cursor"`
+}
+
+func TestListAllInvocations(t *testing.T) {
+	srv := newTestHandler(seedInvocationStore(t), true, true)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/invocations", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body invocationsBody
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Invocations) != 3 {
+		t.Fatalf("want 3 invocations, got %d", len(body.Invocations))
+	}
+	// Newest ledger first (ledger DESC).
+	if got := body.Invocations[0]["tx_hash"]; got != "cc" {
+		t.Errorf("first row tx_hash = %v, want cc", got)
+	}
+	if got := body.Invocations[2]["tx_hash"]; got != "aa" {
+		t.Errorf("last row tx_hash = %v, want aa", got)
+	}
+	// The global response carries the contract id so the table can render it.
+	if got := body.Invocations[0]["contract_id"]; got != "CAAA" {
+		t.Errorf("contract_id = %v, want CAAA", got)
+	}
+	if body.NextCursor != "" {
+		t.Errorf("next_cursor = %q, want empty on the last page", body.NextCursor)
+	}
+}
+
+func TestListAllInvocationsFilters(t *testing.T) {
+	srv := newTestHandler(seedInvocationStore(t), true, true)
+
+	tests := []struct {
+		name    string
+		query   string
+		want    int
+		wantIDs []string
+	}{
+		{name: "contract filter", query: "contract_id=CAAA", want: 2, wantIDs: []string{"cc", "aa"}},
+		{name: "function filter", query: "fn=mint", want: 1, wantIDs: []string{"bb"}},
+		{name: "network filter", query: "network=mainnet", want: 1, wantIDs: []string{"cc"}},
+		{name: "status filter", query: "status=FAILED", want: 1, wantIDs: []string{"bb"}},
+		{name: "ledger range", query: "from=200&to=200", want: 1, wantIDs: []string{"bb"}},
+		{name: "date range covers whole days", query: "since=2026-09-02&until=2026-09-02", want: 1, wantIDs: []string{"bb"}},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/invocations?"+tc.query, nil)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+			}
+			var body invocationsBody
+			if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if len(body.Invocations) != tc.want {
+				t.Fatalf("want %d invocations, got %d", tc.want, len(body.Invocations))
+			}
+			for i, wantID := range tc.wantIDs {
+				if got := body.Invocations[i]["tx_hash"]; got != wantID {
+					t.Errorf("row %d tx_hash = %v, want %s", i, got, wantID)
+				}
+			}
+		})
+	}
+}
+
+func TestListAllInvocationsPagination(t *testing.T) {
+	srv := newTestHandler(seedInvocationStore(t), true, true)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/invocations?limit=2", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	var first invocationsBody
+	if err := json.NewDecoder(w.Body).Decode(&first); err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Invocations) != 2 {
+		t.Fatalf("first page: want 2 invocations, got %d", len(first.Invocations))
+	}
+	if first.NextCursor == "" {
+		t.Fatal("first page: want a next_cursor")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/invocations?limit=2&cursor="+first.NextCursor, nil)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	var second invocationsBody
+	if err := json.NewDecoder(w.Body).Decode(&second); err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Invocations) != 1 {
+		t.Fatalf("second page: want 1 invocation, got %d", len(second.Invocations))
+	}
+	if got := second.Invocations[0]["tx_hash"]; got != "aa" {
+		t.Errorf("second page tx_hash = %v, want aa", got)
+	}
+	if second.NextCursor != "" {
+		t.Errorf("second page next_cursor = %q, want empty", second.NextCursor)
+	}
+}
+
+func TestListAllInvocationsInvalidCursor(t *testing.T) {
+	srv := newTestHandler(seedInvocationStore(t), true, true)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/invocations?cursor=not-base64!!", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d", w.Code)
+	}
+}
+
 func TestContentTypeMiddleware(t *testing.T) {
 	srv := newTestHandler(store.NewMockStore(), true, true)
 	body, _ := json.Marshal(map[string]string{"id": "x", "network": "testnet"})

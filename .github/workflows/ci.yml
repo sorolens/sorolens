@@ -51,11 +51,10 @@ jobs:
       - name: Start Postgres
         working-directory: ./
         run: |
+          chmod +x scripts/aws-mock.sh
           docker compose up -d postgres
           DB_CONTAINER=$(docker compose ps -q postgres)
           docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
-          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
-          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
       - name: Wait for Postgres
         working-directory: ./
         run: |
@@ -135,6 +134,38 @@ jobs:
       - name: Lint
         run: pnpm --filter "./packages/**" lint
   # ------------------------------------------------------------
+  # TypeScript type-check (fast, no build output needed)
+  # ------------------------------------------------------------
+  typecheck:
+    name: TypeScript type-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 11
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "store=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.store }}
+          key: pnpm-node22-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-node22-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Type-check dashboard
+        working-directory: apps/web
+        run: pnpm exec tsc --noEmit
+  # ------------------------------------------------------------
   # Next.js dashboard build
   # ------------------------------------------------------------
   next-build:
@@ -172,13 +203,6 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8080
         run: pnpm build
   # ------------------------------------------------------------
-  # Rust: fixture contract
-  # ------------------------------------------------------------
-    # ------------------------------------------------------------
-  # Rust: fixture contract
-  # --------------------------------------------------------------
-
-    # ------------------------------------------------------------
   # Rust: fixture contract
   # ------------------------------------------------------------
   rust:
@@ -227,11 +251,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Start Postgres
         run: |
+          chmod +x scripts/aws-mock.sh
           docker compose up -d postgres
           DB_CONTAINER=$(docker compose ps -q postgres)
           docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
-          docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
-          docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
       - name: Wait for Postgres
         run: |
           echo "Waiting for PostgreSQL..."

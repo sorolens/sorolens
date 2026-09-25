@@ -12,7 +12,9 @@ type RPCClient interface {
 	GetEvents(ctx context.Context, startLedger, endLedger uint32, filters []EventFilter) (*GetEventsResult, error)
 	GetTransaction(ctx context.Context, hash string) (*TransactionResult, error)
 	GetLedgerEntries(ctx context.Context, keys []string) (*GetLedgerEntriesResult, error)
+	GetContractWasmHash(ctx context.Context, contractID string) (string, error)
 }
+
 
 // Store is the subset of the data store the poller needs.
 // The concrete implementation is store.postgresStore from apps/api.
@@ -53,6 +55,11 @@ type Store interface {
 	ContractHealthInputs(ctx context.Context, contractID string) (HealthInputs, error)
 	// UpsertContractHealthScore caches a computed 0-100 health score.
 	UpsertContractHealthScore(ctx context.Context, h ContractHealthScore) error
+
+	// RecordContractVersion persists a detected Wasm hash transition (issue #276).
+	RecordContractVersion(ctx context.Context, v ContractVersion) error
+	// GetLatestContractVersion returns the most recently recorded ContractVersion.
+	GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error)
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -228,3 +235,20 @@ type ContractHealthScore struct {
 	ComponentStorageTTL  int32
 	ComputedAt           time.Time
 }
+
+// ContractVersion mirrors store.ContractVersion.
+type ContractVersion struct {
+	ContractID        string
+	WasmHash          string
+	FirstSeenLedger   int64
+	TxHash            string
+	VerifiedSourceRef string
+}
+
+// ErrVersionNotFound is returned by GetLatestContractVersion when no entry exists.
+var ErrVersionNotFound = errorString("poller: contract version not found")
+
+type errorString string
+
+func (e errorString) Error() string { return string(e) }
+
