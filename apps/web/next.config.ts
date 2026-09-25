@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 import withPWA from "@ducanh2912/next-pwa";
 
 const baseConfig: NextConfig = {
+  outputFileTracingRoot: path.resolve(process.cwd(), "../.."),
   transpilePackages: ["@sorolens/ui", "@sorolens/xdr"],
 };
 
