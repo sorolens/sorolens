@@ -255,8 +255,8 @@ jobs:
           psql -h localhost -U sorolens -d sorolens -c "ALTER SYSTEM SET wal_level = replica;"
           psql -h localhost -U sorolens -d sorolens -c "ALTER SYSTEM SET archive_mode = on;"
           psql -h localhost -U sorolens -d sorolens -c "ALTER SYSTEM SET archive_command = 'aws s3 cp %p s3://sorolens-backups/wal/%f';"
-          # Restart postgres to pick up archive_mode
-          docker exec $(docker ps -qf ancestor=postgres:16-alpine) pg_ctl restart -D /var/lib/postgresql/data -m fast
+          # Restart postgres to pick up archive_mode (run as postgres user)
+          docker exec -u postgres $(docker ps -qf ancestor=postgres:16-alpine) pg_ctl restart -D /var/lib/postgresql/data -m fast
       - name: Wait for Postgres
         run: |
           echo "Waiting for PostgreSQL..."
