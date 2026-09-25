@@ -318,7 +318,7 @@ keyed by the chi route pattern (`internal/middleware/scopes.go`):
 
 | Scope | Grants |
 |---|---|
-| `read:contracts` | contract, event, invocation, storage, stats, and snapshot reads |
+| `read:contracts` | contract, event, invocation, storage, stats, snapshot, and interface-spec reads |
 | `write:contracts` | `POST /api/v1/contracts` |
 | `read:watchdog` | all `/api/v1/watchdog/*` reads |
 | `admin:*` | everything, including API key management |
@@ -417,6 +417,53 @@ Get a single contract's metadata and sync state.
 Stop tracking a contract. Data is retained but the indexer stops polling.
 
 **Response:** `204 No Content`.
+
+---
+
+#### `GET /api/v1/contracts/:id/spec`
+
+Returns the contract's SEP-48 interface: a JSON tree of the functions it
+exports, with their argument and return types.
+
+The spec is extracted from the `contractspecv0` custom section of the
+contract's Wasm the first time the indexer indexes it, and cached in the
+`contract_specs` table. Type nodes are one of the scalar kinds
+(`address`, `u32`, `i128`, `string`, ...) or a composite carrying its children:
+`vec` and `option` use `elem`, `map` uses `key` and `value`, `result` uses `ok`
+and `err`, `tuple` uses `tuple`, and `bytes_n` carries `n`. A reference to a
+user-defined type is `{"kind":"udt","name":"..."}`.
+
+**Response `200`:**
+```json
+{
+  "contract_id": "CDLZFC3S...",
+  "wasm_hash": "a1b2c3d4...",
+  "parsed_at": "2026-07-01T10:06:00Z",
+  "spec": {
+    "functions": [
+      {
+        "name": "transfer",
+        "doc": "Transfer tokens between two accounts",
+        "inputs": [
+          { "name": "from", "type": { "kind": "address" } },
+          { "name": "to", "type": { "kind": "address" } },
+          { "name": "amount", "type": { "kind": "i128" } }
+        ],
+        "outputs": [{ "kind": "void" }]
+      }
+    ]
+  }
+}
+```
+
+**Responses:**
+- `200`: the parsed interface.
+- `404`: the contract is not tracked (message: "contract not found"), or it is
+tracked but its spec has not been parsed yet (message: "no parsed interface
+spec is available for this contract yet"). A contract whose Wasm carries no
+`contractspecv0` section — for example one not built with `#[contractimpl]` —
+never gets a row, so it answers `404` indefinitely; the indexer logs a warning
+rather than failing the indexing pass.
 
 ---
 

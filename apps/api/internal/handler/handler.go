@@ -16,6 +16,7 @@ type APIStore interface {
 	store.QueryStore
 	store.WatchdogStore
 	store.ContractUpgradeStore
+	store.ContractSpecStore
 	store.HealthScoreStore
 	store.APIKeyStore
 	store.AlertSubscriptionStore

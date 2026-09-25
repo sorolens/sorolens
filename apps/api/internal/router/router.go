@@ -155,6 +155,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/summary", h.ContractSummary)
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
+		get("/contracts/{id}/spec", h.GetContractSpec)
 		get("/stream/events", h.StreamEventsSSE)
 
 		// API keys (admin scope + admin role).
