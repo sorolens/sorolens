@@ -12,6 +12,16 @@ OAPI_CODEGEN := $(CURDIR)/.bin/oapi-codegen
 OAPI_SPEC    := docs/openapi.yaml
 CLIENT_DIR   := packages/go-client
 
+# Build metadata for GET /api/version. Override on the command line, e.g.
+#   make build VERSION=1.2.3
+# VERSION defaults to "dev" (matching cli/Makefile) until a release tag sets it.
+VERSION   ?= dev
+GIT_SHA   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
+BUILT_AT  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+API_BUILDINFO := github.com/sorolens/sorolens/apps/api/internal/buildinfo
+API_LDFLAGS   := -ldflags "-X $(API_BUILDINFO).Version=$(VERSION) -X $(API_BUILDINFO).GitSHA=$(GIT_SHA) -X $(API_BUILDINFO).BuiltAt=$(BUILT_AT)"
+
+.PHONY: up down logs psql migrate-up migrate-down migrate-new test lint dev build client-go openapi lint-openapi
 .PHONY: up down logs psql migrate-up migrate-down migrate-new test lint dev api build client-go openapi lint-openapi
 
 ## up: start all Docker services in the background
@@ -111,7 +121,7 @@ api:
 
 ## build: build all Go binaries and TypeScript packages
 build:
-	cd apps/api && go build ./...
+	cd apps/api && go build $(API_LDFLAGS) ./...
 	cd services/indexer && go build ./...
 	cd cli && go build ./...
 	cd $(CLIENT_DIR) && go build ./...

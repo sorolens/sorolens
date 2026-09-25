@@ -25,6 +25,8 @@ servers:
 tags:
   - name: Health
     description: Liveness and readiness probes
+  - name: Version
+    description: Build metadata for the running API instance
   - name: Stats
     description: Global and per-contract statistics
   - name: Contracts
@@ -106,6 +108,22 @@ paths:
                     type: object
                     additionalProperties:
                       type: string
+
+  /api/version:
+    get:
+      tags: [Version]
+      summary: Build metadata for the running API instance
+      operationId: getVersion
+      security: []
+      responses:
+        "200":
+          description: Version, git SHA, and build timestamp (fall back to "dev" when not injected)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuildInfo"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /metrics:
     get:
@@ -1747,6 +1765,23 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    BuildInfo:
+      type: object
+      required: [version, git_sha, built_at]
+      properties:
+        version:
+          type: string
+          description: Semantic version injected at build time; "dev" when unset.
+          example: 1.4.2
+        git_sha:
+          type: string
+          description: Git commit SHA injected at build time; "dev" when unset.
+          example: abc1234
+        built_at:
+          type: string
+          description: RFC3339 build timestamp injected at build time; "dev" when unset or malformed.
+          example: "2026-01-02T15:04:05Z"
+
     Error:
       type: object
       required: [error]

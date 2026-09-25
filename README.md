@@ -23,6 +23,7 @@ Soroban's public RPC retains events for 24 hours and transaction data for up to 
 - **Snapshot / replay**: `GET /api/v1/contracts/:id/snapshot?ledger=N` replays a contract's storage state and last known event as of any ledger, with a ledger scrubber on the contract page for time-travel debugging.
 - **Scoped API keys**: per-key permissions (`read:contracts`, `write:contracts`, `read:watchdog`, `admin:*`) enforced by route metadata, so a monitoring bot can hold a read-only watchdog key.
 - **API playground**: an interactive `/playground` page to explore every endpoint, send requests, and copy them as curl.
+- **Build introspection**: `GET /api/version` returns the running API's `version`, `git_sha`, and `built_at` (injected at build time via `-ldflags`, falling back to `dev` locally). It is unauthenticated and does no database or Redis work, so deploy checks and uptime monitors can poll it cheaply.
 
 ## Quickstart
 ### Prerequisites
