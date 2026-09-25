@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,12 +14,12 @@ type timeoutHandler struct {
 
 type timeoutResponseWriter struct {
 	http.ResponseWriter
-	written bool
+	written atomic.Bool
 }
 
 func (t *timeoutResponseWriter) WriteHeader(code int) {
-	if !t.written {
-		t.written = true
+	if !t.written.Load() {
+		t.written.Store(true)
 		t.ResponseWriter.WriteHeader(code)
 	}
 }
@@ -39,7 +40,7 @@ func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	select {
 	case <-done:
 	case <-ctx.Done():
-		if ctx.Err() == context.DeadlineExceeded && !tw.written {
+		if ctx.Err() == context.DeadlineExceeded && !tw.written.Load() {
 			tw.Header().Set("Connection", "close")
 			http.Error(tw, "Service Unavailable: Request Timeout", http.StatusServiceUnavailable)
 		}
