@@ -106,6 +106,15 @@ export function getByGithub(githubLogin: string): Link | null {
   return row ?? null;
 }
 
+export function listLinks(limit = 100, offset = 0): Link[] {
+  const conn = requireDb();
+  return conn
+    .prepare(
+      "SELECT discord_id AS discordId, github_login AS githubLogin, linked_at AS linkedAt FROM links ORDER BY linked_at DESC LIMIT ? OFFSET ?",
+    )
+    .all(limit, offset) as Link[];
+}
+
 // ---- per-user Sorolens API keys -------------------------------------------
 
 /** Create or replace the Sorolens API key stored for a Discord user. */

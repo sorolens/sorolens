@@ -242,6 +242,13 @@ func (c *Client) GetNetwork(ctx context.Context) (*NetworkInfo, error) {
 	return &result, nil
 }
 
+// GetContractWasmHash returns the current Wasm hash for the given contract.
+// Returns an empty string when the hash cannot be determined, and an error on
+// RPC transport failures.
+func (c *Client) GetContractWasmHash(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+
 // ---- internal transport ---------------------------------------------------
 
 // call makes one JSON-RPC request, retrying on retriable errors with

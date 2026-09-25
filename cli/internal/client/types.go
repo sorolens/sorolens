@@ -93,6 +93,58 @@ type StorageResponse struct {
 	NextCursor string         `json:"next_cursor"`
 }
 
+// ContractsResponse wraps the paginated contracts API response.
+type ContractsResponse struct {
+	Contracts  []Contract `json:"contracts"`
+	NextCursor string     `json:"next_cursor"`
+}
+
+// InvocationsResponse wraps the paginated invocations API response.
+type InvocationsResponse struct {
+	Invocations []Invocation `json:"invocations"`
+	NextCursor  string       `json:"next_cursor"`
+}
+
+// ContractAlert mirrors the watchdog alert response.
+type ContractAlert struct {
+	ContractID string    `json:"contract_id"`
+	Severity   string    `json:"severity"`
+	Message    string    `json:"message"`
+	Ledger     int64     `json:"ledger"`
+	TxHash     string    `json:"tx_hash"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
+// AlertsResponse wraps the watchdog alerts API response.
+type AlertsResponse struct {
+	Alerts []ContractAlert `json:"alerts"`
+}
+
+
+// MonitoredContract mirrors the API watchdog monitored-contract response.
+type MonitoredContract struct {
+	ContractID    string     `json:"contract_id"`
+	Network       string     `json:"network"`
+	Name          string     `json:"name"`
+	Owner         string     `json:"owner"`
+	Status        string     `json:"status"`
+	LastCheck     *time.Time `json:"last_check"`
+	CheckInterval int64      `json:"check_interval"`
+	RegisteredAt  time.Time  `json:"registered_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// StreamMessage mirrors a single server-sent event emitted by the
+// /api/v1/stream/events endpoint. Type is one of "connected", "event" or
+// "alert"; exactly one of Event or Alert is populated for those cases.
+type StreamMessage struct {
+	Type       string `json:"type"`
+	ContractID string `json:"contract_id,omitempty"`
+	Event      *Event `json:"event,omitempty"`
+	Alert      any    `json:"alert,omitempty"`
+	Message    string `json:"message,omitempty"`
+}
+
 // SorolensError carries the error envelope returned by the API on non-2xx responses.
 type SorolensError struct {
 	Code      string

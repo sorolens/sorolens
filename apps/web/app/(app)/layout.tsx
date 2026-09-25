@@ -1,6 +1,8 @@
+import { ThemeToggle } from "@/components/ThemeToggle";
 import Link from "next/link";
 import { NetworkProvider } from "@/lib/network";
 import { NetworkSelector } from "@/components/NetworkSelector";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -23,6 +25,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 Contracts
               </Link>
               <Link
+                href="/events"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                Events
+              </Link>
+              <Link
                 href="/watchdog"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
@@ -36,9 +44,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
             </nav>
             <NetworkSelector />
+            <ThemeToggle />
           </div>
         </header>
+        <Breadcrumbs />
         <main>{children}</main>
+        <footer className="mt-12 border-t border-[var(--color-border)] pt-6 text-sm text-[var(--color-text-secondary)]">
+          Built for the Stellar developer community.
+        </footer>
       </div>
     </NetworkProvider>
   );

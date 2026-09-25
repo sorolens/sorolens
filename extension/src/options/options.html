@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sorolens settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header">
+        <img src="../icons/icon-48.png" alt="" width="32" height="32" />
+        <div>
+          <h1>Sorolens</h1>
+          <p class="subtitle">
+            One-click tracking for Soroban contract IDs found on Stellar
+            Expert, Stellar Lab and stellar.org.
+          </p>
+        </div>
+      </header>
+
+      <form id="settings-form">
+        <fieldset>
+          <legend>API key</legend>
+          <label class="field">
+            <span class="label">Sorolens API key</span>
+            <input
+              id="api-key"
+              class="input"
+              type="password"
+              placeholder="sl_live_…"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </label>
+          <p class="hint">
+            Create one in the dashboard (Admin → API keys). A key with
+            <code>write:contracts</code> lets the extension register contracts
+            that are not indexed yet; read-only keys still work for status and
+            watchlists. Stored on this device only
+            (<code>storage.local</code>), never synced.
+          </p>
+          <label class="checkbox">
+            <input id="reveal-key" type="checkbox" />
+            <span>Show key</span>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Identity</legend>
+          <label class="field">
+            <span class="label">User ID (sent as <code>X-User-ID</code>)</span>
+            <input
+              id="user-id"
+              class="input"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </label>
+          <p class="hint">
+            The watchlist endpoints key on this identity. To share a watchlist
+            with the dashboard, copy <code>sorolens_user_id</code> from
+            <code>localStorage</code> on the Sorolens web app. Leave empty to
+            generate a new one.
+          </p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Connection</legend>
+          <label class="field">
+            <span class="label">API base URL</span>
+            <input
+              id="api-base-url"
+              class="input"
+              type="url"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </label>
+          <label class="field">
+            <span class="label">Default network</span>
+            <select id="network" class="input"></select>
+          </label>
+          <label class="checkbox">
+            <input id="track-watchlist" type="checkbox" />
+            <span>Also add tracked contracts to my watchlist</span>
+          </label>
+          <label class="checkbox">
+            <input id="show-inline-buttons" type="checkbox" />
+            <span>Show inline buttons on explorer pages</span>
+          </label>
+        </fieldset>
+
+        <div class="actions">
+          <button class="button primary" type="submit" id="save-button">
+            Save
+          </button>
+          <button class="button" type="button" id="test-button">
+            Test connection
+          </button>
+          <button class="button danger" type="button" id="clear-key-button">
+            Clear API key
+          </button>
+        </div>
+      </form>
+
+      <p class="notice" id="notice" hidden></p>
+    </main>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

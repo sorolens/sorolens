@@ -152,6 +152,11 @@ func (h *Handler) ListHealthChecks(w http.ResponseWriter, r *http.Request) {
 
 // ListWatchdogAlerts handles GET /api/v1/watchdog/contracts/{id}/alerts and
 // GET /api/v1/watchdog/alerts.
+//
+// Pagination (issue #150): pass ?limit=<n>&cursor=<c> to continue from a
+// previous page; the response carries next_cursor (empty when exhausted).
+// The cursor is a base64 "timestamp|contract_id" keyset pair, so pages
+// remain stable while new alerts arrive.
 func (h *Handler) ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	severity := r.URL.Query().Get("severity")
@@ -160,8 +165,12 @@ func (h *Handler) ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
-	alerts, err := h.Store.ListAlerts(r.Context(), id, severity, network, intQuery(r, "limit", 100))
+	alerts, next, err := h.Store.ListAlerts(r.Context(), id, severity, network, r.URL.Query().Get("cursor"), intQuery(r, "limit", 100))
 	if err != nil {
+		if errors.Is(err, store.ErrInvalidCursor) {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+			return
+		}
 		h.Logger.Error("list alerts", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list alerts")
 		return
@@ -170,7 +179,10 @@ func (h *Handler) ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 	for i, a := range alerts {
 		resp[i] = alertFromStore(a)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"alerts": resp})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"alerts":      resp,
+		"next_cursor": next,
+	})
 }
 
 // WatchdogStats handles GET /api/v1/watchdog/stats.
@@ -193,5 +205,35 @@ func (h *Handler) WatchdogStats(w http.ResponseWriter, r *http.Request) {
 		Unresponsive:   s.Unresponsive,
 		TotalAlerts:    s.TotalAlerts,
 		CriticalAlerts: s.CriticalAlerts,
+	})
+}
+
+// GetContractUptime handles GET /api/v1/watchdog/contracts/{id}/uptime.
+// Query param: window=24h|7d|30d (defaults to 24h).
+// Response: { "contract_id": "...", "window": "24h", "uptime_pct": 99.98 }
+func (h *Handler) GetContractUptime(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	window := r.URL.Query().Get("window")
+	if window == "" {
+		window = "24h"
+	}
+	switch window {
+	case "24h", "7d", "30d":
+		// valid
+	default:
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "window must be one of: 24h, 7d, 30d")
+		return
+	}
+
+	result, err := h.Store.GetContractUptime(r.Context(), id, window)
+	if err != nil {
+		h.Logger.Error("get contract uptime", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to compute contract uptime")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"contract_id": result.ContractID,
+		"window":      result.Window,
+		"uptime_pct":  result.Uptime,
 	})
 }

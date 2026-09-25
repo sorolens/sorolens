@@ -1,0 +1,36 @@
+# CODEOWNERS — review-required maintainers per path.
+#
+# Owners are the repository's active maintainers, derived from the repository
+# topology and per-path commit history. The default rule below covers any path
+# not matched by a more specific entry.
+#
+# More specific rules must come after the default, per GitHub CODEOWNERS syntax.
+
+# Default owner for the whole repository.
+*                           @Emmanuellsensai
+
+# Applications
+/apps/api/                  @Emmanuellsensai @TemiMustapha
+/apps/web/                  @Emmanuellsensai @TemiMustapha
+/apps/indexer/              @Emmanuellsensai @TemiMustapha
+
+# Backend services
+/services/indexer/          @Emmanuellsensai @TemiMustapha
+/services/discord-bot/      @Emmanuellsensai
+
+# Shared packages
+/packages/xdr/              @Emmanuellsensai
+/packages/ui/               @Emmanuellsensai
+/packages/go-client/        @Emmanuellsensai
+
+# CLI
+/cli/                       @Emmanuellsensai
+
+# Soroban smart contracts
+/contracts/                 @Emmanuellsensai @TemiMustapha
+
+# Documentation, tooling, CI and tests
+/docs/                      @Emmanuellsensai
+/scripts/                   @Emmanuellsensai
+/.github/                   @Emmanuellsensai @TemiMustapha
+/tests/                     @Emmanuellsensai @TemiMustapha
