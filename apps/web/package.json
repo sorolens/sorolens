@@ -12,6 +12,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@sentry/nextjs": "^11.0.0",
     "@sorolens/ui": "workspace:*",
     "@sorolens/xdr": "workspace:*",
     "next": "^15.3.1",
