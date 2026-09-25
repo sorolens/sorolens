@@ -40,6 +40,22 @@ type identityFromRequest func(r *http.Request) (store.User, bool)
 //   - No identity resolvable: 401.
 //   - Caller not found or role below the requirement: 403.
 func RequireRole(lookup UserLookup, logger *slog.Logger, minRole string) func(http.Handler) http.Handler {
+	return requireRole(lookup, logger, minRole, http.StatusUnauthorized)
+}
+
+// RequireRoleOrForbidden is RequireRole with the unauthenticated rejection
+// collapsed into 403. It is for surfaces that should not advertise themselves:
+// an anonymous caller receives the same answer as a signed-in caller who lacks
+// the role. The admin-gated pprof endpoints use it so probing /debug/pprof/*
+// always answers 403 unless the caller is an admin.
+func RequireRoleOrForbidden(lookup UserLookup, logger *slog.Logger, minRole string) func(http.Handler) http.Handler {
+	return requireRole(lookup, logger, minRole, http.StatusForbidden)
+}
+
+// requireRole is the shared implementation behind RequireRole and
+// RequireRoleOrForbidden. unauthStatus is the response used when no identity
+// can be resolved; an identified caller below minRole always gets 403.
+func requireRole(lookup UserLookup, logger *slog.Logger, minRole string, unauthStatus int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := resolveUser(r, lookup)
@@ -47,7 +63,7 @@ func RequireRole(lookup UserLookup, logger *slog.Logger, minRole string) func(ht
 				if logger != nil {
 					logger.Debug("role middleware: no identity", "path", r.URL.Path)
 				}
-				writeRoleError(w, http.StatusUnauthorized, map[string]string{
+				writeRoleError(w, unauthStatus, map[string]string{
 					"error": "authentication required",
 				})
 				return

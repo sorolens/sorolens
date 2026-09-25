@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/http"
+	"net/http/pprof"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -27,6 +28,29 @@ func New(h *handler.Handler) http.Handler {
 	// Health (not rate-limited)
 	r.Get("/health", h.Health)
 	r.Get("/readyz", h.Readyz)
+
+	// Profiling (admin only). net/http/pprof is mounted on this same chi
+	// router so it inherits the global middleware, but every request is
+	// gated by an admin role check. Rejections are always 403 — including
+	// anonymous ones — so the surface is not advertised to unauthenticated
+	// callers.
+	r.Route("/debug/pprof", func(r chi.Router) {
+		r.Use(middleware.RequireRoleOrForbidden(h.Store, h.Logger, middleware.RoleAdmin))
+
+		r.Get("/", pprof.Index)
+		r.Get("/cmdline", pprof.Cmdline)
+		r.Get("/profile", pprof.Profile)
+		r.Get("/symbol", pprof.Symbol)
+		r.Post("/symbol", pprof.Symbol)
+		r.Get("/trace", pprof.Trace)
+
+		// Named runtime profiles: allocs, block, goroutine, heap, mutex and
+		// threadcreate. Resolve the profile explicitly rather than relying on
+		// the request path so routing stays independent of middleware rewrites.
+		r.Get("/{profile}", func(w http.ResponseWriter, req *http.Request) {
+			pprof.Handler(chi.URLParam(req, "profile")).ServeHTTP(w, req)
+		})
+	})
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
