@@ -26,6 +26,7 @@ type FullStore interface {
 	WatchlistStore
 	UserStore
 	PerformanceStore
+	ContractNoteStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.

@@ -110,23 +110,6 @@ export interface ContractsListResponse {
   has_more: boolean;
 }
 
-// ---- bulk contract actions (#176) ------------------------------------------
-
-export type BatchContractsAction = "untrack" | "tag";
-
-export interface BatchContractsRequest {
-  ids: string[];
-  action: BatchContractsAction;
-  // args.label is the tag to apply for action "tag".
-  args?: { label?: string };
-}
-
-export interface BatchContractsResponse {
-  action: BatchContractsAction;
-  requested: number;
-  affected: number;
-}
-
 export interface TrackContractRequest {
   id: string;
   label?: string;
@@ -284,8 +267,6 @@ export interface AlertSubscription {
   contract_id: string;
   webhook_url: string;
   severity_filter: string;
-  last_delivery_status?: string | null;
-  last_delivery_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -294,25 +275,18 @@ export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
 }
 
-export interface WebhookDelivery {
+// ---- contract notes --------------------------------------------------------
+
+export interface ContractNote {
   id: string;
-  subscription_id: string;
-  payload: string;
-  status: 'pending' | 'success' | 'failed';
-  attempt: number;
-  max_attempts: number;
-  next_attempt_at: string;
-  response_code?: number;
-  error_message?: string;
+  contract_id: string;
+  author: string;
+  body: string;
   created_at: string;
   updated_at: string;
 }
 
-export interface WebhookDeliveriesResponse {
-  deliveries: WebhookDelivery[];
-  page: number;
-  limit: number;
-  total: number;
+export interface ContractNotesResponse {
+  notes: ContractNote[];
 }
-
 

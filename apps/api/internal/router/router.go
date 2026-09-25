@@ -165,6 +165,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/upgrades", h.ListContractUpgrades)
 		get("/contracts/{id}/health-score", h.GetContractHealthScore)
 		get("/contracts/{id}/summary", h.ContractSummary)
+		// Contract notes (institutional knowledge). Writes are unscoped for
+		// anonymous dashboard traffic, matching the watchlist surface; a
+		// presented API key still needs the write scope (see scopes.go).
+		get("/contracts/{id}/notes", h.ListContractNotes)
+		r.With(scope).Post("/contracts/{id}/notes", h.CreateContractNote)
+		r.With(scope).Delete("/contracts/{id}/notes/{noteId}", h.DeleteContractNote)
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
 		get("/contracts/{id}/spec", h.GetContractSpec)
