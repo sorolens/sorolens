@@ -199,6 +199,27 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: Versioned liveness probe
+      description: |
+        Alias of /health under the versioned prefix, for container platforms
+        that probe a path relative to the API base. Exempt from rate limiting.
+      operationId: healthV1
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
   /metrics:
     get:
       tags: [Operations]

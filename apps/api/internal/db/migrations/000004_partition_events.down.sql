@@ -35,13 +35,14 @@ BEGIN
              in_successful_call, inserted_at
       FROM events_new;
 
+    -- Drop the partitioned table and its partitions first so its index names
+    -- are released before the replacements below reuse them.
+    DROP TABLE events_new;
+
     -- Recreate the original indexes.
     CREATE INDEX idx_events_contract_ledger ON events (contract_id, ledger DESC);
     CREATE INDEX idx_events_tx_hash ON events (tx_hash);
     CREATE INDEX idx_events_ledger_closed_at ON events (ledger_closed_at DESC);
-
-    -- Drop the partitioned table and its partitions.
-    DROP TABLE events_new;
 
   END IF;
 END $$;

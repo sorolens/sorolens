@@ -81,7 +81,7 @@ The GitHub issue thread remains the source of truth for any individual change. F
                                                   v
      +-----------------+     +-------+     +---------------+     +-------------+
      |  Watchdog       |     |       |     |  Postgres 16  | <-- |  REST API   |
-     |  (Soroban)      |==>events==>|     |  (Neon)       |     |  (Go, Vercel)|
+     |  (Soroban)      |==>events==>|     |  (Neon)       |     |  (Go, Docker)|
      +-----------------+     +-------+     +---------------+     +------+------+
                                                                         |
                                                                         v
@@ -145,7 +145,7 @@ Admin: `GAZ3HN2QNDKWLOI2OQEG65KBJEAUP4PROR3FJNXNDY34UH547MN4CJUI`
 ## Tech stack
 | Layer | Technology |
 |---|---|
-| API | Go 1.23, chi, pgx v5, deployed as Vercel serverless functions |
+| API | Go 1.23, chi, pgx v5, deployed as a standalone Docker service |
 | Indexer | Go 1.23, runs as a GitHub Actions scheduled workflow (5-minute cron) |
 | Database | Postgres 16, hosted on Neon |
 | Cache / locks | Redis, hosted on Upstash |
@@ -207,6 +207,60 @@ and release process.
 | Store methods | `apps/api/internal/store/watchdog.go` |
 | REST endpoints | `GET /api/v1/watchdog/{stats,contracts,alerts,contracts/{id}/{health,alerts}}` |
 | Dashboard pages | `apps/web/app/(app)/watchdog/*` |
+---
+## Deployment
+
+The Vercel deployment hosts the Next.js dashboard only. The Go API ships as a
+standalone Docker image and runs anywhere a container can run (Railway, Render,
+Fly.io, or `docker compose`).
+
+### Build the image
+
+```bash
+docker build -f apps/api/Dockerfile -t sorolens-api .
+```
+
+The multi-stage build compiles the Go binary into a minimal Alpine runtime. The
+container applies pending database migrations on startup — the SQL files under
+`apps/api/internal/db/migrations/` are embedded in the binary — and then serves
+the API on `$PORT` (default `8080`).
+
+### Run the full stack
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+curl -s http://localhost:8080/api/v1/health   # {"status":"ok"}
+```
+
+This starts Postgres, Redis, and the API. Override `POSTGRES_*`, `API_PORT`,
+`STELLAR_NETWORK`, `SOROBAN_RPC_URL`, `WATCHDOG_CONTRACT_ID`, and
+`ALLOWED_ORIGINS` from the environment or a `.env` file.
+
+### Required environment variables
+
+| Variable | Required | Notes |
+|---|---|---|
+| `DATABASE_URL` | yes | Pooled Postgres connection string used by the API at runtime. |
+| `DIRECT_DATABASE_URL` | recommended | Non-pooled connection string used to apply migrations. Falls back to `DATABASE_URL` when unset. |
+| `REDIS_URL` | yes | Redis connection string for caching and rate limiting. |
+| `PORT` | no | HTTP port; defaults to `8080`. |
+| `STELLAR_NETWORK` | no | `testnet` (default), `mainnet`, or `futurenet`. |
+| `SOROBAN_RPC_URL` | no | Defaults to the SDF testnet endpoint. |
+| `WATCHDOG_CONTRACT_ID` | no | Deployed `sorolens-watchdog` contract id. |
+| `ALLOWED_ORIGINS` | no | Comma-separated CORS allowlist for the dashboard origin. Unset (or `*`) allows any origin. |
+
+### Deploy to Railway
+
+`railway.toml` at the repository root configures Railway to build
+`apps/api/Dockerfile` and probe `/api/v1/health`. Create a project, add the
+Postgres and Redis plugins, set the variables above, and deploy.
+
+### Point the dashboard at the API
+
+Set `NEXT_PUBLIC_API_URL` in the Vercel project to the deployed API origin, set
+`ALLOWED_ORIGINS` on the API to the dashboard origin (for example
+`https://sorolens-web-iota.vercel.app`), and redeploy both.
+
 ---
 ## Contributing
 ### See [CONTRIBUTING.md](./CONTRIBUTING.md) for local setup, branch conventions, commit format, and a full walkthrough of adding a new XDR type decoder.

@@ -82,6 +82,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
 
+		// Versioned liveness alias. Keep it dependency-free and exempt from
+		// rate limiting (see middleware.RateLimit) so container orchestrators
+		// and load balancers can probe the deployment path.
+		r.Get("/health", h.Health)
+
 		// Scoped API key auth. It is applied per route with r.With so chi has
 		// already resolved the leaf route pattern when the middleware runs; the
 		// required scope is looked up from the metadata table in

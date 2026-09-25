@@ -1,0 +1,35 @@
+# Keep the build context small for `docker build -f apps/api/Dockerfile .`
+# (the context is the repository root, which contains a ~550 MB node_modules).
+
+# Version control and CI
+.git
+.github
+
+# JavaScript dependencies and build output
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+.turbo
+**/.turbo
+
+# Rust build output
+target
+**/target
+
+# Test and coverage artifacts
+coverage
+**/coverage.out
+
+# Local environment files and dumps
+.env
+.env.*
+!.env.example
+
+# Documentation, screenshots, and scratch scripts are not needed to build.
+docs
+**/*.md
+*.bak
+modify_*.py

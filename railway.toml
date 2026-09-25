@@ -1,0 +1,24 @@
+# Railway deployment for the Sorolens API.
+#
+# One-click setup:
+#   1. Create a Railway project and add a Postgres plugin and a Redis plugin.
+#   2. Point the service at this repository; Railway reads this file.
+#   3. Set the environment variables listed in the README
+#      (DATABASE_URL, DIRECT_DATABASE_URL, REDIS_URL, PORT, STELLAR_NETWORK,
+#      SOROBAN_RPC_URL, WATCHDOG_CONTRACT_ID, ALLOWED_ORIGINS).
+#   4. Deploy. The container applies pending migrations on startup before it
+#      serves traffic.
+#
+# DATABASE_URL and REDIS_URL are injected automatically by the Postgres and
+# Redis plugins; copy the private DATABASE_URL into DIRECT_DATABASE_URL as well
+# so migrations bypass PgBouncer.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/api/Dockerfile"
+
+[deploy]
+healthcheckPath = "/api/v1/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

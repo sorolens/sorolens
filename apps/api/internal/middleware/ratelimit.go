@@ -27,7 +27,7 @@ type RedisClient interface {
 func RateLimit(rc RedisClient, lookup APIKeyLookup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/health" || r.URL.Path == "/readyz" || r.URL.Path == "/api/version" {
+			if r.URL.Path == "/health" || r.URL.Path == "/readyz" || r.URL.Path == "/api/version" || r.URL.Path == "/api/v1/health" {
 				next.ServeHTTP(w, r)
 				return
 			}

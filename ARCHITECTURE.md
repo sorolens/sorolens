@@ -11,9 +11,12 @@ graph TB
         B[Browser / Next.js 15]
     end
 
-    subgraph "Vercel Edge"
+    subgraph "Vercel"
         N[Next.js App\napp/* pages]
-        A[Go API\nVercel Serverless Functions\n/api/v1/*]
+    end
+
+    subgraph "Container host\nRailway / Render / Fly.io"
+        A[Go API\nDocker image\n/api/v1/*]
     end
 
     subgraph "Data Layer"
@@ -293,6 +296,16 @@ other body is bounded with `http.MaxBytesReader`; both paths return `413` with:
 Set `REQUEST_MAX_BODY_BYTES` to change the cap.
 
 Cursor pagination uses an opaque `cursor` token (base64 of `{ledger}:{id}`) rather than offset. This is safe against inserts during pagination and aligns with how the RPC itself paginates.
+
+#### Health and readiness
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Liveness probe. Always `200 {"status":"ok"}` and exempt from rate limiting. |
+| `GET /api/v1/health` | Versioned alias of `/health` for container platforms (Railway, Render) that probe a path under the API prefix. Also exempt from rate limiting. |
+| `GET /readyz` | Readiness probe. Pings Postgres and Redis and returns `503` when either is unreachable. |
+
+The API runs as a standalone Docker service (`apps/api/Dockerfile`), not as Vercel serverless functions. The container applies pending migrations from `apps/api/internal/db/migrations` on startup before it starts serving.
 
 #### Authentication and scopes
 
@@ -629,7 +642,7 @@ Network-wide summary across all tracked contracts.
 
 **Decision:** The dashboard live-tail polls `GET /api/v1/contracts/:id/events` every 5 seconds instead of opening a long-lived SSE stream.
 
-**Rationale:** Vercel serverless functions have a maximum execution time (approximately 60 seconds for Pro, 10 seconds for free). Long-lived SSE connections are not supported on Vercel serverless. HTTP polling with a 5-second interval and a cursor is the only viable approach without a separate persistent WebSocket server.
+**Rationale:** Vercel serverless functions have a maximum execution time (approximately 60 seconds for Pro, 10 seconds for free). Long-lived SSE connections are not supported on Vercel serverless. HTTP polling with a 5-second interval and a cursor is the only viable approach without a separate persistent WebSocket server. The API itself now runs as a container (`apps/api/Dockerfile`), so an SSE handler is no longer blocked by the Vercel function timeout; the polling client is kept for now to avoid changing the dashboard contract.
 
 **Tradeoffs:** Five-second polling has slightly higher latency than SSE and uses more requests. For an observability tool where data is already indexed with 5-minute granularity, this is acceptable. Clients deduplicate by event `id`.
 

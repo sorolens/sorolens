@@ -67,15 +67,17 @@ BEGIN
       _partition_name, _start, _end
     );
 
+    -- Drop the old table first: it still owns the index names below, and
+    -- Postgres index names are unique per schema, so reusing them before the
+    -- drop fails with "relation ... already exists".
+    DROP TABLE events_old;
+
     -- Recreate the indexes on the partitioned table.
     -- Indexes on the parent propagate to all partitions automatically.
     -- We recreate them explicitly to ensure they match the originals.
     CREATE INDEX idx_events_contract_ledger ON events (contract_id, ledger DESC);
     CREATE INDEX idx_events_tx_hash ON events (tx_hash);
     CREATE INDEX idx_events_ledger_closed_at ON events (ledger_closed_at DESC);
-
-    -- Drop the old table.
-    DROP TABLE events_old;
 
   END IF;
 END $$;

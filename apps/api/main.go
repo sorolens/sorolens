@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sorolens/sorolens/apps/api/internal/config"
+	"github.com/sorolens/sorolens/apps/api/internal/db"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/router"
@@ -30,6 +31,20 @@ func main() {
 		logger.Error("config", "err", err)
 		os.Exit(1)
 	}
+
+	// Apply pending schema migrations before connecting the query pool so the
+	// API never serves against an out-of-date schema. Prefer the direct
+	// (non-pooled) URL when set: migrations hold an advisory lock and issue DDL
+	// that should not be routed through a transaction-mode pooler.
+	migrationURL := cfg.DirectDatabaseURL
+	if migrationURL == "" {
+		migrationURL = cfg.DatabaseURL
+	}
+	if err := db.Migrate(migrationURL); err != nil {
+		logger.Error("migrate", "err", err)
+		os.Exit(1)
+	}
+	logger.Info("migrations applied")
 
 	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
