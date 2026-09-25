@@ -1,4 +1,5 @@
 [![CI](https://github.com/sorolens/sorolens/actions/workflows/ci.yml/badge.svg)](https://github.com/sorolens/sorolens/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sorolens/sorolens/branch/main/graph/badge.svg)](https://codecov.io/gh/sorolens/sorolens)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Release](https://img.shields.io/github/v/release/sorolens/sorolens)](https://github.com/sorolens/sorolens/releases)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/D9jATUezYX)
@@ -76,6 +77,28 @@ Real-time chat with maintainers and other contributors: [**join the Sorolens Dis
                                                                 |  (Vercel)     |
                                                                 +---------------+
 ```
+
+## Screenshots
+
+### Landing page
+
+![Sorolens landing page](docs/screenshots/landing.png)
+
+### Contracts list
+
+![Contracts list](docs/screenshots/contracts.png)
+
+### Contract detail
+
+![Contract detail](docs/screenshots/contract-detail.png)
+
+### Watchdog overview
+
+![Watchdog overview](docs/screenshots/watchdog.png)
+
+### Watchdog contract detail
+
+![Watchdog contract detail](docs/screenshots/watchdog-contract-detail.png)
 
 The **watchdog contract** at `contracts/watchdog/` is the piece that makes Sorolens unique: contracts you operate emit `HealthCheckEvent`, `ContractAlert`, `ContractRegistered`, and `ContractDeregistered` on-chain, the indexer picks them up along with everything else, and the dashboard renders your fleet's live health.
 

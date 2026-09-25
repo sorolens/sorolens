@@ -273,6 +273,135 @@ func (s *postgresStore) UpsertSyncState(ctx context.Context, ss SyncState) error
 	return err
 }
 
+// ---- indexer cursors ------------------------------------------------------
+
+// GetIndexerCursor retrieves the last committed ledger for a network.
+func (s *postgresStore) GetIndexerCursor(ctx context.Context, network string) (uint32, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT ledger
+		FROM indexer_cursors
+		WHERE network = $1`, networkOrDefault(network))
+	var ledger int64
+	err := row.Scan(&ledger)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get indexer cursor: %w", err)
+	}
+	return uint32(ledger), nil
+}
+
+// SetIndexerCursor updates the last committed ledger for a network.
+func (s *postgresStore) SetIndexerCursor(ctx context.Context, network string, ledger uint32) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO indexer_cursors (network, ledger, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (network) DO UPDATE SET
+			ledger = EXCLUDED.ledger,
+			updated_at = NOW()`, networkOrDefault(network), ledger)
+	if err != nil {
+		return fmt.Errorf("set indexer cursor: %w", err)
+	}
+	return nil
+}
+
+// BatchInsertWithCursor atomically writes events, invocations, contract sync state,
+// and advances the network indexer cursor within a single database transaction.
+func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) // safe if committed
+
+	batch := &pgx.Batch{}
+
+	for _, e := range events {
+		topicJSON, err := json.Marshal(e.TopicXDR)
+		if err != nil {
+			return fmt.Errorf("marshal topic_xdr for event %s: %w", e.ID, err)
+		}
+		topicDecJSON, _ := json.Marshal(e.TopicDecoded)
+		valDecJSON, _ := json.Marshal(e.ValueDecoded)
+
+		batch.Queue(`
+			INSERT INTO events
+				(id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+				 topic_xdr, value_xdr, topic_decoded, value_decoded,
+				 in_successful_call, inserted_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			ON CONFLICT (id) DO NOTHING`,
+			e.ID, e.ContractID, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
+			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
+			e.InSuccessfulCall, time.Now(),
+		)
+	}
+
+	for _, inv := range invocations {
+		argsJSON, _ := json.Marshal(inv.ArgsDecoded)
+		resultJSON, _ := json.Marshal(inv.ResultDecoded)
+
+		batch.Queue(`
+			INSERT INTO invocations
+				(tx_hash, contract_id, network, ledger, ledger_closed_at, status,
+				 function_name, args_decoded, result_decoded, result_xdr,
+				 resource_fee_charged, cpu_insn, mem_byte,
+				 ledger_read_byte, ledger_write_byte, application_order, inserted_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+			ON CONFLICT (tx_hash) DO NOTHING`,
+			inv.TxHash, inv.ContractID, networkOrDefault(inv.Network), inv.Ledger, inv.LedgerClosedAt, inv.Status,
+			inv.FunctionName, argsJSON, resultJSON, inv.ResultXDR,
+			inv.ResourceFeeCharged, inv.CPUInsn, inv.MemByte,
+			inv.LedgerReadByte, inv.LedgerWriteByte, inv.ApplicationOrder, time.Now(),
+		)
+	}
+
+	if syncState.ContractID != "" {
+		batch.Queue(`
+			INSERT INTO sync_state (contract_id, last_ledger, last_run_at, error_message, updated_at)
+			VALUES ($1, $2, NOW(), NULL, NOW())
+			ON CONFLICT (contract_id) DO UPDATE SET
+				last_ledger   = EXCLUDED.last_ledger,
+				last_run_at   = NOW(),
+				error_message = NULL,
+				updated_at    = NOW()`,
+			syncState.ContractID, syncState.LastLedger,
+		)
+	}
+
+	batch.Queue(`
+		INSERT INTO indexer_cursors (network, ledger, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (network) DO UPDATE SET
+			ledger     = EXCLUDED.ledger,
+			updated_at = NOW()`,
+		networkOrDefault(network), ledger,
+	)
+
+	br := tx.SendBatch(ctx, batch)
+	totalQueued := len(events) + len(invocations)
+	if syncState.ContractID != "" {
+		totalQueued++
+	}
+	totalQueued++ // indexer_cursors
+
+	for i := 0; i < totalQueued; i++ {
+		if _, err := br.Exec(); err != nil {
+			br.Close()
+			return fmt.Errorf("exec batch item %d: %w", i, err)
+		}
+	}
+	if err := br.Close(); err != nil {
+		return fmt.Errorf("close batch: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit batch: %w", err)
+	}
+	return nil
+}
+
 // ---- global stats ---------------------------------------------------------
 
 // GetGlobalStats retrieves aggregated statistics about the tracked contracts, events, invocations, and storage entries.

@@ -269,6 +269,11 @@ func (s *stubStore) CreateNextMonthPartition(_ context.Context) error { return n
 func (s *stubStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error {
 	return nil
 }
+func (s *stubStore) GetIndexerCursor(_ context.Context, _ string) (uint32, error) { return 0, nil }
+func (s *stubStore) SetIndexerCursor(_ context.Context, _ string, _ uint32) error  { return nil }
+func (s *stubStore) BatchInsertWithCursor(_ context.Context, _ string, _ uint32, _ []poller.Event, _ []poller.Invocation, _ poller.SyncState) error {
+	return nil
+}
 func (s *stubStore) RecentHourlyActivity(ctx context.Context, contractID string, hours int) ([]poller.HourlyActivity, error) {
 	return nil, nil
 }

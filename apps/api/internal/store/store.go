@@ -64,6 +64,19 @@ type Store interface {
 
 	// CreateMonthlyPartitionIfNotExists creates a partition for the given year/month if it does not exist.
 	CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error
+
+	// GetIndexerCursor returns the last successfully committed ledger sequence for a network,
+	// or 0 if no cursor has been recorded yet.
+	GetIndexerCursor(ctx context.Context, network string) (uint32, error)
+
+	// SetIndexerCursor updates the cursor for a network.
+	SetIndexerCursor(ctx context.Context, network string, ledger uint32) error
+
+	// BatchInsertWithCursor inserts events, invocations, upserts contract sync state,
+	// and advances the network indexer cursor within a single database transaction.
+	// If any operation fails or the process crashes mid-poll before commit,
+	// the entire batch is rolled back atomically.
+	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error
 }
 
 // AlertSubscriptionStore is the read/write surface for alert webhook subscriptions.

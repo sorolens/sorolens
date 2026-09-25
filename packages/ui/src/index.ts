@@ -5,3 +5,5 @@ export type { BadgeProps, BadgeSize, BadgeVariant } from "./Badge";
 export { DataTable } from "./DataTable";
 export type { Column, DataTableProps } from "./DataTable";
 
+export { Toast } from "./Toast";
+export type { ToastProps, ToastVariant } from "./Toast";

@@ -28,6 +28,7 @@ import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
 import { HealthScoreCard } from "@/components/HealthScoreCard";
+import { useEventStream } from "@/hooks/useEventStream";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -57,6 +58,16 @@ function ContractDetailContent({ id }: { id: string }) {
   const [storageCursor, setStorageCursor] = useState<string | null>(null);
   const [storageHasMore, setStorageHasMore] = useState(false);
   const [currentLedger, setCurrentLedger] = useState(0);
+
+  const { isConnected: isStreamConnected } = useEventStream({
+    contractId: id,
+    onEvent: (newEvent) => {
+      setEvents((prev) => {
+        if (prev.some((e) => e.id === newEvent.id)) return prev;
+        return [newEvent, ...prev];
+      });
+    },
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -329,7 +340,15 @@ function ContractDetailContent({ id }: { id: string }) {
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Events</h2>
+        <div className="mb-4 flex items-center gap-3">
+          <h2 className="text-xl font-semibold">Events</h2>
+          {isStreamConnected && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/40 px-2.5 py-0.5 text-xs font-medium text-green-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+              Live
+            </span>
+          )}
+        </div>
         {eventsLoading ? (
           <TableSkeleton />
         ) : (

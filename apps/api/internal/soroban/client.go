@@ -1,7 +1,9 @@
 // Package soroban provides a typed JSON-RPC 2.0 client for the Stellar
 // Soroban RPC. It wraps the getLatestLedger, getEvents, getLedgerEntries,
 // getTransaction, and getNetwork methods with automatic retry on HTTP 5xx
-// and 429 (rate limit) responses using exponential backoff with jitter.
+// and 429 (rate limit) responses using configurable exponential backoff with
+// jitter. The delay doubles on each consecutive retriable failure, is capped,
+// and resets to the base delay after any successful call.
 //
 // # Retention window
 //
@@ -24,35 +26,145 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"sync"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
 	defaultTimeout = 30 * time.Second
-	maxRetries     = 5
-	maxBackoff     = 30 * time.Second
+
+	// defaultMaxRetries is the number of retries after the initial attempt.
+	defaultMaxRetries = 5
+	// defaultBackoffBase is the delay before the first retry; each further
+	// consecutive retriable failure doubles it.
+	defaultBackoffBase = 1 * time.Second
+	// defaultBackoffMax caps the delay between retries, before jitter.
+	defaultBackoffMax = 60 * time.Second
+	// defaultBackoffJitter is the upper bound of the uniform random jitter
+	// added to each retry delay.
+	defaultBackoffJitter = 1 * time.Second
 )
 
+// Backoff configures the exponential delay applied between retries of a
+// retriable RPC failure. The delay doubles with each consecutive retriable
+// failure from Base up to Max, and any successful call resets it to Base.
+//
+// Zero-valued fields fall back to their defaults (1s base, 60s cap, 1s
+// jitter). Set Jitter or Max to a negative value to disable that part.
+type Backoff struct {
+	// Base is the delay before the first retry. Defaults to 1s.
+	Base time.Duration
+	// Max caps the delay. Defaults to 60s; negative disables the cap.
+	Max time.Duration
+	// Jitter is the upper bound of a uniform random amount added to each
+	// delay. Defaults to 1s; negative disables jitter.
+	Jitter time.Duration
+}
+
+// normalize returns b with zero-valued fields replaced by their defaults and
+// negative values disabled.
+func (b Backoff) normalize() Backoff {
+	if b.Base == 0 {
+		b.Base = defaultBackoffBase
+	}
+	if b.Base < 0 {
+		b.Base = 0
+	}
+	if b.Max == 0 {
+		b.Max = defaultBackoffMax
+	}
+	if b.Max < 0 {
+		b.Max = 0
+	}
+	if b.Jitter == 0 {
+		b.Jitter = defaultBackoffJitter
+	}
+	if b.Jitter < 0 {
+		b.Jitter = 0
+	}
+	return b
+}
+
+// delay returns the wait to apply before the retry that follows failures
+// consecutive retriable failures (1-indexed): min(Base * 2^(failures-1), Max)
+// plus uniform jitter in [0, Jitter).
+func (b Backoff) delay(failures int) time.Duration {
+	if failures < 1 {
+		failures = 1
+	}
+	d := b.Base
+	for i := 1; i < failures; i++ {
+		if d > time.Duration(1)<<62 {
+			break
+		}
+		d *= 2
+		if b.Max > 0 && d >= b.Max {
+			d = b.Max
+			break
+		}
+	}
+	if b.Max > 0 && d > b.Max {
+		d = b.Max
+	}
+	if b.Jitter > 0 {
+		d += time.Duration(rand.Int63n(int64(b.Jitter)))
+	}
+	return d
+}
+
+// Option customises a Client constructed by New.
+type Option func(*Client)
+
+// WithBackoff overrides the exponential backoff applied between retries.
+func WithBackoff(b Backoff) Option {
+	return func(c *Client) { c.backoff = b.normalize() }
+}
+
+// WithMaxRetries sets how many times a retriable request is retried after the
+// initial attempt. A negative value disables retries.
+func WithMaxRetries(n int) Option {
+	return func(c *Client) {
+		if n < 0 {
+			n = 0
+		}
+		c.maxRetries = n
+	}
+}
+
 // Client is a Soroban RPC JSON-RPC 2.0 client.
-// It retries on HTTP 5xx and 429 responses with exponential backoff and jitter.
+// It retries on HTTP 5xx and 429 responses with configurable exponential
+// backoff and jitter that resets after any successful call.
 type Client struct {
 	endpoint   string
 	httpClient *http.Client
 	timeout    time.Duration
+	backoff    Backoff
+	maxRetries int
+
+	mu       sync.Mutex
+	failures int
 }
 
 // New returns a Client that calls endpoint with per-request timeouts of timeout.
-// Pass 0 to use the default 30-second timeout.
-func New(endpoint string, timeout time.Duration) *Client {
+// Pass 0 to use the default 30-second timeout. Options may override the retry
+// count and backoff.
+func New(endpoint string, timeout time.Duration, opts ...Option) *Client {
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
-	return &Client{
+	c := &Client{
 		endpoint:   endpoint,
 		httpClient: &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
 		timeout:    timeout,
+		backoff:    Backoff{}.normalize(),
+		maxRetries: defaultMaxRetries,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // GetLatestLedger returns the latest ledger sequence known to the node.
@@ -132,7 +244,9 @@ func (c *Client) GetNetwork(ctx context.Context) (*NetworkInfo, error) {
 
 // ---- internal transport ---------------------------------------------------
 
-// call makes one JSON-RPC request, retrying on retriable errors.
+// call makes one JSON-RPC request, retrying on retriable errors with
+// exponential backoff. A successful call resets the backoff so the next
+// failure starts at the base delay again.
 func (c *Client) call(ctx context.Context, method string, params any, result any) error {
 	reqBody, err := json.Marshal(rpcRequest{
 		JSONRPC: "2.0",
@@ -145,9 +259,9 @@ func (c *Client) call(ctx context.Context, method string, params any, result any
 	}
 
 	var lastErr error
-	for attempt := 0; attempt <= maxRetries; attempt++ {
+	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
-			wait := backoffDuration(attempt)
+			wait := c.backoff.delay(c.failuresSnapshot())
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -157,13 +271,37 @@ func (c *Client) call(ctx context.Context, method string, params any, result any
 
 		lastErr = c.doOnce(ctx, reqBody, result)
 		if lastErr == nil {
+			c.resetBackoff()
 			return nil
 		}
 		if !isRetriable(lastErr) {
 			return lastErr
 		}
+		c.recordFailure()
 	}
-	return fmt.Errorf("soroban: %s: exceeded %d retries: %w", method, maxRetries, lastErr)
+	return fmt.Errorf("soroban: %s: exceeded %d retries: %w", method, c.maxRetries, lastErr)
+}
+
+// failuresSnapshot returns the number of consecutive retriable failures
+// recorded since the last successful call.
+func (c *Client) failuresSnapshot() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.failures
+}
+
+// recordFailure increments the consecutive retriable failure counter.
+func (c *Client) recordFailure() {
+	c.mu.Lock()
+	c.failures++
+	c.mu.Unlock()
+}
+
+// resetBackoff clears the consecutive failure counter after a success.
+func (c *Client) resetBackoff() {
+	c.mu.Lock()
+	c.failures = 0
+	c.mu.Unlock()
 }
 
 // doOnce performs a single HTTP round-trip and decodes the JSON-RPC response.
@@ -233,8 +371,8 @@ type networkError struct {
 	err error
 }
 
-func (e *networkError) Error() string { return e.err.Error() }
-func (e *networkError) Unwrap() error { return e.err }
+func (e *networkError) Error() string   { return e.err.Error() }
+func (e *networkError) Unwrap() error   { return e.err }
 func (e *networkError) retriable() bool { return true }
 
 type retriable interface {
@@ -250,17 +388,4 @@ func isRetriable(err error) bool {
 		return false
 	}
 	return r.retriable()
-}
-
-// ---- backoff --------------------------------------------------------------
-
-// backoffDuration returns the wait time before retry attempt n (1-indexed).
-// Strategy: min(2^n seconds, 30s) + uniform jitter in [0, 1s).
-func backoffDuration(attempt int) time.Duration {
-	base := time.Duration(1<<uint(attempt)) * time.Second
-	if base > maxBackoff {
-		base = maxBackoff
-	}
-	jitter := time.Duration(rand.Int63n(int64(time.Second)))
-	return base + jitter
 }

@@ -39,4 +39,5 @@ type Handler struct {
 	Redis       Pinger
 	RedisClient RedisClient
 	Logger      *slog.Logger
+	StreamHub   *StreamHub
 }

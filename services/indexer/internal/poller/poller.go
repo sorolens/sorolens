@@ -158,7 +158,15 @@ func (p *Poller) processAll(ctx context.Context) error {
 			if c.Status != "active" && c.Status != "backfilling" {
 				continue
 			}
-			if err := p.processContract(ctx, c); err != nil {
+			// Once a contract's batch starts, let it run to completion and
+			// commit its cursor even if ctx is cancelled mid-flight (SIGTERM,
+			// or the once-mode max-duration timeout): only the decision to
+			// start the *next* contract's batch respects cancellation, via
+			// the ctx.Err() check above. Without this, a shutdown signal
+			// arriving mid-fetch would abort the in-flight RPC/store calls
+			// and lose that contract's progress for the pass instead of
+			// finishing it cleanly.
+			if err := p.processContract(context.WithoutCancel(ctx), c); err != nil {
 				// Log and continue; one failing contract must not block others.
 				p.log.Error("failed to index contract",
 					"contract_id", c.ID,
@@ -435,18 +443,29 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return fmt.Errorf("get sync state: %w", err)
 	}
 
+	networkCursor, err := p.store.GetIndexerCursor(ctx, network)
+	if err != nil {
+		p.log.Warn("failed to fetch indexer cursor for network (continuing)",
+			"network", network,
+			"err", err,
+		)
+	}
+
 	var startLedger uint32
 	if syncState.LastLedger == 0 {
-		// New contract: best-effort backfill from within the retention window.
-		if latest.Sequence > newContractBackfillWindow {
+		if networkCursor > 0 {
+			// Resume after the last successfully committed network batch
+			startLedger = networkCursor + 1
+		} else if latest.Sequence > newContractBackfillWindow {
+			// New contract: best-effort backfill from within the retention window.
 			startLedger = latest.Sequence - newContractBackfillWindow
 		} else {
 			startLedger = 1
 		}
-		p.log.Warn("new contract, starting partial backfill; events before this ledger are unavailable",
+		p.log.Warn("starting sync for contract",
 			"contract_id", contractID,
 			"start_ledger", startLedger,
-			"retention_window_ledgers", newContractBackfillWindow,
+			"network_cursor", networkCursor,
 		)
 	} else {
 		startLedger = syncState.LastLedger + 1
@@ -476,20 +495,9 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return err
 	}
 
-	if len(events) > 0 {
-		if err := p.store.BatchInsertEvents(ctx, events); err != nil {
-			return fmt.Errorf("batch insert events: %w", err)
-		}
-	}
-	if len(invocations) > 0 {
-		if err := p.store.BatchInsertInvocations(ctx, invocations); err != nil {
-			return fmt.Errorf("batch insert invocations: %w", err)
-		}
-	}
-
 	newState := SyncState{ContractID: contractID, LastLedger: endLedger}
-	if err := p.store.UpsertSyncState(ctx, newState); err != nil {
-		return fmt.Errorf("upsert sync state: %w", err)
+	if err := p.store.BatchInsertWithCursor(ctx, network, endLedger, events, invocations, newState); err != nil {
+		return fmt.Errorf("batch insert with cursor: %w", err)
 	}
 
 	log.Info("contract indexed",

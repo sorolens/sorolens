@@ -8,8 +8,8 @@
 //! here and materialises them into the dashboard.
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, Address, Env, String,
-    Symbol, Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error,
+    symbol_short, Address, Env, String, Symbol, Vec,
 };
 
 // ---------------------------------------------------------------------------
@@ -80,6 +80,19 @@ enum DataKey {
     Registry,        // Vec<Address>: list of monitored contract ids
     Health(Address), // ContractHealth by contract id
     Alerts(Address), // Vec<Alert> by contract id
+    Paused,          // bool: emergency stop flag; absent means not paused
+}
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    /// The admin has paused the contract; state-changing calls are rejected.
+    ContractPaused = 1,
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +172,7 @@ impl WatchdogContract {
         name: Symbol,
         check_interval: u64,
     ) {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
         Self::require_admin_or(&env, &caller);
 
@@ -196,6 +210,7 @@ impl WatchdogContract {
         caller: Address,
         registrations: Vec<Registration>,
     ) -> Vec<BatchResult> {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
         Self::require_admin_or(&env, &caller);
 
@@ -228,6 +243,7 @@ impl WatchdogContract {
     /// Deregister a contract. Only the owner (recorded at registration) or
     /// the admin can deregister.
     pub fn deregister_contract(env: Env, caller: Address, contract_id: Address) {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
 
         let health_key = DataKey::Health(contract_id.clone());
@@ -275,6 +291,7 @@ impl WatchdogContract {
         status: HealthStatus,
         metadata: String,
     ) {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
 
         let health_key = DataKey::Health(contract_id.clone());
@@ -311,6 +328,7 @@ impl WatchdogContract {
         severity: AlertSeverity,
         message: String,
     ) {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
 
         let health_key = DataKey::Health(contract_id.clone());
@@ -351,6 +369,26 @@ impl WatchdogContract {
             timestamp: now,
         }
         .publish(&env);
+    }
+
+    // ---- admin: emergency stop ---------------------------------------------
+
+    /// Pause the contract (kill switch). While paused, every state-changing
+    /// method except `pause`/`unpause` fails with `Error::ContractPaused`;
+    /// read-only queries keep working. Admin only. Pausing an already
+    /// paused contract is a no-op.
+    pub fn pause(env: Env, admin: Address) {
+        admin.require_auth();
+        Self::require_admin_only(&env, &admin);
+        env.storage().instance().set(&DataKey::Paused, &true);
+    }
+
+    /// Lift a pause set by `pause`. Admin only. Unpausing a contract that is
+    /// not paused is a no-op.
+    pub fn unpause(env: Env, admin: Address) {
+        admin.require_auth();
+        Self::require_admin_only(&env, &admin);
+        env.storage().instance().remove(&DataKey::Paused);
     }
 
     // ---- read-only queries -------------------------------------------------
@@ -421,7 +459,20 @@ impl WatchdogContract {
             .unwrap_or_else(|| panic!("not initialized"))
     }
 
+    pub fn is_paused(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+    }
+
     // ---- helpers -----------------------------------------------------------
+
+    fn ensure_not_paused(env: &Env) {
+        if Self::is_paused(env.clone()) {
+            panic_with_error!(env, Error::ContractPaused);
+        }
+    }
 
     fn store_registration(env: &Env, caller: &Address, registration: &Registration) {
         let now = env.ledger().timestamp();
@@ -489,11 +540,13 @@ impl WatchdogContract {
 
 #[cfg(test)]
 mod test {
+    extern crate std;
+
     use super::*;
     use soroban_sdk::{
         symbol_short,
-        testutils::{Address as _, Ledger},
-        Env, String as SString,
+        testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger},
+        Env, IntoVal, String as SString,
     };
 
     fn setup(env: &Env) -> (Address, WatchdogContractClient<'_>) {
@@ -835,5 +888,214 @@ mod test {
         let (page, total) = client.get_monitored_page(&10, &5);
         assert_eq!(page.len(), 0);
         assert_eq!(total, 5);
+    }
+
+    // ---- emergency stop (pause / unpause) ----------------------------------
+
+    fn paused_error() -> soroban_sdk::Error {
+        Error::ContractPaused.into()
+    }
+
+    #[test]
+    fn pause_blocks_register_contract() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+
+        client.pause(&admin);
+        let res = client.try_register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        assert_eq!(res, Err(Ok(paused_error())));
+        assert_eq!(client.get_monitored_count(), 0);
+    }
+
+    #[test]
+    fn unpause_allows_register_contract_again() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+
+        client.pause(&admin);
+        client.unpause(&admin);
+        assert!(!client.is_paused());
+
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        assert_eq!(client.get_monitored_count(), 1);
+        assert_eq!(client.get_status(&monitored).owner, owner);
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner")]
+    fn non_admin_cannot_pause() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let stranger = Address::generate(&env);
+        // Auth is mocked, so this fails on the stored-admin check, not on
+        // missing authorization.
+        client.pause(&stranger);
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner")]
+    fn non_admin_cannot_unpause() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let stranger = Address::generate(&env);
+        client.pause(&admin);
+        client.unpause(&stranger);
+    }
+
+    #[test]
+    fn contract_starts_unpaused() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+
+        assert!(!client.is_paused());
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        assert_eq!(client.get_monitored_count(), 1);
+    }
+
+    #[test]
+    fn pause_blocks_report_status_and_report_alert() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        client.pause(&admin);
+
+        let metadata = SString::from_str(&env, "cpu=99");
+        let res = client.try_report_status(&owner, &monitored, &HealthStatus::Degraded, &metadata);
+        assert_eq!(res, Err(Ok(paused_error())));
+        // The admin's override is blocked too.
+        let res = client.try_report_status(&admin, &monitored, &HealthStatus::Degraded, &metadata);
+        assert_eq!(res, Err(Ok(paused_error())));
+
+        let msg = SString::from_str(&env, "down");
+        let res = client.try_report_alert(&owner, &monitored, &AlertSeverity::Critical, &msg);
+        assert_eq!(res, Err(Ok(paused_error())));
+
+        assert_eq!(client.get_status(&monitored).status, HealthStatus::Healthy);
+        assert_eq!(client.get_alerts(&monitored).len(), 0);
+    }
+
+    #[test]
+    fn pause_blocks_batch_registration_and_deregistration() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        client.pause(&admin);
+
+        let mut registrations: Vec<Registration> = Vec::new(&env);
+        registrations.push_back(Registration {
+            contract_id: Address::generate(&env),
+            name: symbol_short!("new"),
+            check_interval: 60,
+        });
+        let res = client.try_register_contracts_batch(&owner, &registrations);
+        assert_eq!(res, Err(Ok(paused_error())));
+
+        let res = client.try_deregister_contract(&owner, &monitored);
+        assert_eq!(res, Err(Ok(paused_error())));
+
+        assert_eq!(client.get_monitored_count(), 1);
+        assert_eq!(client.get_status(&monitored).contract_id, monitored);
+    }
+
+    #[test]
+    fn read_only_queries_work_while_paused() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        let msg = SString::from_str(&env, "heads up");
+        client.report_alert(&owner, &monitored, &AlertSeverity::Info, &msg);
+
+        client.pause(&admin);
+
+        assert!(client.is_paused());
+        assert_eq!(client.admin(), admin);
+        assert_eq!(client.get_status(&monitored).owner, owner);
+        assert_eq!(client.get_alerts(&monitored).len(), 1);
+        assert_eq!(client.get_all_monitored().len(), 1);
+        assert_eq!(client.get_monitored_count(), 1);
+        let (page, total) = client.get_monitored_page(&0, &10);
+        assert_eq!(page.len(), 1);
+        assert_eq!(total, 1);
+    }
+
+    #[test]
+    fn pause_and_unpause_are_idempotent() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+
+        client.unpause(&admin);
+        assert!(!client.is_paused());
+
+        client.pause(&admin);
+        client.pause(&admin);
+        assert!(client.is_paused());
+
+        client.unpause(&admin);
+        client.unpause(&admin);
+        assert!(!client.is_paused());
+    }
+
+    #[test]
+    fn pause_and_unpause_require_admin_auth() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+
+        client.pause(&admin);
+        assert_eq!(
+            env.auths(),
+            std::vec![(
+                admin.clone(),
+                AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        client.address.clone(),
+                        Symbol::new(&env, "pause"),
+                        (admin.clone(),).into_val(&env),
+                    )),
+                    sub_invocations: std::vec![],
+                }
+            )]
+        );
+
+        client.unpause(&admin);
+        assert_eq!(
+            env.auths(),
+            std::vec![(
+                admin.clone(),
+                AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        client.address.clone(),
+                        Symbol::new(&env, "unpause"),
+                        (admin.clone(),).into_val(&env),
+                    )),
+                    sub_invocations: std::vec![],
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn pause_without_admin_signature_fails() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        // Drop the blanket auth mock: the real admin address, but no signature.
+        env.set_auths(&[]);
+
+        assert!(client.try_pause(&admin).is_err());
+        assert!(!client.is_paused());
     }
 }

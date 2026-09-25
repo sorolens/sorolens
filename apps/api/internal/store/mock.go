@@ -24,6 +24,7 @@ type MockStore struct {
 	alertSubscriptions []AlertSubscription
 	users              map[string]User
 	healthScores       map[string]ContractHealthScore
+	indexerCursors     map[string]uint32
 
 	// Error injection
 	UpsertContractErr   error
@@ -53,6 +54,7 @@ func NewMockStore() *MockStore {
 		alerts:             make([]ContractAlert, 0),
 		alertSubscriptions: make([]AlertSubscription, 0),
 		users:              make(map[string]User),
+		indexerCursors:     make(map[string]uint32),
 	}
 }
 
@@ -153,6 +155,36 @@ func (m *MockStore) CreateNextMonthPartition(_ context.Context) error { return n
 
 func (m *MockStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error {
 	return nil
+}
+
+func (m *MockStore) GetIndexerCursor(_ context.Context, network string) (uint32, error) {
+	if m.indexerCursors == nil {
+		return 0, nil
+	}
+	return m.indexerCursors[networkOrDefault(network)], nil
+}
+
+func (m *MockStore) SetIndexerCursor(_ context.Context, network string, ledger uint32) error {
+	if m.indexerCursors == nil {
+		m.indexerCursors = make(map[string]uint32)
+	}
+	m.indexerCursors[networkOrDefault(network)] = ledger
+	return nil
+}
+
+func (m *MockStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error {
+	if err := m.BatchInsertEvents(ctx, events); err != nil {
+		return err
+	}
+	if err := m.BatchInsertInvocations(ctx, invocations); err != nil {
+		return err
+	}
+	if syncState.ContractID != "" {
+		if err := m.UpsertSyncState(ctx, syncState); err != nil {
+			return err
+		}
+	}
+	return m.SetIndexerCursor(ctx, network, ledger)
 }
 
 // ---- store.QueryStore -------------------------------------------------------

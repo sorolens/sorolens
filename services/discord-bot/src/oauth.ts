@@ -22,8 +22,10 @@
 import crypto from "node:crypto";
 import type { Client } from "discord.js";
 import type { Application, Request, Response } from "express";
-import { upsertLink } from "./db.js";
+import { apiKeyStore, upsertLink } from "./db.js";
 import { syncOnMerge } from "./commands.js";
+import { SorolensApi } from "./api.js";
+import { ensureUserApiKey } from "./apikey.js";
 import type { Tiers } from "./roles.js";
 import type { Config } from "./config.js";
 
@@ -187,6 +189,22 @@ export function mountOauthRoutes(app: Application, deps: OauthDeps): void {
           ? err.message
           : "This GitHub account is already linked to another Discord user.";
       return res.status(409).send(errorPage(msg));
+    }
+
+    // Mint (or reuse) the contributor's own Sorolens API key so the
+    // /status, /alerts, /watch and /unwatch commands run under their
+    // identity. Best effort - the link is what gates access.
+    try {
+      const api = new SorolensApi({
+        baseUrl: deps.config.sorolensApiBaseUrl,
+        apiKey: deps.config.sorolensAdminApiKey,
+      });
+      const granted = await ensureUserApiKey(apiKeyStore, api, parsed.discordId, login);
+      if (!granted) {
+        console.warn("oauth: per-user API key not provisioned for", parsed.discordId);
+      }
+    } catch (err) {
+      console.warn("oauth: API key provisioning failed", err);
     }
 
     try {

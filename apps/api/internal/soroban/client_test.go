@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // fixture loads a testdata file and panics if missing.
@@ -26,6 +27,11 @@ func staticServer(statusCode int, body []byte) *httptest.Server {
 		w.WriteHeader(statusCode)
 		w.Write(body) //nolint:errcheck
 	}))
+}
+
+// fastBackoff is a tiny deterministic backoff so retry tests do not sleep.
+func fastBackoff() Backoff {
+	return Backoff{Base: time.Millisecond, Max: 4 * time.Millisecond, Jitter: -1}
 }
 
 // ---- GetLatestLedger tests ------------------------------------------------
@@ -144,8 +150,8 @@ func TestRetryOn5xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, 0)
-	// Override backoff to zero sleep so tests run fast.
+	// Tiny backoff so the two retries do not block the test.
+	c := New(srv.URL, 0, WithBackoff(fastBackoff()))
 	got, err := c.GetLatestLedger(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error after retry: %v", err)
@@ -173,7 +179,7 @@ func TestRetryOn429(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, 0)
+	c := New(srv.URL, 0, WithBackoff(fastBackoff()))
 	got, err := c.GetLatestLedger(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error after 429 retry: %v", err)
@@ -190,7 +196,7 @@ func TestContextCancellation(t *testing.T) {
 	srv := staticServer(http.StatusInternalServerError, []byte(`{}`))
 	defer srv.Close()
 
-	c := New(srv.URL, 0)
+	c := New(srv.URL, 0, WithBackoff(fastBackoff()))
 	ctx, cancel := context.WithCancel(context.Background())
 	// Cancel immediately after the first attempt starts.
 	cancel()
@@ -198,6 +204,96 @@ func TestContextCancellation(t *testing.T) {
 	_, err := c.GetLatestLedger(ctx)
 	if err == nil {
 		t.Fatal("expected error after context cancel, got nil")
+	}
+}
+
+// ---- backoff tests --------------------------------------------------------
+
+func TestBackoffDelayDoublesUpToCap(t *testing.T) {
+	t.Parallel()
+
+	b := Backoff{Base: time.Second, Max: 8 * time.Second, Jitter: -1}.normalize()
+	tests := []struct {
+		failures int
+		want     time.Duration
+	}{
+		{1, time.Second},
+		{2, 2 * time.Second},
+		{3, 4 * time.Second},
+		{4, 8 * time.Second},
+		{5, 8 * time.Second},
+		{6, 8 * time.Second},
+	}
+	for _, tc := range tests {
+		if got := b.delay(tc.failures); got != tc.want {
+			t.Errorf("delay(%d): want %s, got %s", tc.failures, tc.want, got)
+		}
+	}
+}
+
+func TestDefaultBackoffCapsAtSixtySeconds(t *testing.T) {
+	t.Parallel()
+
+	b := Backoff{}.normalize()
+	if b.Base != time.Second {
+		t.Errorf("Base: want 1s, got %s", b.Base)
+	}
+	if b.Max != 60*time.Second {
+		t.Errorf("Max: want 60s, got %s", b.Max)
+	}
+	// 2^6 = 64s is above the 60s cap. Disable jitter so the value is exact.
+	nj := Backoff{Jitter: -1}.normalize()
+	if got := nj.delay(7); got != 60*time.Second {
+		t.Errorf("delay(7): want 60s, got %s", got)
+	}
+}
+
+func TestBackoffResetsAfterSuccess(t *testing.T) {
+	t.Parallel()
+
+	// Fail the first two attempts of the call, then always succeed.
+	var callCount atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if callCount.Add(1) <= 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(fixture(t, "getlatestledger_ok.json")) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 0, WithBackoff(Backoff{Base: time.Millisecond, Max: 4 * time.Millisecond, Jitter: -1}))
+	if _, err := c.GetLatestLedger(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := c.failuresSnapshot(); got != 0 {
+		t.Fatalf("consecutive failures after success: want 0, got %d", got)
+	}
+	// The next retry must start from the base delay again, not the capped one.
+	if got := c.backoff.delay(c.failuresSnapshot() + 1); got != time.Millisecond {
+		t.Errorf("delay after reset: want 1ms, got %s", got)
+	}
+}
+
+func TestBackoffGrowsAcrossConsecutiveFailures(t *testing.T) {
+	t.Parallel()
+
+	srv := staticServer(http.StatusInternalServerError, []byte(`{}`))
+	defer srv.Close()
+
+	c := New(srv.URL, 0,
+		WithMaxRetries(1),
+		WithBackoff(Backoff{Base: time.Millisecond, Max: 4 * time.Millisecond, Jitter: -1}))
+	if _, err := c.GetLatestLedger(context.Background()); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got := c.failuresSnapshot(); got != 2 {
+		t.Fatalf("failures: want 2, got %d", got)
+	}
+	// Two consecutive failures means the next retry waits 2ms, not 1ms.
+	if got := c.backoff.delay(c.failuresSnapshot()); got != 2*time.Millisecond {
+		t.Errorf("next delay: want 2ms, got %s", got)
 	}
 }
 
@@ -214,9 +310,9 @@ func TestDecodeScVal(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name:      "not base64",
-			b64:       "!!!",
-			wantErr:   true,
+			name:    "not base64",
+			b64:     "!!!",
+			wantErr: true,
 		},
 		{
 			name:    "too short",
