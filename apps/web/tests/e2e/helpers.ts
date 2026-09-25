@@ -40,6 +40,7 @@ export function defaultHandlers(): Record<string, Handler> {
 
 function defaultContract(route: Route): { status: number; body: unknown } {
   const path = new URL(route.request().url()).pathname;
+  const qs = new URL(route.request().url()).searchParams;
   if (path.endsWith("/events")) {
     return {
       status: 200,
@@ -65,6 +66,19 @@ function defaultContract(route: Route): { status: number; body: unknown } {
   }
   if (path.endsWith("/snapshot")) {
     return { status: 404, body: { error: "not found" } };
+  }
+  if (path.endsWith("/uptime")) {
+    const window = qs.get("window") ?? "24h";
+    return {
+      status: 200,
+      body: { contract_id: CONTRACT_ID, window, uptime_pct: 99.85 },
+    };
+  }
+  if (path.endsWith("/health")) {
+    return { status: 200, body: { health_checks: [] } };
+  }
+  if (path.endsWith("/alerts")) {
+    return { status: 200, body: { alerts: [] } };
   }
   return { status: 200, body: contractDetail() };
 }

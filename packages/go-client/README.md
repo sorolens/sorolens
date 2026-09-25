@@ -37,6 +37,12 @@ When no API key is supplied, the client omits the `Authorization` header
 make client-go
 ```
 
+The target builds `oapi-codegen` with the pinned Go 1.26 toolchain
+(`GOTOOLCHAIN=go1.26.0`). `oapi-codegen` embeds a gzipped copy of the spec in
+`client.gen.go`, and gzip output differs between Go releases, so regenerating
+with another toolchain produces a diff that CI rejects even when the client is
+otherwise in sync.
+
 CI (`go-client-stale`) fails on any PR where the checked-in generated code
 differs from the spec, so the client is always in sync with `docs/openapi.yaml`.
 

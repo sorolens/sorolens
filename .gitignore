@@ -18,6 +18,7 @@ coverage/
 target/
 
 # Go
+.bin/
 *.exe
 *.test
 sorolens-bin

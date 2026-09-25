@@ -2,7 +2,13 @@ MIGRATE_IMAGE      := migrate/migrate:v4.17.1
 MIGRATIONS_DIR     := apps/api/internal/db/migrations
 DB_URL_LOCAL       := postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable
 DB_URL_DOCKER      := postgres://sorolens:sorolens@postgres:5432/sorolens?sslmode=disable
-OAPI_CODEGEN := oapi-codegen
+OAPI_CODEGEN_VERSION := v2.4.1
+# oapi-codegen embeds a gzipped copy of the spec in the generated client, and
+# gzip output is not stable across Go releases. The generator must therefore be
+# built with the same toolchain the committed client was produced with, or CI's
+# "Go client up-to-date" job reports a spurious diff.
+OAPI_CODEGEN_GO := go1.26.0
+OAPI_CODEGEN := $(CURDIR)/.bin/oapi-codegen
 OAPI_SPEC    := docs/openapi.yaml
 CLIENT_DIR   := packages/go-client
 
@@ -72,7 +78,7 @@ openapi:
 
 ## client-go: regenerate the Go client from the OpenAPI spec
 client-go:
-	@command -v $(OAPI_CODEGEN) >/dev/null 2>&1 || go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1
+	GOBIN=$(CURDIR)/.bin GOTOOLCHAIN=$(OAPI_CODEGEN_GO) go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
 	cd $(CLIENT_DIR) && $(OAPI_CODEGEN) --config oapi-codegen.yaml ../../$(OAPI_SPEC)
 	cd $(CLIENT_DIR) && go mod tidy
 

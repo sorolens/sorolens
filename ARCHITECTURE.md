@@ -499,6 +499,47 @@ are indexed.
 
 ### 4.3 Invocations
 
+#### `GET /api/v1/invocations`
+
+Global invocation explorer: resource usage for every tracked contract, newest
+first (`ledger DESC, tx_hash DESC`). Backs the dashboard's `/invocations` page.
+
+**Query params:** `cursor`, `limit` (default 50, max 200), `contract_id`, `fn`
+(function name), `status` (`SUCCESS`/`FAILED`/`NOT_FOUND`), `network`, `from` /
+`to` (ledger bounds), `since` / `until` (inclusive `ledger_closed_at` bounds, as
+`YYYY-MM-DD` or RFC3339).
+
+Pagination is keyset-based: the cursor encodes the `(ledger, tx_hash)` position,
+which is the sort tuple, so pages stay stable while the indexer appends rows.
+
+**Response `200`:**
+```json
+{
+  "invocations": [
+    {
+      "tx_hash": "32f7e5c3...",
+      "contract_id": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "network": "testnet",
+      "ledger": 490252,
+      "ledger_closed_at": "2026-07-26T10:00:21Z",
+      "status": "SUCCESS",
+      "function_name": "transfer",
+      "resource_fee_charged": 123456,
+      "cpu_insn": 4883530,
+      "mem_byte": 2298162,
+      "ledger_read_byte": 21812,
+      "ledger_write_byte": 1808
+    }
+  ],
+  "next_cursor": "NDkwMjUyOmFiYzEyMw=="
+}
+```
+
+`next_cursor` is an empty string on the last page. Invalid `cursor`, `since`,
+`until`, or `network` values return `422`.
+
+---
+
 #### `GET /api/v1/contracts/:id/invocations`
 
 Paginated invocation list.
