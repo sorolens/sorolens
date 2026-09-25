@@ -66,6 +66,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
 
+		// Liveness probe with dependency reachability. It always returns 200
+		// and carries no scope rule, so uptime monitors can poll it without a
+		// credential.
+		r.Get("/health", h.HealthCheck)
+
 		// Scoped API key auth. It is applied per route with r.With so chi has
 		// already resolved the leaf route pattern when the middleware runs; the
 		// required scope is looked up from the metadata table in

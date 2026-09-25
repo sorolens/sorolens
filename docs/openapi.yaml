@@ -107,6 +107,35 @@ paths:
                     additionalProperties:
                       type: string
 
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: Health probe with postgres and redis reachability
+      operationId: apiHealth
+      security: []
+      responses:
+        "200":
+          description: Service is up; inspect db and redis for dependency state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                    description: '"ok" when both dependencies are reachable, "degraded" otherwise'
+                  db:
+                    type: string
+                    enum: [connected, unreachable]
+                  redis:
+                    type: string
+                    enum: [connected, unreachable]
+                  timestamp:
+                    type: string
+                    format: date-time
+                required: [status, db, redis, timestamp]
+
   /metrics:
     get:
       tags: [Operations]
