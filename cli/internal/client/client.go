@@ -158,6 +158,13 @@ func (c *Client) GetGlobalStats(ctx context.Context) (GlobalStats, error) {
 	return out, err
 }
 
+// GetMonitoredContract fetches the watchdog's on-chain health status for a monitored contract.
+func (c *Client) GetMonitoredContract(ctx context.Context, contractID string) (MonitoredContract, error) {
+	var out MonitoredContract
+	err := c.do(ctx, http.MethodGet, "/api/v1/watchdog/contracts/"+contractID, nil, &out)
+	return out, err
+}
+
 // GetContractStats fetches per-contract statistics for the given window ("24h", "7d", "30d").
 func (c *Client) GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error) {
 	if window == "" {

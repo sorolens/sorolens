@@ -7,6 +7,7 @@ import type {
   ContractSummary,
   ContractsListResponse,
   EventsResponse,
+  GlobalEventsResponse,
   GlobalStats,
   HealthChecksResponse,
   InvocationsResponse,
@@ -294,25 +295,79 @@ export function listAlerts(
   return fetchJson<AlertsResponse>(`${API_URL}${path}${qs ? "?" + qs : ""}`);
 }
 
+// ---- events explorer ------------------------------------------------------
+
+export interface ListAllEventsParams {
+  cursor?: string;
+  limit?: number;
+  contractId?: string;
+  type?: string;
+  network?: string;
+  /** RFC 3339 inclusive bounds on ledger_closed_at. */
+  since?: string;
+  until?: string;
+}
+
+/** Cross-contract events feed, newest first (GET /api/v1/events). */
+export function listAllEvents(
+  params: ListAllEventsParams = {},
+  init?: RequestInit,
+): Promise<GlobalEventsResponse> {
+  const search = new URLSearchParams();
+  if (params.cursor) search.set("cursor", params.cursor);
+  if (params.limit) search.set("limit", String(params.limit));
+  if (params.contractId) search.set("contract_id", params.contractId);
+  if (params.type) search.set("type", params.type);
+  if (params.network) search.set("network", params.network);
+  if (params.since) search.set("since", params.since);
+  if (params.until) search.set("until", params.until);
+  const qs = search.toString();
+  return fetchJson<GlobalEventsResponse>(
+    `${API_URL}/api/v1/events${qs ? "?" + qs : ""}`,
+    init,
+  );
+}
+
 // ---- subscriptions --------------------------------------------------------
+// Subscriptions hold integration secrets, so every call needs a contributor
+// identity; the dashboard forwards its browser user ID like trackContract.
+
+function userHeaders(userId?: string): Record<string, string> {
+  return userId ? { "X-User-ID": userId } : {};
+}
 
 export function createSubscription(
   req: CreateSubscriptionRequest,
+  userId?: string,
 ): Promise<AlertSubscription> {
   return fetchJson<AlertSubscription>(`${API_URL}/api/v1/watchdog/subscriptions`, {
     method: "POST",
     body: JSON.stringify(req),
+    headers: userHeaders(userId),
   });
 }
 
-export function listSubscriptions(): Promise<SubscriptionsResponse> {
-  return fetchJson<SubscriptionsResponse>(`${API_URL}/api/v1/watchdog/subscriptions`);
+export function listSubscriptions(userId?: string): Promise<SubscriptionsResponse> {
+  return fetchJson<SubscriptionsResponse>(`${API_URL}/api/v1/watchdog/subscriptions`, {
+    headers: userHeaders(userId),
+  });
 }
 
-export function deleteSubscription(id: string): Promise<void> {
-  return fetchJson<void>(`${API_URL}/api/v1/watchdog/subscriptions/${id}`, {
-    method: "DELETE",
-  });
+export async function deleteSubscription(id: string, userId?: string): Promise<void> {
+  const res = await fetch(
+    `${API_URL}/api/v1/watchdog/subscriptions/${encodeURIComponent(id)}`,
+    { method: "DELETE", headers: userHeaders(userId) },
+  );
+  if (!res.ok) {
+    let body: { error?: string | { message?: string } } = {};
+    try {
+      body = await res.json();
+    } catch {
+      // ignore parse error
+    }
+    const message = typeof body.error === "string" ? body.error : body.error?.message;
+    throw new ApiError(res.status, message || res.statusText);
+  }
 }
 
 // ---- watchlist ------------------------------------------------------------

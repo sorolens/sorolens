@@ -91,8 +91,12 @@ type AlertSubscription struct {
 	ContractID     string
 	WebhookURL     string
 	SeverityFilter string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// ChannelType is webhook | slack | discord | pagerduty (issue #127).
+	ChannelType string
+	// RoutingKey is the PagerDuty integration key (pagerduty only). Secret.
+	RoutingKey string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // Role names for role-based access control.

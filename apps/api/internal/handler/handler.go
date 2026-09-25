@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
@@ -21,6 +22,7 @@ type APIStore interface {
 	store.WatchlistStore
 	store.UserStore
 	store.PerformanceStore
+	store.GlobalEventStore
 }
 
 // Pinger is implemented by both the postgres pool and the Redis client.
@@ -41,6 +43,14 @@ type Handler struct {
 	RedisClient RedisClient
 	Logger      *slog.Logger
 	StreamHub   *StreamHub
+
+	// Cache stores hot GET responses (issue #143). Nil disables caching.
+	Cache middleware.ResponseCache
+	// CacheTTL is how long a cached response lives. Zero disables caching.
+	CacheTTL time.Duration
+	// SlackSigningSecret verifies Slack slash command requests (issue #127).
+	// Empty disables the Slack command endpoint.
+	SlackSigningSecret string
 
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.

@@ -93,6 +93,19 @@ type StorageResponse struct {
 	NextCursor string         `json:"next_cursor"`
 }
 
+// MonitoredContract mirrors the API watchdog monitored-contract response.
+type MonitoredContract struct {
+	ContractID    string     `json:"contract_id"`
+	Network       string     `json:"network"`
+	Name          string     `json:"name"`
+	Owner         string     `json:"owner"`
+	Status        string     `json:"status"`
+	LastCheck     *time.Time `json:"last_check"`
+	CheckInterval int64      `json:"check_interval"`
+	RegisteredAt  time.Time  `json:"registered_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
 // StreamMessage mirrors a single server-sent event emitted by the
 // /api/v1/stream/events endpoint. Type is one of "connected", "event" or
 // "alert"; exactly one of Event or Alert is populated for those cases.

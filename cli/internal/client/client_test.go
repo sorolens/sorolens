@@ -135,6 +135,57 @@ func TestListEventsWithTypeFilter(t *testing.T) {
 	}
 }
 
+func TestGetMonitoredContractHappyPath(t *testing.T) {
+	want := client.MonitoredContract{
+		ContractID:    "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		Network:       "testnet",
+		Name:          "MyVault",
+		Owner:         "GABCXYZ",
+		Status:        "healthy",
+		CheckInterval: 60,
+		RegisteredAt:  time.Now().UTC().Truncate(time.Second),
+		UpdatedAt:     time.Now().UTC().Truncate(time.Second),
+	}
+	srv := serve(t, "/api/v1/watchdog/contracts/"+want.ContractID, http.StatusOK, want)
+	defer srv.Close()
+
+	c := client.New(srv.URL, 5*time.Second)
+	got, err := c.GetMonitoredContract(context.Background(), want.ContractID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.ContractID != want.ContractID {
+		t.Errorf("ContractID: got %q, want %q", got.ContractID, want.ContractID)
+	}
+	if got.Status != want.Status {
+		t.Errorf("Status: got %q, want %q", got.Status, want.Status)
+	}
+}
+
+func TestGetMonitoredContract404ReturnsSorolensError(t *testing.T) {
+	id := "CNONEXISTENT"
+	srv := serve(t, "/api/v1/watchdog/contracts/"+id, http.StatusNotFound, map[string]any{
+		"error": map[string]string{
+			"code":    "NOT_FOUND",
+			"message": "monitored contract not found",
+		},
+	})
+	defer srv.Close()
+
+	c := client.New(srv.URL, 5*time.Second)
+	_, err := c.GetMonitoredContract(context.Background(), id)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	se, ok := err.(*client.SorolensError)
+	if !ok {
+		t.Fatalf("expected *client.SorolensError, got %T", err)
+	}
+	if se.Status != http.StatusNotFound {
+		t.Errorf("Status: got %d, want %d", se.Status, http.StatusNotFound)
+	}
+}
+
 func TestStreamEventsParsesSSEFrames(t *testing.T) {
 	contractID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

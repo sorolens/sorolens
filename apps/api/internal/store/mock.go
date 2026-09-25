@@ -623,6 +623,7 @@ func (m *MockStore) TouchAPIKey(_ context.Context, id string) error {
 // ---- store.AlertSubscriptionStore -------------------------------------------
 
 func (m *MockStore) Create(_ context.Context, s AlertSubscription) error {
+	s.ChannelType = channelOrDefault(s.ChannelType)
 	m.alertSubscriptions = append(m.alertSubscriptions, s)
 	return nil
 }
@@ -643,6 +644,9 @@ func (m *MockStore) Delete(_ context.Context, id string) error {
 		if s.ID != id {
 			filtered = append(filtered, s)
 		}
+	}
+	if len(filtered) == len(m.alertSubscriptions) {
+		return ErrNotFound
 	}
 	m.alertSubscriptions = filtered
 	return nil

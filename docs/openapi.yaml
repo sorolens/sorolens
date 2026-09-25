@@ -45,6 +45,12 @@ tags:
     description: Per-user contract watchlists
   - name: Watchdog
     description: On-chain watchdog monitoring data
+  - name: Notifications
+    description: Alert notification channels (webhook, Slack, Discord, PagerDuty)
+  - name: Integrations
+    description: Inbound third-party integrations (Slack slash commands)
+  - name: Operations
+    description: Prometheus metrics
 
 paths:
   /health:
@@ -101,6 +107,89 @@ paths:
                     additionalProperties:
                       type: string
 
+  /metrics:
+    get:
+      tags: [Operations]
+      summary: Prometheus metrics
+      operationId: getMetrics
+      security: []
+      description: |
+        Prometheus text exposition. Includes the response cache counters
+        `sorolens_api_cache_requests_total{namespace,result}` (result is `hit`
+        or `miss`) and `sorolens_api_cache_purges_total{namespace}`, plus Go
+        runtime and process metrics.
+      responses:
+        "200":
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /integrations/slack/commands:
+    post:
+      tags: [Integrations]
+      summary: Slack slash command
+      operationId: slackCommand
+      security: []
+      description: |
+        Endpoint for a Slack slash command such as `/sorolens <contract_id>`.
+        Every request must carry a valid Slack signature
+        (`X-Slack-Signature`, HMAC-SHA256 over `v0:<timestamp>:<body>` with the
+        app's signing secret) and an `X-Slack-Request-Timestamp` within five
+        minutes. Replies with an ephemeral Block Kit message showing the
+        contract's watchdog status and latest alerts. Disabled (404) unless
+        `SLACK_SIGNING_SECRET` is set.
+      parameters:
+        - name: X-Slack-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+            example: v0=a2114d57b48eac39b9ad189dd8316235a7b4a8d21a10bd27519666489c69b503
+        - name: X-Slack-Request-Timestamp
+          in: header
+          required: true
+          schema:
+            type: string
+            example: "1531420618"
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                command:
+                  type: string
+                  example: /sorolens
+                text:
+                  type: string
+                  description: Contract ID to look up; empty or `help` returns usage.
+      responses:
+        "200":
+          description: Ephemeral Slack message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlackMessage"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          description: Missing, invalid, or stale Slack signature.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Slack integration is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/v1/stats/global:
     get:
       tags: [Stats]
@@ -134,6 +223,103 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/events:
+    get:
+      tags: [Events]
+      summary: List events across all tracked contracts
+      operationId: listAllEvents
+      description: Cross-contract events explorer feed, newest first.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: contract_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Contract ID prefix (case-insensitive); a full ID matches one contract.
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [contract, system, diagnostic]
+        - $ref: "#/components/parameters/NetworkParam"
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound on ledger_closed_at (RFC 3339).
+        - name: until
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on ledger_closed_at (RFC 3339).
+      responses:
+        "200":
+          description: Page of events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next_cursor]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor for the next (older) page; empty when no more pages.
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/compare:
+    get:
+      tags: [Stats]
+      summary: Compare up to four contracts side by side
+      operationId: compareContracts
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 1 to 4 comma-separated contract IDs.
+        - name: window
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [24h, 7d, 30d]
+            default: 24h
+      responses:
+        "200":
+          description: Comparison, one entry per requested contract in request order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompareResponse"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+
   /api/v1/contracts:
     get:
       tags: [Contracts]
@@ -154,6 +340,9 @@ paths:
       responses:
         "200":
           description: Page of contracts
+          headers:
+            X-Cache:
+              $ref: "#/components/headers/XCache"
           content:
             application/json:
               schema:
@@ -226,6 +415,9 @@ paths:
       responses:
         "200":
           description: The contract
+          headers:
+            X-Cache:
+              $ref: "#/components/headers/XCache"
           content:
             application/json:
               schema:
@@ -527,6 +719,141 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Event"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/upgrades:
+    get:
+      tags: [Contracts]
+      summary: List Wasm code upgrades for a contract
+      operationId: listContractUpgrades
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+      responses:
+        "200":
+          description: Upgrades, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [upgrades]
+                properties:
+                  upgrades:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ContractUpgrade"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/health-score:
+    get:
+      tags: [Stats]
+      summary: Get a contract's composite 0-100 health score
+      operationId: getContractHealthScore
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The cached health score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthScore"
+        "404":
+          description: Contract not found, or its score has not been computed yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/summary:
+    get:
+      tags: [Stats]
+      summary: Get a contract's dashboard summary
+      operationId: getContractSummary
+      description: Contract metadata, stats, latest event and invocation, and health score in one call.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/graph:
+    get:
+      tags: [Contracts]
+      summary: Get the contract's cross-contract call graph
+      operationId: getContractGraph
+      description: Nodes and edges derived from the contract's most recent invocations (up to 1000).
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The call graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractGraph"
+        "400":
+          description: Invalid contract ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/stream/events:
+    get:
+      tags: [Events]
+      summary: Stream new events (Server-Sent Events)
+      operationId: streamAllEvents
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - name: contract_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Only stream events for this contract.
+      responses:
+        "200":
+          description: An SSE stream; each `data:` line is a JSON Event.
+          content:
+            text/event-stream:
+              schema:
+                type: string
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -860,6 +1187,9 @@ paths:
       responses:
         "200":
           description: Watchdog summary counts
+          headers:
+            X-Cache:
+              $ref: "#/components/headers/XCache"
           content:
             application/json:
               schema:
@@ -893,6 +1223,7 @@ paths:
             minimum: 1
             maximum: 500
           description: Maximum alerts to return (default 100).
+        - $ref: "#/components/parameters/AlertCursor"
       responses:
         "200":
           description: Alerts
@@ -900,12 +1231,15 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [alerts]
+                required: [alerts, next_cursor]
                 properties:
                   alerts:
                     type: array
                     items:
                       $ref: "#/components/schemas/ContractAlert"
+                  next_cursor:
+                    type: string
+                    description: Cursor for the next (older) page; empty when no more pages.
         "422":
           $ref: "#/components/responses/InvalidInput"
         "500":
@@ -1021,6 +1355,7 @@ paths:
             type: integer
             minimum: 1
             maximum: 500
+        - $ref: "#/components/parameters/AlertCursor"
       responses:
         "200":
           description: Alerts for the contract
@@ -1028,14 +1363,107 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [alerts]
+                required: [alerts, next_cursor]
                 properties:
                   alerts:
                     type: array
                     items:
                       $ref: "#/components/schemas/ContractAlert"
+                  next_cursor:
+                    type: string
+                    description: Cursor for the next (older) page; empty when no more pages.
         "422":
           $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/subscriptions:
+    get:
+      tags: [Notifications]
+      summary: List alert notification subscriptions
+      operationId: listAlertSubscriptions
+      description: Integration secrets are never returned; see AlertSubscription.
+      security:
+        - ApiKeyAuth: [read:watchdog]
+          RoleAuth: [contributor]
+      responses:
+        "200":
+          description: Subscriptions, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscriptions]
+                properties:
+                  subscriptions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AlertSubscription"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Notifications]
+      summary: Subscribe a channel to a contract's alerts
+      operationId: createAlertSubscription
+      description: |
+        Critical alerts for the contract are delivered to the channel in its
+        native format: `webhook` (generic JSON), `slack` (Block Kit via an
+        incoming webhook), `discord` (embed via a channel webhook) or
+        `pagerduty` (Events API v2 trigger with severity mapping).
+      security:
+        - ApiKeyAuth: [write:contracts]
+          RoleAuth: [contributor]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAlertSubscription"
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertSubscription"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/subscriptions/{id}:
+    delete:
+      tags: [Notifications]
+      summary: Delete an alert subscription
+      operationId: deleteAlertSubscription
+      security:
+        - ApiKeyAuth: [write:contracts]
+          RoleAuth: [contributor]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1098,6 +1526,24 @@ components:
       schema:
         type: string
       description: Caller user ID.
+
+    AlertCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Opaque alert cursor from a previous page's next_cursor.
+
+  headers:
+    XCache:
+      description: |
+        Response cache status (`HIT` or `MISS`). Present when the API runs
+        with Redis caching enabled; cached bodies live for API_CACHE_TTL
+        (default 30s) and are purged by writes to the same resource.
+      schema:
+        type: string
+        enum: [HIT, MISS]
 
   responses:
     Unauthorized:
@@ -1581,3 +2027,241 @@ components:
         timestamp:
           type: string
           format: date-time
+
+    ContractUpgrade:
+      type: object
+      required: [contract_id, from_hash, to_hash, ledger, at]
+      properties:
+        contract_id:
+          type: string
+        from_hash:
+          type: string
+          description: Previous Wasm hash (hex).
+        to_hash:
+          type: string
+          description: New Wasm hash (hex).
+        ledger:
+          type: integer
+          format: int64
+        tx_hash:
+          type: string
+        at:
+          type: string
+          format: date-time
+
+    HealthScore:
+      type: object
+      required: [contract_id, score, components, computed_at]
+      properties:
+        contract_id:
+          type: string
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        components:
+          type: object
+          required: [uptime, error_rate, performance, storage_ttl]
+          properties:
+            uptime:
+              type: integer
+            error_rate:
+              type: integer
+            performance:
+              type: integer
+            storage_ttl:
+              type: integer
+        computed_at:
+          type: string
+          format: date-time
+
+    ContractSummary:
+      type: object
+      required: [contract_id, network, label, status, generated_at, stats]
+      properties:
+        contract_id:
+          type: string
+        network:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        stats:
+          $ref: "#/components/schemas/ContractStats"
+        latest_event:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/Event"
+        latest_invocation:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/Invocation"
+        health_score:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/HealthScore"
+
+    ContractGraph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          nullable: true
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+        edges:
+          type: array
+          nullable: true
+          items:
+            type: object
+            required: [source, target, count]
+            properties:
+              source:
+                type: string
+              target:
+                type: string
+              count:
+                type: integer
+
+    CompareResponse:
+      type: object
+      required: [window, contracts]
+      properties:
+        window:
+          type: string
+          enum: [24h, 7d, 30d]
+        contracts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompareContractEntry"
+
+    CompareContractEntry:
+      type: object
+      required: [id, network, label, status, tracked, has_data, event_count, invocation_count, avg_cpu, avg_fee, last_synced_ledger, event_volume]
+      properties:
+        id:
+          type: string
+        network:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+        tracked:
+          type: boolean
+        has_data:
+          type: boolean
+        event_count:
+          type: integer
+          format: int64
+        invocation_count:
+          type: integer
+          format: int64
+        avg_cpu:
+          type: number
+        avg_fee:
+          type: number
+        health_score:
+          type: integer
+          nullable: true
+        last_synced_ledger:
+          type: integer
+          format: int64
+        event_volume:
+          type: array
+          items:
+            type: object
+            required: [timestamp, count]
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              count:
+                type: integer
+                format: int64
+        error:
+          type: string
+
+    AlertSubscription:
+      type: object
+      description: |
+        A notification channel subscribed to a contract's alerts. Secrets are
+        never returned: Slack and Discord webhook URLs are masked
+        (e.g. `https://hooks.slack.com/services/***`) and the PagerDuty
+        routing key is reported only via `has_routing_key`.
+      required: [id, contract_id, channel_type, webhook_url, has_routing_key, severity_filter, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        contract_id:
+          type: string
+        channel_type:
+          type: string
+          enum: [webhook, slack, discord, pagerduty]
+        webhook_url:
+          type: string
+        has_routing_key:
+          type: boolean
+        severity_filter:
+          type: string
+          enum: [Info, Warning, Critical]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateAlertSubscription:
+      type: object
+      required: [contract_id]
+      properties:
+        contract_id:
+          type: string
+        channel_type:
+          type: string
+          enum: [webhook, slack, discord, pagerduty]
+          default: webhook
+        webhook_url:
+          type: string
+          format: uri
+          description: |
+            Required for webhook (http or https), slack and discord (https
+            incoming webhook URL). Optional for pagerduty, where it defaults
+            to https://events.pagerduty.com/v2/enqueue.
+        routing_key:
+          type: string
+          description: PagerDuty integration key. Required for pagerduty, rejected otherwise.
+        severity_filter:
+          type: string
+          enum: [Info, Warning, Critical]
+          default: Critical
+
+    SlackMessage:
+      type: object
+      required: [response_type, text]
+      properties:
+        response_type:
+          type: string
+          enum: [ephemeral]
+        text:
+          type: string
+        blocks:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
