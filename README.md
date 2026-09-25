@@ -78,6 +78,28 @@ Real-time chat with maintainers and other contributors: [**join the Sorolens Dis
                                                                 +---------------+
 ```
 
+## Screenshots
+
+### Landing page
+
+![Sorolens landing page](docs/screenshots/landing.png)
+
+### Contracts list
+
+![Contracts list](docs/screenshots/contracts.png)
+
+### Contract detail
+
+![Contract detail](docs/screenshots/contract-detail.png)
+
+### Watchdog overview
+
+![Watchdog overview](docs/screenshots/watchdog.png)
+
+### Watchdog contract detail
+
+![Watchdog contract detail](docs/screenshots/watchdog-contract-detail.png)
+
 The **watchdog contract** at `contracts/watchdog/` is the piece that makes Sorolens unique: contracts you operate emit `HealthCheckEvent`, `ContractAlert`, `ContractRegistered`, and `ContractDeregistered` on-chain, the indexer picks them up along with everything else, and the dashboard renders your fleet's live health.
 
 > See `ARCHITECTURE.md` for the full system diagram, data flows, schema DDL, and REST API reference.
