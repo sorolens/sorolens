@@ -2,6 +2,8 @@ interface StatCardProps {
   label: string;
   value: string | number;
   subtext?: string;
+  /** Full text exposed as a native hover tooltip when `subtext` is truncated. */
+  subtextTitle?: string;
   variant?: "default" | "warning" | "danger" | "safe";
   /** Alias for `variant`, kept for readability on new call sites. */
   tone?: "default" | "warning" | "danger" | "safe";
@@ -11,6 +13,7 @@ export function StatCard({
   label,
   value,
   subtext,
+  subtextTitle,
   variant,
   tone,
 }: StatCardProps) {
@@ -40,7 +43,10 @@ export function StatCard({
       <div className="text-sm text-[var(--color-text-secondary)]">{label}</div>
       <div className={`mt-1 text-3xl font-bold ${textColor}`}>{value}</div>
       {subtext && (
-        <div className="mt-1 text-xs text-[var(--color-text-secondary)]">
+        <div
+          title={subtextTitle}
+          className="mt-1 text-xs text-[var(--color-text-secondary)]"
+        >
           {subtext}
         </div>
       )}

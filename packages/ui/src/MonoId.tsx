@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 
+export type MonoIdVariant = "copy" | "text";
+
 export interface MonoIdProps {
   value: string;
   headChars?: number;
   tailChars?: number;
+  /**
+   * `"copy"` (default) renders a button that copies the full value on click.
+   * `"text"` renders a non-interactive span instead, so the truncated ID can
+   * be nested inside links and other interactive elements while still
+   * exposing the full value through a native hover tooltip.
+   */
+  variant?: MonoIdVariant;
 }
 
 async function copyText(value: string): Promise<void> {
@@ -40,7 +49,12 @@ function truncateValue(value: string, headChars: number, tailChars: number): str
   return `${value.slice(0, headChars)}...${value.slice(-tailChars)}`;
 }
 
-export function MonoId({ value, headChars = 6, tailChars = 4 }: MonoIdProps) {
+export function MonoId({
+  value,
+  headChars = 6,
+  tailChars = 4,
+  variant = "copy",
+}: MonoIdProps) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -60,6 +74,20 @@ export function MonoId({ value, headChars = 6, tailChars = 4 }: MonoIdProps) {
   async function handleClick() {
     await copyText(value);
     setCopied(true);
+  }
+
+  if (variant === "text") {
+    return (
+      <span
+        title={value}
+        style={{
+          fontFamily:
+            '"JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
+        }}
+      >
+        {displayValue}
+      </span>
+    );
   }
 
   return (
