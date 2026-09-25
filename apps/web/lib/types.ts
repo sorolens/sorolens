@@ -163,6 +163,8 @@ export interface ContractAlert {
 
 export interface AlertsResponse {
   alerts: ContractAlert[];
+  /** Cursor for the next page; empty when the feed is exhausted. */
+  next_cursor: string;
 }
 
 export interface WatchdogStats {
@@ -231,29 +233,38 @@ export interface WatchlistStatusResponse {
 
 // ---- comparison ------------------------------------------------------------
 
-export interface CompareStats {
-  event_count_24h: number;
-  event_count_7d: number;
+/** One hour bucket of event volume for the comparison sparkline. */
+export interface CompareVolumePoint {
+  /** RFC3339 UTC hour start. */
+  timestamp: string;
+  count: number;
+}
+
+/** One contract's unified comparison metrics from GET /api/v1/compare. */
+export interface CompareContractEntry {
+  id: string;
+  network: string;
+  label: string;
+  status: string;
+  /** Whether the contract is registered in Sorolens. */
+  tracked: boolean;
+  /** Whether any indexed data (or a health score) exists yet. */
+  has_data: boolean;
+  event_count: number;
   invocation_count: number;
   avg_cpu: number;
   avg_fee: number;
-  last_activity: string | null;
-}
-
-export interface ComparisonData {
-  contract: ContractSummary;
-  stats: CompareStats;
-  health_status: string;
-}
-
-export interface ContractStatsApiResponse {
-  event_count: number;
-  invocation_count: number;
-  storage_count: number;
+  /** Cached composite health score, or null when not computed yet. */
+  health_score: number | null;
   last_synced_ledger: number;
-  window_event_count: number;
-  window_invocation_count: number;
-  window_duration: string;
+  event_volume: CompareVolumePoint[];
+  /** Set when this contract's lookups failed while others succeeded. */
+  error?: string;
+}
+
+export interface CompareResponse {
+  window: string;
+  contracts: CompareContractEntry[];
 }
 
 export interface CreateSubscriptionRequest {

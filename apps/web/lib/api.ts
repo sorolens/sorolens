@@ -2,6 +2,7 @@ import type {
   AlertsResponse,
   AlertSubscription,
   ContractDetail,
+  CompareResponse,
   ContractSnapshot,
   ContractSummary,
   ContractsListResponse,
@@ -185,6 +186,26 @@ export function getGlobalStats(): Promise<GlobalStats> {
   return fetchJson<GlobalStats>(`${API_URL}/api/v1/stats/global`);
 }
 
+// ---- comparison -------------------------------------------------------------
+
+/**
+ * Fetch unified stats for up to 4 contracts in a single round-trip. The API
+ * fans out to the per-contract lookups in parallel and returns one entry per
+ * requested contract; a contract with no data yet still gets an entry with
+ * zeroed metrics rather than an error.
+ */
+export function getCompare(
+  ids: string[],
+  window: TimeWindow = "7d",
+): Promise<CompareResponse> {
+  const search = new URLSearchParams();
+  search.set("ids", ids.join(","));
+  search.set("window", window);
+  return fetchJson<CompareResponse>(
+    `${API_URL}/api/v1/compare?${search.toString()}`,
+  );
+}
+
 // ---- snapshot / replay ------------------------------------------------------
 
 /**
@@ -252,12 +273,18 @@ export function listHealthChecks(
 
 export function listAlerts(
   contractId?: string,
-  params?: { severity?: string; limit?: number; network?: string },
+  params?: {
+    severity?: string;
+    limit?: number;
+    network?: string;
+    cursor?: string;
+  },
 ): Promise<AlertsResponse> {
   const search = new URLSearchParams();
   if (params?.severity) search.set("severity", params.severity);
   if (params?.limit) search.set("limit", String(params.limit));
   if (params?.network) search.set("network", params.network);
+  if (params?.cursor) search.set("cursor", params.cursor);
   const qs = search.toString();
   const path = contractId
     ? `/api/v1/watchdog/contracts/${contractId}/alerts`

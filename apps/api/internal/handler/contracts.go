@@ -328,6 +328,7 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	f := store.EventFilters{
 		Type:    r.URL.Query().Get("type"),
 		Network: network,
+		Topic:   strings.TrimSpace(r.URL.Query().Get("topic")),
 		From:    uint32Query(r, "from"),
 		To:      uint32Query(r, "to"),
 	}
