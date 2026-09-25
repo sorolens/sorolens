@@ -22,6 +22,12 @@ func New(h *handler.Handler) http.Handler {
 	r.Use(middleware.Logger(h.Logger))
 	r.Use(chiMiddleware.StripSlashes)
 
+	// Compress responses (gzip/br) for clients that ask for it. Must run
+	// before the rate limiter so compressed and uncompressed variants of a
+	// route share one rate-limit bucket (responses are buffered until the
+	// compression decision, so limiter headers written later are unaffected).
+	r.Use(middleware.Compression)
+
 	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
 
 	// Health (not rate-limited)
