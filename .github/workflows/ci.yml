@@ -51,8 +51,17 @@ jobs:
       - name: Start Postgres
         working-directory: ./
         run: |
-          docker compose up -d postgres
-          DB_CONTAINER=$(docker compose ps -q postgres)
+          # Start postgres without archive_mode for CI (aws mock copied after startup)
+          docker run -d --name sorolens-postgres \
+            -e POSTGRES_DB=sorolens \
+            -e POSTGRES_USER=sorolens \
+            -e POSTGRES_PASSWORD=sorolens \
+            -p 5432:5432 \
+            -v sorolens_postgres_data:/var/lib/postgresql/data \
+            --network sorolens_net \
+            postgres:16-alpine \
+            postgres -c wal_level=replica
+          DB_CONTAINER=$(docker ps -qf name=sorolens-postgres)
           docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
           docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
           docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
@@ -60,7 +69,7 @@ jobs:
         working-directory: ./
         run: |
           echo "Waiting for PostgreSQL..."
-          DB_CONTAINER=$(docker compose ps -q postgres)
+          DB_CONTAINER=$(docker ps -qf name=sorolens-postgres)
           until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
       - name: Run DB migrations
         if: matrix.module == 'apps/api'
@@ -227,15 +236,26 @@ jobs:
         uses: actions/checkout@v4
       - name: Start Postgres
         run: |
-          docker compose up -d postgres
-          DB_CONTAINER=$(docker compose ps -q postgres)
+          # Start postgres with archive_mode for backup test
+          docker run -d --name sorolens-postgres \
+            -e POSTGRES_DB=sorolens \
+            -e POSTGRES_USER=sorolens \
+            -e POSTGRES_PASSWORD=sorolens \
+            -p 5432:5432 \
+            -v sorolens_postgres_data:/var/lib/postgresql/data \
+            --network sorolens_net \
+            postgres:16-alpine \
+            postgres -c wal_level=replica -c archive_mode=on -c "archive_command=aws s3 cp %p s3://sorolens-backups/wal/%f"
+          DB_CONTAINER=$(docker ps -qf name=sorolens-postgres)
           docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
           docker cp scripts/aws-mock.sh "${DB_CONTAINER}:/usr/local/bin/aws"
           docker exec "$DB_CONTAINER" chmod +x /usr/local/bin/aws
+          # Restart to pick up archive_command with aws mock available
+          docker restart "$DB_CONTAINER"
       - name: Wait for Postgres
         run: |
           echo "Waiting for PostgreSQL..."
-          DB_CONTAINER=$(docker compose ps -q postgres)
+          DB_CONTAINER=$(docker ps -qf name=sorolens-postgres)
           until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
       - name: Setup Mock S3 Bucket
         run: |
@@ -243,7 +263,7 @@ jobs:
           install -m 755 scripts/aws-mock.sh /usr/local/bin/aws
       - name: Run Backup Script
         run: |
-          export DB_CONTAINER=$(docker compose ps -q postgres)
+          export DB_CONTAINER=$(docker ps -qf name=sorolens-postgres)
           ./scripts/backup.sh
       - name: Run Restore Script
         run: |
