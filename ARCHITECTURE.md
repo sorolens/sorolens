@@ -134,6 +134,37 @@ This flow runs for all contracts in "active" status on every 5-minute cron tick.
 8. Release the global Redis lock.
 ```
 
+### 2.3 Contract discovery (watched accounts)
+
+Runs at the start of every pass, before the per-contract loop, so a newly
+discovered contract is indexed in the same pass. Skipped for a network whose
+RPC client cannot serve `getTransactions` or when the store has no discovery
+support.
+
+```
+1. Load watched_accounts. If there are none, move the discovery cursor
+   (indexer_cursors row 'discovery:<network>') to the tip and stop, so adding
+   the first account never triggers a scan of stale history.
+
+2. Page through RPC getTransactions from cursor + 1 (first run: tip - 720
+   ledgers, ~1 hour), 200 per page, at most 50 pages per pass.
+
+3. For each SUCCESS transaction, decode the envelope (services/indexer/
+   internal/discovery). A Soroban tx has exactly one operation; when it is an
+   InvokeHostFunction CREATE_CONTRACT / CREATE_CONTRACT_V2, derive the
+   contract id = sha256(HashIDPreimage{CONTRACT_ID, sha256(passphrase),
+   preimage}).
+
+4. If the operation source (else the tx source) or the from-address deployer
+   is watched: insert the contract as status 'active', label
+   'discovered_by:<account>', seed sync_state.last_ledger = deploy_ledger - 1
+   and bump watched_accounts.discovered_count, in one transaction. An already
+   tracked contract is left untouched.
+
+5. Advance the discovery cursor to the last fully scanned ledger. On a store
+   error the cursor stops before that ledger so the deployment is retried.
+```
+
 ---
 
 ## 3. Postgres Schema (DDL)

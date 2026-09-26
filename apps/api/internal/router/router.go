@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/pprof"
 
@@ -31,6 +32,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(middleware.Recoverer(h.Logger))
 	r.Use(middleware.BodyLimit(maxBodyBytes))
 	r.Use(middleware.Logger(h.Logger))
+	// Audit trail for every mutating /api/ request (issue #122). It sits
+	// outside rate limiting, content-type and auth checks so their
+	// rejections are audited too, and inside Recoverer so a panic is
+	// recorded as 500 before being recovered.
+	r.Use(middleware.Audit(h.Store, h.Logger, "/api/"))
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(middleware.Metrics)
 
@@ -210,7 +216,15 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 			r.Get("/keys", h.ListAPIKeys)
 			r.Post("/keys", h.CreateAPIKey)
 			r.Delete("/keys/{id}", h.RevokeAPIKey)
+			r.Get("/audit", h.ListAuditEvents)
 		})
+
+		// Watched accounts: contracts deployed by these accounts are tracked
+		// automatically by the indexer (issue #123). Same role rules as
+		// contract registration.
+		r.With(scope, contributor).Post("/watched-accounts", h.AddWatchedAccount)
+		get("/watched-accounts", h.ListWatchedAccounts)
+		r.With(scope, contributor).Delete("/watched-accounts/{id}", h.DeleteWatchedAccount)
 
 		// Watchlist
 		r.Route("/watchlist", func(r chi.Router) {

@@ -1,0 +1,24 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "transactions": [
+      {
+        "status": "SUCCESS",
+        "txHash": "3f0c4e1b8a7d2c9e6b5a4f3e2d1c0b9a8f7e6d5c4b3a29181716151413121110",
+        "applicationOrder": 1,
+        "feeBump": false,
+        "envelopeXdr": "AAAAAgAAAAA=",
+        "resultXdr": "AAAAAAAAAGQAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAA=",
+        "resultMetaXdr": "AAAAAwAAAAA=",
+        "ledger": 1888539,
+        "createdAt": 1717166042
+      }
+    ],
+    "latestLedger": 1888600,
+    "latestLedgerCloseTimestamp": 1717166350,
+    "oldestLedger": 1767641,
+    "oldestLedgerCloseTimestamp": 1716561760,
+    "cursor": "8111217537191937"
+  }
+}
