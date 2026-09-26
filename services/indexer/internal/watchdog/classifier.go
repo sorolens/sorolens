@@ -151,9 +151,7 @@ func ProjectHealth(e RawEvent) (Health, error) {
 		return Health{}, err
 	}
 	status, _ := stringField(e.Value, "status")
-	if status == "" {
-		status = "Unknown"
-	}
+	status = normalizeHealthStatus(status)
 	metadata, _ := stringField(e.Value, "metadata")
 	return Health{
 		ContractID: cid,
@@ -198,6 +196,29 @@ func ProjectAlert(e RawEvent) (Alert, error) {
 }
 
 // ---- helpers ---------------------------------------------------------------
+
+// knownHealthStatuses enumerates the values the on-chain `HealthStatus` enum
+// (contracts/watchdog/src/lib.rs) can emit on a HealthCheckEvent. RPC payloads
+// are untrusted, so anything outside this set is treated as malformed.
+var knownHealthStatuses = map[string]struct{}{
+	"Healthy":      {},
+	"Degraded":     {},
+	"Unresponsive": {},
+}
+
+// defaultHealthStatus is returned when a HealthCheckEvent carries a missing,
+// empty, or out-of-enum status value.
+const defaultHealthStatus = "Unknown"
+
+// normalizeHealthStatus validates a decoded status string against the on-chain
+// HealthStatus enum and falls back to defaultHealthStatus for malformed input,
+// so a bad payload cannot leak an arbitrary status into the store.
+func normalizeHealthStatus(status string) string {
+	if _, ok := knownHealthStatuses[status]; ok {
+		return status
+	}
+	return defaultHealthStatus
+}
 
 func requireString(topics []string, idx int, name string) (string, error) {
 	if idx >= len(topics) || topics[idx] == "" {

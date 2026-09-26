@@ -1,0 +1,265 @@
+/* Popup chrome, mirroring the dashboard's Catppuccin-ish palette. */
+
+:root {
+  color-scheme: light dark;
+  --bg-page: #ffffff;
+  --bg-card: #f6f6f9;
+  --border: #e2e2ea;
+  --text-primary: #1f2430;
+  --text-secondary: #5c6478;
+  --accent: #06b6d4;
+  --accent-strong: #0e7490;
+  --ok: #16a34a;
+  --warn: #b45309;
+  --danger: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-page: #11111b;
+    --bg-card: #1e1e2e;
+    --border: #313244;
+    --text-primary: #cdd6f4;
+    --text-secondary: #a6adc8;
+    --accent: #06b6d4;
+    --accent-strong: #67e8f9;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 340px;
+  margin: 0;
+  padding: 0;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.header h1 {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.logo {
+  display: block;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+
+.dot[data-state="ok"] {
+  background: var(--ok);
+}
+
+.dot[data-state="error"] {
+  background: var(--danger);
+}
+
+main {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel h2 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.row code {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.badge[data-state="watched"] {
+  border-color: rgba(34, 197, 94, 0.6);
+  color: var(--ok);
+}
+
+.badge[data-state="indexed"] {
+  border-color: rgba(137, 180, 250, 0.6);
+  color: var(--accent-strong);
+}
+
+.badge[data-state="error"] {
+  border-color: rgba(239, 68, 68, 0.6);
+  color: var(--danger);
+}
+
+.manual {
+  display: flex;
+  gap: 6px;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.button {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--accent);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #06202a;
+}
+
+.button.ghost {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.button.link {
+  border: none;
+  background: none;
+  color: var(--accent-strong);
+  padding: 0;
+  font-size: 12px;
+}
+
+.hint,
+.empty {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.hint[data-tone="error"] {
+  color: var(--danger);
+}
+
+.hint[data-tone="info"] {
+  color: var(--text-secondary);
+}
+
+.empty {
+  margin: 0;
+}
+
+.notice {
+  margin: 0;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.notice[data-tone="info"] {
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.meta {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+}

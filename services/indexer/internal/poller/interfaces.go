@@ -45,6 +45,10 @@ type Store interface {
 	ContractHealthInputs(ctx context.Context, contractID string) (HealthInputs, error)
 	// UpsertContractHealthScore caches a computed 0-100 health score.
 	UpsertContractHealthScore(ctx context.Context, h ContractHealthScore) error
+
+	// InsertFailedEvent parks an event that exhausted processing retries
+	// in the dead-letter queue (issue #202).
+	InsertFailedEvent(ctx context.Context, fe FailedEvent) error
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -157,6 +161,16 @@ type Event struct {
 	InSuccessfulCall bool
 }
 
+// FailedEvent mirrors store.FailedEvent for the indexer DLQ (issue #202).
+type FailedEvent struct {
+	EventID      string
+	ContractID   string
+	Network      string
+	EventPayload []byte
+	ErrorMessage string
+	Attempts     int
+}
+
 // Invocation mirrors store.Invocation.
 type Invocation struct {
 	TxHash           string
@@ -220,3 +234,19 @@ type ContractHealthScore struct {
 	ComponentStorageTTL  int32
 	ComputedAt           time.Time
 }
+
+// ContractVersion mirrors store.ContractVersion.
+type ContractVersion struct {
+	ContractID        string
+	WasmHash          string
+	FirstSeenLedger   int64
+	TxHash            string
+	VerifiedSourceRef string
+}
+
+// ErrVersionNotFound is returned by GetLatestContractVersion when no entry exists.
+var ErrVersionNotFound = errorString("poller: contract version not found")
+
+type errorString string
+
+func (e errorString) Error() string { return string(e) }

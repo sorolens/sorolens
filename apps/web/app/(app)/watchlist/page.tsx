@@ -2,11 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  listWatchlist,
-  addToWatchlist,
-  removeFromWatchlist,
-} from "@/lib/api";
+import { listWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/api";
 import type { WatchlistItem } from "@/lib/types";
 import { StarButton } from "@/components/StarButton";
 
@@ -64,9 +60,16 @@ export default function WatchlistPage() {
         </h1>
       </div>
 
-      {loading && <div className="space-y-4">{Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="h-16 rounded-lg bg-[var(--color-bg-card)] animate-pulse" />
-      ))}</div>}
+      {loading && (
+        <div className="space-y-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-16 rounded-lg bg-[var(--color-bg-card)] animate-pulse"
+            />
+          ))}
+        </div>
+      )}
 
       {!loading && items.length === 0 && (
         <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-16 text-center border border-[var(--color-border)]">

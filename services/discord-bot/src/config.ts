@@ -55,6 +55,18 @@ export const config = {
   oauthStateSecret: required("OAUTH_STATE_SECRET"),
   publicBaseUrl: required("PUBLIC_BASE_URL"),
 
+  // Sorolens API (backing /status, /alerts, /watch and /unwatch)
+  sorolensApiBaseUrl: optional("SOROLENS_API_BASE_URL", "http://localhost:8080"),
+
+  // Optional admin-scoped key (`admin:*`). When set, `/connect` mints a
+  // per-contributor key through POST /api/v1/api-keys so each command runs
+  // under the caller's own identity. Without it the commands fall back to
+  // the public, unscoped read surface.
+  sorolensAdminApiKey: optional("SOROLENS_API_KEY", ""),
+
+  // Per-user slash command budget (sliding window of 60s).
+  commandRateLimitPerMinute: intOpt("COMMAND_RATE_LIMIT_PER_MINUTE", 10),
+
   // HTTP server
   port: intOpt("PORT", 8080),
 

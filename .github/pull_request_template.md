@@ -1,31 +1,21 @@
-## Summary
-<!-- One or two sentences describing what this PR does. -->
-## Related issue
+## What changed
+<!-- Describe what you changed -->
+
+## Why
+<!-- Explain why these changes were made -->
+
+## How tested
+<!-- Describe how you verified these changes -->
+
+## Screenshots
+<!-- Add screenshots if applicable -->
+
+## Closes
 Closes #
-<!-- If this PR partially addresses an issue rather than closing it, use "Refs #" instead. -->
-## Changes made
-<!-- List the files changed and briefly explain each change. Bullet points are fine. -->
--
--
--
-## How to test
-<!-- Step-by-step instructions for a reviewer to verify the change works correctly. -->
-1.
-2.
-3.
-## Screenshots (UI changes only)
-<!-- If you changed the dashboard, add before/after screenshots here. Delete this section if not applicable. -->
-| Before | After |
-|---|---|
-| | |
-## Checklist
-- [ ] Tests added or updated for every new or changed behavior.
-- [ ] `go test -race ./...` passes locally for any Go changes.
-- [ ] `pnpm vitest run` passes locally for any TypeScript changes.
-- [ ] `golangci-lint run ./...` passes with no new warnings.
-- [ ] `pnpm build` passes in `apps/web` for any dashboard changes.
-- [ ] No secrets, API keys, or private keys are present in the diff (`git diff main...HEAD | grep -i key`).
-- [ ] `.env.example` updated if new environment variables were added.
-- [ ] `ARCHITECTURE.md` updated if the REST API surface changed.
-- [ ] Migration file added to `services/indexer/migrations/` if the schema changed.
-- [ ] CI is passing on this branch.
+
+## PR Checklist
+- [ ] Read `CONTRIBUTING.md` for local setup, branch naming, commit format, and the PR checklist.
+- [ ] PR description links the issue with `Closes #`.
+- [ ] Described what was changed and stated how it was verified.
+- [ ] Kept the PR to this issue's scope.
+- [ ] CI is green before requesting review.

@@ -5,6 +5,7 @@
 
 # Node
 node_modules/
+.pnpm-store/
 dist/
 .next/
 .turbo/
@@ -17,12 +18,20 @@ coverage/
 target/
 
 # Go
+.bin/
 *.exe
 *.test
 sorolens-bin
+**/coverage.out
 /cli/cli
 /services/indexer/indexer
 
 # Misc
 .DS_Store
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/

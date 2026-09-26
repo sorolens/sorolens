@@ -1,0 +1,147 @@
+name: IaC
+
+# Validates the self-hosting Terraform modules and Pulumi package in deploy/.
+# Everything runs against mocks, a throwaway local state backend and fake
+# credentials: no cloud account, no secrets (so fork PRs work), and nothing
+# is ever created (no apply / up).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "deploy/**"
+      - ".github/workflows/iac.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/**"
+      - ".github/workflows/iac.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iac-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TERRAFORM_VERSION: "1.16.4"
+  TFLINT_VERSION: "v0.64.0"
+  PULUMI_VERSION: "3.265.0"
+
+jobs:
+  terraform:
+    name: Terraform (fmt, validate, test, tflint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff
+
+      - name: terraform validate + test (mock providers, plan only)
+        run: |
+          for dir in modules/core modules/aws examples/aws; do
+            echo "::group::$dir"
+            terraform -chdir="$dir" init -backend=false -input=false
+            terraform -chdir="$dir" validate
+            terraform -chdir="$dir" test
+            echo "::endgroup::"
+          done
+
+      - name: Set up tflint
+        uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+
+      - name: tflint (terraform + aws rulesets)
+        env:
+          # Only used to download the ruleset plugin from GitHub releases.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --init --config "$PWD/.tflint.hcl"
+          for dir in modules/core modules/aws examples/aws; do
+            tflint --chdir="$dir" --config "$PWD/.tflint.hcl"
+          done
+
+  terraform-minimum:
+    # The modules declare required_version >= 1.9.0; prove it. (The tests
+    # themselves need 1.11+, so they are skipped here.)
+    name: Terraform 1.9 compatibility (validate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform 1.9
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: terraform validate
+        run: |
+          for dir in modules/core modules/aws examples/aws; do
+            echo "::group::$dir"
+            terraform -chdir="$dir" init -backend=false -input=false -test-directory=no-tests-on-1.9
+            terraform -chdir="$dir" validate -no-tests
+            echo "::endgroup::"
+          done
+
+  pulumi:
+    name: Pulumi (build, unit tests, offline preview)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/pulumi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: deploy/pulumi/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Unit tests (Pulumi runtime mocks)
+        run: pnpm test
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v7
+        with:
+          pulumi-version: ${{ env.PULUMI_VERSION }}
+
+      - name: pulumi preview, HTTPS scenario (local backend, fake credentials)
+        run: ./scripts/offline-preview.sh https
+
+      - name: pulumi preview, HTTP evaluation scenario
+        run: ./scripts/offline-preview.sh http

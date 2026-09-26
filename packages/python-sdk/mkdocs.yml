@@ -1,0 +1,24 @@
+site_name: Sorolens Python SDK
+site_description: Official Python client for the Sorolens Soroban indexing API
+site_url: https://sorolens.readthedocs.io/
+repo_url: https://github.com/sorolens/sorolens
+edit_uri: edit/main/packages/python-sdk/docs/
+docs_dir: docs
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_root_heading: true
+            members_order: source
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - API reference: api.md

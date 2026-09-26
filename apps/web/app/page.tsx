@@ -4,23 +4,19 @@ import { LiveStats } from "@/components/LiveStats";
 const features = [
   {
     title: "Contract Event Indexing",
-    body:
-      "Every event your contract emits (decoded topics, decoded values, ledger and transaction context) indexed into Postgres and queryable via REST or the dashboard.",
+    body: "Every event your contract emits (decoded topics, decoded values, ledger and transaction context) indexed into Postgres and queryable via REST or the dashboard.",
   },
   {
     title: "Storage Tracking",
-    body:
-      "Snapshot of every temporary, persistent, and instance storage entry, with TTL health so you see which keys are about to expire before your users do.",
+    body: "Snapshot of every temporary, persistent, and instance storage entry, with TTL health so you see which keys are about to expire before your users do.",
   },
   {
     title: "Invocation Tracing",
-    body:
-      "Per-transaction CPU instructions, memory, ledger I/O bytes, and fee charged: the numbers you need to catch a regression before mainnet.",
+    body: "Per-transaction CPU instructions, memory, ledger I/O bytes, and fee charged: the numbers you need to catch a regression before mainnet.",
   },
   {
     title: "Watchdog Monitoring",
-    body:
-      "On-chain health checks and alerts, published by our sorolens-watchdog Soroban contract. Register your contract, push status updates, and see the timeline here.",
+    body: "On-chain health checks and alerts, published by our sorolens-watchdog Soroban contract. Register your contract, push status updates, and see the timeline here.",
     badge: "New",
   },
 ];
@@ -29,20 +25,17 @@ const steps = [
   {
     n: "1",
     title: "Track a contract",
-    body:
-      "Point the CLI or the API at any Soroban contract on testnet, mainnet, or futurenet. The indexer starts filling in its history on the next tick.",
+    body: "Point the CLI or the API at any Soroban contract on testnet, mainnet, or futurenet. The indexer starts filling in its history on the next tick.",
   },
   {
     n: "2",
     title: "Watch it live",
-    body:
-      "Events, invocations, and storage state land in the dashboard as the indexer pulls them from RPC, with a REST API in front for CI, alerts, or your own tooling.",
+    body: "Events, invocations, and storage state land in the dashboard as the indexer pulls them from RPC, with a REST API in front for CI, alerts, or your own tooling.",
   },
   {
     n: "3",
     title: "Add a watchdog",
-    body:
-      "For proactive monitoring, register your contract with the on-chain watchdog and push status updates. Any downtime, degraded response, or alert shows up here immediately.",
+    body: "For proactive monitoring, register your contract with the on-chain watchdog and push status updates. Any downtime, degraded response, or alert shows up here immediately.",
   },
 ];
 
@@ -52,7 +45,10 @@ export default function HomePage() {
       {/* Top nav */}
       <nav className="border-b border-[var(--color-border)]">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2 text-xl font-bold tracking-tight">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-xl font-bold tracking-tight"
+          >
             <img src="/logo.svg" alt="" className="h-7 w-7" aria-hidden />
             Sorolens
           </Link>
@@ -81,13 +77,14 @@ export default function HomePage() {
             Soroban observability
           </span>
           <h1 className="mb-6 text-5xl font-bold leading-tight tracking-tight sm:text-6xl">
-            Real-time monitoring and on-chain health checks for Soroban contracts.
+            Real-time monitoring and on-chain health checks for Soroban
+            contracts.
           </h1>
           <p className="mb-8 text-lg text-[var(--color-text-secondary)]">
             The only Stellar observability tool with a deployed Soroban{" "}
-            <em>watchdog</em> contract for proactive contract monitoring. Events,
-            invocations, storage TTLs, and health status: indexed, queryable,
-            and alertable.
+            <em>watchdog</em> contract for proactive contract monitoring.
+            Events, invocations, storage TTLs, and health status: indexed,
+            queryable, and alertable.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Link
@@ -163,16 +160,28 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm text-[var(--color-text-secondary)] sm:px-6 lg:px-8">
           <span>MIT licensed. Built for the Stellar developer community.</span>
           <div className="flex flex-wrap gap-4">
-            <a href="https://github.com/sorolens/sorolens" rel="noopener noreferrer">
+            <a
+              href="https://github.com/sorolens/sorolens"
+              rel="noopener noreferrer"
+            >
               Monorepo
             </a>
-            <a href="https://github.com/sorolens/sorolens-cli" rel="noopener noreferrer">
+            <a
+              href="https://github.com/sorolens/sorolens-cli"
+              rel="noopener noreferrer"
+            >
               CLI
             </a>
-            <a href="https://github.com/sorolens/sorolens-sdk" rel="noopener noreferrer">
+            <a
+              href="https://github.com/sorolens/sorolens-sdk"
+              rel="noopener noreferrer"
+            >
               SDK
             </a>
-            <a href="https://github.com/sorolens/sorolens/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">
+            <a
+              href="https://github.com/sorolens/sorolens/blob/main/CONTRIBUTING.md"
+              rel="noopener noreferrer"
+            >
               Contribute
             </a>
             <a href="https://discord.gg/D9jATUezYX" rel="noopener noreferrer">
