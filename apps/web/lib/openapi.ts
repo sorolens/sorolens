@@ -54,7 +54,7 @@ const pathParam = (name: string, description: string): OpenAPIParameter => ({
 
 const contractIdParam = pathParam(
   "id",
-  "56-character StrKey contract id starting with C",
+  "56-character StrKey contract id starting with C"
 );
 
 const networkParam: OpenAPIParameter = {
@@ -76,31 +76,74 @@ export const openApiDocument: OpenAPIDocument = {
         parameters: [networkParam],
       },
     },
+    "/api/v1/invocations": {
+      get: {
+        operationId: "listAllInvocations",
+        summary: "Invocations across every tracked contract",
+        tags: ["Invocations"],
+        parameters: [
+          {
+            name: "cursor",
+            in: "query",
+            description: "Opaque pagination cursor",
+          },
+          { name: "limit", in: "query", type: "integer", default: "50" },
+          networkParam,
+          {
+            name: "contract_id",
+            in: "query",
+            description: "Restrict to one contract id",
+          },
+          { name: "fn", in: "query", description: "Filter by function name" },
+          {
+            name: "status",
+            in: "query",
+            description: "SUCCESS | FAILED | NOT_FOUND",
+          },
+          {
+            name: "from",
+            in: "query",
+            type: "integer",
+            description: "Lower ledger bound",
+          },
+          {
+            name: "to",
+            in: "query",
+            type: "integer",
+            description: "Upper ledger bound",
+          },
+          {
+            name: "since",
+            in: "query",
+            description:
+              "Lower bound on ledger_closed_at (YYYY-MM-DD or RFC3339)",
+          },
+          {
+            name: "until",
+            in: "query",
+            description:
+              "Upper bound on ledger_closed_at (YYYY-MM-DD or RFC3339)",
+          },
+        ],
+      },
+    },
     "/api/v1/contracts": {
       get: {
         operationId: "listContracts",
         summary: "List tracked contracts",
         tags: ["Contracts"],
         parameters: [
-          { name: "cursor", in: "query", description: "Opaque pagination cursor" },
+          {
+            name: "cursor",
+            in: "query",
+            description: "Opaque pagination cursor",
+          },
           { name: "limit", in: "query", type: "integer", default: "50" },
           networkParam,
-          { name: "status", in: "query", description: "pending | backfilling | active | paused | error" },
           {
-            name: "sort",
+            name: "status",
             in: "query",
-            type: "string",
-            enum: ["added_at", "last_activity", "events_count"],
-            default: "added_at",
-            description: "Column to order by (default added_at)",
-          },
-          {
-            name: "order",
-            in: "query",
-            type: "string",
-            enum: ["asc", "desc"],
-            default: "desc",
-            description: "Sort direction (default desc)",
+            description: "pending | backfilling | active | paused | error",
           },
         ],
       },
@@ -118,7 +161,7 @@ export const openApiDocument: OpenAPIDocument = {
               label: "My Contract",
             },
             null,
-            2,
+            2
           ),
         },
       },
@@ -157,7 +200,11 @@ export const openApiDocument: OpenAPIDocument = {
           { name: "cursor", in: "query" },
           { name: "limit", in: "query", type: "integer", default: "50" },
           networkParam,
-          { name: "status", in: "query", description: "SUCCESS | FAILED | NOT_FOUND" },
+          {
+            name: "status",
+            in: "query",
+            description: "SUCCESS | FAILED | NOT_FOUND",
+          },
           { name: "fn", in: "query", description: "Filter by function name" },
           { name: "from", in: "query", type: "integer" },
           { name: "to", in: "query", type: "integer" },
@@ -174,8 +221,16 @@ export const openApiDocument: OpenAPIDocument = {
           { name: "cursor", in: "query" },
           { name: "limit", in: "query", type: "integer", default: "50" },
           networkParam,
-          { name: "durability", in: "query", description: "temporary | persistent | instance" },
-          { name: "status", in: "query", description: "live | archived | deleted" },
+          {
+            name: "durability",
+            in: "query",
+            description: "temporary | persistent | instance",
+          },
+          {
+            name: "status",
+            in: "query",
+            description: "live | archived | deleted",
+          },
         ],
       },
     },
@@ -186,7 +241,12 @@ export const openApiDocument: OpenAPIDocument = {
         tags: ["Stats"],
         parameters: [
           contractIdParam,
-          { name: "window", in: "query", description: "24h | 7d | 30d", default: "24h" },
+          {
+            name: "window",
+            in: "query",
+            description: "24h | 7d | 30d",
+            default: "24h",
+          },
         ],
       },
     },
@@ -229,7 +289,11 @@ export const openApiDocument: OpenAPIDocument = {
         summary: "All watchdog alerts",
         tags: ["Watchdog"],
         parameters: [
-          { name: "severity", in: "query", description: "Info | Warning | Critical" },
+          {
+            name: "severity",
+            in: "query",
+            description: "Info | Warning | Critical",
+          },
           { name: "limit", in: "query", type: "integer", default: "100" },
           networkParam,
         ],
@@ -252,7 +316,9 @@ export const openApiDocument: OpenAPIDocument = {
         operationId: "getMonitoredContract",
         summary: "One monitored contract's current health",
         tags: ["Watchdog"],
-        parameters: [pathParam("id", "Contract id registered with the watchdog")],
+        parameters: [
+          pathParam("id", "Contract id registered with the watchdog"),
+        ],
       },
     },
     "/api/v1/watchdog/contracts/{id}/health": {
@@ -298,7 +364,7 @@ export const openApiDocument: OpenAPIDocument = {
           example: JSON.stringify(
             { name: "monitoring bot", scopes: ["read:watchdog"] },
             null,
-            2,
+            2
           ),
         },
       },
@@ -322,7 +388,7 @@ export interface EndpointEntry {
 }
 
 export function listEndpoints(
-  doc: OpenAPIDocument = openApiDocument,
+  doc: OpenAPIDocument = openApiDocument
 ): EndpointEntry[] {
   const methods: HttpMethod[] = ["GET", "POST", "DELETE"];
   const out: EndpointEntry[] = [];
@@ -336,7 +402,7 @@ export function listEndpoints(
 }
 
 export function endpointsByTag(
-  doc: OpenAPIDocument = openApiDocument,
+  doc: OpenAPIDocument = openApiDocument
 ): { tag: string; endpoints: EndpointEntry[] }[] {
   const groups = new Map<string, EndpointEntry[]>();
   for (const entry of listEndpoints(doc)) {

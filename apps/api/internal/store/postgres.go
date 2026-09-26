@@ -18,6 +18,35 @@ type postgresStore struct {
 	pool *pgxpool.Pool
 }
 
+func (s *postgresStore) UpsertLabel(ctx context.Context, label Label) error {
+	if label.Public {
+		_, err := s.pool.Exec(ctx, `INSERT INTO labels_public (label, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (label) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, label.Label, label.Value)
+		return err
+	}
+	_, err := s.pool.Exec(ctx, `INSERT INTO labels_workspace (workspace_id, label, value, updated_at) VALUES ($1, $2, $3, NOW()) ON CONFLICT (workspace_id, label) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, label.WorkspaceID, label.Label, label.Value)
+	return err
+}
+
+func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error) {
+	rows, err := s.pool.Query(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public FROM labels_workspace WHERE workspace_id = $1) labels WHERE label ILIKE '%' || $2 || '%' OR value ILIKE '%' || $2 || '%' ORDER BY label LIMIT 100`, workspaceID, query)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	var labels []Label
+	for rows.Next() {
+		var label Label
+		if err := rows.Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public); err != nil { return nil, err }
+		labels = append(labels, label)
+	}
+	return labels, rows.Err()
+}
+
+func (s *postgresStore) ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error) {
+	var label Label
+	err := s.pool.QueryRow(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public, 2 AS priority FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public, 1 AS priority FROM labels_workspace WHERE workspace_id = $1) labels WHERE lower(label) = lower($2) ORDER BY priority LIMIT 1`, workspaceID, query).Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public)
+	if errors.Is(err, pgx.ErrNoRows) { return Label{}, ErrNotFound }
+	return label, err
+}
+
 // ---- contracts ------------------------------------------------------------
 
 // UpsertContract inserts or updates a contract in the database. It uses the contract ID as the unique constraint for upserting.
@@ -75,52 +104,25 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-
-	sortCol, descending := NormalizeContractSort(f.Sort, f.Order)
-	dir, cmp := "ASC", ">"
-	if descending {
-		dir, cmp = "DESC", "<"
-	}
-
-	// Only the columns needed for ordering are derived; the default added_at
-	// sort stays a plain column scan.
-	derived := ""
-	switch sortCol {
-	case ContractSortEventsCount:
-		derived = `,
-			(SELECT COUNT(*) FROM events ev WHERE ev.contract_id = c.id) AS events_count`
-	case ContractSortLastActivity:
-		derived = `,
-			GREATEST(
-				COALESCE((SELECT MAX(ev.ledger_closed_at) FROM events ev WHERE ev.contract_id = c.id), 'epoch'::timestamptz),
-				COALESCE((SELECT MAX(iv.ledger_closed_at) FROM invocations iv WHERE iv.contract_id = c.id), 'epoch'::timestamptz)
-			) AS last_activity`
-	}
-
-	// The filtered set is built once and reused for the cursor lookup below.
-	// sortCol/dir/cmp are chosen from a whitelist, never from client input
-	// directly, so the fmt.Sprintf interpolation is injection-safe.
-	query := fmt.Sprintf(`
-		WITH filtered AS (
-			SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
-			       c.backfill_complete_at, c.status, c.added_at%s
-			FROM contracts c
-			WHERE ($1 = '' OR c.network = $1)
-			  AND ($2 = '' OR c.status = $2)
-			  AND ($3 = '' OR EXISTS (
-			        SELECT 1 FROM contract_tags t
-			        WHERE t.contract_id = c.id AND t.tag = $3))
-		)
-		SELECT id, network, label, wasm_hash, created_at_ledger,
-		       backfill_complete_at, status, added_at
-		FROM filtered
-		WHERE ($4 = '' OR (filtered.%s, filtered.id) %s (
-		        SELECT f2.%s, f2.id FROM filtered f2 WHERE f2.id = $4))
-		ORDER BY filtered.%s %s, filtered.id %s
-		LIMIT $5`,
-		derived, sortCol, cmp, sortCol, sortCol, dir, dir)
-
-	rows, err := s.pool.Query(ctx, query, f.Network, f.Status, f.Tag, cursor, limit+1)
+	// cursor is the last-seen contract ID (lexicographic order).
+	rows, err := s.pool.Query(ctx, `
+		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at
+		FROM contracts c
+		LEFT JOIN (
+			SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
+			FROM (
+				SELECT contract_id, ledger_closed_at FROM events
+				UNION ALL
+				SELECT contract_id, ledger_closed_at FROM invocations
+			) activity_rows
+			GROUP BY contract_id
+		) activity ON activity.contract_id = c.id
+		WHERE ($1 = '' OR c.id > $1)
+		  AND ($2 = '' OR c.network = $2)
+		  AND ($3 = '' OR c.status = $3)
+		ORDER BY c.id ASC
+		LIMIT $4`, cursor, f.Network, f.Status, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -131,7 +133,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 		var c Contract
 		if err := rows.Scan(
 			&c.ID, &c.Network, &c.Label, &c.WasmHash, &c.CreatedAtLedger,
-			&c.BackfillCompleteAt, &c.Status, &c.AddedAt,
+			&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.LastActivityAt,
 		); err != nil {
 			return nil, "", err
 		}
@@ -339,6 +341,135 @@ func (s *postgresStore) UpsertSyncState(ctx context.Context, ss SyncState) error
 	return err
 }
 
+// ---- indexer cursors ------------------------------------------------------
+
+// GetIndexerCursor retrieves the last committed ledger for a network.
+func (s *postgresStore) GetIndexerCursor(ctx context.Context, network string) (uint32, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT ledger
+		FROM indexer_cursors
+		WHERE network = $1`, networkOrDefault(network))
+	var ledger int64
+	err := row.Scan(&ledger)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get indexer cursor: %w", err)
+	}
+	return uint32(ledger), nil
+}
+
+// SetIndexerCursor updates the last committed ledger for a network.
+func (s *postgresStore) SetIndexerCursor(ctx context.Context, network string, ledger uint32) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO indexer_cursors (network, ledger, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (network) DO UPDATE SET
+			ledger = GREATEST(indexer_cursors.ledger, EXCLUDED.ledger),
+			updated_at = NOW()`, networkOrDefault(network), ledger)
+	if err != nil {
+		return fmt.Errorf("set indexer cursor: %w", err)
+	}
+	return nil
+}
+
+// BatchInsertWithCursor atomically writes events, invocations, contract sync state,
+// and advances the network indexer cursor within a single database transaction.
+func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) // safe if committed
+
+	batch := &pgx.Batch{}
+
+	for _, e := range events {
+		topicJSON, err := json.Marshal(e.TopicXDR)
+		if err != nil {
+			return fmt.Errorf("marshal topic_xdr for event %s: %w", e.ID, err)
+		}
+		topicDecJSON, _ := json.Marshal(e.TopicDecoded)
+		valDecJSON, _ := json.Marshal(e.ValueDecoded)
+
+		batch.Queue(`
+			INSERT INTO events
+				(id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+				 topic_xdr, value_xdr, topic_decoded, value_decoded,
+				 in_successful_call, inserted_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			ON CONFLICT (id) DO NOTHING`,
+			e.ID, e.ContractID, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
+			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
+			e.InSuccessfulCall, time.Now(),
+		)
+	}
+
+	for _, inv := range invocations {
+		argsJSON, _ := json.Marshal(inv.ArgsDecoded)
+		resultJSON, _ := json.Marshal(inv.ResultDecoded)
+
+		batch.Queue(`
+			INSERT INTO invocations
+				(tx_hash, contract_id, network, ledger, ledger_closed_at, status,
+				 function_name, args_decoded, result_decoded, result_xdr,
+				 resource_fee_charged, cpu_insn, mem_byte,
+				 ledger_read_byte, ledger_write_byte, application_order, inserted_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+			ON CONFLICT (tx_hash) DO NOTHING`,
+			inv.TxHash, inv.ContractID, networkOrDefault(inv.Network), inv.Ledger, inv.LedgerClosedAt, inv.Status,
+			inv.FunctionName, argsJSON, resultJSON, inv.ResultXDR,
+			inv.ResourceFeeCharged, inv.CPUInsn, inv.MemByte,
+			inv.LedgerReadByte, inv.LedgerWriteByte, inv.ApplicationOrder, time.Now(),
+		)
+	}
+
+	if syncState.ContractID != "" {
+		batch.Queue(`
+			INSERT INTO sync_state (contract_id, last_ledger, last_run_at, error_message, updated_at)
+			VALUES ($1, $2, NOW(), NULL, NOW())
+			ON CONFLICT (contract_id) DO UPDATE SET
+				last_ledger   = EXCLUDED.last_ledger,
+				last_run_at   = NOW(),
+				error_message = NULL,
+				updated_at    = NOW()`,
+			syncState.ContractID, syncState.LastLedger,
+		)
+	}
+
+	batch.Queue(`
+		INSERT INTO indexer_cursors (network, ledger, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (network) DO UPDATE SET
+			ledger     = GREATEST(indexer_cursors.ledger, EXCLUDED.ledger),
+			updated_at = NOW()`,
+		networkOrDefault(network), ledger,
+	)
+
+	br := tx.SendBatch(ctx, batch)
+	totalQueued := len(events) + len(invocations)
+	if syncState.ContractID != "" {
+		totalQueued++
+	}
+	totalQueued++ // indexer_cursors
+
+	for i := 0; i < totalQueued; i++ {
+		if _, err := br.Exec(); err != nil {
+			br.Close()
+			return fmt.Errorf("exec batch item %d: %w", i, err)
+		}
+	}
+	if err := br.Close(); err != nil {
+		return fmt.Errorf("close batch: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit batch: %w", err)
+	}
+	return nil
+}
+
 // ---- global stats ---------------------------------------------------------
 
 // GetGlobalStats retrieves aggregated statistics about the tracked contracts, events, invocations, and storage entries.
@@ -454,4 +585,115 @@ func (s *postgresStore) IsInWatchlist(ctx context.Context, userID, contractID st
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// ---- contract versions ---------------------------------------------------
+
+func (s *postgresStore) RecordContractVersion(ctx context.Context, v ContractVersion) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO contract_versions
+			(contract_id, wasm_hash, first_seen_ledger, tx_hash, verified_source_ref, recorded_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (contract_id, wasm_hash) DO NOTHING`,
+		v.ContractID, v.WasmHash, v.FirstSeenLedger, nullableText(v.TxHash),
+		nullableText(v.VerifiedSourceRef), time.Now(),
+	)
+	return err
+}
+
+func (s *postgresStore) ListContractVersions(ctx context.Context, contractID string) ([]ContractVersion, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, contract_id, wasm_hash, first_seen_ledger,
+		       COALESCE(tx_hash, ''), COALESCE(verified_source_ref, ''), recorded_at
+		FROM contract_versions
+		WHERE contract_id = $1
+		ORDER BY first_seen_ledger ASC`, contractID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ContractVersion
+	for rows.Next() {
+		var cv ContractVersion
+		if err := rows.Scan(
+			&cv.ID, &cv.ContractID, &cv.WasmHash, &cv.FirstSeenLedger,
+			&cv.TxHash, &cv.VerifiedSourceRef, &cv.RecordedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, cv)
+	}
+	return out, rows.Err()
+}
+
+func (s *postgresStore) GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, contract_id, wasm_hash, first_seen_ledger,
+		       COALESCE(tx_hash, ''), COALESCE(verified_source_ref, ''), recorded_at
+		FROM contract_versions
+		WHERE contract_id = $1
+		ORDER BY first_seen_ledger DESC
+		LIMIT 1`, contractID)
+	var cv ContractVersion
+	err := row.Scan(
+		&cv.ID, &cv.ContractID, &cv.WasmHash, &cv.FirstSeenLedger,
+		&cv.TxHash, &cv.VerifiedSourceRef, &cv.RecordedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ContractVersion{}, ErrNotFound
+	}
+	return cv, err
+}
+
+// nullableText converts an empty Go string to a SQL NULL so that optional
+// columns don't store empty strings in the database.
+func nullableText(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit int) ([]Contract, error) {
+	if query == "" {
+		return []Contract{}, nil
+	}
+
+	q := `
+		SELECT
+			id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at, last_activity_at
+		FROM contracts
+		WHERE id ILIKE $1 OR label ILIKE $1
+		ORDER BY added_at DESC
+		LIMIT $2
+	`
+
+	// Add % wildcards for simple ILIKE search
+	searchPattern := "%" + query + "%"
+
+	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var contracts []Contract
+	for rows.Next() {
+		var c Contract
+		if err := rows.Scan(
+			&c.ID, &c.Network, &c.Label, &c.WasmHash,
+			&c.CreatedAtLedger, &c.BackfillCompleteAt, &c.Status,
+			&c.AddedAt, &c.LastActivityAt,
+		); err != nil {
+			return nil, err
+		}
+		contracts = append(contracts, c)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return contracts, nil
 }

@@ -1,22 +1,28 @@
 /**
- * Shared browser identity helper.
+ * Browser-side user identity.
  *
- * The API's write routes (track contract, tag contract) require a recognized
- * contributor identity. Until auth is wired up, the dashboard stores an
- * operator-supplied user ID in localStorage and forwards it as X-User-ID,
- * matching the convention the watchlist page already uses.
+ * RBAC: registering a contract and mutating the watchlist require a user that
+ * has been granted at least the contributor role in the API's users table.
+ * Until a real auth flow exists, the dashboard identifies itself with a
+ * localStorage value forwarded to the API as `X-User-ID`. It must map to a
+ * user with at least the contributor role.
  */
 
-export const USER_ID_STORAGE_KEY = "sorolens_user_id";
+/** localStorage key holding the browser identity. */
+export const USER_STORAGE_KEY = "sorolens_user_id";
 
-/** Returns the stored user ID, or "" when none is available. */
+/**
+ * Reads the current user id, or `""` when there is none.
+ *
+ * localStorage can be unavailable (private mode, some test runners), in which
+ * case this returns an empty string. Callers tolerate that because anonymous
+ * reads remain open; only writes need the identity.
+ */
 export function getUserId(): string {
   if (typeof window === "undefined") return "";
   try {
-    return window.localStorage.getItem(USER_ID_STORAGE_KEY) || "";
+    return window.localStorage.getItem(USER_STORAGE_KEY) || "";
   } catch {
-    // localStorage can be unavailable (private mode, some test runners);
-    // reads remain open for anonymous callers, only writes need identity.
     return "";
   }
 }

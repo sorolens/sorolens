@@ -37,6 +37,7 @@ type Store interface {
 	// page. Returns the next cursor (empty string when there are no more
 	// pages) as the second return value.
 	ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error)
+	SearchContracts(ctx context.Context, query string, limit int) ([]Contract, error)
 
 	// BatchInsertEvents inserts events, ignoring duplicates by primary key.
 	// All rows are sent in a single network round-trip.
@@ -64,6 +65,33 @@ type Store interface {
 
 	// CreateMonthlyPartitionIfNotExists creates a partition for the given year/month if it does not exist.
 	CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error
+
+	// GetIndexerCursor returns the last successfully committed ledger sequence for a network,
+	// or 0 if no cursor has been recorded yet.
+	GetIndexerCursor(ctx context.Context, network string) (uint32, error)
+
+	// SetIndexerCursor updates the cursor for a network.
+	SetIndexerCursor(ctx context.Context, network string, ledger uint32) error
+
+	// BatchInsertWithCursor inserts events, invocations, upserts contract sync state,
+	// and advances the network indexer cursor within a single database transaction.
+	// If any operation fails or the process crashes mid-poll before commit,
+	// the entire batch is rolled back atomically.
+	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error
+
+	// RecordContractVersion appends a new entry to the contract_versions table
+	// if the given wasm_hash has not been seen before for this contract.
+	// It is a no-op (returns nil) when the (contract_id, wasm_hash) pair already
+	// exists, making repeated indexer calls idempotent.
+	RecordContractVersion(ctx context.Context, v ContractVersion) error
+
+	// ListContractVersions returns all recorded Wasm hash entries for the given
+	// contract, sorted chronologically by first_seen_ledger ascending.
+	ListContractVersions(ctx context.Context, contractID string) ([]ContractVersion, error)
+
+	// GetLatestContractVersion returns the most recently seen ContractVersion for
+	// the given contract. Returns ErrNotFound when no version has been recorded yet.
+	GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error)
 }
 
 // AlertSubscriptionStore is the read/write surface for alert webhook subscriptions.
@@ -115,8 +143,14 @@ type UserStore interface {
 	GetUserByGitHubID(ctx context.Context, githubID string) (User, error)
 }
 
-// ContractFilters holds optional query filters and ordering for listing
-// contracts.
+// LabelStore persists public and workspace-scoped human-readable identifiers.
+type LabelStore interface {
+	UpsertLabel(ctx context.Context, label Label) error
+	ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error)
+	ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error)
+}
+
+// ContractFilters holds optional query filters for listing contracts.
 type ContractFilters struct {
 	// Network restricts results to one of testnet | mainnet | futurenet.
 	// Empty means all networks.
@@ -127,12 +161,6 @@ type ContractFilters struct {
 	// Tag restricts results to contracts carrying this tag. Empty means
 	// no tag filter.
 	Tag string
-	// Sort selects the ordering column: ContractSortAddedAt,
-	// ContractSortLastActivity, or ContractSortEventsCount. Empty means the
-	// default (ContractSortAddedAt).
-	Sort string
-	// Order is SortAsc or SortDesc. Empty means the default (SortDesc).
-	Order string
 }
 
 // NewStore returns a Store backed by the given pgxpool.Pool.

@@ -11,6 +11,8 @@ import (
 // Config holds global CLI configuration derived from persistent flags and env vars.
 type Config struct {
 	APIURL  string
+	Network string
+	Output  string
 	JSON    bool
 	NoColor bool
 	Timeout time.Duration
@@ -25,16 +27,19 @@ var rootCmd = &cobra.Command{
 	Long: `sorolens is the command-line interface for the Sorolens observability
 platform. It lets you track, inspect, and monitor Soroban smart contracts
 on the Stellar network.`,
-	SilenceUsage:  true,
-	SilenceErrors: true,
+	SilenceUsage:      true,
+	SilenceErrors:     true,
+	PersistentPreRunE: applyConfig,
 }
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(
 		&globalConfig.APIURL, "api-url",
-		envOrDefault("SOROLENS_API_URL", "http://localhost:8080"),
+		"",
 		"Sorolens API base URL",
 	)
+	rootCmd.PersistentFlags().StringVar(&globalConfig.Network, "network", "", "Stellar network (testnet, mainnet, futurenet, standalone)")
+	rootCmd.PersistentFlags().StringVar(&globalConfig.Output, "output", "", "Output format (table or json)")
 	rootCmd.PersistentFlags().BoolVar(&globalConfig.JSON, "json", false, "Output machine-readable JSON")
 	rootCmd.PersistentFlags().BoolVar(&globalConfig.NoColor, "no-color", false, "Disable color output")
 	rootCmd.PersistentFlags().DurationVar(&globalConfig.Timeout, "timeout", 10*time.Second, "Request timeout")

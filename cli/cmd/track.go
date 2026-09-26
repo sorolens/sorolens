@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/sorolens/sorolens/cli/internal/client"
 	"github.com/sorolens/sorolens/cli/internal/format"
+	"github.com/spf13/cobra"
 )
 
 var trackCmd = &cobra.Command{
@@ -17,11 +17,9 @@ var trackCmd = &cobra.Command{
 }
 
 var trackAlias string
-var trackNetwork string
 
 func init() {
 	trackCmd.Flags().StringVar(&trackAlias, "alias", "", "Optional human-readable label for the contract")
-	trackCmd.Flags().StringVar(&trackNetwork, "network", "testnet", "Stellar network (testnet, mainnet, futurenet, standalone)")
 	rootCmd.AddCommand(trackCmd)
 }
 
@@ -32,7 +30,7 @@ func runTrack(cmd *cobra.Command, args []string) error {
 	}
 
 	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
-	contract, err := c.TrackContract(cmd.Context(), contractID, trackAlias, trackNetwork)
+	contract, err := c.TrackContract(cmd.Context(), contractID, trackAlias, globalConfig.Network)
 	if err != nil {
 		if se, ok := err.(*client.SorolensError); ok {
 			fmt.Fprintf(os.Stderr, "Error (%s): %s\n", se.Code, se.Message)

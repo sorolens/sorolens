@@ -18,6 +18,9 @@ const cfg: Config = {
   githubOauthClientSecret: "gh_secret",
   oauthStateSecret: "super-secret-do-not-guess",
   publicBaseUrl: "https://sorolens.onrender.com",
+  sorolensApiBaseUrl: "https://api.sorolens.dev",
+  sorolensAdminApiKey: "",
+  commandRateLimitPerMinute: 10,
   port: 8080,
   dbPath: "/tmp/x.db",
 };

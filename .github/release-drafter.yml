@@ -1,0 +1,66 @@
+# Release Drafter configuration for sorolens.
+# Docs: https://github.com/release-drafter/release-drafter#configuration
+# Every label referenced below exists in this repository
+# (https://github.com/sorolens/sorolens/labels).
+
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+# Map the repo's existing complexity labels onto semantic version bumps.
+version-resolver:
+  major:
+    labels:
+      - high
+  minor:
+    labels:
+      - medium
+  patch:
+    labels:
+      - trivial
+  default: patch
+
+categories:
+  - title: "🚀 Features"
+    labels:
+      - enhancement
+  - title: "🐛 Bug Fixes"
+    labels:
+      - bug
+  - title: "🎨 Frontend"
+    labels:
+      - frontend
+  - title: "🔌 Indexer"
+    labels:
+      - indexer
+  - title: "⚙️ Backend"
+    labels:
+      - backend
+  - title: "📜 Smart Contracts & Rust"
+    labels:
+      - smart-contract
+      - rust
+  - title: "🖥️ CLI"
+    labels:
+      - cli
+  - title: "🧪 Testing"
+    labels:
+      - testing
+  - title: "📚 Documentation"
+    labels:
+      - documentation
+      - docs
+  - title: "🛠️ DevOps & CI"
+    labels:
+      - devops
+
+change-template: "- $TITLE ([#$NUMBER]($URL)) @$AUTHOR"
+change-title-escapes: '\<*_&'
+
+no-changes-template: "- No changes"
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/sorolens/sorolens/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION

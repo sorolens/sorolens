@@ -2,22 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { DataTable, MonoId } from "@sorolens/ui";
+import { DataTable, Toast } from "@sorolens/ui";
 import type { Column } from "@sorolens/ui";
-import { listContracts, trackContract, ApiError } from "@/lib/api";
+import { LabelledId } from "@/components/LabelledId";
+import { listContracts } from "@/lib/api";
 import type { ContractSummary } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
-import { getUserId } from "@/lib/user";
+import { contractRowKey, isPendingRow } from "@/lib/optimisticTrack";
+import type { ContractRow } from "@/lib/optimisticTrack";
 import { TableSkeleton } from "@/components/Skeleton";
+import ImportContractsCsv from "@/components/ImportContractsCsv";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const PAGE_SIZE = 20;
-
-// Soroban contract IDs are 56-char strkeys starting with 'C'
-const CONTRACT_ID_RE = /^C[A-Z0-9]{55}$/;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,258 +48,91 @@ function formatDate(iso: string) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Track Contract Modal
-// ---------------------------------------------------------------------------
-
-interface TrackModalProps {
-  onClose: () => void;
-  onSuccess: () => void;
+function formatRelativeTime(iso: string, now = Date.now()) {
+  const diffSeconds = Math.max(
+    0,
+    Math.floor((now - new Date(iso).getTime()) / 1000)
+  );
+  if (diffSeconds < 60) return "just now";
+  const minutes = Math.floor(diffSeconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
-function TrackContractModal({ onClose, onSuccess }: TrackModalProps) {
-  const [contractId, setContractId] = useState("");
-  const [label, setLabel] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+function RelativeTime({ iso }: { iso: string | null }) {
+  const [, setNow] = useState(() => Date.now());
 
-  const idError =
-    contractId.length > 0 && !CONTRACT_ID_RE.test(contractId)
-      ? "Contract ID must be 56 characters starting with 'C' (A–Z, 0–9 only)"
-      : null;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (idError || !contractId) return;
-
-    setSubmitting(true);
-    setError(null);
-    try {
-      await trackContract(
-        { id: contractId, label: label || undefined },
-        getUserId(),
-      );
-      onSuccess();
-      onClose();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("An unexpected error occurred");
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Close on backdrop click
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const handleBackdrop = (e: React.MouseEvent) => {
-    if (e.target === backdropRef.current) onClose();
-  };
-
-  // Close on Escape
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
-  return (
-    <div
-      ref={backdropRef}
-      onClick={handleBackdrop}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      aria-modal="true"
-      role="dialog"
-      aria-labelledby="track-modal-title"
-    >
-      <div className="w-full max-w-md rounded-xl bg-[var(--color-bg-card)] p-6 shadow-2xl border border-[var(--color-border)]">
-        <div className="mb-5 flex items-center justify-between">
-          <h2
-            id="track-modal-title"
-            className="text-lg font-semibold text-[var(--color-text-primary)]"
-          >
-            Track a Contract
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-            aria-label="Close modal"
-          >
-            ✕
-          </button>
-        </div>
+  if (!iso) {
+    return (
+      <span className="text-[var(--color-text-secondary)]">No activity</span>
+    );
+  }
 
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          <div>
-            <label
-              htmlFor="track-contract-id"
-              className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]"
-            >
-              Contract ID <span className="text-red-400">*</span>
-            </label>
-            <input
-              id="track-contract-id"
-              type="text"
-              value={contractId}
-              onChange={(e) => {
-                setContractId(e.target.value.trim());
-                setError(null);
-              }}
-              placeholder="C…"
-              className="w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2.5 font-mono text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
-              autoComplete="off"
-              spellCheck={false}
-              required
-            />
-            {idError && (
-              <p className="mt-1.5 text-xs text-red-400" role="alert">
-                {idError}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="track-contract-label"
-              className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]"
-            >
-              Alias / Label{" "}
-              <span className="text-[var(--color-text-secondary)] font-normal">
-                (optional)
-              </span>
-            </label>
-            <input
-              id="track-contract-label"
-              type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="My Contract"
-              className="w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
-            />
-          </div>
-
-          {error && (
-            <p
-              className="rounded-lg bg-red-900/20 border border-red-900/40 px-3 py-2.5 text-sm text-red-400"
-              role="alert"
-            >
-              {error}
-            </p>
-          )}
-
-          <div className="flex gap-3 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-lg border border-[var(--color-border)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              id="track-modal-submit"
-              type="submit"
-              disabled={submitting || !!idError || !contractId}
-              className="flex-1 rounded-lg bg-[var(--color-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity disabled:opacity-50 hover:opacity-90"
-            >
-              {submitting ? "Tracking…" : "Track contract"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+  return <span>{formatRelativeTime(iso)}</span>;
 }
 
 // ---------------------------------------------------------------------------
 // Contracts Table Columns
 // ---------------------------------------------------------------------------
 
-function makeColumns(
-  onTagClick: (tag: string) => void,
-): Column<ContractSummary>[] {
-  return [
-    {
-      key: "id",
-      header: "Contract ID",
-      sortable: true,
-      accessor: (c) => (
-        <span className="font-mono text-xs">
-          <MonoId value={c.id} headChars={8} tailChars={8} />
-        </span>
-      ),
-    },
-    {
-      key: "label",
-      header: "Alias",
-      sortable: true,
-      accessor: (c) =>
-        c.label ? (
-          <span className="text-[var(--color-text-primary)]">{c.label}</span>
-        ) : (
-          <span className="text-[var(--color-text-secondary)]">--</span>
-        ),
-    },
-    {
-      key: "network",
-      header: "Network",
-      sortable: true,
-      accessor: (c) => (
-        <span className="text-xs text-[var(--color-text-secondary)]">
-          {c.network}
-        </span>
-      ),
-    },
-    {
-      key: "tags",
-      header: "Tags",
-      accessor: (c) => {
-        const tags = c.tags ?? [];
-        if (tags.length === 0) {
-          return <span className="text-[var(--color-text-secondary)]">--</span>;
-        }
-        return (
-          <div className="flex flex-wrap gap-1">
-            {tags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={(e) => {
-                  // Don't trigger the row's navigation handler.
-                  e.stopPropagation();
-                  onTagClick(tag);
-                }}
-                className="rounded-full bg-[var(--color-accent)]/15 px-2 py-0.5 text-xs font-medium text-[var(--color-accent)] transition-opacity hover:opacity-80"
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        );
-      },
-    },
-    {
-      key: "status",
-      header: "Status",
-      sortable: true,
-      accessor: (c) => <StatusBadge status={c.status} />,
-    },
-    {
-      key: "added_at",
-      header: "Added",
-      sortable: true,
-      accessor: (c) => (
-        <span className="text-xs text-[var(--color-text-secondary)]">
-          {formatDate(c.added_at)}
-        </span>
-      ),
-    },
-  ];
-}
+const COLUMNS: Column<ContractRow>[] = [
+  {
+    key: "id",
+    header: "Contract ID",
+    sortable: true,
+    accessor: (c) => (
+      <span
+        className={`font-mono text-xs ${isPendingRow(c) ? "opacity-60" : ""}`}
+      >
+        <LabelledId value={c.id} knownLabel={c.label} />
+      </span>
+    ),
+  },
+  {
+    key: "network",
+    header: "Network",
+    sortable: true,
+    accessor: (c) => (
+      <span className="text-xs text-[var(--color-text-secondary)]">
+        {c.network}
+      </span>
+    ),
+  },
+  {
+    key: "status",
+    header: "Status",
+    sortable: true,
+    accessor: (c) => <StatusBadge status={c.status} />,
+  },
+  {
+    key: "added_at",
+    header: "Added",
+    sortable: true,
+    accessor: (c) => (
+      <span className="text-xs text-[var(--color-text-secondary)]">
+        {formatDate(c.added_at)}
+      </span>
+    ),
+  },
+  {
+    key: "last_activity_at",
+    header: "Last activity",
+    sortable: true,
+    accessor: (c) => (
+      <span className="text-xs text-[var(--color-text-secondary)]">
+        <RelativeTime iso={c.last_activity_at} />
+      </span>
+    ),
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Main Page
@@ -310,7 +143,7 @@ export default function ContractsPage() {
   const { network } = useNetwork();
 
   // Data state
-  const [contracts, setContracts] = useState<ContractSummary[]>([]);
+  const [contracts, setContracts] = useState<ContractRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Pagination state: stack of cursors, index 0 = first page
@@ -328,15 +161,28 @@ export default function ContractsPage() {
   const [sortColumn, setSortColumn] = useState<string>("added_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
-  // Modal state
-  const [showModal, setShowModal] = useState(false);
+  // CSV import state
+  const [showImport, setShowImport] = useState(false);
+
+  // Track state: one request in flight at a time, errors surface as a toast.
+  const [trackPending, setTrackPending] = useState(false);
+  const [toast, setToast] = useState<{ id: number; message: string } | null>(
+    null
+  );
+  const toastSeq = useRef(0);
+  const dismissToast = useCallback(() => setToast(null), []);
 
   // ---------------------------------------------------------------------------
   // Data fetching
   // ---------------------------------------------------------------------------
 
+  // Only the most recent load() may write to state, so a slow response can't
+  // overwrite a newer page, the optimistic list, or a restored snapshot.
+  const loadSeq = useRef(0);
+
   const load = useCallback(
     async (cursor: string | null) => {
+      const seq = ++loadSeq.current;
       setLoading(true);
       try {
         const data = await listContracts({
@@ -345,18 +191,20 @@ export default function ContractsPage() {
           network: networkFilter(network),
           tag: tagFilter || undefined,
         });
+        if (seq !== loadSeq.current) return;
         setContracts(data.contracts ?? []);
         setHasMore(data.has_more ?? false);
       } catch {
+        if (seq !== loadSeq.current) return;
         // Backend not reachable yet. Fall through to the empty state so the
         // page still reads as "waiting for data" instead of "broken".
         setContracts([]);
         setHasMore(false);
       } finally {
-        setLoading(false);
+        if (seq === loadSeq.current) setLoading(false);
       }
     },
-    [network, tagFilter],
+    [network]
   );
 
   useEffect(() => {
@@ -422,6 +270,8 @@ export default function ContractsPage() {
   });
 
   const sorted = [...filtered].sort((a, b) => {
+    // Keep a just-submitted contract at the top whatever the sort column.
+    if (isPendingRow(a) !== isPendingRow(b)) return isPendingRow(a) ? -1 : 1;
     const av = (a as unknown as Record<string, unknown>)[sortColumn];
     const bv = (b as unknown as Record<string, unknown>)[sortColumn];
     const cmp = String(av ?? "").localeCompare(String(bv ?? ""));
@@ -449,10 +299,21 @@ export default function ContractsPage() {
 
   return (
     <>
-      {showModal && (
-        <TrackContractModal
-          onClose={() => setShowModal(false)}
-          onSuccess={handleTrackSuccess}
+      {showImport && (
+        <ImportContractsCsv
+          network={network}
+          userId={getUserId()}
+          onClose={() => setShowImport(false)}
+          onImported={handleTrackSuccess}
+        />
+      )}
+
+      {toast && (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          variant="error"
+          onDismiss={dismissToast}
         />
       )}
 
@@ -463,15 +324,27 @@ export default function ContractsPage() {
             Contracts
           </h1>
 
-          <button
-            id="track-contract-btn"
-            type="button"
-            onClick={() => setShowModal(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity hover:opacity-90"
-          >
-            <span aria-hidden="true">+</span>
-            Track contract
-          </button>
+          <div className="flex gap-2">
+            <button
+              id="import-csv-btn"
+              type="button"
+              onClick={() => setShowImport(true)}
+              disabled={trackPending}
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] hover:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Import CSV
+            </button>
+            {/* The tracking wizard (issue #140) replaced the old single-field
+                modal, so this is a route, not a dialog trigger. */}
+            <Link
+              id="track-contract-btn"
+              href="/contracts/new"
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity hover:opacity-90"
+            >
+              <span aria-hidden="true">+</span>
+              Track contract
+            </Link>
+          </div>
         </div>
 
         {/* Filters: free-text search and server-side tag filter */}
@@ -503,20 +376,20 @@ export default function ContractsPage() {
         {!loading && sorted.length === 0 && (
           <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-16 text-center border border-[var(--color-border)]">
             <p className="text-lg font-medium text-[var(--color-text-primary)]">
-              {search || tagFilter
-                ? "No contracts match your filters"
+              {search
+                ? "No contracts match your search"
                 : "No contracts tracked yet"}
             </p>
             {!search && !tagFilter && (
               <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                Use the CLI or API to start tracking a Soroban contract, or click{" "}
-                <button
-                  type="button"
-                  onClick={() => setShowModal(true)}
+                Use the CLI or API to start tracking a Soroban contract, or
+                click{" "}
+                <Link
+                  href="/contracts/new"
                   className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
                 >
-                  Track contract
-                </button>{" "}
+                  run the tracking wizard
+                </Link>{" "}
                 to add one from here.
               </p>
             )}
@@ -525,14 +398,16 @@ export default function ContractsPage() {
 
         {/* Data table */}
         {!loading && sorted.length > 0 && (
-          <DataTable<ContractSummary>
-            columns={columns}
+          <DataTable<ContractRow>
+            columns={COLUMNS}
             data={sorted}
-            rowKey={(c) => c.id}
+            rowKey={contractRowKey}
             sortColumn={sortColumn}
             sortDirection={sortDirection}
             onSort={handleSort}
             onRowClick={(c) => {
+              // The detail page doesn't exist until the API confirms it.
+              if (isPendingRow(c)) return;
               window.location.href = `/contracts/${c.id}`;
             }}
             emptyState={
@@ -576,11 +451,13 @@ export default function ContractsPage() {
 
         {/* Shortcut link to contract detail (accessible) */}
         <div className="sr-only">
-          {sorted.map((c) => (
-            <Link key={c.id} href={`/contracts/${c.id}`}>
-              {c.label ?? c.id}
-            </Link>
-          ))}
+          {sorted
+            .filter((c) => !isPendingRow(c))
+            .map((c) => (
+              <Link key={c.id} href={`/contracts/${c.id}`}>
+                {c.label ?? c.id}
+              </Link>
+            ))}
         </div>
       </div>
     </>

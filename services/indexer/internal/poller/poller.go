@@ -9,17 +9,25 @@ package poller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"runtime"
+	"sync"
 	"time"
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
+	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
 	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
 )
 
 const (
+	// maxEventRetries is how many times a single event is retried before
+	// it is parked in the dead-letter queue (issue #202).
+	maxEventRetries = 3
+
 	// lockTTL is the Redis advisory lock lifetime per contract.
 	// Set to twice the expected maximum per-contract processing time.
 	lockTTL = 60 * time.Second
@@ -35,6 +43,9 @@ const (
 
 // Config holds runtime parameters for the Poller.
 type Config struct {
+	// Workers is the maximum number of contracts processed concurrently. Values
+	// less than one default to GOMAXPROCS.
+	Workers int
 	// LedgerWindow is the maximum number of ledgers to request per getEvents
 	// call. Matches INDEXER_LEDGER_WINDOW from the API config.
 	LedgerWindow uint32
@@ -62,6 +73,16 @@ type Poller struct {
 	redis      RedisClient
 	cfg        Config
 	log        *slog.Logger
+	// metrics records the per-network lag gauges on every pass (issue #198).
+	// It is nil unless SetMetrics is called; nil disables metric recording.
+	metrics *metrics.Recorder
+}
+
+// SetMetrics attaches the Prometheus recorder the poller updates on every
+// pass (issue #198). It must be called before Run; when it is never called
+// metric recording is skipped, so existing callers are unaffected.
+func (p *Poller) SetMetrics(r *metrics.Recorder) {
+	p.metrics = r
 }
 
 // New returns a Poller wired with the given dependencies.
@@ -81,7 +102,7 @@ func NewWithRPCClients(rpcClients map[string]RPCClient, store Store, redis Redis
 // Run starts the poller in the given mode.
 // mode must be "once" or "continuous".
 // The context controls graceful shutdown: when ctx is cancelled the poller
-// finishes the current contract then returns.
+// finishes in-flight contracts, skips queued contracts, then returns.
 func (p *Poller) Run(ctx context.Context, mode string) error {
 	switch mode {
 	case "once":
@@ -106,6 +127,7 @@ func (p *Poller) runOnce(ctx context.Context) error {
 
 	err := p.processAll(ctx)
 	elapsed := time.Since(start)
+	p.metrics.ObserveRunDuration("once", elapsed.Seconds())
 
 	if ctx.Err() == context.DeadlineExceeded {
 		p.log.Warn("indexer run exceeded max-duration, exiting cleanly",
@@ -120,9 +142,11 @@ func (p *Poller) runOnce(ctx context.Context) error {
 // runContinuous loops until ctx is cancelled, sleeping PollInterval between passes.
 func (p *Poller) runContinuous(ctx context.Context) error {
 	for {
+		passStart := time.Now()
 		if err := p.processAll(ctx); err != nil {
 			p.log.Error("indexer pass error", "err", err)
 		}
+		p.metrics.ObserveRunDuration("continuous", time.Since(passStart).Seconds())
 		select {
 		case <-ctx.Done():
 			p.log.Info("indexer shutting down")
@@ -138,33 +162,67 @@ func (p *Poller) processAll(ctx context.Context) error {
 	if err := partition.EnsureNextMonthPartition(ctx, p.store); err != nil {
 		p.log.Warn("failed to ensure next month partition", "err", err)
 	}
+	workerCount := p.cfg.Workers
+	if workerCount < 1 {
+		workerCount = runtime.GOMAXPROCS(0)
+	}
+	jobs := make(chan Contract, workerCount)
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go func() {
+			defer workers.Done()
+			for contract := range jobs {
+				// Preserve graceful shutdown semantics: contracts already being
+				// processed finish, but queued contracts do not start after cancel.
+				if ctx.Err() != nil {
+					continue
+				}
+				if err := p.processContract(context.WithoutCancel(ctx), contract); err != nil {
+					// One failing contract must not block the rest of the pass.
+					p.log.Error("failed to index contract",
+						"contract_id", contract.ID,
+						"err", err,
+					)
+				}
+			}
+		}()
+	}
+	stopWorkers := func() {
+		close(jobs)
+		workers.Wait()
+	}
 
 	var cursor string
 	for {
 		// Check for shutdown between contract batches.
 		if ctx.Err() != nil {
+			stopWorkers()
 			return nil
 		}
 
 		contracts, next, err := p.store.ListContracts(ctx, cursor, 50)
 		if err != nil {
+			stopWorkers()
 			return fmt.Errorf("list contracts: %w", err)
 		}
 
+	contractBatch:
 		for _, c := range contracts {
 			if ctx.Err() != nil {
-				return nil
+				break contractBatch
 			}
 			if c.Status != "active" && c.Status != "backfilling" {
 				continue
 			}
-			if err := p.processContract(ctx, c); err != nil {
-				// Log and continue; one failing contract must not block others.
-				p.log.Error("failed to index contract",
-					"contract_id", c.ID,
-					"err", err,
-				)
+			select {
+			case <-ctx.Done():
+				break contractBatch
+			case jobs <- c:
 			}
+		}
+		if ctx.Err() != nil {
+			break
 		}
 
 		if next == "" {
@@ -172,6 +230,7 @@ func (p *Poller) processAll(ctx context.Context) error {
 		}
 		cursor = next
 	}
+	stopWorkers()
 
 	if p.cfg.AnomalyEnabled {
 		p.runAnomalyDetection(ctx)
@@ -477,8 +536,8 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 	}
 
 	if len(events) > 0 {
-		if err := p.store.BatchInsertEvents(ctx, events); err != nil {
-			return fmt.Errorf("batch insert events: %w", err)
+		if err := p.insertEventsWithDLQ(ctx, events); err != nil {
+			return fmt.Errorf("insert events: %w", err)
 		}
 	}
 	if len(invocations) > 0 {
@@ -492,11 +551,77 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return fmt.Errorf("upsert sync state: %w", err)
 	}
 
+	// Only count work that was actually committed: a failed insert returns
+	// above, so these series always describe durable progress. The lag sample
+	// uses the batch's final ledger as the committed cursor, which is clamped
+	// at zero against the observed head.
+	p.metrics.AddEventsProcessed(network, len(events))
+	p.metrics.ObserveNetwork(network, latest.Sequence, endLedger)
+
 	log.Info("contract indexed",
 		"events", len(events),
 		"invocations", len(invocations),
 		"duration", time.Since(runStart),
 	)
+	return nil
+}
+
+// insertEventsWithDLQ persists events one at a time, retrying each up to
+// maxEventRetries times. An event that still cannot be stored is parked in the
+// dead-letter queue (issue #202) and the remaining events are still processed,
+// so a single bad event can no longer block a contract's indexing pass.
+//
+// Per-event rather than per-batch by design: BatchInsertEvents rejects the
+// whole slice when any one element is bad, so retrying as a batch would park
+// the good events alongside the bad one.
+func (p *Poller) insertEventsWithDLQ(ctx context.Context, events []Event) error {
+	for _, ev := range events {
+		var lastErr error
+		stored := false
+		for attempt := 1; attempt <= maxEventRetries; attempt++ {
+			if err := p.store.BatchInsertEvents(ctx, []Event{ev}); err != nil {
+				lastErr = err
+				continue
+			}
+			stored = true
+			break
+		}
+		if stored {
+			continue
+		}
+
+		// EventPayload is what the requeue endpoint re-inserts, so it must be a
+		// JSON-serialized Event: handler/dlq.go unmarshals it back into
+		// store.Event. Event holds only plain fields, so a marshal failure is
+		// unreachable in practice — park the row anyway rather than drop it.
+		payload, marshalErr := json.Marshal(ev)
+		msg := "insert retries exhausted"
+		switch {
+		case marshalErr != nil:
+			p.log.Error("marshal event for DLQ", "event_id", ev.ID, "err", marshalErr)
+			payload, msg = nil, "marshal payload: "+marshalErr.Error()
+		case lastErr != nil:
+			msg = lastErr.Error()
+		}
+
+		if err := p.store.InsertFailedEvent(ctx, FailedEvent{
+			EventID:      ev.ID,
+			ContractID:   ev.ContractID,
+			Network:      ev.Network,
+			EventPayload: payload,
+			ErrorMessage: msg,
+			Attempts:     maxEventRetries,
+		}); err != nil {
+			// The event is now stored nowhere, which the caller must know about.
+			return fmt.Errorf("park event %s in DLQ: %w", ev.ID, err)
+		}
+		p.log.Warn("event parked in DLQ",
+			"event_id", ev.ID,
+			"contract_id", ev.ContractID,
+			"attempts", maxEventRetries,
+			"err", msg,
+		)
+	}
 	return nil
 }
 
