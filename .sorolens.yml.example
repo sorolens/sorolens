@@ -1,0 +1,4 @@
+# Copy this file to ~/.sorolens.yml and adjust the defaults as needed.
+api_url: http://localhost:8080
+network: testnet
+output: table

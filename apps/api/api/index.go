@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/exaring/otelpgx"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	apiconfig "github.com/sorolens/sorolens/apps/api/internal/config"
 	sorohandler "github.com/sorolens/sorolens/apps/api/internal/handler"
+	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/router"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
@@ -55,8 +58,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			DB:     &dbPinger{pool: pool},
 			Redis:  &redisPinger{client: redisClient},
 			Logger: logger,
+
+			Cache:              &middleware.RedisCache{Client: redisClient},
+			CacheTTL:           30 * time.Second,
+			SlackSigningSecret: os.Getenv("SLACK_SIGNING_SECRET"),
 		}
-		handler = router.New(h)
+		maxBodyBytes := apiconfig.DefaultRequestMaxBodyBytes
+		if n, err := apiconfig.MaxBodyBytesFromEnv(); err != nil {
+			logger.Error("request body limit", "err", err)
+		} else {
+			maxBodyBytes = n
+		}
+		handler = router.New(h, maxBodyBytes)
 	})
 
 	if handler == nil {

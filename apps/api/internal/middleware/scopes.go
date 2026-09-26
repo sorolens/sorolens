@@ -31,18 +31,30 @@ const (
 // (e.g. /health, /readyz) and are reachable by any authenticated key.
 var routeScopes = map[string]string{
 	"GET /api/v1/stats/global": ScopeReadContracts,
+	"GET /api/v1/compare":      ScopeReadContracts,
 
-	"GET /api/v1/contracts":                  ScopeReadContracts,
-	"POST /api/v1/contracts":                 ScopeWriteContracts,
-	"GET /api/v1/contracts/{id}":             ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/events":      ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/invocations": ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/storage":     ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/stats":       ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/forecast":    ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/snapshot":    ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/stream":      ScopeReadContracts,
-	"GET /api/v1/stream/events":               ScopeReadContracts,
+	"GET /api/v1/contracts":                    ScopeReadContracts,
+	"POST /api/v1/contracts":                   ScopeWriteContracts,
+	"GET /api/v1/contracts/{id}":               ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/events":        ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/invocations":   ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/storage":       ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/stats":         ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/summary":       ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/forecast":      ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/snapshot":      ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/snapshot.json": ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/stream":        ScopeReadContracts,
+	"GET /api/v1/stream/events":                ScopeReadContracts,
+
+	"GET /api/v1/events": ScopeReadContracts,
+
+	"POST /api/v1/watchdog/subscriptions":        ScopeWriteContracts,
+	"GET /api/v1/watchdog/subscriptions":         ScopeReadWatchdog,
+	"DELETE /api/v1/watchdog/subscriptions/{id}": ScopeWriteContracts,
+
+	"GET /api/v1/dlq":                ScopeReadContracts,
+	"POST /api/v1/dlq/{id}/requeue":  ScopeWriteContracts,
 
 	"GET /api/v1/watchdog/stats":                 ScopeReadWatchdog,
 	"GET /api/v1/watchdog/alerts":                ScopeReadWatchdog,

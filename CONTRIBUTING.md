@@ -1,15 +1,112 @@
 # Contributing to Sorolens
 Thank you for your interest. This document covers everything you need to make a contribution: local setup, how to claim an issue, branch naming, commit format, PR requirements, and a full walkthrough of the most common first contribution (adding an XDR type decoder).
+
+## Quick Start: run Sorolens locally
+
+Postgres 16, Redis, and the database schema all come from Docker, so there is nothing to install or configure by hand.
+
+```bash
+# 1. Start Postgres 16 + Redis and apply the schema (migrations run once, on first start)
+docker compose up -d
+
+# 2. Run the Go API against them, using the .env.example defaults
+make api                # http://localhost:8080
+
+# 3. Stop everything again (pass -v to also delete the Postgres/Redis data)
+docker compose down
+```
+
+What `docker compose up -d` starts:
+
+| Service | Address | Notes |
+|---|---|---|
+| `postgres` | `localhost:5432` | user `sorolens`, password `sorolens`, db `sorolens` |
+| `redis` | `localhost:6379` | |
+| `migrate` | – | applies `apps/api/internal/db/migrations/*.up.sql`, then exits |
+| `adminer` | http://localhost:8081 | database UI, not needed for development |
+
+`docker compose ps` shows whether the services are healthy and `docker compose logs -f` tails their logs. If you prefer to run the API directly instead of through `make api`, export the same values yourself — the API reads its configuration from the process environment, not from a `.env` file:
+
+```bash
+cd apps/api
+export DATABASE_URL="postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable"
+export DIRECT_DATABASE_URL="$DATABASE_URL"
+export REDIS_URL="redis://localhost:6379"
+go run .                # http://localhost:8080
+```
+
+Postgres and Redis data live in named volumes, so `docker compose down` keeps your data. To start over from an empty database, run `docker compose down -v` followed by `docker compose up -d`; the migrations are re-applied automatically.
+
+The indexer, dashboard, and CLI are started the same way as before — see [Local setup per package](#local-setup-per-package).
+
+---
+## Quickstart: your first PR in 15 minutes
+
+New here? This section gets you from `git clone` to an open pull request in about 15 minutes. Each step links to the detailed section further down if you need more depth.
+
+### 1. Clone and enter the repo (~1 min)
+
+```bash
+git clone https://github.com/sorolens/sorolens.git
+cd sorolens
+```
+
+### 2. Install the prerequisites (~5 min)
+
+You need Go 1.23, Node 22, pnpm 9, and a running Docker daemon. Exact versions and install links are in [Prerequisite versions](#prerequisite-versions); the short check:
+
+```bash
+go version       # go1.23.x
+node --version   # v22.x.x
+pnpm --version   # 9.x.x
+docker info      # daemon must be running
+```
+
+Missing pnpm? `npm install -g pnpm@9`. For Go, Node, or Docker, use the install links in [Prerequisite versions](#prerequisite-versions).
+
+### 3. Start the infrastructure and run the test suite (~4 min)
+
+```bash
+docker compose up -d                                # Postgres 16 + Redis on localhost
+cd apps/api && go test -race ./...                  # Go API tests
+cd ../../services/indexer && go test -race ./...    # indexer tests
+cd ../../packages/xdr && pnpm install && pnpm vitest run   # XDR decoder tests
+cd ../..
+```
+
+Or, after a one-time `pnpm install` at the repo root, run everything at once with `make test`. If all tests pass before you changed anything, your environment is ready.
+
+### 4. Pick an issue and claim it (~2 min)
+
+1. Browse the [open issues](https://github.com/sorolens/sorolens/issues) and filter by `good first issue` or `help wanted`.
+2. Comment **"I'd like to work on this"** and wait for a maintainer to assign it. Details and etiquette: [How to claim an issue](#how-to-claim-an-issue).
+
+### 5. Branch, code, commit, open the PR (the rest is your change)
+
+```bash
+git checkout -b feat/your-short-description
+# ...make your change and add tests...
+git commit -m "feat(scope): short imperative description"
+git push origin feat/your-short-description
+```
+
+Then open a PR against `main` with `Closes #<issue-number>` in the description. The [Branch naming](#branch-naming), [Commit format](#commit-format), and [PR checklist](#pr-checklist) sections are short and strictly enforced by CI and reviewers — give them a skim before you push.
+
+### Stuck?
+
+Ask in the [Sorolens Discord](https://discord.gg/D9jATUezYX): setup and code questions in `#help`, PRs that need eyes in `#reviews-wanted`. You'll get help there faster than in an issue thread. For deeper setup, see [Local setup per package](#local-setup-per-package).
+
 ---
 ## Table of contents
-1. [Prerequisite versions](#prerequisite-versions)
-2. [Local setup per package](#local-setup-per-package)
-3. [How to claim an issue](#how-to-claim-an-issue)
-4. [Branch naming](#branch-naming)
-5. [Commit format](#commit-format)
-6. [PR checklist](#pr-checklist)
-7. [Running tests](#running-tests)
-8. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
+1. [Quick Start](#quick-start-run-sorolens-locally)
+2. [Prerequisite versions](#prerequisite-versions)
+3. [Local setup per package](#local-setup-per-package)
+4. [How to claim an issue](#how-to-claim-an-issue)
+5. [Branch naming](#branch-naming)
+6. [Commit format](#commit-format)
+7. [PR checklist](#pr-checklist)
+8. [Running tests](#running-tests)
+9. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
 ---
 ## Prerequisite versions
 | Tool | Required version | Install |
@@ -35,14 +132,15 @@ golangci-lint --version
 docker compose up -d
 # Postgres 16 on localhost:5432 (user: sorolens, password: sorolens, db: sorolens)
 # Redis on localhost:6379
+# The one-shot `migrate` service applies the schema, then exits.
 ```
 ### `apps/api` - Go API
 ```bash
-cd apps/api
-cp .env.example .env         # edit DATABASE_URL and REDIS_URL if needed
-go run ./cmd/api             # starts on :8080
+make api                     # runs `go run .` with the .env.example defaults
+# or, from apps/api, after exporting DATABASE_URL / REDIS_URL yourself:
+cd apps/api && go run .      # starts on :8080
 ```
-Environment variables (see `.env.example`):
+Environment variables (see `.env.example` at the repo root):
 | Variable | Default | Notes |
 |---|---|---|
 | `DATABASE_URL` | `postgres://sorolens:sorolens@localhost:5432/sorolens` | pgx connection string |
@@ -52,13 +150,12 @@ Environment variables (see `.env.example`):
 ### `services/indexer` - Go indexer
 ```bash
 cd services/indexer
-cp .env.example .env
-go run ./cmd/migrate up      # apply schema migrations
-go run ./cmd/sorolens index --once   # run one indexer cycle and exit
+# The schema is applied by the compose `migrate` service (see Quick Start).
+go run . --mode once         # run one indexer cycle and exit
 ```
 To run continuously (equivalent to the cron in production):
 ```bash
-go run ./cmd/sorolens index --interval 5m
+go run . --mode continuous --poll-interval 5m
 ```
 ### `apps/web` - Next.js dashboard
 ```bash

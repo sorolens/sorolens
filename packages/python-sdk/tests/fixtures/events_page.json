@@ -1,0 +1,19 @@
+{
+  "events": [
+    {
+      "id": "evt_01",
+      "contract_id": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "network": "testnet",
+      "ledger": 51240,
+      "ledger_closed_at": "2026-01-15T12:05:00Z",
+      "tx_hash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      "type": "contract",
+      "topic_xdr": ["AAAAAQ=="],
+      "value_xdr": "AAAAAg==",
+      "topic_decoded": ["counter"],
+      "value_decoded": {"value": 7},
+      "in_successful_call": true
+    }
+  ],
+  "next_cursor": ""
+}

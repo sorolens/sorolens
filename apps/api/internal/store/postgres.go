@@ -18,6 +18,35 @@ type postgresStore struct {
 	pool *pgxpool.Pool
 }
 
+func (s *postgresStore) UpsertLabel(ctx context.Context, label Label) error {
+	if label.Public {
+		_, err := s.pool.Exec(ctx, `INSERT INTO labels_public (label, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (label) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, label.Label, label.Value)
+		return err
+	}
+	_, err := s.pool.Exec(ctx, `INSERT INTO labels_workspace (workspace_id, label, value, updated_at) VALUES ($1, $2, $3, NOW()) ON CONFLICT (workspace_id, label) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, label.WorkspaceID, label.Label, label.Value)
+	return err
+}
+
+func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error) {
+	rows, err := s.pool.Query(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public FROM labels_workspace WHERE workspace_id = $1) labels WHERE label ILIKE '%' || $2 || '%' OR value ILIKE '%' || $2 || '%' ORDER BY label LIMIT 100`, workspaceID, query)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	var labels []Label
+	for rows.Next() {
+		var label Label
+		if err := rows.Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public); err != nil { return nil, err }
+		labels = append(labels, label)
+	}
+	return labels, rows.Err()
+}
+
+func (s *postgresStore) ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error) {
+	var label Label
+	err := s.pool.QueryRow(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public, 2 AS priority FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public, 1 AS priority FROM labels_workspace WHERE workspace_id = $1) labels WHERE lower(label) = lower($2) ORDER BY priority LIMIT 1`, workspaceID, query).Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public)
+	if errors.Is(err, pgx.ErrNoRows) { return Label{}, ErrNotFound }
+	return label, err
+}
+
 // ---- contracts ------------------------------------------------------------
 
 // UpsertContract inserts or updates a contract in the database. It uses the contract ID as the unique constraint for upserting.
@@ -64,13 +93,22 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 	}
 	// cursor is the last-seen contract ID (lexicographic order).
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, network, label, wasm_hash, created_at_ledger,
-		       backfill_complete_at, status, added_at
-		FROM contracts
-		WHERE ($1 = '' OR id > $1)
-		  AND ($2 = '' OR network = $2)
-		  AND ($3 = '' OR status = $3)
-		ORDER BY id ASC
+		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at
+		FROM contracts c
+		LEFT JOIN (
+			SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
+			FROM (
+				SELECT contract_id, ledger_closed_at FROM events
+				UNION ALL
+				SELECT contract_id, ledger_closed_at FROM invocations
+			) activity_rows
+			GROUP BY contract_id
+		) activity ON activity.contract_id = c.id
+		WHERE ($1 = '' OR c.id > $1)
+		  AND ($2 = '' OR c.network = $2)
+		  AND ($3 = '' OR c.status = $3)
+		ORDER BY c.id ASC
 		LIMIT $4`, cursor, f.Network, f.Status, limit+1)
 	if err != nil {
 		return nil, "", err
@@ -82,7 +120,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 		var c Contract
 		if err := rows.Scan(
 			&c.ID, &c.Network, &c.Label, &c.WasmHash, &c.CreatedAtLedger,
-			&c.BackfillCompleteAt, &c.Status, &c.AddedAt,
+			&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.LastActivityAt,
 		); err != nil {
 			return nil, "", err
 		}
@@ -517,4 +555,115 @@ func (s *postgresStore) IsInWatchlist(ctx context.Context, userID, contractID st
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// ---- contract versions ---------------------------------------------------
+
+func (s *postgresStore) RecordContractVersion(ctx context.Context, v ContractVersion) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO contract_versions
+			(contract_id, wasm_hash, first_seen_ledger, tx_hash, verified_source_ref, recorded_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (contract_id, wasm_hash) DO NOTHING`,
+		v.ContractID, v.WasmHash, v.FirstSeenLedger, nullableText(v.TxHash),
+		nullableText(v.VerifiedSourceRef), time.Now(),
+	)
+	return err
+}
+
+func (s *postgresStore) ListContractVersions(ctx context.Context, contractID string) ([]ContractVersion, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, contract_id, wasm_hash, first_seen_ledger,
+		       COALESCE(tx_hash, ''), COALESCE(verified_source_ref, ''), recorded_at
+		FROM contract_versions
+		WHERE contract_id = $1
+		ORDER BY first_seen_ledger ASC`, contractID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ContractVersion
+	for rows.Next() {
+		var cv ContractVersion
+		if err := rows.Scan(
+			&cv.ID, &cv.ContractID, &cv.WasmHash, &cv.FirstSeenLedger,
+			&cv.TxHash, &cv.VerifiedSourceRef, &cv.RecordedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, cv)
+	}
+	return out, rows.Err()
+}
+
+func (s *postgresStore) GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, contract_id, wasm_hash, first_seen_ledger,
+		       COALESCE(tx_hash, ''), COALESCE(verified_source_ref, ''), recorded_at
+		FROM contract_versions
+		WHERE contract_id = $1
+		ORDER BY first_seen_ledger DESC
+		LIMIT 1`, contractID)
+	var cv ContractVersion
+	err := row.Scan(
+		&cv.ID, &cv.ContractID, &cv.WasmHash, &cv.FirstSeenLedger,
+		&cv.TxHash, &cv.VerifiedSourceRef, &cv.RecordedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ContractVersion{}, ErrNotFound
+	}
+	return cv, err
+}
+
+// nullableText converts an empty Go string to a SQL NULL so that optional
+// columns don't store empty strings in the database.
+func nullableText(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit int) ([]Contract, error) {
+	if query == "" {
+		return []Contract{}, nil
+	}
+
+	q := `
+		SELECT
+			id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at, last_activity_at
+		FROM contracts
+		WHERE id ILIKE $1 OR label ILIKE $1
+		ORDER BY added_at DESC
+		LIMIT $2
+	`
+
+	// Add % wildcards for simple ILIKE search
+	searchPattern := "%" + query + "%"
+
+	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var contracts []Contract
+	for rows.Next() {
+		var c Contract
+		if err := rows.Scan(
+			&c.ID, &c.Network, &c.Label, &c.WasmHash,
+			&c.CreatedAtLedger, &c.BackfillCompleteAt, &c.Status,
+			&c.AddedAt, &c.LastActivityAt,
+		); err != nil {
+			return nil, err
+		}
+		contracts = append(contracts, c)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return contracts, nil
 }

@@ -81,6 +81,7 @@ enum DataKey {
     Health(Address), // ContractHealth by contract id
     Alerts(Address), // Vec<Alert> by contract id
     Paused,          // bool: emergency stop flag; absent means not paused
+    PendingAdmin,    // Address: nominated next admin awaiting acceptance
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +137,32 @@ pub struct ContractAlert {
     pub severity: AlertSeverity,
     pub message: String,
     pub timestamp: u64,
+}
+
+/// An admin hand-off has started: `current_admin` nominated `new_admin`.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdminTransferProposed {
+    #[topic]
+    pub current_admin: Address,
+    pub new_admin: Address,
+}
+
+/// The nominated address accepted and is now the contract admin.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdminTransferAccepted {
+    #[topic]
+    pub new_admin: Address,
+}
+
+/// A pending admin nomination was withdrawn; `current_admin` keeps the role.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdminTransferCancelled {
+    #[topic]
+    pub current_admin: Address,
+    pub pending_admin: Address,
 }
 
 // ---------------------------------------------------------------------------
@@ -391,6 +418,84 @@ impl WatchdogContract {
         env.storage().instance().remove(&DataKey::Paused);
     }
 
+    // ---- admin: two-step transfer ------------------------------------------
+
+    /// Start a two-step admin hand-off by nominating `new_admin`. Admin only.
+    ///
+    /// The nomination is stored as a *pending* admin and does not take effect
+    /// until that exact address calls `accept_admin`. A typo or an
+    /// unavailable nominee therefore cannot lock the contract out of its
+    /// admin role: the current admin stays in control until acceptance.
+    /// Nominating again replaces any earlier pending nomination.
+    ///
+    /// This call is intentionally **not** gated by `ensure_not_paused`:
+    /// rotating admin keys (for example while the kill switch is engaged)
+    /// must remain possible for the current admin, like `pause`/`unpause`.
+    pub fn propose_admin(env: Env, current_admin: Address, new_admin: Address) {
+        current_admin.require_auth();
+        Self::require_admin_only(&env, &current_admin);
+
+        if new_admin == current_admin {
+            panic!("new admin is already the current admin");
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingAdmin, &new_admin);
+
+        AdminTransferProposed {
+            current_admin,
+            new_admin,
+        }
+        .publish(&env);
+    }
+
+    /// Complete a pending hand-off. Only the nominated address may call this,
+    /// and it must authorize the call.
+    ///
+    /// On success the nominee becomes the stored admin and the pending slot
+    /// is cleared. Nothing is written if there is no live nomination or if
+    /// the caller is not the nominee.
+    pub fn accept_admin(env: Env, new_admin: Address) {
+        new_admin.require_auth();
+
+        let pending: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingAdmin)
+            .unwrap_or_else(|| panic!("no admin transfer proposed"));
+
+        if new_admin != pending {
+            panic!("caller is not the pending admin");
+        }
+
+        env.storage().instance().set(&DataKey::Admin, &pending);
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+
+        AdminTransferAccepted { new_admin }.publish(&env);
+    }
+
+    /// Withdraw the pending nomination, leaving the current admin in place.
+    /// Admin only; panics if there is nothing pending.
+    pub fn cancel_admin_proposal(env: Env, current_admin: Address) {
+        current_admin.require_auth();
+        Self::require_admin_only(&env, &current_admin);
+
+        let pending: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingAdmin)
+            .unwrap_or_else(|| panic!("no admin transfer proposed"));
+
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+
+        AdminTransferCancelled {
+            current_admin,
+            pending_admin: pending,
+        }
+        .publish(&env);
+    }
+
     // ---- read-only queries -------------------------------------------------
 
     pub fn get_status(env: Env, contract_id: Address) -> ContractHealth {
@@ -412,7 +517,11 @@ impl WatchdogContract {
         if start < total {
             for i in start..core::cmp::min(start + limit, total) {
                 if let Some(id) = registry.get(i) {
-                    if let Some(record) = env.storage().persistent().get::<_, ContractHealth>(&DataKey::Health(id.clone())) {
+                    if let Some(record) = env
+                        .storage()
+                        .persistent()
+                        .get::<_, ContractHealth>(&DataKey::Health(id.clone()))
+                    {
                         page.push_back(record);
                     }
                 }
@@ -464,6 +573,14 @@ impl WatchdogContract {
             .instance()
             .get(&DataKey::Paused)
             .unwrap_or(false)
+    }
+
+    /// The address currently nominated to become admin, if a hand-off is in
+    /// progress.
+    pub fn pending_admin(env: Env) -> Option<Address> {
+        env.storage()
+            .instance()
+            .get::<_, Address>(&DataKey::PendingAdmin)
     }
 
     // ---- helpers -----------------------------------------------------------
@@ -873,7 +990,7 @@ mod test {
             let name = symbol_short!("test");
             client.register_contract(&owner, &id, &name, &60u64);
         }
-        
+
         // Test first page
         let (page, total) = client.get_monitored_page(&0, &2);
         assert_eq!(page.len(), 2);
@@ -1097,5 +1214,201 @@ mod test {
 
         assert!(client.try_pause(&admin).is_err());
         assert!(!client.is_paused());
+    }
+
+    // ---- two-step admin transfer -------------------------------------------
+
+    #[test]
+    fn admin_transfer_full_handshake_succeeds() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let new_admin = Address::generate(&env);
+
+        assert_eq!(client.pending_admin(), None);
+        client.propose_admin(&admin, &new_admin);
+        assert_eq!(client.pending_admin(), Some(new_admin.clone()));
+        // The nomination alone must not move admin authority.
+        assert_eq!(client.admin(), admin);
+
+        client.accept_admin(&new_admin);
+        assert_eq!(client.admin(), new_admin);
+        assert_eq!(client.pending_admin(), None);
+    }
+
+    #[test]
+    fn accepted_admin_gains_privileges_and_old_admin_loses_them() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let new_admin = Address::generate(&env);
+
+        client.propose_admin(&admin, &new_admin);
+        client.accept_admin(&new_admin);
+
+        // The new admin can exercise admin-only powers...
+        client.pause(&new_admin);
+        assert!(client.is_paused());
+        client.unpause(&new_admin);
+        assert!(!client.is_paused());
+
+        // ...while the previous admin no longer can.
+        assert!(client
+            .try_propose_admin(&admin, &Address::generate(&env))
+            .is_err());
+        assert_eq!(client.admin(), new_admin);
+    }
+
+    #[test]
+    #[should_panic(expected = "caller is not the pending admin")]
+    fn non_pending_address_cannot_accept() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let pending = Address::generate(&env);
+        let impostor = Address::generate(&env);
+
+        client.propose_admin(&admin, &pending);
+        // Auth is mocked, so this is rejected by the pending-admin check, not
+        // by a missing authorization.
+        client.accept_admin(&impostor);
+    }
+
+    #[test]
+    fn impostor_accept_does_not_change_admin() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let pending = Address::generate(&env);
+        let impostor = Address::generate(&env);
+
+        client.propose_admin(&admin, &pending);
+        assert!(client.try_accept_admin(&impostor).is_err());
+        assert_eq!(client.admin(), admin);
+        assert_eq!(client.pending_admin(), Some(pending));
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner may perform this action")]
+    fn non_admin_cannot_propose_admin() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let stranger = Address::generate(&env);
+        client.propose_admin(&stranger, &Address::generate(&env));
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner may perform this action")]
+    fn non_admin_cannot_cancel_proposal() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let stranger = Address::generate(&env);
+        client.propose_admin(&admin, &Address::generate(&env));
+        client.cancel_admin_proposal(&stranger);
+    }
+
+    #[test]
+    fn cancel_proposal_clears_pending_and_keeps_admin() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let pending = Address::generate(&env);
+
+        client.propose_admin(&admin, &pending);
+        client.cancel_admin_proposal(&admin);
+
+        assert_eq!(client.pending_admin(), None);
+        assert_eq!(client.admin(), admin);
+        // A cancelled nominee can no longer accept.
+        assert!(client.try_accept_admin(&pending).is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "no admin transfer proposed")]
+    fn accept_without_proposal_panics() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        client.accept_admin(&Address::generate(&env));
+    }
+
+    #[test]
+    #[should_panic(expected = "no admin transfer proposed")]
+    fn cancel_without_proposal_panics() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        client.cancel_admin_proposal(&admin);
+    }
+
+    #[test]
+    #[should_panic(expected = "new admin is already the current admin")]
+    fn proposing_current_admin_panics() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        client.propose_admin(&admin, &admin);
+    }
+
+    #[test]
+    fn proposing_again_replaces_previous_nominee() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let first = Address::generate(&env);
+        let second = Address::generate(&env);
+
+        client.propose_admin(&admin, &first);
+        client.propose_admin(&admin, &second);
+
+        assert_eq!(client.pending_admin(), Some(second.clone()));
+        assert!(client.try_accept_admin(&first).is_err());
+        client.accept_admin(&second);
+        assert_eq!(client.admin(), second);
+    }
+
+    #[test]
+    fn propose_and_accept_require_expected_auth() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let new_admin = Address::generate(&env);
+
+        client.propose_admin(&admin, &new_admin);
+        assert_eq!(
+            env.auths(),
+            std::vec![(
+                admin.clone(),
+                AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        client.address.clone(),
+                        Symbol::new(&env, "propose_admin"),
+                        (admin.clone(), new_admin.clone()).into_val(&env),
+                    )),
+                    sub_invocations: std::vec![],
+                }
+            )]
+        );
+
+        client.accept_admin(&new_admin);
+        assert_eq!(
+            env.auths(),
+            std::vec![(
+                new_admin.clone(),
+                AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        client.address.clone(),
+                        Symbol::new(&env, "accept_admin"),
+                        (new_admin.clone(),).into_val(&env),
+                    )),
+                    sub_invocations: std::vec![],
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn accept_without_nominee_signature_fails() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let new_admin = Address::generate(&env);
+
+        client.propose_admin(&admin, &new_admin);
+        // Drop the blanket auth mock: the nominee never signed.
+        env.set_auths(&[]);
+
+        assert!(client.try_accept_admin(&new_admin).is_err());
+        assert_eq!(client.admin(), admin);
+        assert_eq!(client.pending_admin(), Some(new_admin));
     }
 }

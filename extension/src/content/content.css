@@ -1,0 +1,103 @@
+/*
+ * Inline "Track on Sorolens" button.
+ *
+ * The selectors are anchored on the data-sorolens-ui attribute the content
+ * script adds, so explorer stylesheets cannot accidentally restyle the button
+ * (and the button cannot leak styles into the page).
+ */
+
+button[data-sorolens-ui="button"].sorolens-track-btn {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 0 6px;
+  padding: 1px 7px 1px 6px;
+  border: 1px solid rgba(6, 182, 212, 0.55);
+  border-radius: 999px;
+  background: rgba(6, 182, 212, 0.08);
+  color: #0891b2;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  vertical-align: baseline;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease,
+    color 120ms ease;
+}
+
+button[data-sorolens-ui="button"].sorolens-track-btn:hover {
+  background: rgba(6, 182, 212, 0.18);
+  border-color: #06b6d4;
+  color: #0e7490;
+}
+
+button[data-sorolens-ui="button"].sorolens-track-btn:focus-visible {
+  outline: 2px solid #06b6d4;
+  outline-offset: 1px;
+}
+
+button[data-sorolens-ui="button"].sorolens-track-btn:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+button[data-sorolens-ui="button"].sorolens-track-btn
+  .sorolens-track-btn__icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+button[data-sorolens-ui="button"].sorolens-track-btn[data-sorolens-state="watched"] {
+  border-color: rgba(34, 197, 94, 0.6);
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+
+button[data-sorolens-ui="button"].sorolens-track-btn[data-sorolens-state="watched"]
+  .sorolens-track-btn__icon {
+  color: #16a34a;
+}
+
+button[data-sorolens-ui="button"].sorolens-track-btn[data-sorolens-state="indexed"] {
+  border-color: rgba(137, 180, 250, 0.6);
+  background: rgba(137, 180, 250, 0.12);
+  color: #1d4ed8;
+}
+
+button[data-sorolens-ui="button"].sorolens-track-btn[data-sorolens-state="error"] {
+  border-color: rgba(239, 68, 68, 0.6);
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
+@media (prefers-color-scheme: dark) {
+  button[data-sorolens-ui="button"].sorolens-track-btn {
+    background: rgba(6, 182, 212, 0.14);
+    color: #67e8f9;
+  }
+
+  button[data-sorolens-ui="button"].sorolens-track-btn:hover {
+    background: rgba(6, 182, 212, 0.24);
+    color: #a5f3fc;
+  }
+
+  button[data-sorolens-ui="button"].sorolens-track-btn[data-sorolens-state="watched"] {
+    background: rgba(34, 197, 94, 0.18);
+    color: #86efac;
+  }
+
+  button[data-sorolens-ui="button"].sorolens-track-btn[data-sorolens-state="indexed"] {
+    background: rgba(137, 180, 250, 0.18);
+    color: #bfdbfe;
+  }
+
+  button[data-sorolens-ui="button"].sorolens-track-btn[data-sorolens-state="error"] {
+    background: rgba(239, 68, 68, 0.18);
+    color: #fca5a5;
+  }
+}

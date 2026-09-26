@@ -9,17 +9,23 @@ package poller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
+	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
 	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
 )
 
 const (
+	// maxEventRetries is how many times a single event is retried before
+	// it is parked in the dead-letter queue (issue #202).
+	maxEventRetries = 3
+
 	// lockTTL is the Redis advisory lock lifetime per contract.
 	// Set to twice the expected maximum per-contract processing time.
 	lockTTL = 60 * time.Second
@@ -62,6 +68,16 @@ type Poller struct {
 	redis      RedisClient
 	cfg        Config
 	log        *slog.Logger
+	// metrics records the per-network lag gauges on every pass (issue #198).
+	// It is nil unless SetMetrics is called; nil disables metric recording.
+	metrics *metrics.Recorder
+}
+
+// SetMetrics attaches the Prometheus recorder the poller updates on every
+// pass (issue #198). It must be called before Run; when it is never called
+// metric recording is skipped, so existing callers are unaffected.
+func (p *Poller) SetMetrics(r *metrics.Recorder) {
+	p.metrics = r
 }
 
 // New returns a Poller wired with the given dependencies.
@@ -158,15 +174,7 @@ func (p *Poller) processAll(ctx context.Context) error {
 			if c.Status != "active" && c.Status != "backfilling" {
 				continue
 			}
-			// Once a contract's batch starts, let it run to completion and
-			// commit its cursor even if ctx is cancelled mid-flight (SIGTERM,
-			// or the once-mode max-duration timeout): only the decision to
-			// start the *next* contract's batch respects cancellation, via
-			// the ctx.Err() check above. Without this, a shutdown signal
-			// arriving mid-fetch would abort the in-flight RPC/store calls
-			// and lose that contract's progress for the pass instead of
-			// finishing it cleanly.
-			if err := p.processContract(context.WithoutCancel(ctx), c); err != nil {
+			if err := p.processContract(ctx, c); err != nil {
 				// Log and continue; one failing contract must not block others.
 				p.log.Error("failed to index contract",
 					"contract_id", c.ID,
@@ -443,29 +451,18 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return fmt.Errorf("get sync state: %w", err)
 	}
 
-	networkCursor, err := p.store.GetIndexerCursor(ctx, network)
-	if err != nil {
-		p.log.Warn("failed to fetch indexer cursor for network (continuing)",
-			"network", network,
-			"err", err,
-		)
-	}
-
 	var startLedger uint32
 	if syncState.LastLedger == 0 {
-		if networkCursor > 0 {
-			// Resume after the last successfully committed network batch
-			startLedger = networkCursor + 1
-		} else if latest.Sequence > newContractBackfillWindow {
-			// New contract: best-effort backfill from within the retention window.
+		// New contract: best-effort backfill from within the retention window.
+		if latest.Sequence > newContractBackfillWindow {
 			startLedger = latest.Sequence - newContractBackfillWindow
 		} else {
 			startLedger = 1
 		}
-		p.log.Warn("starting sync for contract",
+		p.log.Warn("new contract, starting partial backfill; events before this ledger are unavailable",
 			"contract_id", contractID,
 			"start_ledger", startLedger,
-			"network_cursor", networkCursor,
+			"retention_window_ledgers", newContractBackfillWindow,
 		)
 	} else {
 		startLedger = syncState.LastLedger + 1
@@ -495,9 +492,20 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return err
 	}
 
+	if len(events) > 0 {
+		if err := p.insertEventsWithDLQ(ctx, events); err != nil {
+			return fmt.Errorf("insert events: %w", err)
+		}
+	}
+	if len(invocations) > 0 {
+		if err := p.store.BatchInsertInvocations(ctx, invocations); err != nil {
+			return fmt.Errorf("batch insert invocations: %w", err)
+		}
+	}
+
 	newState := SyncState{ContractID: contractID, LastLedger: endLedger}
-	if err := p.store.BatchInsertWithCursor(ctx, network, endLedger, events, invocations, newState); err != nil {
-		return fmt.Errorf("batch insert with cursor: %w", err)
+	if err := p.store.UpsertSyncState(ctx, newState); err != nil {
+		return fmt.Errorf("upsert sync state: %w", err)
 	}
 
 	log.Info("contract indexed",
@@ -505,6 +513,65 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		"invocations", len(invocations),
 		"duration", time.Since(runStart),
 	)
+	return nil
+}
+
+// insertEventsWithDLQ persists events one at a time, retrying each up to
+// maxEventRetries times. An event that still cannot be stored is parked in the
+// dead-letter queue (issue #202) and the remaining events are still processed,
+// so a single bad event can no longer block a contract's indexing pass.
+//
+// Per-event rather than per-batch by design: BatchInsertEvents rejects the
+// whole slice when any one element is bad, so retrying as a batch would park
+// the good events alongside the bad one.
+func (p *Poller) insertEventsWithDLQ(ctx context.Context, events []Event) error {
+	for _, ev := range events {
+		var lastErr error
+		stored := false
+		for attempt := 1; attempt <= maxEventRetries; attempt++ {
+			if err := p.store.BatchInsertEvents(ctx, []Event{ev}); err != nil {
+				lastErr = err
+				continue
+			}
+			stored = true
+			break
+		}
+		if stored {
+			continue
+		}
+
+		// EventPayload is what the requeue endpoint re-inserts, so it must be a
+		// JSON-serialized Event: handler/dlq.go unmarshals it back into
+		// store.Event. Event holds only plain fields, so a marshal failure is
+		// unreachable in practice — park the row anyway rather than drop it.
+		payload, marshalErr := json.Marshal(ev)
+		msg := "insert retries exhausted"
+		switch {
+		case marshalErr != nil:
+			p.log.Error("marshal event for DLQ", "event_id", ev.ID, "err", marshalErr)
+			payload, msg = nil, "marshal payload: "+marshalErr.Error()
+		case lastErr != nil:
+			msg = lastErr.Error()
+		}
+
+		if err := p.store.InsertFailedEvent(ctx, FailedEvent{
+			EventID:      ev.ID,
+			ContractID:   ev.ContractID,
+			Network:      ev.Network,
+			EventPayload: payload,
+			ErrorMessage: msg,
+			Attempts:     maxEventRetries,
+		}); err != nil {
+			// The event is now stored nowhere, which the caller must know about.
+			return fmt.Errorf("park event %s in DLQ: %w", ev.ID, err)
+		}
+		p.log.Warn("event parked in DLQ",
+			"event_id", ev.ID,
+			"contract_id", ev.ContractID,
+			"attempts", maxEventRetries,
+			"err", msg,
+		)
+	}
 	return nil
 }
 

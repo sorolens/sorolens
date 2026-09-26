@@ -11,7 +11,7 @@ export interface ResponseState {
 export function escapeHtml(value: string): string {
   return value.replace(
     /[&<>]/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] as string,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] as string
   );
 }
 
@@ -35,7 +35,7 @@ export function highlightJson(text: string): string {
         return `<span class="text-fuchsia-400">${bool}</span>`;
       }
       return match;
-    },
+    }
   );
 }
 
@@ -45,7 +45,7 @@ export function buildUrl(
   path: string,
   pathParams: Record<string, string>,
   queryParams: Record<string, string>,
-  parameters: OpenAPIParameter[],
+  parameters: OpenAPIParameter[]
 ): string {
   let resolved = path;
   for (const p of parameters) {
@@ -68,7 +68,7 @@ export function buildCurl(
   method: HttpMethod,
   url: string,
   apiKey: string,
-  body: string,
+  body: string
 ): string {
   const parts = [
     `curl -X ${method} '${url}'`,

@@ -29,6 +29,16 @@ type contractResponse struct {
 	AddedAt            time.Time  `json:"added_at"`
 }
 
+type contractListResponse struct {
+	ID             string     `json:"id"`
+	Network        string     `json:"network"`
+	Label          string     `json:"label"`
+	WasmHash       string     `json:"wasm_hash"`
+	Status         string     `json:"status"`
+	AddedAt        time.Time  `json:"added_at"`
+	LastActivityAt *time.Time `json:"last_activity_at"`
+}
+
 type eventResponse struct {
 	ID               string    `json:"id"`
 	ContractID       string    `json:"contract_id"`
@@ -152,6 +162,18 @@ func contractFromStore(c store.Contract) contractResponse {
 		BackfillCompleteAt: c.BackfillCompleteAt,
 		Status:             c.Status,
 		AddedAt:            c.AddedAt,
+	}
+}
+
+func contractListFromStore(c store.Contract) contractListResponse {
+	return contractListResponse{
+		ID:             c.ID,
+		Network:        c.Network,
+		Label:          c.Label,
+		WasmHash:       c.WasmHash,
+		Status:         c.Status,
+		AddedAt:        c.AddedAt,
+		LastActivityAt: c.LastActivityAt,
 	}
 }
 
@@ -286,9 +308,9 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := make([]contractResponse, len(contracts))
+	resp := make([]contractListResponse, len(contracts))
 	for i, c := range contracts {
-		resp[i] = contractFromStore(c)
+		resp[i] = contractListFromStore(c)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"contracts":   resp,
@@ -325,11 +347,23 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	var inSuccess *bool
+	if param := r.URL.Query().Get("in_successful_call"); param != "" {
+		if param == "true" {
+			v := true
+			inSuccess = &v
+		} else if param == "false" {
+			v := false
+			inSuccess = &v
+		}
+	}
 	f := store.EventFilters{
-		Type:    r.URL.Query().Get("type"),
-		Network: network,
-		From:    uint32Query(r, "from"),
-		To:      uint32Query(r, "to"),
+		Type:             r.URL.Query().Get("type"),
+		Network:          network,
+		Topic:            strings.TrimSpace(r.URL.Query().Get("topic")),
+		From:             uint32Query(r, "from"),
+		To:               uint32Query(r, "to"),
+		InSuccessfulCall: inSuccess,
 	}
 	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
 	if err != nil {
@@ -362,7 +396,7 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 	f := store.InvocationFilters{
 		Status:       r.URL.Query().Get("status"),
-		FunctionName: r.URL.Query().Get("fn"),
+		FunctionName: r.URL.Query().Get("function_name"),
 		Network:      network,
 		From:         uint32Query(r, "from"),
 		To:           uint32Query(r, "to"),
@@ -376,6 +410,114 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	resp := make([]invocationResponse, len(invs))
 	for i, inv := range invs {
 		resp[i] = invocationFromStore(inv)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"invocations": resp,
+		"next_cursor": encodeCursor(nextRaw),
+	})
+}
+
+// ---- global invocations -----------------------------------------------------
+
+// parseInvocationCursor decodes the raw (already base64-decoded) global
+// invocation cursor "<ledger>:<tx_hash>" into its keyset components. An empty
+// cursor means "start at the newest invocation".
+func parseInvocationCursor(raw string) (uint32, string, bool) {
+	if raw == "" {
+		return 0, "", true
+	}
+	ledgerStr, txHash, found := strings.Cut(raw, ":")
+	if !found || txHash == "" {
+		return 0, "", false
+	}
+	n, err := strconv.ParseUint(ledgerStr, 10, 32)
+	if err != nil || n == 0 {
+		return 0, "", false
+	}
+	return uint32(n), txHash, true
+}
+
+// timeParam parses an inclusive date or RFC3339 bound. A plain date is expanded
+// to the start (or, when endOfDay is set, the end) of that UTC day so that
+// ?since=2026-09-01&until=2026-09-30 covers the whole range.
+func timeParam(r *http.Request, key string, endOfDay bool) (*time.Time, bool) {
+	v := strings.TrimSpace(r.URL.Query().Get(key))
+	if v == "" {
+		return nil, true
+	}
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		t = t.UTC()
+		return &t, true
+	}
+	if t, err := time.Parse("2006-01-02", v); err == nil {
+		if endOfDay {
+			t = t.Add(24*time.Hour - time.Nanosecond)
+		}
+		return &t, true
+	}
+	return nil, false
+}
+
+// ListAllInvocations handles GET /api/v1/invocations: the global invocation
+// explorer. It returns invocations across every tracked contract, newest
+// first (ledger DESC, tx_hash DESC).
+//
+// Query params: cursor, limit, contract_id, fn, status, network, from/to
+// (ledger bounds), and since/until (inclusive date or RFC3339 bounds on
+// ledger_closed_at).
+func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
+	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		return
+	}
+	cursorLedger, cursorTxHash, ok := parseInvocationCursor(rawCursor)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		return
+	}
+	network, ok := networkParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	since, ok := timeParam(r, "since", false)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "since must be an RFC3339 timestamp or YYYY-MM-DD date")
+		return
+	}
+	until, ok := timeParam(r, "until", true)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "until must be an RFC3339 timestamp or YYYY-MM-DD date")
+		return
+	}
+
+	f := store.InvocationFilters{
+		ContractID:   strings.TrimSpace(r.URL.Query().Get("contract_id")),
+		Status:       r.URL.Query().Get("status"),
+		FunctionName: r.URL.Query().Get("fn"),
+		Network:      network,
+		From:         uint32Query(r, "from"),
+		To:           uint32Query(r, "to"),
+		Since:        since,
+		Until:        until,
+	}
+	invs, nextLedger, nextTxHash, err := h.Store.ListAllInvocations(
+		r.Context(), cursorLedger, cursorTxHash, intQuery(r, "limit", 50), f,
+	)
+	if err != nil {
+		h.Logger.Error("list all invocations", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list invocations")
+		return
+	}
+
+	resp := make([]invocationResponse, len(invs))
+	for i, inv := range invs {
+		resp[i] = invocationFromStore(inv)
+	}
+	nextRaw := ""
+	if nextTxHash != "" {
+		nextRaw = fmt.Sprintf("%d:%s", nextLedger, nextTxHash)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"invocations": resp,
@@ -642,4 +784,42 @@ func (h *Handler) StreamEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
 	writeJSON(w, http.StatusOK, map[string]any{"events": resp})
+}
+
+func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	limit := intQuery(r, "limit", 10)
+
+	contracts, err := h.Store.SearchContracts(r.Context(), q, limit)
+	if err != nil {
+		h.Logger.Error("search contracts", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to search contracts")
+		return
+	}
+
+	if contracts == nil {
+		contracts = []store.Contract{}
+	}
+
+	var res []contractResponse
+	for _, c := range contracts {
+		res = append(res, contractResponse{
+			ID:                 c.ID,
+			Network:            c.Network,
+			Label:              c.Label,
+			WasmHash:           c.WasmHash,
+			CreatedAtLedger:    c.CreatedAtLedger,
+			BackfillCompleteAt: c.BackfillCompleteAt,
+			Status:             c.Status,
+			AddedAt:            c.AddedAt,
+		})
+	}
+
+	// API typically returns a list of results wrapped or just the array.
+	// We'll return an array directly for simplicity or wrapped in { results: ... } if preferred.
+	// Looking at other routes, List returns { items: [...] }. But a simple array is fine too.
+	// Wait, List returns { items: [...], next_cursor: ... }. Let's return { items: [...] } for consistency.
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"items": res,
+	})
 }

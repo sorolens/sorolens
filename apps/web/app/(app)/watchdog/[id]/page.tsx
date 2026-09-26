@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import {
   ApiError,
   getMonitoredContract,
+  getContractUptime,
   listAlerts,
   listHealthChecks,
 } from "@/lib/api";
@@ -13,9 +14,15 @@ import type {
   ContractAlert,
   HealthCheck,
   MonitoredContract,
+  UptimeWindow,
 } from "@/lib/types";
 import { CardSkeleton, TableSkeleton } from "@/components/Skeleton";
-import { HealthBadge, SeverityBadge } from "@/components/WatchdogBadges";
+import {
+  HealthBadge,
+  SeverityBadge,
+  UptimeBadge,
+} from "@/components/WatchdogBadges";
+import { WatchdogTimeline } from "@/components/WatchdogTimeline";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -26,12 +33,20 @@ export default function MonitoredContractPage({ params }: Props) {
   return <Content id={id} />;
 }
 
+/** The three uptime windows we display as badges. */
+const UPTIME_WINDOWS: UptimeWindow[] = ["24h", "7d", "30d"];
+
 function Content({ id }: { id: string }) {
   const [contract, setContract] = useState<MonitoredContract | null>(null);
   const [history, setHistory] = useState<HealthCheck[] | null>(null);
   const [alerts, setAlerts] = useState<ContractAlert[] | null>(null);
   const [notFoundError, setNotFoundError] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
+
+  // uptime: null = loading, number = resolved pct (0-100)
+  const [uptime24h, setUptime24h] = useState<number | null>(null);
+  const [uptime7d, setUptime7d] = useState<number | null>(null);
+  const [uptime30d, setUptime30d] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +76,18 @@ function Content({ id }: { id: string }) {
       if (cancelled) return;
       setHistory(h.health_checks ?? []);
       setAlerts(a.alerts ?? []);
+
+      // Fetch uptime badges in parallel; failures are swallowed so that a
+      // missing uptime stat never breaks the rest of the detail page.
+      const [u24, u7, u30] = await Promise.allSettled([
+        getContractUptime(id, "24h"),
+        getContractUptime(id, "7d"),
+        getContractUptime(id, "30d"),
+      ]);
+      if (cancelled) return;
+      if (u24.status === "fulfilled") setUptime24h(u24.value.uptime_pct);
+      if (u7.status === "fulfilled") setUptime7d(u7.value.uptime_pct);
+      if (u30.status === "fulfilled") setUptime30d(u30.value.uptime_pct);
     }
     load();
     return () => {
@@ -69,6 +96,13 @@ function Content({ id }: { id: string }) {
   }, [id]);
 
   if (notFoundError) notFound();
+
+  /** Map each window to its resolved pct (null while loading). */
+  const uptimeByWindow: Record<UptimeWindow, number | null> = {
+    "24h": uptime24h,
+    "7d": uptime7d,
+    "30d": uptime30d,
+  };
 
   return (
     <div className="space-y-8">
@@ -95,10 +129,14 @@ function Content({ id }: { id: string }) {
           <dl className="mt-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
             <div>
               <dt className="text-[var(--color-text-secondary)]">Owner</dt>
-              <dd className="mt-1 truncate font-mono text-xs">{contract.owner}</dd>
+              <dd className="mt-1 truncate font-mono text-xs">
+                {contract.owner}
+              </dd>
             </div>
             <div>
-              <dt className="text-[var(--color-text-secondary)]">Check interval</dt>
+              <dt className="text-[var(--color-text-secondary)]">
+                Check interval
+              </dt>
               <dd className="mt-1 tabular-nums">{contract.check_interval}s</dd>
             </div>
             <div>
@@ -116,6 +154,22 @@ function Content({ id }: { id: string }) {
               </dd>
             </div>
           </dl>
+
+          {/* Uptime percentage badges */}
+          <div className="mt-6 border-t border-[var(--color-border)] pt-4">
+            <p className="mb-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+              Uptime
+            </p>
+            <div
+              className="flex flex-wrap gap-2"
+              aria-label="Uptime percentage badges"
+              data-testid="uptime-badges"
+            >
+              {UPTIME_WINDOWS.map((w) => (
+                <UptimeBadge key={w} window={w} pct={uptimeByWindow[w]} />
+              ))}
+            </div>
+          </div>
         </div>
       ) : unavailable ? (
         <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
@@ -147,27 +201,7 @@ function Content({ id }: { id: string }) {
             No health checks recorded yet.
           </p>
         ) : (
-          <ol className="space-y-2">
-            {history.map((h) => (
-              <li
-                key={`${h.tx_hash}-${h.contract_id}`}
-                className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-4 py-2 text-sm"
-              >
-                <HealthBadge status={h.status} />
-                <span className="tabular-nums text-[var(--color-text-secondary)]">
-                  {new Date(h.timestamp).toLocaleString()}
-                </span>
-                <span className="tabular-nums text-[var(--color-text-secondary)]">
-                  ledger {h.ledger}
-                </span>
-                {h.metadata && (
-                  <span className="ml-auto truncate font-mono text-xs">
-                    {h.metadata}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ol>
+          <WatchdogTimeline checks={history} />
         )}
       </section>
 
