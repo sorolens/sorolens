@@ -189,6 +189,19 @@ const (
 	NetworkParamTestnet    NetworkParam = "testnet"
 )
 
+// Defines values for OrderParam.
+const (
+	OrderParamAsc  OrderParam = "asc"
+	OrderParamDesc OrderParam = "desc"
+)
+
+// Defines values for SortParam.
+const (
+	SortParamAddedAt      SortParam = "added_at"
+	SortParamEventsCount  SortParam = "events_count"
+	SortParamLastActivity SortParam = "last_activity"
+)
+
 // Defines values for V2Network.
 const (
 	V2NetworkFuturenet  V2Network = "futurenet"
@@ -10596,6 +10609,7 @@ type ListContractsResponse struct {
 		// NextCursor Opaque cursor for the next page; empty when no more pages.
 		NextCursor string `json:"next_cursor"`
 	}
+	JSON400 *InvalidInput
 	JSON422 *InvalidInput
 	JSON500 *InternalError
 }
@@ -14371,6 +14385,13 @@ func ParseListContractsResponse(rsp *http.Response) (*ListContractsResponse, err
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidInput
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest InvalidInput

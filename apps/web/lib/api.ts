@@ -207,6 +207,38 @@ export function removeContractTag(
 }
 
 /**
+ * Add a tag to a contract. Tags require a contributor identity, so the
+ * browser forwards its user ID the same way tracking a contract does.
+ * Adding a tag that already exists is a no-op.
+ */
+export function addContractTag(
+  id: string,
+  tag: string,
+  userId?: string
+): Promise<ContractTagsResponse> {
+  const headers: Record<string, string> = {};
+  if (userId) headers["X-User-ID"] = userId;
+  return fetchJson<ContractTagsResponse>(
+    `${API_URL}/api/v1/contracts/${id}/tags`,
+    { method: "POST", body: JSON.stringify({ tag }), headers }
+  );
+}
+
+/** Remove a tag from a contract. Removing an absent tag is a no-op. */
+export function removeContractTag(
+  id: string,
+  tag: string,
+  userId?: string
+): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (userId) headers["X-User-ID"] = userId;
+  return fetchNoContent(
+    `${API_URL}/api/v1/contracts/${id}/tags/${encodeURIComponent(tag)}`,
+    { method: "DELETE", headers }
+  );
+}
+
+/**
  * Pre-flight check for the tracking wizard: validates the contract id's StrKey
  * format (including its checksum) and reports whether it is already tracked.
  * Read-only; it never registers the contract.

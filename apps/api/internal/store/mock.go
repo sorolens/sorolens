@@ -163,14 +163,20 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 	if m.ListContractsErr != nil {
 		return nil, "", m.ListContractsErr
 	}
-	if limit <= 0 {
+	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	var out []Contract
+
+	sortCol, descending := NormalizeContractSort(f.Sort, f.Order)
+
+	type row struct {
+		contract     Contract
+		lastActivity time.Time
+		eventsCount  int64
+	}
+
+	rows := make([]row, 0, len(m.contracts))
 	for _, c := range m.contracts {
-		if cursor != "" && c.ID <= cursor {
-			continue
-		}
 		if f.Network != "" && c.Network != f.Network {
 			continue
 		}
@@ -181,7 +187,11 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 			continue
 		}
 		c.Tags = m.tagsFor(c.ID)
-		out = append(out, c)
+		rows = append(rows, row{
+			contract:     c,
+			lastActivity: m.contractLastActivity(c.ID),
+			eventsCount:  m.contractEventCount(c.ID),
+		})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
@@ -208,11 +218,44 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 		return cmp < 0
 	})
 	var nextCursor string
-	if len(out) > limit {
-		nextCursor = out[limit-1].ID
-		out = out[:limit]
+	if len(rows) > limit {
+		nextCursor = rows[limit-1].contract.ID
+		rows = rows[:limit]
+	}
+
+	out := make([]Contract, len(rows))
+	for i := range rows {
+		out[i] = rows[i].contract
 	}
 	return out, nextCursor, nil
+}
+
+// contractEventCount returns the number of indexed events for a contract.
+func (m *MockStore) contractEventCount(contractID string) int64 {
+	var n int64
+	for _, e := range m.events {
+		if e.ContractID == contractID {
+			n++
+		}
+	}
+	return n
+}
+
+// contractLastActivity returns the most recent event or invocation ledger
+// close time for a contract, or the Unix epoch when it has no indexed activity.
+func (m *MockStore) contractLastActivity(contractID string) time.Time {
+	latest := time.Unix(0, 0).UTC()
+	for _, e := range m.events {
+		if e.ContractID == contractID && e.LedgerClosedAt.After(latest) {
+			latest = e.LedgerClosedAt
+		}
+	}
+	for _, inv := range m.invocations {
+		if inv.ContractID == contractID && inv.LedgerClosedAt.After(latest) {
+			latest = inv.LedgerClosedAt
+		}
+	}
+	return latest
 }
 
 // tagsFor returns the sorted tags for a contract, always non-nil.

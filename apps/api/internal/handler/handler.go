@@ -25,6 +25,7 @@ type APIStore interface {
 	store.APIKeyStore
 	store.AlertSubscriptionStore
 	store.AlertGroupStore
+	store.ContractTagStore
 	store.WatchlistStore
 	store.UserStore
 	store.PerformanceStore

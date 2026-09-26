@@ -8,6 +8,7 @@ from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.list_contracts_dir import ListContractsDir
 from ...models.list_contracts_network import ListContractsNetwork
+from ...models.list_contracts_order import ListContractsOrder
 from ...models.list_contracts_response_200 import ListContractsResponse200
 from ...models.list_contracts_sort import ListContractsSort
 from ...types import UNSET, Response, Unset
@@ -70,6 +71,11 @@ def _parse_response(
         response_200 = ListContractsResponse200.from_dict(response.json())
 
         return response_200
+
+    if response.status_code == 400:
+        response_400 = Error.from_dict(response.json())
+
+        return response_400
 
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())

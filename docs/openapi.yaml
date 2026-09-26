@@ -213,6 +213,8 @@ paths:
                   next_cursor:
                     type: string
                     description: Opaque cursor for the next page; empty when no more pages.
+        "400":
+          $ref: "#/components/responses/InvalidInput"
         "422":
           $ref: "#/components/responses/InvalidInput"
         "500":
@@ -3391,6 +3393,28 @@ components:
         maxLength: 32
         pattern: "^[a-z0-9][a-z0-9_-]*$"
       description: Show only contracts carrying this tag.
+    SortParam:
+      name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [added_at, last_activity, events_count]
+        default: added_at
+      description: |
+        Column to order the contracts list by. added_at sorts by when tracking
+        began, last_activity by the most recent indexed event or invocation
+        (no-activity contracts sort last), and events_count by the number of
+        indexed events.
+    OrderParam:
+      name: order
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+      description: Sort direction. Defaults to desc (newest or busiest first).
     TagPath:
       name: tag
       in: path

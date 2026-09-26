@@ -116,6 +116,7 @@ from .list_contract_storage_status import ListContractStorageStatus
 from .list_contract_upgrades_response_200 import ListContractUpgradesResponse200
 from .list_contracts_dir import ListContractsDir
 from .list_contracts_network import ListContractsNetwork
+from .list_contracts_order import ListContractsOrder
 from .list_contracts_response_200 import ListContractsResponse200
 from .list_contracts_sort import ListContractsSort
 from .list_failed_events_response_200 import ListFailedEventsResponse200
@@ -326,6 +327,7 @@ __all__ = (
     "ListContractUpgradesResponse200",
     "ListContractsDir",
     "ListContractsNetwork",
+    "ListContractsOrder",
     "ListContractsResponse200",
     "ListContractsSort",
     "ListFailedEventsResponse200",
