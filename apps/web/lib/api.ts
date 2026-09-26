@@ -2,6 +2,8 @@ import type {
   AlertsResponse,
   AlertSubscription,
   ContractDetail,
+  ContractNote,
+  ContractNotesResponse,
   CompareResponse,
   ContractSnapshot,
   ContractSummary,
@@ -515,5 +517,38 @@ export function watchlistStatus(
   return fetchJson<WatchlistStatusResponse>(
     `${API_URL}/api/v1/watchlist/${contractId}/status`,
     { headers: { "X-User-ID": userId } }
+  );
+}
+
+// ---- contract notes --------------------------------------------------------
+
+export function getContractNotes(
+  contractId: string,
+): Promise<ContractNotesResponse> {
+  return fetchJson<ContractNotesResponse>(
+    `${API_URL}/api/v1/contracts/${contractId}/notes`,
+  );
+}
+
+export function createContractNote(
+  contractId: string,
+  note: { author: string; body: string },
+): Promise<ContractNote> {
+  return fetchJson<ContractNote>(
+    `${API_URL}/api/v1/contracts/${contractId}/notes`,
+    {
+      method: "POST",
+      body: JSON.stringify(note),
+    },
+  );
+}
+
+export function deleteContractNote(
+  contractId: string,
+  noteId: string,
+): Promise<{ deleted: boolean; id: string }> {
+  return fetchJson<{ deleted: boolean; id: string }>(
+    `${API_URL}/api/v1/contracts/${contractId}/notes/${noteId}`,
+    { method: "DELETE" },
   );
 }

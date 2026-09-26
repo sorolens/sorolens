@@ -82,10 +82,12 @@ func normalizePattern(pattern string) string {
 	if pattern == "" {
 		return pattern
 	}
+
 	trimmed := strings.TrimSuffix(pattern, "/")
 	if trimmed == "" {
 		return "/"
 	}
+
 	return trimmed
 }
 
@@ -101,31 +103,54 @@ func normalizePattern(pattern string) string {
 //   - Credential presented but unknown or revoked: 401.
 //   - Credential valid but missing the required scope: 403 with
 //     {"error":"missing scope","required":"<scope>"}.
-func RequireScopes(lookup APIKeyLookup, logger *slog.Logger) func(http.Handler) http.Handler {
+func RequireScopes(
+	lookup APIKeyLookup,
+	logger *slog.Logger,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			required, hasScopeRule := lookupRequiredScope(r)
 			token := extractAPIKey(r)
+
 			if token == "" {
 				if hasScopeRule && required == ScopeAdmin {
-					writeScopeError(w, http.StatusUnauthorized, map[string]string{
-						"error": "authentication required",
-					})
+					writeScopeError(
+						w,
+						http.StatusUnauthorized,
+						map[string]string{
+							"error": "authentication required",
+						},
+					)
 					return
 				}
+
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			key, err := lookup.GetAPIKeyByHash(r.Context(), store.HashKey(token))
+			key, err := lookup.GetAPIKeyByHash(
+				r.Context(),
+				store.HashKey(token),
+			)
 			if err != nil || key.Revoked() {
-				writeScopeError(w, http.StatusUnauthorized, map[string]string{
-					"error": "invalid API key",
-				})
+				writeScopeError(
+					w,
+					http.StatusUnauthorized,
+					map[string]string{
+						"error": "invalid API key",
+					},
+				)
 				return
 			}
+
 			if err := lookup.TouchAPIKey(r.Context(), key.ID); err != nil && logger != nil {
-				logger.Warn("touch api key", "err", err, "key_id", key.ID)
+				logger.Warn(
+					"touch api key",
+					"err",
+					err,
+					"key_id",
+					key.ID,
+				)
 			}
 
 			if !hasScopeRule || key.HasScope(required) {
@@ -133,10 +158,14 @@ func RequireScopes(lookup APIKeyLookup, logger *slog.Logger) func(http.Handler) 
 				return
 			}
 
-			writeScopeError(w, http.StatusForbidden, map[string]string{
-				"error":    "missing scope",
-				"required": required,
-			})
+			writeScopeError(
+				w,
+				http.StatusForbidden,
+				map[string]string{
+					"error":    "missing scope",
+					"required": required,
+				},
+			)
 		})
 	}
 }
@@ -146,6 +175,7 @@ func lookupRequiredScope(r *http.Request) (string, bool) {
 	if rctx == nil {
 		return "", false
 	}
+
 	return RequiredScope(r.Method, rctx.RoutePattern())
 }
 
@@ -157,10 +187,15 @@ func extractAPIKey(r *http.Request) string {
 			return strings.TrimSpace(h[7:])
 		}
 	}
+
 	return strings.TrimSpace(r.URL.Query().Get("api_key"))
 }
 
-func writeScopeError(w http.ResponseWriter, status int, body map[string]string) {
+func writeScopeError(
+	w http.ResponseWriter,
+	status int,
+	body map[string]string,
+) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)

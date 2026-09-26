@@ -305,8 +305,8 @@ keyed by the chi route pattern (`internal/middleware/scopes.go`):
 
 | Scope | Grants |
 |---|---|
-| `read:contracts` | contract, event, invocation, storage, stats, and snapshot reads |
-| `write:contracts` | `POST /api/v1/contracts` |
+| `read:contracts` | contract, event, invocation, storage, stats, snapshot, and note reads |
+| `write:contracts` | `POST /api/v1/contracts` and contract note create/delete |
 | `read:watchdog` | all `/api/v1/watchdog/*` reads |
 | `admin:*` | everything, including API key management |
 

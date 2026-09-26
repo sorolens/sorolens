@@ -186,6 +186,17 @@ type ContractHealthScore struct {
 	ComputedAt           time.Time
 }
 
+// ContractNote is a markdown note (institutional knowledge) attached to a
+// contract by a contributor. Notes are rendered client-side.
+type ContractNote struct {
+	ID         string
+	ContractID string
+	Author     string
+	Body       string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 // HealthScoreInputs holds the raw signals aggregated to compute a health score.
 type HealthScoreInputs struct {
 	HealthyChecks     int64

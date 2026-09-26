@@ -35,6 +35,7 @@ import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
 import { HealthScoreCard } from "@/components/HealthScoreCard";
+import { ContractNotes } from "@/components/ContractNotes";
 import { useEventStream } from "@/hooks/useEventStream";
 
 interface Props {
@@ -435,6 +436,11 @@ function ContractDetailContent({ id }: { id: string }) {
 
       <section className="mb-8">
         <HealthScoreCard contractId={id} />
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-4 text-xl font-semibold">Notes</h2>
+        <ContractNotes contractId={id} />
       </section>
     </div>
   );
