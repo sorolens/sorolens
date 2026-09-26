@@ -170,6 +170,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/summary", h.ContractSummary)
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
+		get("/stream/events", h.StreamEventsSSE)
+		// Dry-run an invocation against indexed state. Read-only: it never
+		// broadcasts, so it sits at the read scope alongside the other
+		// contract queries.
+		r.With(scope).Post("/simulate", h.Simulate)
 		// Dead-letter queue for events that failed processing (issue #202).
 		get("/dlq", h.ListFailedEvents)
 		r.With(scope, contributor).Post("/dlq/{id}/requeue", h.RequeueFailedEvent)

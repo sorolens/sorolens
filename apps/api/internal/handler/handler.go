@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sorolens/sorolens/apps/api/internal/simulator"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
@@ -55,6 +56,10 @@ type Handler struct {
 	Redis       Pinger
 	RedisClient RedisClient
 	Logger      *slog.Logger
+
+	// Simulator runs dry-run invocations for POST /simulate. When nil, the
+	// handler falls back to a default service that caches results for 30s.
+	Simulator *simulator.Service
 	// Cold is optional; when set, event queries fall back to object storage for
 	// ledger ranges that are no longer in Postgres.
 	Cold ColdEventReader
