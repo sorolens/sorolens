@@ -46,9 +46,11 @@ type Store interface {
 	// UpsertContractHealthScore caches a computed 0-100 health score.
 	UpsertContractHealthScore(ctx context.Context, h ContractHealthScore) error
 
-	// InsertFailedEvent parks an event that exhausted processing retries
-	// in the dead-letter queue (issue #202).
-	InsertFailedEvent(ctx context.Context, fe FailedEvent) error
+	// ListRules returns all enabled alert rules for evaluation.
+	ListRules(ctx context.Context) ([]AlertRule, error)
+	// RuleWindowStats fetches per-invocation samples plus the event count for
+	// one contract over the trailing window, feeding the DSL evaluator.
+	RuleWindowStats(ctx context.Context, contractID string, window time.Duration) (WindowStats, error)
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -235,18 +237,32 @@ type ContractHealthScore struct {
 	ComputedAt           time.Time
 }
 
-// ContractVersion mirrors store.ContractVersion.
-type ContractVersion struct {
-	ContractID        string
-	WasmHash          string
-	FirstSeenLedger   int64
-	TxHash            string
-	VerifiedSourceRef string
+// AlertRule mirrors store.AlertRule.
+type AlertRule struct {
+	ID         string
+	Name       string
+	Expression string
+	ContractID string
+	Network    string
+	Severity   string
+	Enabled    bool
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
-// ErrVersionNotFound is returned by GetLatestContractVersion when no entry exists.
-var ErrVersionNotFound = errorString("poller: contract version not found")
+// WindowStats mirrors rules.WindowStats.
+type WindowStats struct {
+	Duration    time.Duration
+	Invocations []InvocationSample
+	Events      int64
+}
 
-type errorString string
-
-func (e errorString) Error() string { return string(e) }
+// InvocationSample mirrors rules.InvocationSample.
+type InvocationSample struct {
+	Status      string
+	Timestamp   time.Time
+	FeeStroops  int64
+	CPUInsn     int64
+	MemBytes    int64
+	LedgerBytes int64
+}

@@ -27,7 +27,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.0 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.3 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.3 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.3 // indirect
@@ -57,6 +56,7 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.70.1 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
+	github.com/sorolens/sorolens/packages/rules v0.0.0
 	github.com/twpayne/go-geom v1.6.1 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -74,3 +74,9 @@ require (
 	google.golang.org/grpc v1.83.1 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
+
+// The alert-rule DSL lives in a sibling workspace module. The workspace go.work
+// also lists it, but a replace is needed so transient graph loads during `go
+// build` resolve the v0.0.0 require to the local directory instead of the
+// proxy.
+replace github.com/sorolens/sorolens/packages/rules => ../../packages/rules

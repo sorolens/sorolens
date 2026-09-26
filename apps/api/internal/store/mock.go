@@ -31,10 +31,7 @@ type MockStore struct {
 	failedEvents       map[int64]FailedEvent
 	failedEventSeq     int64
 	indexerCursors     map[string]uint32
-	contractSpecs      map[string]ContractSpec
-	contractVersions   map[string][]ContractVersion
-	alertGroups        []AlertGroup
-	labels             []Label
+	rules              []AlertRule
 
 	// Error injection
 	UpsertContractErr           error
@@ -100,8 +97,7 @@ func NewMockStore() *MockStore {
 		alertSubscriptions: make([]AlertSubscription, 0),
 		users:              make(map[string]User),
 		indexerCursors:     make(map[string]uint32),
-		contractSpecs:      make(map[string]ContractSpec),
-		contractVersions:   make(map[string][]ContractVersion),
+		rules:              make([]AlertRule, 0),
 	}
 }
 

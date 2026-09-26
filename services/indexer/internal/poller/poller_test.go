@@ -290,6 +290,18 @@ func (f *fakeStore) UpsertContractHealthScore(_ context.Context, s ContractHealt
 	return nil
 }
 
+func (f *fakeStore) ListRules(_ context.Context) ([]AlertRule, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return nil, nil
+}
+
+func (f *fakeStore) RuleWindowStats(_ context.Context, contractID string, window time.Duration) (WindowStats, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return WindowStats{Duration: window}, nil
+}
+
 // ---- fake RedisClient -----------------------------------------------------
 
 type fakeRedis struct {

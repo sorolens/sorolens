@@ -218,90 +218,17 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/watchdog/contracts/{id}", h.GetMonitoredContract)
 		get("/watchdog/contracts/{id}/health", h.ListHealthChecks)
 		get("/watchdog/contracts/{id}/alerts", h.ListWatchdogAlerts)
-		get("/watchdog/contracts/{id}/uptime", h.GetContractUptime)
 
-		// Monthly SLA and uptime reporting (issue #266). Reports are derived
-		// from the watchdog health checks and alerts already stored, so there
-		// is no new ingestion path. The badge is plain SVG so it can be
-		// embedded in a README without a client library.
-		get("/reports/{contract_id}", h.GetContractReport)
-		get("/reports/{contract_id}/history", h.GetContractReportHistory)
-		get("/reports/{contract_id}/badge.svg", h.GetContractSLABadge)
-
-		// Alert notification subscriptions (issue #127). They hold
-		// integration secrets, so reading them also needs contributor.
-		r.With(scope, contributor).Post("/watchdog/subscriptions", h.CreateSubscription)
-		r.With(scope, contributor).Get("/watchdog/subscriptions", h.ListSubscriptions)
-		r.With(scope, contributor).Delete("/watchdog/subscriptions/{id}", h.DeleteSubscription)
-	})
-
-	// API v2 (issue #144). A parallel namespace carrying the same resources
-	// with a consistent envelope (data/pagination), RFC 3339 timestamps, and
-	// uniform field names. v1 is untouched; see docs/api-v2.md for the
-	// field-by-field mapping.
-	//
-	// The scope and role middleware are the same as v1, so an API key or role
-	// that works against v1 works identically against v2.
-	r.Route("/api/v2", func(r chi.Router) {
-		r.Use(middleware.ContentTypeJSON)
-
-		scope := middleware.RequireScopes(h.Store, h.Logger)
-		contributor := middleware.RequireRole(h.Store, h.Logger, middleware.RoleContributor)
-		admin := middleware.RequireRole(h.Store, h.Logger, middleware.RoleAdmin)
-
-		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
-
-		// Live dashboard feeds (#139).
-		get("/events/recent", h.V2RecentEvents)
-		get("/stats/activity", h.V2LiveActivity)
-
-		// Stats
-		get("/stats/global", h.V2GlobalStats)
-
-		// Contracts
-		r.With(scope).Post("/contracts/validate", h.V2ValidateContract)
-		r.With(scope, contributor).Post("/contracts", h.V2RegisterContract)
-		get("/contracts", h.V2ListContracts)
-		get("/contracts/{id}", h.V2GetContract)
-		get("/contracts/{id}/events", h.V2ListEvents)
-		get("/contracts/{id}/invocations", h.V2ListInvocations)
-		get("/contracts/{id}/storage", h.V2ListStorageEntries)
-		get("/contracts/{id}/stats", h.V2ContractStats)
-		get("/contracts/{id}/forecast", h.V2ContractForecast)
-		get("/contracts/{id}/snapshot", h.V2ContractSnapshot)
-		get("/contracts/{id}/upgrades", h.V2ListContractUpgrades)
-		get("/contracts/{id}/health-score", h.V2GetContractHealthScore)
-		get("/contracts/{id}/stream", h.V2StreamEvents)
-		get("/contracts/{id}/graph", h.V2ContractGraph)
-
-		// API keys (admin scope + admin role). These reuse the v1 handlers and
-		// are declared passthrough in docs/api-v2.md.
-		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
-		r.With(scope, admin).Post("/api-keys", h.CreateAPIKey)
-		r.With(scope, admin).Delete("/api-keys/{id}", h.RevokeAPIKey)
-
-		// Admin surface, mirroring v1 so v2 has a 1:1 route map.
-		r.With(admin).Route("/admin", func(r chi.Router) {
-			r.Get("/keys", h.ListAPIKeys)
-			r.Post("/keys", h.CreateAPIKey)
-			r.Delete("/keys/{id}", h.RevokeAPIKey)
-		})
-
-		// Watchlist
-		r.Route("/watchlist", func(r chi.Router) {
-			r.Post("/", h.V2AddToWatchlist)
-			r.Delete("/{contractId}", h.V2RemoveFromWatchlist)
-			r.Get("/", h.V2ListWatchlist)
-			r.Get("/{contractId}/status", h.V2WatchlistStatus)
-		})
-
-		// Watchdog
-		get("/watchdog/stats", h.V2WatchdogStats)
-		get("/watchdog/alerts", h.V2ListWatchdogAlerts)
-		get("/watchdog/contracts", h.V2ListMonitoredContracts)
-		get("/watchdog/contracts/{id}", h.V2GetMonitoredContract)
-		get("/watchdog/contracts/{id}/health", h.V2ListHealthChecks)
-		get("/watchdog/contracts/{id}/alerts", h.V2ListWatchdogAlerts)
+		// User-defined alert rules (DSL). Reads are open; writes require a
+		// contributor. The samples/preview sub-routes are registered before the
+		// {id} route so "samples" and "preview" are never captured as an id.
+		r.With(scope, contributor).Post("/rules", h.CreateRule)
+		get("/rules", h.ListRules)
+		get("/rules/samples", h.ListRuleSamples)
+		r.With(scope, contributor).Post("/rules/preview", h.PreviewRule)
+		get("/rules/{id}", h.GetRule)
+		r.With(scope, contributor).Put("/rules/{id}", h.UpdateRule)
+		r.With(scope, contributor).Delete("/rules/{id}", h.DeleteRule)
 	})
 
 	return r

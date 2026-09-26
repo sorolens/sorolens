@@ -4,5 +4,6 @@ use (
 	./apps/api
 	./cli
 	./packages/go-client
+	./packages/rules
 	./services/indexer
 )

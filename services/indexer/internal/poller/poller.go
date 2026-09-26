@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sorolens/sorolens/packages/rules"
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
@@ -236,6 +237,7 @@ func (p *Poller) processAll(ctx context.Context) error {
 		p.runAnomalyDetection(ctx)
 	}
 	p.runHealthScores(ctx)
+	p.runAlertRules(ctx)
 	return nil
 }
 
@@ -419,6 +421,148 @@ func (p *Poller) runHealthScores(ctx context.Context) {
 
 	p.log.Info("health score pass complete",
 		"contracts_scored", scored,
+		"duration", time.Since(start),
+	)
+}
+
+// runAlertRules evaluates all enabled alert rules against current contract data.
+// For each rule that fires, it inserts an alert into the store.
+func (p *Poller) runAlertRules(ctx context.Context) {
+	start := time.Now()
+	rulesList, err := p.store.ListRules(ctx)
+	if err != nil {
+		p.log.Error("alert rules: list rules", "err", err)
+		return
+	}
+
+	if len(rulesList) == 0 {
+		p.log.Debug("alert rules: no enabled rules")
+		return
+	}
+
+	var evaluated, fired int
+	for _, ar := range rulesList {
+		if ctx.Err() != nil {
+			return
+		}
+		if !ar.Enabled {
+			continue
+		}
+
+		// Parse the rule expression
+		rule, err := rules.ParseExpression(ar.Expression)
+		if err != nil {
+			p.log.Warn("alert rules: parse expression",
+				"rule_id", ar.ID,
+				"expression", ar.Expression,
+				"err", err,
+			)
+			continue
+		}
+
+		// Determine which contracts to evaluate
+		var contractIDs []string
+		if ar.ContractID == "" || ar.ContractID == "*" || ar.ContractID == "all" || ar.ContractID == "every" {
+			// Evaluate against all active contracts
+			var cursor string
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+				contracts, next, err := p.store.ListContracts(ctx, cursor, 50)
+				if err != nil {
+					p.log.Error("alert rules: list contracts", "err", err)
+					return
+				}
+				for _, c := range contracts {
+					if c.Status == "active" || c.Status == "backfilling" {
+						contractIDs = append(contractIDs, c.ID)
+					}
+				}
+				if next == "" {
+					break
+				}
+				cursor = next
+			}
+		} else {
+			contractIDs = []string{ar.ContractID}
+		}
+
+		// Evaluate rule for each contract
+		for _, contractID := range contractIDs {
+			if ctx.Err() != nil {
+				return
+			}
+
+			window := rule.Window
+			if window == 0 {
+				window = rules.DefaultWindow
+			}
+
+			stats, err := p.store.RuleWindowStats(ctx, contractID, window)
+			if err != nil {
+				p.log.Warn("alert rules: window stats",
+					"rule_id", ar.ID,
+					"contract_id", contractID,
+					"err", err,
+				)
+				continue
+			}
+
+			// Convert poller WindowStats to rules WindowStats
+			ruleStats := rules.WindowStats{
+				Duration:    stats.Duration,
+				Events:      stats.Events,
+				Invocations: make([]rules.InvocationSample, len(stats.Invocations)),
+			}
+			for i, inv := range stats.Invocations {
+				ruleStats.Invocations[i] = rules.InvocationSample{
+					Status:      inv.Status,
+					Timestamp:   inv.Timestamp,
+					FeeStroops:  inv.FeeStroops,
+					CPUInsn:     inv.CPUInsn,
+					MemBytes:    inv.MemBytes,
+					LedgerBytes: inv.LedgerBytes,
+				}
+			}
+
+			result := rules.Evaluate(rule, ruleStats)
+			evaluated++
+
+			if result.Fired {
+				fired++
+				alert := Alert{
+					ContractID: contractID,
+					Severity:   ar.Severity,
+					Message:    fmt.Sprintf("Rule '%s' fired: %s", ar.Name, result.Description),
+					Ledger:     0,
+					TxHash:     fmt.Sprintf("rule:%s:%s:%d", ar.ID, contractID, time.Now().Unix()),
+					Timestamp:  time.Now().UTC(),
+				}
+				if err := p.store.InsertAlert(ctx, alert); err != nil {
+					p.log.Warn("alert rules: insert alert",
+						"rule_id", ar.ID,
+						"contract_id", contractID,
+						"err", err,
+					)
+				} else {
+					p.log.Warn("alert rule fired",
+						"rule_id", ar.ID,
+						"rule_name", ar.Name,
+						"contract_id", contractID,
+						"value", result.Value,
+						"threshold", rule.Threshold,
+						"description", result.Description,
+					)
+				}
+			}
+		}
+	}
+
+	p.log.Info("alert rules pass complete",
+		"rules", len(rulesList),
+		"evaluated", evaluated,
+		"fired", fired,
 		"duration", time.Since(start),
 	)
 }

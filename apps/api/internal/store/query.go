@@ -30,9 +30,7 @@ type FullStore interface {
 	WatchlistStore
 	UserStore
 	PerformanceStore
-	GlobalEventStore
-	LabelStore
-	FailedEventStore
+	RuleStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.

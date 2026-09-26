@@ -398,11 +398,11 @@ func (s *stubStore) ContractHealthInputs(_ context.Context, _ string) (poller.He
 func (s *stubStore) UpsertContractHealthScore(_ context.Context, _ poller.ContractHealthScore) error {
 	return nil
 }
-func (s *stubStore) RecordContractVersion(_ context.Context, _ poller.ContractVersion) error {
-	return nil
+func (s *stubStore) ListRules(ctx context.Context) ([]poller.AlertRule, error) {
+	return nil, nil
 }
-func (s *stubStore) GetLatestContractVersion(_ context.Context, _ string) (poller.ContractVersion, error) {
-	return poller.ContractVersion{}, poller.ErrVersionNotFound
+func (s *stubStore) RuleWindowStats(ctx context.Context, contractID string, window time.Duration) (poller.WindowStats, error) {
+	return poller.WindowStats{Duration: window}, nil
 }
 
 type stubRedis struct{}

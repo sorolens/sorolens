@@ -1,0 +1,11 @@
+-- ============================================================
+-- 000009: relax contract_alerts to carry user-defined rule alerts
+--
+-- User-defined alert rules (DSL, migration 000008) fire against ANY tracked
+-- contract, not just contracts registered with the on-chain watchdog. The
+-- original FK pinned contract_alerts.contract_id to monitored_contracts, which
+-- made InsertContractAlert fail for tracked-but-unmonitored contracts. Drop it
+-- so the same table serves both watchdog and rule alerts; deduplication is
+-- already handled by ux_contract_alerts_tx_contract -- (tx_hash, contract_id).
+-- ============================================================
+ALTER TABLE contract_alerts DROP CONSTRAINT IF EXISTS contract_alerts_contract_id_fkey;
