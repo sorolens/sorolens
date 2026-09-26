@@ -1,0 +1,75 @@
+name: Documentation report
+description: Something is missing or wrong in the documentation.
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to file a documentation report. Please fill in as much detail as you can.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the documentation problem.
+      placeholder: "The events API reference documents a `cursor` parameter but never says whether it is inclusive or exclusive."
+    validations:
+      required: true
+  - type: textarea
+    id: location
+    attributes:
+      label: Location
+      description: Where the problem lives — a file path in the repo or a docs page URL.
+      placeholder: "docs/reference/api/events.md, or https://docs.sorolens.io/api/events"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What the documentation should say.
+      placeholder: "The reference should state that the cursor is exclusive: the next page starts after the returned value."
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What the documentation currently says, or what is missing entirely.
+      placeholder: "The parameter is listed with no semantics, so integrators page incorrectly and see repeated rows."
+    validations:
+      required: true
+  - type: dropdown
+    id: doc_type
+    attributes:
+      label: Documentation type
+      description: Which kind of documentation is affected?
+      options:
+        - API reference
+        - Guides / tutorials
+        - README
+        - Inline code comments / godocs
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Please include relevant version information.
+        For Go issues: `go version` and module path.
+        For dashboard issues: browser and OS.
+        For CLI issues: `sorolens version`.
+      placeholder: |
+        - Sorolens version: 0.1.2
+        - OS: Ubuntu 24.04
+        - Browser (if docs site): Chrome 126
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, links, or a suggested rewrite that might help.
+    validations:
+      required: false
