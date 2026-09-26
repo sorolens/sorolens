@@ -138,6 +138,13 @@ export interface ContractSummary {
   wasm_hash: string | null;
   added_at: string;
   last_activity_at: string | null;
+  tags: string[];
+}
+
+/** Response from the contract tag endpoints. */
+export interface ContractTagsResponse {
+  contract_id: string;
+  tags: string[];
 }
 
 export interface ContractsListResponse {

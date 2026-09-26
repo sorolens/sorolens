@@ -346,8 +346,8 @@ describe("ContractsPage", () => {
 
     await waitFor(() =>
       expect(mockListContracts).toHaveBeenLastCalledWith(
-        expect.objectContaining({ tag: "prod" }),
-      ),
+        expect.objectContaining({ tag: "prod" })
+      )
     );
   });
 
@@ -366,8 +366,8 @@ describe("ContractsPage", () => {
 
     await waitFor(() =>
       expect(mockListContracts).toHaveBeenLastCalledWith(
-        expect.objectContaining({ tag: "prod" }),
-      ),
+        expect.objectContaining({ tag: "prod" })
+      )
     );
   });
 

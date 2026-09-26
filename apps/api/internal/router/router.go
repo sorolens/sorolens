@@ -162,6 +162,8 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, cacheLabels).Get("/resolve", h.ResolveLabel)
 		r.With(scope, cacheContracts).Get("/contracts", h.ListContracts)
 		r.With(scope, cacheContracts).Get("/contracts/{id}", h.GetContract)
+		r.With(scope, contributor).Post("/contracts/{id}/tags", h.AddContractTag)
+		r.With(scope, contributor).Delete("/contracts/{id}/tags/{tag}", h.RemoveContractTag)
 		get("/contracts/{id}/events", h.ListEvents)
 		get("/contracts/{id}/events.csv", h.ExportEventsCSV)
 		get("/contracts/{id}/invocations", h.ListInvocations)

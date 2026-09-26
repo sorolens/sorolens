@@ -7,7 +7,9 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.list_contracts_network import ListContractsNetwork
+from ...models.list_contracts_order import ListContractsOrder
 from ...models.list_contracts_response_200 import ListContractsResponse200
+from ...models.list_contracts_sort import ListContractsSort
 from ...types import UNSET, Response, Unset
 
 
@@ -17,6 +19,9 @@ def _get_kwargs(
     limit: int | Unset = UNSET,
     network: ListContractsNetwork | Unset = UNSET,
     status: str | Unset = UNSET,
+    tag: str | Unset = UNSET,
+    sort: ListContractsSort | Unset = ListContractsSort.ADDED_AT,
+    order: ListContractsOrder | Unset = ListContractsOrder.DESC,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
@@ -32,6 +37,20 @@ def _get_kwargs(
     params["network"] = json_network
 
     params["status"] = status
+
+    params["tag"] = tag
+
+    json_sort: str | Unset = UNSET
+    if not isinstance(sort, Unset):
+        json_sort = sort.value
+
+    params["sort"] = json_sort
+
+    json_order: str | Unset = UNSET
+    if not isinstance(order, Unset):
+        json_order = order.value
+
+    params["order"] = json_order
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -51,6 +70,11 @@ def _parse_response(
         response_200 = ListContractsResponse200.from_dict(response.json())
 
         return response_200
+
+    if response.status_code == 400:
+        response_400 = Error.from_dict(response.json())
+
+        return response_400
 
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())
@@ -86,6 +110,9 @@ def sync_detailed(
     limit: int | Unset = UNSET,
     network: ListContractsNetwork | Unset = UNSET,
     status: str | Unset = UNSET,
+    tag: str | Unset = UNSET,
+    sort: ListContractsSort | Unset = ListContractsSort.ADDED_AT,
+    order: ListContractsOrder | Unset = ListContractsOrder.DESC,
 ) -> Response[Error | ListContractsResponse200]:
     """List tracked contracts
 
@@ -94,6 +121,9 @@ def sync_detailed(
         limit (int | Unset):
         network (ListContractsNetwork | Unset):
         status (str | Unset):
+        tag (str | Unset):
+        sort (ListContractsSort | Unset):  Default: ListContractsSort.ADDED_AT.
+        order (ListContractsOrder | Unset):  Default: ListContractsOrder.DESC.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -108,6 +138,9 @@ def sync_detailed(
         limit=limit,
         network=network,
         status=status,
+        tag=tag,
+        sort=sort,
+        order=order,
     )
 
     response = client.get_httpx_client().request(
@@ -124,6 +157,9 @@ def sync(
     limit: int | Unset = UNSET,
     network: ListContractsNetwork | Unset = UNSET,
     status: str | Unset = UNSET,
+    tag: str | Unset = UNSET,
+    sort: ListContractsSort | Unset = ListContractsSort.ADDED_AT,
+    order: ListContractsOrder | Unset = ListContractsOrder.DESC,
 ) -> Error | ListContractsResponse200 | None:
     """List tracked contracts
 
@@ -132,6 +168,9 @@ def sync(
         limit (int | Unset):
         network (ListContractsNetwork | Unset):
         status (str | Unset):
+        tag (str | Unset):
+        sort (ListContractsSort | Unset):  Default: ListContractsSort.ADDED_AT.
+        order (ListContractsOrder | Unset):  Default: ListContractsOrder.DESC.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -147,6 +186,9 @@ def sync(
         limit=limit,
         network=network,
         status=status,
+        tag=tag,
+        sort=sort,
+        order=order,
     ).parsed
 
 
@@ -157,6 +199,9 @@ async def asyncio_detailed(
     limit: int | Unset = UNSET,
     network: ListContractsNetwork | Unset = UNSET,
     status: str | Unset = UNSET,
+    tag: str | Unset = UNSET,
+    sort: ListContractsSort | Unset = ListContractsSort.ADDED_AT,
+    order: ListContractsOrder | Unset = ListContractsOrder.DESC,
 ) -> Response[Error | ListContractsResponse200]:
     """List tracked contracts
 
@@ -165,6 +210,9 @@ async def asyncio_detailed(
         limit (int | Unset):
         network (ListContractsNetwork | Unset):
         status (str | Unset):
+        tag (str | Unset):
+        sort (ListContractsSort | Unset):  Default: ListContractsSort.ADDED_AT.
+        order (ListContractsOrder | Unset):  Default: ListContractsOrder.DESC.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -179,6 +227,9 @@ async def asyncio_detailed(
         limit=limit,
         network=network,
         status=status,
+        tag=tag,
+        sort=sort,
+        order=order,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -193,6 +244,9 @@ async def asyncio(
     limit: int | Unset = UNSET,
     network: ListContractsNetwork | Unset = UNSET,
     status: str | Unset = UNSET,
+    tag: str | Unset = UNSET,
+    sort: ListContractsSort | Unset = ListContractsSort.ADDED_AT,
+    order: ListContractsOrder | Unset = ListContractsOrder.DESC,
 ) -> Error | ListContractsResponse200 | None:
     """List tracked contracts
 
@@ -201,6 +255,9 @@ async def asyncio(
         limit (int | Unset):
         network (ListContractsNetwork | Unset):
         status (str | Unset):
+        tag (str | Unset):
+        sort (ListContractsSort | Unset):  Default: ListContractsSort.ADDED_AT.
+        order (ListContractsOrder | Unset):  Default: ListContractsOrder.DESC.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -217,5 +274,8 @@ async def asyncio(
             limit=limit,
             network=network,
             status=status,
+            tag=tag,
+            sort=sort,
+            order=order,
         )
     ).parsed

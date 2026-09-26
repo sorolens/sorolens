@@ -25,6 +25,7 @@ class Contract:
         backfill_complete_at (datetime.datetime | None):
         status (ContractStatus):
         added_at (datetime.datetime):
+        tags (list[str]): User-defined tags, sorted ascending. Always present; empty when the contract has no tags.
     """
 
     id: str
@@ -35,6 +36,7 @@ class Contract:
     backfill_complete_at: datetime.datetime | None
     status: ContractStatus
     added_at: datetime.datetime
+    tags: list[str]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -58,6 +60,8 @@ class Contract:
 
         added_at = self.added_at.isoformat()
 
+        tags = self.tags
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -70,6 +74,7 @@ class Contract:
                 "backfill_complete_at": backfill_complete_at,
                 "status": status,
                 "added_at": added_at,
+                "tags": tags,
             }
         )
 
@@ -109,6 +114,8 @@ class Contract:
 
         added_at = datetime.datetime.fromisoformat(d.pop("added_at"))
 
+        tags = cast(list[str], d.pop("tags"))
+
         contract = cls(
             id=id,
             network=network,
@@ -118,6 +125,7 @@ class Contract:
             backfill_complete_at=backfill_complete_at,
             status=status,
             added_at=added_at,
+            tags=tags,
         )
 
         contract.additional_properties = d

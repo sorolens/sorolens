@@ -32,6 +32,8 @@ from .contract_snapshot_export_summary import ContractSnapshotExportSummary
 from .contract_stats import ContractStats
 from .contract_status import ContractStatus
 from .contract_summary import ContractSummary
+from .contract_tag_request import ContractTagRequest
+from .contract_tags import ContractTags
 from .contract_upgrade import ContractUpgrade
 from .contract_validation_result import ContractValidationResult
 from .create_alert_subscription import CreateAlertSubscription
@@ -100,7 +102,9 @@ from .list_contract_storage_response_200 import ListContractStorageResponse200
 from .list_contract_storage_status import ListContractStorageStatus
 from .list_contract_upgrades_response_200 import ListContractUpgradesResponse200
 from .list_contracts_network import ListContractsNetwork
+from .list_contracts_order import ListContractsOrder
 from .list_contracts_response_200 import ListContractsResponse200
+from .list_contracts_sort import ListContractsSort
 from .list_failed_events_response_200 import ListFailedEventsResponse200
 from .list_monitored_contracts_network import ListMonitoredContractsNetwork
 from .list_monitored_contracts_response_200 import ListMonitoredContractsResponse200
@@ -223,6 +227,8 @@ __all__ = (
     "ContractStats",
     "ContractStatus",
     "ContractSummary",
+    "ContractTagRequest",
+    "ContractTags",
     "ContractUpgrade",
     "ContractValidationResult",
     "CreateAlertSubscription",
@@ -285,7 +291,9 @@ __all__ = (
     "ListContractStorageStatus",
     "ListContractUpgradesResponse200",
     "ListContractsNetwork",
+    "ListContractsOrder",
     "ListContractsResponse200",
+    "ListContractsSort",
     "ListFailedEventsResponse200",
     "ListMonitoredContractsNetwork",
     "ListMonitoredContractsResponse200",

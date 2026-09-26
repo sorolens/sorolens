@@ -178,6 +178,8 @@ paths:
             type: string
           description: Filter by contract status (pending, active, backfilling, error, paused).
         - $ref: "#/components/parameters/TagParam"
+        - $ref: "#/components/parameters/SortParam"
+        - $ref: "#/components/parameters/OrderParam"
       responses:
         "200":
           description: Page of contracts
@@ -3203,6 +3205,28 @@ components:
         maxLength: 32
         pattern: "^[a-z0-9][a-z0-9_-]*$"
       description: Show only contracts carrying this tag.
+    SortParam:
+      name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [added_at, last_activity, events_count]
+        default: added_at
+      description: |
+        Column to order the contracts list by. added_at sorts by when tracking
+        began, last_activity by the most recent indexed event or invocation
+        (no-activity contracts sort last), and events_count by the number of
+        indexed events.
+    OrderParam:
+      name: order
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+      description: Sort direction. Defaults to desc (newest or busiest first).
     TagPath:
       name: tag
       in: path
@@ -4172,33 +4196,6 @@ components:
         timestamp:
           type: string
           format: date-time
-        tags:
-          type: array
-          items:
-            type: string
-          description: User-defined tags, sorted ascending. Always present; empty when the contract has no tags.
-
-    ContractTagRequest:
-      type: object
-      required: [tag]
-      properties:
-        tag:
-          type: string
-          minLength: 1
-          maxLength: 32
-          pattern: "^[a-z0-9][a-z0-9_-]*$"
-          description: Tag label. Trimmed and lowercased before storage.
-
-    ContractTags:
-      type: object
-      required: [contract_id, tags]
-      properties:
-        contract_id:
-          type: string
-        tags:
-          type: array
-          items:
-            type: string
 
     V2Alert:
       type: object

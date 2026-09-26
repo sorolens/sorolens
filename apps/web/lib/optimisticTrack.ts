@@ -46,6 +46,7 @@ export function buildOptimisticContract(
     wasm_hash: null,
     added_at: new Date().toISOString(),
     last_activity_at: null,
+    tags: [],
     optimisticId: `optimistic-${optimisticCounter}`,
   };
 }

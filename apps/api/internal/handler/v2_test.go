@@ -282,6 +282,10 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		// event listing. v2 exposes the JSON listing; the flat file follows
 		// when the export is ported.
 		"GET /api/v1/contracts/{id}/events.csv":        true,
+		// Contract tags (#163): the write endpoints are not part of the v2
+		// surface yet, so v1 keeps them for now.
+		"POST /api/v1/contracts/{id}/tags":            true,
+		"DELETE /api/v1/contracts/{id}/tags/{tag}":    true,
 	}
 
 	var missing []string

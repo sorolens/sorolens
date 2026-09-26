@@ -25,6 +25,7 @@ type FullStore interface {
 	APIKeyStore
 	AlertSubscriptionStore
 	AlertGroupStore
+	ContractTagStore
 	WatchlistStore
 	UserStore
 	PerformanceStore

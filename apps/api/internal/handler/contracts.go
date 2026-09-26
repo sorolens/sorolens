@@ -44,6 +44,7 @@ type contractListResponse struct {
 	Status         string     `json:"status"`
 	AddedAt        time.Time  `json:"added_at"`
 	LastActivityAt *time.Time `json:"last_activity_at"`
+	Tags           []string   `json:"tags"`
 }
 
 type eventResponse struct {
@@ -178,6 +179,10 @@ func contractFromStore(c store.Contract) contractResponse {
 }
 
 func contractListFromStore(c store.Contract) contractListResponse {
+	tags := c.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	return contractListResponse{
 		ID:             c.ID,
 		Network:        c.Network,
@@ -186,6 +191,7 @@ func contractListFromStore(c store.Contract) contractListResponse {
 		Status:         c.Status,
 		AddedAt:        c.AddedAt,
 		LastActivityAt: c.LastActivityAt,
+		Tags:           tags,
 	}
 }
 
@@ -358,6 +364,8 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		Network: network,
 		Status:  r.URL.Query().Get("status"),
 		Tag:     tag,
+		Sort:    sortCol,
+		Order:   order,
 	}
 
 	contracts, nextRaw, err := h.Store.ListContracts(r.Context(), rawCursor, limit, f)

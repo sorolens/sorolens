@@ -75,7 +75,10 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 // fetchNoContent is the variant for endpoints that return 204 with no body.
-async function fetchNoContent(url: string, options?: RequestInit): Promise<void> {
+async function fetchNoContent(
+  url: string,
+  options?: RequestInit
+): Promise<void> {
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -106,6 +109,9 @@ export function listContracts(params?: {
   limit?: number;
   network?: string;
   status?: string;
+  tag?: string;
+  sort?: "added_at" | "last_activity" | "events_count";
+  order?: "asc" | "desc";
 }): Promise<ContractsListResponse> {
   const search = new URLSearchParams();
   if (params?.cursor) search.set("cursor", params.cursor);
@@ -113,6 +119,8 @@ export function listContracts(params?: {
   if (params?.network) search.set("network", params.network);
   if (params?.status) search.set("status", params.status);
   if (params?.tag) search.set("tag", params.tag);
+  if (params?.sort) search.set("sort", params.sort);
+  if (params?.order) search.set("order", params.order);
   const qs = search.toString();
   return fetchJson<ContractsListResponse>(
     `${API_URL}/api/v1/contracts${qs ? "?" + qs : ""}`
@@ -136,6 +144,38 @@ export function trackContract(
 
 export function getContract(id: string): Promise<ContractDetail> {
   return fetchJson<ContractDetail>(`${API_URL}/api/v1/contracts/${id}`);
+}
+
+/**
+ * Add a tag to a contract. Tags require a contributor identity, so the
+ * browser forwards its user ID the same way tracking a contract does.
+ * Adding a tag that already exists is a no-op.
+ */
+export function addContractTag(
+  id: string,
+  tag: string,
+  userId?: string
+): Promise<ContractTagsResponse> {
+  const headers: Record<string, string> = {};
+  if (userId) headers["X-User-ID"] = userId;
+  return fetchJson<ContractTagsResponse>(
+    `${API_URL}/api/v1/contracts/${id}/tags`,
+    { method: "POST", body: JSON.stringify({ tag }), headers }
+  );
+}
+
+/** Remove a tag from a contract. Removing an absent tag is a no-op. */
+export function removeContractTag(
+  id: string,
+  tag: string,
+  userId?: string
+): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (userId) headers["X-User-ID"] = userId;
+  return fetchNoContent(
+    `${API_URL}/api/v1/contracts/${id}/tags/${encodeURIComponent(tag)}`,
+    { method: "DELETE", headers }
+  );
 }
 
 /**

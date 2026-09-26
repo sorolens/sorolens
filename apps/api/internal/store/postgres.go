@@ -104,25 +104,61 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	// cursor is the last-seen contract ID (lexicographic order).
-	rows, err := s.pool.Query(ctx, `
-		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
-		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at
-		FROM contracts c
-		LEFT JOIN (
-			SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
-			FROM (
-				SELECT contract_id, ledger_closed_at FROM events
-				UNION ALL
-				SELECT contract_id, ledger_closed_at FROM invocations
-			) activity_rows
-			GROUP BY contract_id
-		) activity ON activity.contract_id = c.id
-		WHERE ($1 = '' OR c.id > $1)
-		  AND ($2 = '' OR c.network = $2)
-		  AND ($3 = '' OR c.status = $3)
-		ORDER BY c.id ASC
-		LIMIT $4`, cursor, f.Network, f.Status, limit+1)
+
+	sortCol, descending := NormalizeContractSort(f.Sort, f.Order)
+	dir, cmp := "ASC", ">"
+	if descending {
+		dir, cmp = "DESC", "<"
+	}
+
+	// The value rows are ordered by, aliased as sort_value so the cursor
+	// comparison and ORDER BY share one expression. sortCol is chosen from a
+	// whitelist, never from client input directly, so the fmt.Sprintf
+	// interpolation is injection-safe.
+	var sortValue string
+	switch sortCol {
+	case ContractSortEventsCount:
+		sortValue = "(SELECT COUNT(*) FROM events ev WHERE ev.contract_id = c.id)"
+	case ContractSortLastActivity:
+		sortValue = "COALESCE(activity.last_activity_at, 'epoch'::timestamptz)"
+	default:
+		sortValue = "c.added_at"
+	}
+
+	// last_activity_at is always returned (the dashboard renders it) and is
+	// reused as the ordering value when sorting by last_activity. The filtered
+	// set is built once and reused for the keyset cursor lookup below.
+	query := fmt.Sprintf(`
+		WITH filtered AS (
+			SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+			       c.backfill_complete_at, c.status, c.added_at,
+			       activity.last_activity_at,
+			       %s AS sort_value
+			FROM contracts c
+			LEFT JOIN (
+				SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
+				FROM (
+					SELECT contract_id, ledger_closed_at FROM events
+					UNION ALL
+					SELECT contract_id, ledger_closed_at FROM invocations
+				) activity_rows
+				GROUP BY contract_id
+			) activity ON activity.contract_id = c.id
+			WHERE ($1 = '' OR c.network = $1)
+			  AND ($2 = '' OR c.status = $2)
+			  AND ($3 = '' OR EXISTS (
+			        SELECT 1 FROM contract_tags t
+			        WHERE t.contract_id = c.id AND t.tag = $3))
+		)
+		SELECT id, network, label, wasm_hash, created_at_ledger,
+		       backfill_complete_at, status, added_at, last_activity_at
+		FROM filtered
+		WHERE ($4 = '' OR (sort_value, id) %s (
+		        SELECT f2.sort_value, f2.id FROM filtered f2 WHERE f2.id = $4))
+		ORDER BY sort_value %s, id %s
+		LIMIT $5`, sortValue, cmp, dir, dir)
+
+	rows, err := s.pool.Query(ctx, query, f.Network, f.Status, f.Tag, cursor, limit+1)
 	if err != nil {
 		return nil, "", err
 	}

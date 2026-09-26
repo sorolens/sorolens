@@ -56,7 +56,9 @@ describe("TagInput", () => {
 
   it("removes a tag via its chip button", () => {
     const onRemove = vi.fn();
-    render(<TagInput tags={["prod", "defi"]} onAdd={vi.fn()} onRemove={onRemove} />);
+    render(
+      <TagInput tags={["prod", "defi"]} onAdd={vi.fn()} onRemove={onRemove} />
+    );
 
     fireEvent.click(screen.getByLabelText("Remove tag prod"));
 
@@ -65,7 +67,9 @@ describe("TagInput", () => {
 
   it("removes the last tag on Backspace when the input is empty", () => {
     const onRemove = vi.fn();
-    render(<TagInput tags={["prod", "defi"]} onAdd={vi.fn()} onRemove={onRemove} />);
+    render(
+      <TagInput tags={["prod", "defi"]} onAdd={vi.fn()} onRemove={onRemove} />
+    );
 
     fireEvent.keyDown(screen.getByTestId("tag-input"), { key: "Backspace" });
 
@@ -79,7 +83,7 @@ describe("TagInput", () => {
         onAdd={vi.fn()}
         onRemove={vi.fn()}
         error="You need a contributor identity to edit tags."
-      />,
+      />
     );
     expect(screen.getByRole("alert")).toBeDefined();
   });

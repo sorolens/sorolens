@@ -12,6 +12,7 @@ import { contractRowKey, isPendingRow } from "@/lib/optimisticTrack";
 import type { ContractRow } from "@/lib/optimisticTrack";
 import { TableSkeleton } from "@/components/Skeleton";
 import ImportContractsCsv from "@/components/ImportContractsCsv";
+import { getUserId } from "@/lib/user";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -83,56 +84,86 @@ function RelativeTime({ iso }: { iso: string | null }) {
 // Contracts Table Columns
 // ---------------------------------------------------------------------------
 
-const COLUMNS: Column<ContractRow>[] = [
-  {
-    key: "id",
-    header: "Contract ID",
-    sortable: true,
-    accessor: (c) => (
-      <span
-        className={`font-mono text-xs ${isPendingRow(c) ? "opacity-60" : ""}`}
-      >
-        <LabelledId value={c.id} knownLabel={c.label} />
-      </span>
-    ),
-  },
-  {
-    key: "network",
-    header: "Network",
-    sortable: true,
-    accessor: (c) => (
-      <span className="text-xs text-[var(--color-text-secondary)]">
-        {c.network}
-      </span>
-    ),
-  },
-  {
-    key: "status",
-    header: "Status",
-    sortable: true,
-    accessor: (c) => <StatusBadge status={c.status} />,
-  },
-  {
-    key: "added_at",
-    header: "Added",
-    sortable: true,
-    accessor: (c) => (
-      <span className="text-xs text-[var(--color-text-secondary)]">
-        {formatDate(c.added_at)}
-      </span>
-    ),
-  },
-  {
-    key: "last_activity_at",
-    header: "Last activity",
-    sortable: true,
-    accessor: (c) => (
-      <span className="text-xs text-[var(--color-text-secondary)]">
-        <RelativeTime iso={c.last_activity_at} />
-      </span>
-    ),
-  },
-];
+function makeColumns(onTagClick: (tag: string) => void): Column<ContractRow>[] {
+  return [
+    {
+      key: "id",
+      header: "Contract ID",
+      sortable: true,
+      accessor: (c) => (
+        <span
+          className={`font-mono text-xs ${isPendingRow(c) ? "opacity-60" : ""}`}
+        >
+          <LabelledId value={c.id} knownLabel={c.label} />
+        </span>
+      ),
+    },
+    {
+      key: "network",
+      header: "Network",
+      sortable: true,
+      accessor: (c) => (
+        <span className="text-xs text-[var(--color-text-secondary)]">
+          {c.network}
+        </span>
+      ),
+    },
+    {
+      key: "tags",
+      header: "Tags",
+      accessor: (c) => {
+        const tags = c.tags ?? [];
+        if (tags.length === 0) {
+          return <span className="text-[var(--color-text-secondary)]">--</span>;
+        }
+        return (
+          <div className="flex flex-wrap gap-1">
+            {tags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={(e) => {
+                  // Don't trigger the row's navigation handler.
+                  e.stopPropagation();
+                  onTagClick(tag);
+                }}
+                className="rounded-full bg-[var(--color-accent)]/15 px-2 py-0.5 text-xs font-medium text-[var(--color-accent)] transition-opacity hover:opacity-80"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      accessor: (c) => <StatusBadge status={c.status} />,
+    },
+    {
+      key: "added_at",
+      header: "Added",
+      sortable: true,
+      accessor: (c) => (
+        <span className="text-xs text-[var(--color-text-secondary)]">
+          {formatDate(c.added_at)}
+        </span>
+      ),
+    },
+    {
+      key: "last_activity_at",
+      header: "Last activity",
+      sortable: true,
+      accessor: (c) => (
+        <span className="text-xs text-[var(--color-text-secondary)]">
+          <RelativeTime iso={c.last_activity_at} />
+        </span>
+      ),
+    },
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Main Page
@@ -204,7 +235,7 @@ export default function ContractsPage() {
         if (seq === loadSeq.current) setLoading(false);
       }
     },
-    [network]
+    [network, tagFilter]
   );
 
   useEffect(() => {
@@ -399,7 +430,7 @@ export default function ContractsPage() {
         {/* Data table */}
         {!loading && sorted.length > 0 && (
           <DataTable<ContractRow>
-            columns={COLUMNS}
+            columns={columns}
             data={sorted}
             rowKey={contractRowKey}
             sortColumn={sortColumn}
