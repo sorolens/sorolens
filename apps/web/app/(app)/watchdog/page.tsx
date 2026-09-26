@@ -17,7 +17,6 @@ import { TableSkeleton } from "@/components/Skeleton";
 import { HealthBadge, SeverityBadge } from "@/components/WatchdogBadges";
 import { networkFilter, useNetwork } from "@/lib/network";
 import { MonoId } from "@sorolens/ui";
-import { truncateMiddle } from "@/lib/format";
 
 const ZERO_STATS: WatchdogStats = {
   total_monitored: 0,
@@ -215,18 +214,16 @@ export default function WatchdogPage() {
                         {c.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--color-text-secondary)]">
+                    <td
+                      title={c.contract_id}
+                      className="px-4 py-3 font-mono text-xs text-[var(--color-text-secondary)]"
+                    >
                       <MonoId
                         value={c.contract_id}
                         headChars={8}
                         tailChars={6}
                         variant="text"
                       />
-                    <td
-                      title={c.contract_id}
-                      className="px-4 py-3 font-mono text-xs text-[var(--color-text-secondary)]"
-                    >
-                      {truncateMiddle(c.contract_id)}
                     </td>
                     <td className="px-4 py-3">
                       <HealthBadge status={c.status} />
@@ -319,7 +316,6 @@ export default function WatchdogPage() {
                           tailChars={6}
                           variant="text"
                         />
-                        {truncateMiddle(a.contract_id)}
                       </Link>
                     </td>
                     <td className="px-4 py-3">{a.message}</td>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { MonoId } from "@sorolens/ui";
 import { listAllEvents } from "@/lib/api";
 import { networkFilter, useNetwork } from "@/lib/network";
+import { StatCard } from "@/components/StatCard";
 import { TableSkeleton } from "@/components/Skeleton";
 import {
   FIRST_PAGE,
@@ -273,27 +274,6 @@ export default function EventsExplorerPage() {
               Clear
             </button>
           )}
-        </form>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          label="Streamed Events"
-          value={events.length.toLocaleString()}
-          subtext={activeFilter ? `For ${activeFilter.slice(0, 8)}...` : "Across all tracked contracts"}
-          subtextTitle={activeFilter || undefined}
-        />
-        <StatCard
-          label="Stream Connection"
-          value={isConnected ? "Connected" : isPolling ? "Polling" : "Connecting"}
-          subtext={isConnected ? "Server-Sent Events active" : "HTTP polling fallback active"}
-        />
-        <StatCard
-          label="Last Event Received"
-          value={lastEventAt ? lastEventAt.toLocaleTimeString() : "Waiting for events..."}
-          subtext={lastEventAt ? lastEventAt.toLocaleDateString() : "New events appear in real-time"}
-        />
-      </div>
         </div>
         {rangeError && (
           <p role="alert" className="w-full text-xs text-red-400">
@@ -301,6 +281,43 @@ export default function EventsExplorerPage() {
           </p>
         )}
       </form>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Streamed Events"
+          value={events.length.toLocaleString()}
+          subtext={
+            activeFilter
+              ? `For ${activeFilter.slice(0, 8)}...`
+              : "Across all tracked contracts"
+          }
+          subtextTitle={activeFilter || undefined}
+        />
+        <StatCard
+          label="Stream Connection"
+          value={
+            isConnected ? "Connected" : isPolling ? "Polling" : "Connecting"
+          }
+          subtext={
+            isConnected
+              ? "Server-Sent Events active"
+              : "HTTP polling fallback active"
+          }
+        />
+        <StatCard
+          label="Last Event Received"
+          value={
+            lastEventAt
+              ? lastEventAt.toLocaleTimeString()
+              : "Waiting for events..."
+          }
+          subtext={
+            lastEventAt
+              ? lastEventAt.toLocaleDateString()
+              : "New events appear in real-time"
+          }
+        />
+      </div>
 
       {error ? (
         <div
