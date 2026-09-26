@@ -91,7 +91,9 @@ describe("bestFor", () => {
 
 describe("metricValue", () => {
   it("returns null for a contract with no data", () => {
-    expect(metricValue(entry({ has_data: false, event_count: 7 }), eventSpec)).toBeNull();
+    expect(
+      metricValue(entry({ has_data: false, event_count: 7 }), eventSpec)
+    ).toBeNull();
   });
 
   it("returns null for an uncomputed health score", () => {

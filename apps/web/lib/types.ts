@@ -11,6 +11,7 @@ export interface Contract {
   } | null;
   storage_entry_count: number;
   expiring_entry_count: number;
+  tags: string[];
 }
 
 export interface ContractDetail extends Contract {
@@ -19,6 +20,9 @@ export interface ContractDetail extends Contract {
 
 export interface ContractEvent {
   id: string;
+  /** The API has always returned this; the type was missing it. */
+  contract_id: string;
+  network: string;
   ledger: number;
   ledger_closed_at: string;
   tx_hash: string;
@@ -30,6 +34,20 @@ export interface ContractEvent {
   in_successful_call: boolean;
 }
 
+/** An event from the cross-contract feed (GET /api/v1/events). */
+export interface GlobalEvent extends ContractEvent {
+  contract_id: string;
+  network: string;
+}
+
+export interface GlobalEventsResponse {
+  events: GlobalEvent[];
+  /** Opaque cursor for the next (older) page; empty on the last page. */
+  next_cursor: string;
+}
+
+export type EventType = "contract" | "system" | "diagnostic";
+
 export interface EventsResponse {
   events: ContractEvent[];
   cursor: string | null;
@@ -38,6 +56,8 @@ export interface EventsResponse {
 
 export interface Invocation {
   tx_hash: string;
+  contract_id: string;
+  network: string;
   ledger: number;
   ledger_closed_at: string;
   status: string;
@@ -53,8 +73,8 @@ export interface Invocation {
 
 export interface InvocationsResponse {
   invocations: Invocation[];
-  cursor: string | null;
-  has_more: boolean;
+  // The API returns `next_cursor` (empty when there are no further pages).
+  next_cursor: string | null;
 }
 
 export interface StorageEntry {
@@ -89,10 +109,25 @@ export interface VolumePoint {
   count: number;
 }
 
+/** One hour bucket of invocation frequency (issue #185). */
+export interface InvocationFrequencyPoint {
+  hour: string; // "HH:00" UTC hour start
+  count: number;
+}
+
 export interface StatsResponse {
   event_volume: VolumePoint[];
   invocation_count: VolumePoint[];
   stats: ContractStats;
+}
+
+/** One day of averaged per-invocation resource usage (issue #184). */
+export interface ResourceTrendPoint {
+  date: string;
+  avg_cpu_insn: number;
+  avg_mem_byte: number;
+  avg_fee: number;
+  count: number;
 }
 
 export interface ContractSummary {
@@ -102,6 +137,9 @@ export interface ContractSummary {
   status: string;
   wasm_hash: string | null;
   added_at: string;
+  last_activity_at: string | null;
+  /** User-defined tags. Absent on optimistic rows built before a response. */
+  tags?: string[];
 }
 
 export interface ContractsListResponse {
@@ -110,9 +148,55 @@ export interface ContractsListResponse {
   has_more: boolean;
 }
 
+/** Body of POST /api/v1/contracts/:id/tags — the contract's full tag list. */
+export interface ContractTagsResponse {
+  contract_id: string;
+  tags: string[];
+}
+
+// ---- bulk contract actions (#176) ------------------------------------------
+
+export type BatchContractsAction = "untrack" | "tag";
+
+export interface BatchContractsRequest {
+  ids: string[];
+  action: BatchContractsAction;
+  // args.label is the tag to apply for action "tag".
+  args?: { label?: string };
+}
+
+export interface BatchContractsResponse {
+  action: BatchContractsAction;
+  requested: number;
+  affected: number;
+}
+
 export interface TrackContractRequest {
   id: string;
   label?: string;
+  /** Network the contract lives on: testnet | mainnet | futurenet | standalone. */
+  network?: string;
+}
+
+/**
+ * Result of the tracking wizard's pre-flight check
+ * (POST /api/v1/contracts/validate). `valid` reflects the id's StrKey format
+ * and the network; `already_tracked` is advisory so the wizard can redirect to
+ * the existing entry instead of creating a duplicate.
+ */
+export interface ValidateContractResponse {
+  valid: boolean;
+  contract_id: string;
+  network: string;
+  already_tracked: boolean;
+  label: string | null;
+  reason: string | null;
+}
+
+export interface LabelResolution {
+  label: string;
+  value: string;
+  scope: string;
 }
 
 export type TimeWindow = "24h" | "7d" | "30d" | "all";
@@ -121,6 +205,50 @@ export type TimeWindow = "24h" | "7d" | "30d" | "all";
 
 export type HealthStatus = "Healthy" | "Degraded" | "Unresponsive" | string;
 export type AlertSeverity = "Info" | "Warning" | "Critical";
+export type UptimeWindow = "24h" | "7d" | "30d";
+
+export interface UptimeResponse {
+  contract_id: string;
+  window: UptimeWindow;
+  /** Uptime percentage in the range [0, 100] with up to 2 decimal places. */
+  uptime_pct: number;
+}
+
+/**
+ * One contract's service-level summary for a calendar month (issue #266).
+ * Derived from watchdog health checks and alerts, not from a separate source.
+ */
+export interface MonthlySLA {
+  contract_id: string;
+  /** Reporting period, YYYY-MM (UTC). */
+  month: string;
+  /** Healthy checks / total checks * 100. Zero when there are no checks. */
+  uptime_pct: number;
+  total_checks: number;
+  healthy_checks: number;
+  /** Outages: transitions from Healthy into any other status. */
+  incidents: number;
+  /** Mean time to recovery in seconds, across incidents that recovered. */
+  mttr_seconds: number;
+  total_downtime_seconds: number;
+  longest_outage_seconds: number;
+  /** True when the month ends mid-incident, so MTTR excludes that incident. */
+  ongoing_outage: boolean;
+  critical_alerts: number;
+  warning_alerts: number;
+  info_alerts: number;
+  total_alerts: number;
+  first_check: string | null;
+  last_check: string | null;
+}
+
+export interface SLAHistoryResponse {
+  contract_id: string;
+  /** Oldest first, so it maps straight onto a chart's x-axis. */
+  months: MonthlySLA[];
+}
+
+export type ReportFormat = "json" | "csv" | "pdf";
 
 export interface MonitoredContract {
   contract_id: string;
@@ -218,6 +346,32 @@ export interface GlobalStats {
   total_storage_entries: number;
 }
 
+// ---- live dashboard (#139) --------------------------------------------------
+
+export interface RecentEventsResponse {
+  events: ContractEvent[];
+}
+
+/**
+ * One contract's event activity over the live window.
+ *
+ * `per_minute` always has exactly `minutes` buckets, oldest first, so the
+ * sparkline's x-axis stays contiguous and does not shift between refreshes.
+ */
+export interface ContractEventRate {
+  contract_id: string;
+  label: string;
+  network: string;
+  total: number;
+  per_minute: number[];
+}
+
+export interface LiveActivityResponse {
+  minutes: number;
+  window_start: string;
+  contracts: ContractEventRate[];
+}
+
 export interface WatchlistItem {
   contract_id: string;
   added_at: string;
@@ -267,16 +421,25 @@ export interface CompareResponse {
   contracts: CompareContractEntry[];
 }
 
+export type ChannelType = "webhook" | "slack" | "discord" | "pagerduty";
+
 export interface CreateSubscriptionRequest {
   contract_id: string;
-  webhook_url: string;
+  channel_type?: ChannelType;
+  /** Required for webhook, slack and discord; optional for pagerduty. */
+  webhook_url?: string;
+  /** PagerDuty integration key (pagerduty only). */
+  routing_key?: string;
   severity_filter?: string;
 }
 
+/** Secrets are never returned: webhook_url is masked for slack/discord. */
 export interface AlertSubscription {
   id: string;
   contract_id: string;
+  channel_type: ChannelType;
   webhook_url: string;
+  has_routing_key: boolean;
   severity_filter: string;
   created_at: string;
   updated_at: string;
@@ -286,3 +449,34 @@ export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
 }
 
+// ---- source verification ---------------------------------------------------
+
+export interface VerificationDiagnostic {
+  code: string;
+  severity: string;
+  message: string;
+  hint?: string;
+}
+
+export interface ContractVerification {
+  contract_id: string;
+  status: string;
+  matched: boolean;
+  on_chain_hash?: string;
+  compiled_wasm_hash?: string;
+  source: {
+    kind: string;
+    ref?: string;
+    digest?: string;
+  };
+  toolchain: {
+    stellar?: string;
+    rustc?: string;
+    cargo?: string;
+  };
+  diagnostics: VerificationDiagnostic[];
+  build_log?: string;
+  submitted_at: string;
+  verified_at?: string;
+  updated_at: string;
+}

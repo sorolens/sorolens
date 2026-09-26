@@ -61,7 +61,7 @@ export function ContractSelector({
               data-testid={id ? "compare-slot-filled" : "compare-slot-empty"}
             >
               <span className="min-w-0 truncate text-[var(--color-text-secondary)]">
-                {id ? contract?.label ?? shortId(id) : `Slot ${i + 1}`}
+                {id ? (contract?.label ?? shortId(id)) : `Slot ${i + 1}`}
               </span>
               {id && (
                 <button
@@ -113,7 +113,9 @@ export function ContractSelector({
             {selected.length}/{max} selected
           </span>
           <span className="text-[var(--color-text-secondary)]">
-            {selected.length >= 2 ? "Ready to compare" : "Select at least 2 contracts"}
+            {selected.length >= 2
+              ? "Ready to compare"
+              : "Select at least 2 contracts"}
           </span>
         </div>
       )}

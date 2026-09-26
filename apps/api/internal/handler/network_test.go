@@ -145,6 +145,32 @@ func TestListContractsCombinesNetworkAndStatus(t *testing.T) {
 	}
 }
 
+func TestListContractsIncludesLastActivity(t *testing.T) {
+	lastActivity := time.Date(2026, 9, 25, 5, 42, 0, 0, time.UTC)
+	ms := store.NewMockStore()
+	if err := ms.UpsertContract(nil, store.Contract{
+		ID: "CLASTACTIVITY", Network: "testnet", Label: "active", Status: "active",
+		LastActivityAt: &lastActivity,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := newTestHandler(ms, true, true)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/contracts", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	contracts := decodeContracts(t, w.Body.Bytes())
+	if len(contracts) != 1 {
+		t.Fatalf("want 1 contract, got %d", len(contracts))
+	}
+	if got := contracts[0]["last_activity_at"]; got != lastActivity.Format(time.RFC3339) {
+		t.Fatalf("want last_activity_at=%q, got %v", lastActivity.Format(time.RFC3339), got)
+	}
+}
+
 func TestListContractsRejectsUnknownNetwork(t *testing.T) {
 	srv := newTestHandler(seedMultiNetworkStore(t), true, true)
 

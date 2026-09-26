@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -15,17 +16,26 @@ import (
 // the postgres backend and the in-memory MockStore.
 type FullStore interface {
 	Store
+	ContractBulkStore
 	QueryStore
+	LiveStore
+	ArchiveStore
 	WatchdogStore
 	ContractUpgradeStore
+	ContractSpecStore
+	ContractTagStore
 	HealthScoreStore
 	APIKeyStore
 	AlertSubscriptionStore
+	AlertGroupStore
 	WatchlistStore
 	UserStore
 	PerformanceStore
-	WatchedAccountStore
-	AuditStore
+	ContractWasmStore
+	GlobalEventStore
+	ContractVerificationStore
+	LabelStore
+	FailedEventStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
@@ -39,18 +49,28 @@ type EventFilters struct {
 	Network string
 	// Topic matches events whose decoded topic list contains the given value
 	// (JSONB containment). See topicFilterJSON for the accepted encodings.
-	Topic string
-	From  uint32
-	To    uint32
+	Topic            string
+	From             uint32
+	To               uint32
+	InSuccessfulCall *bool
 }
 
 // InvocationFilters holds optional query filters for listing invocations.
 type InvocationFilters struct {
+	// ContractID restricts a cross-contract listing to one contract. The
+	// per-contract listing passes the id as a separate argument and leaves
+	// this empty.
+	ContractID   string
 	Status       string
 	FunctionName string
 	Network      string
 	From         uint32
 	To           uint32
+	// Since and Until are inclusive bounds on ledger_closed_at. The
+	// per-contract listing ignores them; the global listing uses them for its
+	// date-range filter.
+	Since *time.Time
+	Until *time.Time
 }
 
 // StorageFilters holds optional query filters for listing storage entries.
@@ -96,6 +116,12 @@ type DailyAggregate struct {
 type QueryStore interface {
 	ListEvents(ctx context.Context, contractID, cursor string, limit int, f EventFilters) ([]Event, string, error)
 	ListInvocations(ctx context.Context, contractID, cursor string, limit int, f InvocationFilters) ([]Invocation, string, error)
+	// ListAllInvocations lists invocations across every tracked contract,
+	// newest first (ledger DESC, tx_hash DESC). cursorLedger/cursorTxHash carry
+	// the keyset position from a previous page; a zero ledger starts at the
+	// newest row. It returns the next page's cursor components, which are zero
+	// and empty when the page returned is the last one.
+	ListAllInvocations(ctx context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error)
 	ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error)
 	GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error)
 	RecentEvents(ctx context.Context, contractID string, limit int) ([]Event, error)
@@ -104,6 +130,10 @@ type QueryStore interface {
 	// "latest invocation" lookups (e.g. the dashboard summary) without walking
 	// the ascending paginated list.
 	RecentInvocations(ctx context.Context, contractID string, limit int) ([]Invocation, error)
+
+	// StreamEventsCSV streams contract events as CSV without buffering all rows.
+	// The caller is responsible for setting appropriate HTTP headers.
+	StreamEventsCSV(ctx context.Context, contractID string, f EventFilters, w io.Writer) error
 
 	// ContractFirstLedger returns the earliest ledger for which the contract
 	// has indexed data (events or invocations). It returns 0 when nothing has
@@ -141,10 +171,14 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 	// like the other filters would hide the containment operator behind a
 	// disjunction and force a sequential scan.
 	args := []any{contractID, cursor, f.Network, f.Type, f.From, f.To, limit + 1}
-	topicClause := ""
+	dynamicClauses := ""
 	if f.Topic != "" {
 		args = append(args, topicFilterJSON(f.Topic))
-		topicClause = fmt.Sprintf("  AND topic_decoded @> $%d::jsonb\n", len(args))
+		dynamicClauses += fmt.Sprintf("  AND topic_decoded @> $%d::jsonb\n", len(args))
+	}
+	if f.InSuccessfulCall != nil {
+		args = append(args, *f.InSuccessfulCall)
+		dynamicClauses += fmt.Sprintf("  AND in_successful_call = $%d\n", len(args))
 	}
 
 	rows, err := s.pool.Query(ctx, `
@@ -158,7 +192,7 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 		  AND ($4 = '' OR type = $4)
 		  AND ($5 = 0   OR ledger >= $5)
 		  AND ($6 = 0   OR ledger <= $6)
-`+topicClause+`		ORDER BY ledger ASC, id ASC
+`+dynamicClauses+`		ORDER BY ledger ASC, id ASC
 		LIMIT $7`,
 		args...,
 	)
@@ -216,6 +250,56 @@ func topicFilterJSON(topic string) string {
 		return "[]"
 	}
 	return string(b)
+}
+
+func (s *postgresStore) StreamEventsCSV(ctx context.Context, contractID string, f EventFilters, w io.Writer) (err error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+		       topic_xdr, value_xdr, topic_decoded, value_decoded,
+		       in_successful_call, inserted_at
+		FROM events
+		WHERE contract_id = $1
+		  AND ($2 = '' OR network = $2)
+		  AND ($3 = '' OR type = $3)
+		  AND ($4 = 0   OR ledger >= $4)
+		  AND ($5 = 0   OR ledger <= $5)
+		ORDER BY ledger ASC, id ASC`,
+		contractID, f.Network, f.Type, f.From, f.To,
+	)
+	if err != nil {
+		return fmt.Errorf("stream events csv: %w", err)
+	}
+	defer rows.Close()
+
+	csvWriter, err := newEventsCSVWriter(w)
+	if err != nil {
+		return fmt.Errorf("stream events csv: %w", err)
+	}
+	defer flushEventsCSV(csvWriter, &err)
+
+	// The JSON columns are passed through as stored: re-encoding them here
+	// would reorder object keys and could disagree with the stored text.
+	var row []string
+	for rows.Next() {
+		var e Event
+		var topicXDR, topicDec, valDec []byte
+		if err := rows.Scan(
+			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
+			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
+			&e.InSuccessfulCall, &e.InsertedAt,
+		); err != nil {
+			return err
+		}
+		row = eventCSVRecord(e, string(topicXDR), string(topicDec), string(valDec))
+		if err := csvWriter.Write(row); err != nil {
+			return err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	// flushEventsCSV reports any buffered or flush-time write failure.
+	return nil
 }
 
 // ---- RecentEvents -----------------------------------------------------------
@@ -354,6 +438,71 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+// ---- ListAllInvocations -----------------------------------------------------
+
+// ListAllInvocations pages through invocations for every contract. The keyset
+// cursor is (ledger, tx_hash), which is exactly the ORDER BY tuple, so pages
+// stay stable while the indexer appends newer rows.
+func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
+		       function_name, args_decoded, result_decoded, result_xdr,
+		       resource_fee_charged, cpu_insn, mem_byte,
+		       ledger_read_byte, ledger_write_byte, application_order, inserted_at
+		FROM invocations
+		WHERE ($1 = '' OR contract_id = $1)
+		  AND ($2 = '' OR network = $2)
+		  AND ($3 = '' OR status = $3)
+		  AND ($4 = '' OR function_name = $4)
+		  AND ($5 = 0   OR ledger >= $5)
+		  AND ($6 = 0   OR ledger <= $6)
+		  AND ($7::timestamptz IS NULL OR ledger_closed_at >= $7)
+		  AND ($8::timestamptz IS NULL OR ledger_closed_at <= $8)
+		  AND ($9 = 0   OR (ledger, tx_hash) < ($9, $10))
+		ORDER BY ledger DESC, tx_hash DESC
+		LIMIT $11`,
+		f.ContractID, f.Network, f.Status, f.FunctionName, f.From, f.To,
+		f.Since, f.Until, cursorLedger, cursorTxHash, limit+1,
+	)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("list all invocations: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Invocation
+	for rows.Next() {
+		var inv Invocation
+		var argsDec, resultDec []byte
+		if err := rows.Scan(
+			&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
+			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
+			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
+			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+		); err != nil {
+			return nil, 0, "", err
+		}
+		_ = json.Unmarshal(argsDec, &inv.ArgsDecoded)
+		_ = json.Unmarshal(resultDec, &inv.ResultDecoded)
+		out = append(out, inv)
+	}
+	if rows.Err() != nil {
+		return nil, 0, "", rows.Err()
+	}
+
+	var nextLedger uint32
+	var nextTxHash string
+	if len(out) > limit {
+		last := out[limit-1]
+		nextLedger = last.Ledger
+		nextTxHash = last.TxHash
+		out = out[:limit]
+	}
+	return out, nextLedger, nextTxHash, nil
 }
 
 // ---- ListStorageEntries -----------------------------------------------------

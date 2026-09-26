@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sorolens/sorolens/apps/api/internal/config"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/router"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
@@ -75,7 +76,7 @@ func newSummaryTestHandler(s handler.APIStore) http.Handler {
 		RedisClient: &mockRedisClient{},
 		Logger:      logger,
 	}
-	return router.New(h)
+	return router.New(h, config.DefaultRequestMaxBodyBytes)
 }
 
 func doSummaryRequest(srv http.Handler, contractID string) *httptest.ResponseRecorder {

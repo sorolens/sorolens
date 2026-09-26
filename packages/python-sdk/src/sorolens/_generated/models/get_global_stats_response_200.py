@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any, TypeVar
+
+from attrs import define as _attrs_define
+from attrs import field as _attrs_field
+from typing_extensions import Self
+
+T = TypeVar("T", bound="GetGlobalStatsResponse200")
+
+
+@_attrs_define
+class GetGlobalStatsResponse200:
+    """
+    Attributes:
+        tracked_contracts (int):
+        total_events (int):
+        total_invocations (int):
+        total_storage_entries (int):
+    """
+
+    tracked_contracts: int
+    total_events: int
+    total_invocations: int
+    total_storage_entries: int
+    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        tracked_contracts = self.tracked_contracts
+
+        total_events = self.total_events
+
+        total_invocations = self.total_invocations
+
+        total_storage_entries = self.total_storage_entries
+
+        field_dict: dict[str, Any] = {}
+        field_dict.update(self.additional_properties)
+        field_dict.update(
+            {
+                "tracked_contracts": tracked_contracts,
+                "total_events": total_events,
+                "total_invocations": total_invocations,
+                "total_storage_entries": total_storage_entries,
+            }
+        )
+
+        return field_dict
+
+    @classmethod
+    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+        d = dict(src_dict)
+        tracked_contracts = d.pop("tracked_contracts")
+
+        total_events = d.pop("total_events")
+
+        total_invocations = d.pop("total_invocations")
+
+        total_storage_entries = d.pop("total_storage_entries")
+
+        get_global_stats_response_200 = cls(
+            tracked_contracts=tracked_contracts,
+            total_events=total_events,
+            total_invocations=total_invocations,
+            total_storage_entries=total_storage_entries,
+        )
+
+        get_global_stats_response_200.additional_properties = d
+        return get_global_stats_response_200
+
+    @property
+    def additional_keys(self) -> list[str]:
+        return list(self.additional_properties.keys())
+
+    def __getitem__(self, key: str) -> Any:
+        return self.additional_properties[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self.additional_properties[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        del self.additional_properties[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.additional_properties

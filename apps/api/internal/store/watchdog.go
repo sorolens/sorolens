@@ -57,6 +57,13 @@ type WatchdogStats struct {
 	CriticalAlerts int64
 }
 
+// UptimeResult holds the computed uptime percentage for a given time window.
+type UptimeResult struct {
+	ContractID string  `json:"contract_id"`
+	Window     string  `json:"window"`
+	Uptime     float64 `json:"uptime_pct"`
+}
+
 // ---- interface -------------------------------------------------------------
 
 // ErrInvalidCursor is returned when a pagination cursor cannot be decoded
@@ -106,6 +113,12 @@ type WatchdogStore interface {
 	ListHealthChecks(ctx context.Context, contractID string, limit int) ([]HealthCheck, error)
 	ListAlerts(ctx context.Context, contractID, severity, network, cursor string, limit int) ([]ContractAlert, string, error)
 	GetWatchdogStats(ctx context.Context, network string) (WatchdogStats, error)
+
+	// GetContractUptime computes the uptime percentage for the given contract
+	// over the requested time window ("24h", "7d", or "30d"). Uptime is
+	// defined as the fraction of health-check timestamps within the window
+	// where the status was "Healthy".
+	GetContractUptime(ctx context.Context, contractID string, window string) (UptimeResult, error)
 }
 
 // ---- postgres implementation ----------------------------------------------
@@ -304,4 +317,50 @@ func (s *postgresStore) GetWatchdogStats(ctx context.Context, network string) (W
 	err := row.Scan(&s2.TotalMonitored, &s2.Healthy, &s2.Degraded, &s2.Unresponsive,
 		&s2.TotalAlerts, &s2.CriticalAlerts)
 	return s2, err
+}
+
+// windowDuration maps a string window token to a Postgres interval string.
+func windowDuration(window string) (string, bool) {
+	switch window {
+	case "24h":
+		return "24 hours", true
+	case "7d":
+		return "7 days", true
+	case "30d":
+		return "30 days", true
+	default:
+		return "", false
+	}
+}
+
+func (s *postgresStore) GetContractUptime(ctx context.Context, contractID string, window string) (UptimeResult, error) {
+	interval, ok := windowDuration(window)
+	if !ok {
+		return UptimeResult{}, fmt.Errorf("invalid window %q: must be 24h, 7d, or 30d", window)
+	}
+
+	row := s.pool.QueryRow(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE status = 'Healthy') AS healthy_count,
+			COUNT(*)                                    AS total_count
+		FROM health_checks
+		WHERE contract_id = $1
+		  AND timestamp >= NOW() - $2::interval`,
+		contractID, interval)
+
+	var healthyCount, totalCount int64
+	if err := row.Scan(&healthyCount, &totalCount); err != nil {
+		return UptimeResult{}, fmt.Errorf("get contract uptime: %w", err)
+	}
+
+	var uptimePct float64
+	if totalCount > 0 {
+		uptimePct = float64(healthyCount) / float64(totalCount) * 100.0
+	}
+
+	return UptimeResult{
+		ContractID: contractID,
+		Window:     window,
+		Uptime:     uptimePct,
+	}, nil
 }
