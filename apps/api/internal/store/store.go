@@ -130,6 +130,25 @@ type UserStore interface {
 	GetUserByGitHubID(ctx context.Context, githubID string) (User, error)
 }
 
+// ContractNoteStore is the data-access surface for markdown notes attached
+// to contracts. Read methods return ErrNotFound when a note does not exist.
+type ContractNoteStore interface {
+	// CreateContractNote inserts a note. The caller supplies the id and
+	// timestamps so the API can return the created row without a re-read.
+	CreateContractNote(ctx context.Context, n ContractNote) error
+
+	// ListContractNotes returns a contract's notes, newest first, capped at
+	// limit rows (limit <= 0 falls back to a sensible default).
+	ListContractNotes(ctx context.Context, contractID string, limit int) ([]ContractNote, error)
+
+	// GetContractNote returns the note with the given id, or ErrNotFound.
+	GetContractNote(ctx context.Context, id string) (ContractNote, error)
+
+	// DeleteContractNote deletes a note scoped to its contract. It returns
+	// ErrNotFound when no note with that id belongs to the contract.
+	DeleteContractNote(ctx context.Context, contractID, id string) error
+}
+
 // LabelStore persists public and workspace-scoped human-readable identifiers.
 type LabelStore interface {
 	UpsertLabel(ctx context.Context, label Label) error

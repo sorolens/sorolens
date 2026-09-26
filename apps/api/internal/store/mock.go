@@ -29,6 +29,7 @@ type MockStore struct {
 	failedEvents       map[int64]FailedEvent
 	failedEventSeq     int64
 	indexerCursors     map[string]uint32
+	contractNotes      []ContractNote
 	contractVersions   map[string][]ContractVersion
 	alertGroups        []AlertGroup
 	labels             []Label
@@ -94,6 +95,7 @@ func NewMockStore() *MockStore {
 		alertSubscriptions: make([]AlertSubscription, 0),
 		users:              make(map[string]User),
 		indexerCursors:     make(map[string]uint32),
+		contractNotes:      make([]ContractNote, 0),
 		contractVersions:   make(map[string][]ContractVersion),
 	}
 }
