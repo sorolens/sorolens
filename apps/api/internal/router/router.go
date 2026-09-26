@@ -143,6 +143,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Global invocation explorer: resource usage across every contract.
 		get("/invocations", h.ListAllInvocations)
 		get("/contracts/{id}/storage", h.ListStorageEntries)
+		get("/contracts/{id}/storage/diff", h.ContractStorageDiff)
 		get("/contracts/{id}/stats", h.ContractStats)
 		get("/contracts/{id}/forecast", h.ContractForecast)
 		get("/contracts/{id}/snapshot", h.ContractSnapshot)

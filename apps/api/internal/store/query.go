@@ -132,6 +132,9 @@ type QueryStore interface {
 	// the given ledger: for each key, the most recent version written at or
 	// before ledger whose TTL had not yet expired.
 	GetStorageSnapshot(ctx context.Context, contractID string, ledger uint32) ([]StorageEntry, error)
+	// GetStorageDiff returns the per-key storage changes between two ledgers:
+	// entries that were created, updated, deleted, or expired in between.
+	GetStorageDiff(ctx context.Context, contractID string, from, to uint32) (StorageDiff, error)
 	// LastEventAtOrBefore returns the most recent event with ledger <= ledger,
 	// or ErrNotFound when the contract has no such event.
 	LastEventAtOrBefore(ctx context.Context, contractID string, ledger uint32) (Event, error)
