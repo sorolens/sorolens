@@ -130,6 +130,9 @@ type fakeStore struct {
 	eventInsertErrs map[string]error
 	// eventInsertFailTimes maps event ID -> remaining failures before success.
 	eventInsertFailTimes map[string]int
+	// wasmBinaries is the content-addressed Wasm cache (issue #162):
+	// wasm hash -> raw bytes.
+	wasmBinaries map[string][]byte
 }
 
 func newFakeStore(contracts []Contract) *fakeStore {
@@ -138,6 +141,7 @@ func newFakeStore(contracts []Contract) *fakeStore {
 		syncStates:     make(map[string]SyncState),
 		hourly:         make(map[string][]HourlyActivity),
 		wasmHashes:     make(map[string]string),
+		wasmBinaries:   make(map[string][]byte),
 		healthInputs:   make(map[string]HealthInputs),
 		indexerCursors: make(map[string]uint32),
 	}
@@ -274,6 +278,24 @@ func (f *fakeStore) UpdateContractWasmHash(_ context.Context, contractID, wasmHa
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.wasmHashes[contractID] = wasmHash
+	return nil
+}
+
+// HasContractWasm and UpsertContractWasm back the content-addressed Wasm
+// cache that cacheWasmBinary fills (issue #162).
+func (f *fakeStore) HasContractWasm(_ context.Context, wasmHash string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.wasmBinaries[wasmHash]
+	return ok, nil
+}
+
+func (f *fakeStore) UpsertContractWasm(_ context.Context, wasmHash string, code []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.wasmBinaries[wasmHash]; !ok {
+		f.wasmBinaries[wasmHash] = append([]byte(nil), code...)
+	}
 	return nil
 }
 
@@ -836,6 +858,63 @@ func instanceKeyXDR(contractIDHex string) string {
 		panic(err)
 	}
 	return key
+}
+
+// buildCodeEntryXDR encodes a CONTRACT_CODE LedgerEntry carrying code, which
+// is what the RPC returns for wasm.ContractCodeKey(wasmHash).
+func buildCodeEntryXDR(wasmHashHex string, code []byte, lastModified uint32) string {
+	var out []byte
+	putU32 := func(v uint32) { out = binary.BigEndian.AppendUint32(out, v) }
+	putU32(lastModified)
+	putU32(7) // LedgerEntryType CONTRACT_CODE
+	putU32(0) // ContractCodeEntryExt V0
+	wasmHash, _ := hex.DecodeString(wasmHashHex)
+	out = append(out, wasmHash...)
+	putU32(uint32(len(code)))
+	out = append(out, code...)
+	out = append(out, make([]byte, (4-(len(code)%4))%4)...) // opaque padding
+	return base64.StdEncoding.EncodeToString(out)
+}
+
+// TestPoller_cachesWasmBinaryOnBaseline covers issue #162 at the indexer
+// boundary: the first poll that observes a contract's Wasm hash must fetch
+// the CONTRACT_CODE entry and persist the exact bytes.
+func TestPoller_cachesWasmBinaryOnBaseline(t *testing.T) {
+	t.Parallel()
+
+	contractID := "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
+	wasmHash := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	code := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+
+	instanceKey := instanceKeyXDR(contractID)
+	codeKey, err := wasm.ContractCodeKey(wasmHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	st := newFakeStore([]Contract{{ID: contractID, Status: "active"}})
+	st.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
+
+	rpc := &fakeRPC{
+		latestLedger: &LatestLedger{Sequence: 500000},
+		ledgerEntries: map[string]LedgerEntry{
+			instanceKey: {Key: instanceKey, XDR: buildInstanceEntryXDR(contractID, wasmHash, 501), LastModifiedLedgerSeq: 501},
+			codeKey:     {Key: codeKey, XDR: buildCodeEntryXDR(wasmHash, code, 501), LastModifiedLedgerSeq: 501},
+		},
+	}
+
+	p := New(rpc, st, newFakeRedis(), testConfig(), testLogger())
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("run once: %v", err)
+	}
+
+	got, ok := st.wasmBinaries[wasmHash]
+	if !ok {
+		t.Fatal("expected the wasm binary to be cached on baseline")
+	}
+	if string(got) != string(code) {
+		t.Errorf("cached code = %x, want %x", got, code)
+	}
 }
 
 func TestPoller_checksWasmHashBaseline(t *testing.T) {

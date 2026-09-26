@@ -49,7 +49,9 @@ export function CompareView({ initialIds, initialWindow }: CompareViewProps) {
     };
   }, []);
 
-  // Mirror the selection into the URL so /compare?ids=A,B is shareable.
+  // Mirror the selection into the URL so a shared /compare?ids=A,B link stays
+  // human-readable: URLSearchParams percent-encodes the comma separator to
+  // %2C, so swap it back after serialising. The page parses both identically.
   useEffect(() => {
     const params = new URLSearchParams();
     if (selectedIds.length > 0) params.set("ids", selectedIds.join(","));

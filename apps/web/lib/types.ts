@@ -138,19 +138,37 @@ export interface ContractSummary {
   wasm_hash: string | null;
   added_at: string;
   last_activity_at: string | null;
-  tags: string[];
-}
-
-/** Response from the contract tag endpoints. */
-export interface ContractTagsResponse {
-  contract_id: string;
-  tags: string[];
+  /** User-defined tags. Absent on optimistic rows built before a response. */
+  tags?: string[];
 }
 
 export interface ContractsListResponse {
   contracts: ContractSummary[];
   cursor: string | null;
   has_more: boolean;
+}
+
+/** Body of POST /api/v1/contracts/:id/tags — the contract's full tag list. */
+export interface ContractTagsResponse {
+  contract_id: string;
+  tags: string[];
+}
+
+// ---- bulk contract actions (#176) ------------------------------------------
+
+export type BatchContractsAction = "untrack" | "tag";
+
+export interface BatchContractsRequest {
+  ids: string[];
+  action: BatchContractsAction;
+  // args.label is the tag to apply for action "tag".
+  args?: { label?: string };
+}
+
+export interface BatchContractsResponse {
+  action: BatchContractsAction;
+  requested: number;
+  affected: number;
 }
 
 export interface TrackContractRequest {
@@ -429,4 +447,36 @@ export interface AlertSubscription {
 
 export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
+}
+
+// ---- source verification ---------------------------------------------------
+
+export interface VerificationDiagnostic {
+  code: string;
+  severity: string;
+  message: string;
+  hint?: string;
+}
+
+export interface ContractVerification {
+  contract_id: string;
+  status: string;
+  matched: boolean;
+  on_chain_hash?: string;
+  compiled_wasm_hash?: string;
+  source: {
+    kind: string;
+    ref?: string;
+    digest?: string;
+  };
+  toolchain: {
+    stellar?: string;
+    rustc?: string;
+    cargo?: string;
+  };
+  diagnostics: VerificationDiagnostic[];
+  build_log?: string;
+  submitted_at: string;
+  verified_at?: string;
+  updated_at: string;
 }

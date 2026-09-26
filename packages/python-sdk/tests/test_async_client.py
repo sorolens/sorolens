@@ -24,6 +24,7 @@ async def test_async_list_contracts(client):
     page = await client.contracts.list(limit=2)
     assert len(page.contracts) == 2
     assert page.contracts[0].network == "testnet"
+    assert page.contracts[0].tags == ["prod"]
 
 
 async def test_async_get_missing_contract_raises_not_found(client):

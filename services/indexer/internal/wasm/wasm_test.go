@@ -145,3 +145,82 @@ func TestWasmHashFromInstanceEntry_rejectsNonInstance(t *testing.T) {
 		})
 	}
 }
+
+// buildCodeEntry builds a valid CONTRACT_CODE LedgerEntry.xdr fixture holding
+// the given Wasm bytecode.
+func buildCodeEntry(code, hash []byte, lastModified uint32) []byte {
+	var out []byte
+	out = append(out, be32(lastModified)...)
+	out = append(out, be32(ledgerEntryTypeContractCode)...)
+	out = append(out, be32(0)...) // ContractCodeEntryExt V0
+	out = append(out, hash...)
+	out = append(out, be32(uint32(len(code)))...)
+	out = append(out, code...)
+	return out
+}
+
+func TestContractCodeKey(t *testing.T) {
+	hash := make([]byte, 32)
+	for i := range hash {
+		hash[i] = byte(i)
+	}
+
+	key, err := ContractCodeKey(hex.EncodeToString(hash))
+	if err != nil {
+		t.Fatalf("ContractCodeKey: %v", err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		t.Fatalf("decode key: %v", err)
+	}
+
+	want := append(be32(ledgerEntryTypeContractCode), hash...)
+	if !bytes.Equal(raw, want) {
+		t.Errorf("ContractCodeKey = %x, want %x", raw, want)
+	}
+}
+
+func TestContractCodeKeyRejectsBadHash(t *testing.T) {
+	if _, err := ContractCodeKey("not-hex"); err == nil {
+		t.Error("expected an error for non-hex input")
+	}
+	if _, err := ContractCodeKey(hex.EncodeToString(make([]byte, 31))); err == nil {
+		t.Error("expected an error for a 31-byte hash")
+	}
+}
+
+func TestWasmCodeFromCodeEntry(t *testing.T) {
+	code := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+	entry := buildCodeEntry(code, make([]byte, 32), 42)
+
+	got, ok := WasmCodeFromCodeEntry(base64.StdEncoding.EncodeToString(entry))
+	if !ok {
+		t.Fatal("expected ok=true for a well-formed code entry")
+	}
+	if !bytes.Equal(got, code) {
+		t.Errorf("code = %x, want %x", got, code)
+	}
+}
+
+func TestWasmCodeFromCodeEntryRejectsOtherEntryTypes(t *testing.T) {
+	// A contract-instance entry must not be read as code.
+	instance := buildInstanceEntry(make([]byte, 32), make([]byte, 32), 1)
+	if _, ok := WasmCodeFromCodeEntry(base64.StdEncoding.EncodeToString(instance)); ok {
+		t.Error("expected ok=false for a contract-data entry")
+	}
+
+	if _, ok := WasmCodeFromCodeEntry("!!!not base64!!!"); ok {
+		t.Error("expected ok=false for invalid base64")
+	}
+}
+
+func TestWasmCodeFromCodeEntryRejectsTruncatedCode(t *testing.T) {
+	code := []byte{0x00, 0x61, 0x73, 0x6d}
+	entry := buildCodeEntry(code, make([]byte, 32), 1)
+	// Lop off the last byte so the declared code length overruns the buffer.
+	truncated := entry[:len(entry)-1]
+
+	if _, ok := WasmCodeFromCodeEntry(base64.StdEncoding.EncodeToString(truncated)); ok {
+		t.Error("expected ok=false for a truncated code entry")
+	}
+}

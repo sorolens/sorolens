@@ -360,8 +360,14 @@ func renderReportPDF(m store.MonthlySLA, signature string) ([]byte, error) {
 			"  Signature    UNSIGNED — set REPORT_SIGNING_KEY to sign exports",
 		)
 	} else {
+		// REPORT_SIGNING_KEY is operator supplied, so never assume the digest
+		// is long enough to truncate: a short key would otherwise panic here.
+		preview := signature
+		if len(preview) > 16 {
+			preview = preview[:16] + "..."
+		}
 		lines = append(lines,
-			"  Signature    "+signature[:min(16, len(signature))]+"...",
+			"  Signature    "+preview,
 			"  (full value in the document Info dictionary and the",
 			"   X-Report-Signature response header)",
 		)

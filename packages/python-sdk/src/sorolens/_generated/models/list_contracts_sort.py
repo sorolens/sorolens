@@ -3,8 +3,10 @@ from enum import StrEnum
 
 class ListContractsSort(StrEnum):
     ADDED_AT = "added_at"
-    EVENTS_COUNT = "events_count"
-    LAST_ACTIVITY = "last_activity"
+    ID = "id"
+    LABEL = "label"
+    NETWORK = "network"
+    STATUS = "status"
 
     def __str__(self) -> str:
         return str(self.value)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -94,71 +95,43 @@ func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Con
 }
 
 // ListContracts returns a list of contracts matching the optional filters.
-//
-// Results are ordered by the requested sort column (see ContractFilters.Sort),
-// tie-broken by contract ID so the ordering is total. The cursor is the ID of
-// the last row from the previous page; because that row's sort value is read
-// from the same filtered set, keyset pagination is correct for every sort
-// column and direction.
+// The default order is by ID; a sort column and direction from
+// ContractFilters may override it. The cursor is the last-seen contract ID,
+// and id is always appended as a stable tie-breaker.
 func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-
-	sortCol, descending := NormalizeContractSort(f.Sort, f.Order)
-	dir, cmp := "ASC", ">"
-	if descending {
-		dir, cmp = "DESC", "<"
+	// Only whitelisted values (see contractSortColumns) reach the ORDER BY
+	// clause, so the human-supplied sort parameter cannot inject SQL.
+	sortCol, ok := contractSortColumns[f.Sort]
+	if !ok {
+		sortCol = "id"
 	}
-
-	// The value rows are ordered by, aliased as sort_value so the cursor
-	// comparison and ORDER BY share one expression. sortCol is chosen from a
-	// whitelist, never from client input directly, so the fmt.Sprintf
-	// interpolation is injection-safe.
-	var sortValue string
-	switch sortCol {
-	case ContractSortEventsCount:
-		sortValue = "(SELECT COUNT(*) FROM events ev WHERE ev.contract_id = c.id)"
-	case ContractSortLastActivity:
-		sortValue = "COALESCE(activity.last_activity_at, 'epoch'::timestamptz)"
-	default:
-		sortValue = "c.added_at"
+	dir := "ASC"
+	if strings.EqualFold(f.SortDir, "desc") {
+		dir = "DESC"
 	}
-
-	// last_activity_at is always returned (the dashboard renders it) and is
-	// reused as the ordering value when sorting by last_activity. The filtered
-	// set is built once and reused for the keyset cursor lookup below.
-	query := fmt.Sprintf(`
-		WITH filtered AS (
-			SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
-			       c.backfill_complete_at, c.status, c.added_at,
-			       activity.last_activity_at,
-			       %s AS sort_value
-			FROM contracts c
-			LEFT JOIN (
-				SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
-				FROM (
-					SELECT contract_id, ledger_closed_at FROM events
-					UNION ALL
-					SELECT contract_id, ledger_closed_at FROM invocations
-				) activity_rows
-				GROUP BY contract_id
-			) activity ON activity.contract_id = c.id
-			WHERE ($1 = '' OR c.network = $1)
-			  AND ($2 = '' OR c.status = $2)
-			  AND ($3 = '' OR EXISTS (
-			        SELECT 1 FROM contract_tags t
-			        WHERE t.contract_id = c.id AND t.tag = $3))
-		)
-		SELECT id, network, label, wasm_hash, created_at_ledger,
-		       backfill_complete_at, status, added_at, last_activity_at
-		FROM filtered
-		WHERE ($4 = '' OR (sort_value, id) %s (
-		        SELECT f2.sort_value, f2.id FROM filtered f2 WHERE f2.id = $4))
-		ORDER BY sort_value %s, id %s
-		LIMIT $5`, sortValue, cmp, dir, dir)
-
-	rows, err := s.pool.Query(ctx, query, f.Network, f.Status, f.Tag, cursor, limit+1)
+	// cursor is the last-seen contract ID (lexicographic order); id is always
+	// appended as a stable tie-breaker.
+	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
+		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at
+		FROM contracts c
+		LEFT JOIN (
+			SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
+			FROM (
+				SELECT contract_id, ledger_closed_at FROM events
+				UNION ALL
+				SELECT contract_id, ledger_closed_at FROM invocations
+			) activity_rows
+			GROUP BY contract_id
+		) activity ON activity.contract_id = c.id
+		WHERE ($1 = '' OR c.id > $1)
+		  AND ($2 = '' OR c.network = $2)
+		  AND ($3 = '' OR c.status = $3)
+		ORDER BY c.%s %s, c.id ASC
+		LIMIT $4`, sortCol, dir), cursor, f.Network, f.Status, limit+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -202,6 +175,61 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 		}
 	}
 	return out, nextCursor, nil
+}
+
+// contractChildTables lists the contract-scoped tables whose rows are removed
+// when a contract is untracked. The identifiers are hardcoded so they are safe
+// to interpolate; contract IDs are always bound as query parameters.
+var contractChildTables = []string{
+	"events",
+	"invocations",
+	"storage_entries",
+	"storage_entry_history",
+	"sync_state",
+	"contract_upgrades",
+	"contract_health_scores",
+	"performance_baselines",
+}
+
+// DeleteContracts permanently removes the given contracts and every indexed
+// row that references them, in a single transaction. Child rows go first so
+// the foreign keys on events/invocations/storage_entries/sync_state hold.
+func (s *postgresStore) DeleteContracts(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin untrack tx: %w", err)
+	}
+	defer tx.Rollback(ctx) // no-op once committed
+
+	for _, table := range contractChildTables {
+		if _, err := tx.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE contract_id = ANY($1)", table), ids); err != nil {
+			return 0, fmt.Errorf("delete %s for contracts: %w", table, err)
+		}
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM contracts WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return 0, fmt.Errorf("delete contracts: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit untrack tx: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// SetContractLabel sets the label (tag) on every given contract and returns the
+// number of contracts updated. Unknown IDs are ignored.
+func (s *postgresStore) SetContractLabel(ctx context.Context, ids []string, label string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE contracts SET label = $1 WHERE id = ANY($2)`, label, ids)
+	if err != nil {
+		return 0, fmt.Errorf("set contract label: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // ---- events ---------------------------------------------------------------

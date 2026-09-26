@@ -281,11 +281,25 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		// CSV export (#160): a bulk download over the same data as the v1
 		// event listing. v2 exposes the JSON listing; the flat file follows
 		// when the export is ported.
-		"GET /api/v1/contracts/{id}/events.csv":        true,
-		// Contract tags (#163): the write endpoints are not part of the v2
-		// surface yet, so v1 keeps them for now.
-		"POST /api/v1/contracts/{id}/tags":            true,
-		"DELETE /api/v1/contracts/{id}/tags/{tag}":    true,
+		"GET /api/v1/contracts/{id}/events.csv": true,
+		// SEP-48 interface spec (issue #134): an additive read over cached
+		// Wasm metadata with no v2 counterpart.
+		"GET /api/v1/contracts/{id}/spec": true,
+		// Contract tags (issue #459): contributor-scoped writes with no v2 twin.
+		"POST /api/v1/contracts/{id}/tags":         true,
+		"DELETE /api/v1/contracts/{id}/tags/{tag}": true,
+		// Wasm binary download (#162): raw application/wasm bytes, not a JSON
+		// document, so it has no meaning under the v2 envelope. The v2
+		// contract surface keeps its JSON twins only.
+		"GET /api/v1/contracts/{id}/wasm": true,
+		// Bulk untrack/tag (#176): a v1 write surface with no v2 twin yet.
+		"POST /api/v1/contracts/batch": true,
+		// Contract source verification (issue #263): submitting source runs a
+		// compiler and returns a verdict document, and the read endpoint serves
+		// the cached verdict. Both stay v1-only until they are given the v2
+		// envelope.
+		"POST /api/v1/contracts/{id}/verify":      true,
+		"GET /api/v1/contracts/{id}/verification": true,
 	}
 
 	var missing []string

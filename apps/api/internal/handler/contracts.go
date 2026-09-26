@@ -44,7 +44,9 @@ type contractListResponse struct {
 	Status         string     `json:"status"`
 	AddedAt        time.Time  `json:"added_at"`
 	LastActivityAt *time.Time `json:"last_activity_at"`
-	Tags           []string   `json:"tags"`
+	// Always present, empty when the contract carries no tags, so a client
+	// can render the list without a null check.
+	Tags []string `json:"tags"`
 }
 
 type eventResponse struct {
@@ -158,6 +160,21 @@ func networkParam(r *http.Request) (string, bool) {
 		return "", false
 	}
 	return v, true
+}
+
+// contractSortParam reads the optional ?sort= and ?dir= filters for the
+// contracts list. Unknown sort columns and directions are rejected so the
+// handler can respond 422 instead of silently falling back to the default.
+func contractSortParam(r *http.Request) (sort, dir string, ok bool) {
+	sort = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("sort")))
+	dir = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("dir")))
+	if sort != "" && !store.ValidContractSort(sort) {
+		return "", "", false
+	}
+	if dir != "" && dir != "asc" && dir != "desc" {
+		return "", "", false
+	}
+	return sort, dir, true
 }
 
 func contractFromStore(c store.Contract) contractResponse {
@@ -323,8 +340,7 @@ func (h *Handler) RegisterContract(w http.ResponseWriter, r *http.Request) {
 // ListContracts handles GET /api/v1/contracts.
 //
 // Query params: cursor, limit, network (testnet|mainnet|futurenet), status,
-// tag, sort (added_at|last_activity|events_count), order (asc|desc). Unknown
-// sort columns or orders are rejected with 400.
+// sort (id|label|network|status|added_at), dir (asc|desc).
 func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
 	if !ok {
@@ -336,22 +352,9 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
-	sortCol := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("sort")))
-	if sortCol == "" {
-		sortCol = store.ContractSortAddedAt
-	}
-	if !store.ValidContractSort(sortCol) {
-		writeError(w, r, http.StatusBadRequest, CodeInvalidInput,
-			"sort must be one of: added_at, last_activity, events_count")
-		return
-	}
-	order := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("order")))
-	if order == "" {
-		order = store.SortDesc
-	}
-	if !store.ValidContractOrder(order) {
-		writeError(w, r, http.StatusBadRequest, CodeInvalidInput,
-			"order must be one of: asc, desc")
+	sort, dir, ok := contractSortParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "sort must be one of: id, label, network, status, added_at; dir must be asc or desc")
 		return
 	}
 	limit := intQuery(r, "limit", 50)
@@ -364,8 +367,8 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		Network: network,
 		Status:  r.URL.Query().Get("status"),
 		Tag:     tag,
-		Sort:    sortCol,
-		Order:   order,
+		Sort:    sort,
+		SortDir: dir,
 	}
 
 	contracts, nextRaw, err := h.Store.ListContracts(r.Context(), rawCursor, limit, f)

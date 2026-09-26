@@ -1,6 +1,8 @@
 import type {
   AlertsResponse,
   AlertSubscription,
+  BatchContractsRequest,
+  BatchContractsResponse,
   ContractDetail,
   CompareResponse,
   ContractSnapshot,
@@ -32,6 +34,7 @@ import type {
   WatchlistResponse,
   WatchlistStatusResponse,
   HealthScoreResponse,
+  ContractVerification,
   LabelResolution,
 } from "./types";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
@@ -110,8 +113,8 @@ export function listContracts(params?: {
   network?: string;
   status?: string;
   tag?: string;
-  sort?: "added_at" | "last_activity" | "events_count";
-  order?: "asc" | "desc";
+  sort?: string;
+  dir?: "asc" | "desc";
 }): Promise<ContractsListResponse> {
   const search = new URLSearchParams();
   if (params?.cursor) search.set("cursor", params.cursor);
@@ -120,7 +123,7 @@ export function listContracts(params?: {
   if (params?.status) search.set("status", params.status);
   if (params?.tag) search.set("tag", params.tag);
   if (params?.sort) search.set("sort", params.sort);
-  if (params?.order) search.set("order", params.order);
+  if (params?.dir) search.set("dir", params.dir);
   const qs = search.toString();
   return fetchJson<ContractsListResponse>(
     `${API_URL}/api/v1/contracts${qs ? "?" + qs : ""}`
@@ -142,8 +145,65 @@ export function trackContract(
   });
 }
 
+// batchContracts applies one bulk action (untrack | tag) to many contracts.
+// Like trackContract it forwards the browser identity so the API's RBAC layer
+// can require the contributor role.
+export function batchContracts(
+  req: BatchContractsRequest,
+  userId?: string
+): Promise<BatchContractsResponse> {
+  const headers: Record<string, string> = {};
+  if (userId) headers["X-User-ID"] = userId;
+  return fetchJson<BatchContractsResponse>(
+    `${API_URL}/api/v1/contracts/batch`,
+    {
+      method: "POST",
+      body: JSON.stringify(req),
+      headers,
+    }
+  );
+}
+
 export function getContract(id: string): Promise<ContractDetail> {
   return fetchJson<ContractDetail>(`${API_URL}/api/v1/contracts/${id}`);
+}
+
+// ---- contract tags (issue #459) ---------------------------------------------
+
+/**
+ * Adds a user-defined tag. Requires a contributor identity, so the browser
+ * identity is forwarded the same way the watchlist and registration calls do.
+ * Adding a tag the contract already carries is a no-op, and the response is
+ * the contract's full, sorted tag list.
+ */
+export function addContractTag(
+  id: string,
+  tag: string,
+  userId: string
+): Promise<ContractTagsResponse> {
+  return fetchJson<ContractTagsResponse>(
+    `${API_URL}/api/v1/contracts/${id}/tags`,
+    {
+      method: "POST",
+      body: JSON.stringify({ tag }),
+      headers: { "X-User-ID": userId },
+    }
+  );
+}
+
+/** Removes a tag. Removing one the contract does not carry is a no-op. */
+export function removeContractTag(
+  id: string,
+  tag: string,
+  userId: string
+): Promise<void> {
+  return fetchJson<void>(
+    `${API_URL}/api/v1/contracts/${id}/tags/${encodeURIComponent(tag)}`,
+    {
+      method: "DELETE",
+      headers: { "X-User-ID": userId },
+    }
+  );
 }
 
 /**
@@ -383,6 +443,20 @@ export function getContractHealthScore(
 ): Promise<HealthScoreResponse> {
   return fetchJson<HealthScoreResponse>(
     `${API_URL}/api/v1/contracts/${id}/health-score`
+  );
+}
+
+// ---- source verification ---------------------------------------------------
+
+/**
+ * Fetch the cached source-verification verdict for a contract. Returns a 404
+ * ApiError when the contract has never been submitted for verification.
+ */
+export function getContractVerification(
+  id: string
+): Promise<ContractVerification> {
+  return fetchJson<ContractVerification>(
+    `${API_URL}/api/v1/contracts/${id}/verification`
   );
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/router"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
+	"github.com/sorolens/sorolens/apps/api/internal/verify"
 )
 
 func main() {
@@ -65,12 +66,22 @@ func main() {
 	redisClient := redis.NewClient(redisOpts)
 	defer redisClient.Close()
 
+	// Source verification runs builds on the API host, so it is only wired in
+	// the long-running server (not the Vercel serverless entrypoint) and is
+	// bounded by VERIFY_TIMEOUT. See internal/verify for the isolation caveats.
+	verifier := verify.NewService(verify.Options{
+		BuildCommand: cfg.VerifyBuildCommand,
+		Timeout:      cfg.VerifyTimeout,
+		WorkspaceDir: cfg.VerifyWorkspaceDir,
+	})
+
 	h := &handler.Handler{
 		Store:       store.NewFullStore(pool),
 		DB:          &dbPinger{pool: pool},
 		Redis:       &redisPinger{client: redisClient},
 		RedisClient: &realRedisClient{client: redisClient},
 		Logger:      logger,
+		Verifier:    verifier,
 
 		Cache:              &middleware.RedisCache{Client: redisClient},
 		CacheTTL:           cfg.CacheTTL,

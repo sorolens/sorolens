@@ -27,12 +27,16 @@ def test_list_contracts(client):
     assert page.next_cursor == "eyJvZmZzZXQiOjJ9"
     assert [contract.label for contract in page.contracts] == ["counter", "watchdog"]
     assert page.contracts[1].backfill_complete_at is None
+    # Tags ride along on the list response; an untagged contract reports [].
+    assert page.contracts[0].tags == ["prod"]
+    assert page.contracts[1].tags == []
 
 
 def test_get_contract(client):
     contract = client.contracts.get(CONTRACT_ID)
     assert contract.id == CONTRACT_ID
     assert contract.status.value == "active"
+    assert contract.tags == ["prod"]
 
 
 def test_get_missing_contract_raises_not_found(client):

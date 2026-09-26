@@ -392,6 +392,12 @@ func (s *stubStore) InsertContractUpgrade(_ context.Context, _ poller.ContractUp
 func (s *stubStore) UpdateContractWasmHash(_ context.Context, _ string, _ string) error {
 	return nil
 }
+func (s *stubStore) HasContractWasm(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+func (s *stubStore) UpsertContractWasm(_ context.Context, _ string, _ []byte) error {
+	return nil
+}
 func (s *stubStore) ContractHealthInputs(_ context.Context, _ string) (poller.HealthInputs, error) {
 	return poller.HealthInputs{}, nil
 }

@@ -306,7 +306,7 @@ keyed by the chi route pattern (`internal/middleware/scopes.go`):
 
 | Scope | Grants |
 |---|---|
-| `read:contracts` | contract, event, invocation, storage, stats, and snapshot reads |
+| `read:contracts` | contract, event, invocation, storage, stats, snapshot, and interface-spec reads |
 | `write:contracts` | `POST /api/v1/contracts` and contract tag writes |
 | `read:watchdog` | all `/api/v1/watchdog/*` reads |
 | `admin:*` | everything, including API key management |
@@ -355,7 +355,9 @@ Register a contract for tracking.
 List all tracked contracts.
 
 **Query params:** `network` (filter by network), `status` (filter by status),
-`tag` (show only contracts carrying this tag).
+`tag` (show only contracts carrying this tag), `sort` (sort column: `id`, `label`,
+`network`, `status`, or `added_at`; defaults to `id`), `dir` (`asc` or `desc`,
+default `asc`). Values outside those sets are rejected with `422`.
 
 **Response `200`:**
 ```json
@@ -373,6 +375,38 @@ List all tracked contracts.
   ]
 }
 ```
+
+---
+
+#### `POST /api/v1/contracts/batch`
+
+Apply one action to many contracts at once. Requires the `write:contracts`
+scope and at least the `contributor` role.
+
+**Request body:**
+```json
+{
+  "ids": ["CDLZFC3S...", "GABC..."],
+  "action": "untrack",
+  "args": {}
+}
+```
+
+| `action` | `args` | Effect |
+|---|---|---|
+| `untrack` | (none) | Permanently deletes the contracts together with every indexed row that references them: events, invocations, storage entries and history, sync state, upgrades, health scores, and performance baselines. Irreversible, so the dashboard confirms before sending. |
+| `tag` | `{ "label": "payments" }` | Sets `label` on each contract, replacing any existing alias. |
+
+A request may target at most 100 distinct IDs; unknown IDs are ignored
+rather than failing the whole batch.
+
+**Response `200`:**
+```json
+{ "action": "untrack", "requested": 2, "affected": 2 }
+```
+
+**Responses:** `200`, `401`, `403`, `415`, `422` (bad body, unknown action, blank
+label), `500`.
 
 ---
 
@@ -408,6 +442,53 @@ Get a single contract's metadata and sync state.
 Stop tracking a contract. Data is retained but the indexer stops polling.
 
 **Response:** `204 No Content`.
+
+---
+
+#### `GET /api/v1/contracts/:id/spec`
+
+Returns the contract's SEP-48 interface: a JSON tree of the functions it
+exports, with their argument and return types.
+
+The spec is extracted from the `contractspecv0` custom section of the
+contract's Wasm the first time the indexer indexes it, and cached in the
+`contract_specs` table. Type nodes are one of the scalar kinds
+(`address`, `u32`, `i128`, `string`, ...) or a composite carrying its children:
+`vec` and `option` use `elem`, `map` uses `key` and `value`, `result` uses `ok`
+and `err`, `tuple` uses `tuple`, and `bytes_n` carries `n`. A reference to a
+user-defined type is `{"kind":"udt","name":"..."}`.
+
+**Response `200`:**
+```json
+{
+  "contract_id": "CDLZFC3S...",
+  "wasm_hash": "a1b2c3d4...",
+  "parsed_at": "2026-07-01T10:06:00Z",
+  "spec": {
+    "functions": [
+      {
+        "name": "transfer",
+        "doc": "Transfer tokens between two accounts",
+        "inputs": [
+          { "name": "from", "type": { "kind": "address" } },
+          { "name": "to", "type": { "kind": "address" } },
+          { "name": "amount", "type": { "kind": "i128" } }
+        ],
+        "outputs": [{ "kind": "void" }]
+      }
+    ]
+  }
+}
+```
+
+**Responses:**
+- `200`: the parsed interface.
+- `404`: the contract is not tracked (message: "contract not found"), or it is
+tracked but its spec has not been parsed yet (message: "no parsed interface
+spec is available for this contract yet"). A contract whose Wasm carries no
+`contractspecv0` section — for example one not built with `#[contractimpl]` —
+never gets a row, so it answers `404` indefinitely; the indexer logs a warning
+rather than failing the indexing pass.
 
 ---
 

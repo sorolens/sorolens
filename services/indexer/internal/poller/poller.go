@@ -484,6 +484,11 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		)
 	}
 
+	// Cache the contract's SEP-48 interface spec on first index (issue #130).
+	// Best-effort: every failure mode logs a warning inside, so this never
+	// blocks event indexing.
+	p.cacheContractSpec(ctx, rpc, contract)
+
 	latest, err := rpc.GetLatestLedger(ctx)
 	if err != nil {
 		return fmt.Errorf("get latest ledger: %w", err)
@@ -662,10 +667,26 @@ func (p *Poller) checkWasmHash(ctx context.Context, rpc RPCClient, contract Cont
 		if err := p.store.UpdateContractWasmHash(ctx, contract.ID, currentHash); err != nil {
 			return fmt.Errorf("baseline contract wasm hash: %w", err)
 		}
+		if err := p.cacheWasmBinary(ctx, rpc, currentHash); err != nil {
+			p.log.Warn("wasm binary cache failed (continuing)",
+				"contract_id", contract.ID,
+				"wasm_hash", currentHash,
+				"err", err,
+			)
+		}
 		return nil
 	}
 
 	if currentHash == contract.WasmHash {
+		// Hash unchanged — still make sure the binary is cached, so
+		// contracts tracked before this feature existed get backfilled.
+		if err := p.cacheWasmBinary(ctx, rpc, currentHash); err != nil {
+			p.log.Warn("wasm binary cache failed (continuing)",
+				"contract_id", contract.ID,
+				"wasm_hash", currentHash,
+				"err", err,
+			)
+		}
 		return nil // unchanged
 	}
 
@@ -682,11 +703,65 @@ func (p *Poller) checkWasmHash(ctx context.Context, rpc RPCClient, contract Cont
 	if err := p.store.UpdateContractWasmHash(ctx, contract.ID, currentHash); err != nil {
 		return fmt.Errorf("update contract wasm hash: %w", err)
 	}
+	if err := p.cacheWasmBinary(ctx, rpc, currentHash); err != nil {
+		p.log.Warn("wasm binary cache failed after upgrade (continuing)",
+			"contract_id", contract.ID,
+			"wasm_hash", currentHash,
+			"err", err,
+		)
+	}
 
 	p.log.Info("contract code upgraded",
 		"contract_id", contract.ID,
 		"from_hash", contract.WasmHash,
 		"to_hash", currentHash,
+	)
+	return nil
+}
+
+// cacheWasmBinary fetches the CONTRACT_CODE ledger entry for wasmHash and
+// stores the raw bytes in the content-addressed Wasm cache (issue #162).
+//
+// Best-effort by design: a missing entry (ledger retention, or a race with
+// the ledger closing) or a decode failure is reported to the caller, which
+// logs it and retries on the next poll. Event indexing is never blocked by a
+// Wasm fetch problem.
+func (p *Poller) cacheWasmBinary(ctx context.Context, rpc RPCClient, wasmHash string) error {
+	cached, err := p.store.HasContractWasm(ctx, wasmHash)
+	if err != nil {
+		return fmt.Errorf("has contract wasm: %w", err)
+	}
+	if cached {
+		return nil
+	}
+
+	key, err := wasm.ContractCodeKey(wasmHash)
+	if err != nil {
+		return fmt.Errorf("build code key: %w", err)
+	}
+	res, err := rpc.GetLedgerEntries(ctx, []string{key})
+	if err != nil {
+		return fmt.Errorf("get code entry: %w", err)
+	}
+
+	var code []byte
+	for _, e := range res.Entries {
+		if c, ok := wasm.WasmCodeFromCodeEntry(e.XDR); ok {
+			code = c
+			break
+		}
+	}
+	if len(code) == 0 {
+		// Code entry not readable yet; retry on the next poll.
+		return nil
+	}
+	if err := p.store.UpsertContractWasm(ctx, wasmHash, code); err != nil {
+		return fmt.Errorf("upsert contract wasm: %w", err)
+	}
+
+	p.log.Info("cached contract wasm binary",
+		"contract_id_hash", wasmHash,
+		"size_bytes", len(code),
 	)
 	return nil
 }
