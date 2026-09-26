@@ -57,6 +57,37 @@ export interface InvocationsResponse {
   has_more: boolean;
 }
 
+/**
+ * One frame of a transaction's cross-contract call tree, as returned by
+ * `GET /api/v1/invocations/{tx_hash}/trace`. `span_id` is a deterministic
+ * call-path string ("0", "0.0", "0.1", "0.0.0"); the root always has "0" and
+ * is backed by the invocations row, every other node by a call_edges row.
+ */
+export interface TraceNode {
+  span_id: string;
+  parent_span_id?: string;
+  contract_id?: string;
+  function_name?: string;
+  cpu: number;
+  mem: number;
+  fee_share: number;
+  depth: number;
+  children: TraceNode[];
+}
+
+export interface TraceResponse {
+  tx_hash: string;
+  status?: string;
+  network?: string;
+  ledger: number;
+  root: TraceNode;
+  edge_count: number;
+  /** False when the transaction recorded no cross-contract calls. */
+  has_edges: boolean;
+  /** True when the indexer's caps dropped frames from the tree. */
+  truncated: boolean;
+}
+
 export interface StorageEntry {
   key_xdr: string;
   key_decoded: string | null;
@@ -116,4 +147,162 @@ export interface TrackContractRequest {
 }
 
 export type TimeWindow = "24h" | "7d" | "30d" | "all";
+
+// ---- watchdog --------------------------------------------------------------
+
+export type HealthStatus = "Healthy" | "Degraded" | "Unresponsive" | string;
+export type AlertSeverity = "Info" | "Warning" | "Critical";
+
+export interface MonitoredContract {
+  contract_id: string;
+  network: string;
+  name: string;
+  owner: string;
+  status: HealthStatus;
+  last_check: string | null;
+  check_interval: number;
+  registered_at: string;
+  updated_at: string;
+}
+
+export interface MonitoredContractsResponse {
+  contracts: MonitoredContract[];
+  next_cursor: string;
+}
+
+export interface HealthCheck {
+  contract_id: string;
+  status: HealthStatus;
+  metadata: string;
+  ledger: number;
+  tx_hash: string;
+  timestamp: string;
+}
+
+export interface HealthChecksResponse {
+  health_checks: HealthCheck[];
+}
+
+export interface ContractAlert {
+  contract_id: string;
+  severity: AlertSeverity;
+  message: string;
+  ledger: number;
+  tx_hash: string;
+  timestamp: string;
+}
+
+export interface AlertsResponse {
+  alerts: ContractAlert[];
+}
+
+export interface WatchdogStats {
+  total_monitored: number;
+  healthy: number;
+  degraded: number;
+  unresponsive: number;
+  total_alerts: number;
+  critical_alerts: number;
+}
+
+// ---- snapshot / replay ------------------------------------------------------
+
+export interface SnapshotStorageEntry extends StorageEntry {
+  network: string;
+}
+
+export interface HealthScoreResponse {
+  contract_id: string;
+  score: number;
+  components: {
+    uptime: number;
+    error_rate: number;
+    performance: number;
+    storage_ttl: number;
+  };
+  computed_at: string;
+}
+
+export interface ContractSnapshot {
+  contract_id: string;
+  network: string;
+  ledger: number;
+  first_tracked_ledger: number;
+  storage: SnapshotStorageEntry[];
+  last_event: {
+    id: string;
+    ledger: number;
+    tx_hash: string;
+    type: string;
+    ledger_closed_at: string;
+    value_decoded: unknown;
+    value_xdr: string;
+  } | null;
+}
+
+export interface GlobalStats {
+  tracked_contracts: number;
+  total_events: number;
+  total_invocations: number;
+  total_storage_entries: number;
+}
+
+export interface WatchlistItem {
+  contract_id: string;
+  added_at: string;
+}
+
+export interface WatchlistResponse {
+  items: WatchlistItem[];
+}
+
+export interface WatchlistStatusResponse {
+  in_watchlist: boolean;
+}
+
+// ---- comparison ------------------------------------------------------------
+
+export interface CompareStats {
+  event_count_24h: number;
+  event_count_7d: number;
+  invocation_count: number;
+  avg_cpu: number;
+  avg_fee: number;
+  last_activity: string | null;
+}
+
+export interface ComparisonData {
+  contract: ContractSummary;
+  stats: CompareStats;
+  health_status: string;
+}
+
+export interface ContractStatsApiResponse {
+  event_count: number;
+  invocation_count: number;
+  storage_count: number;
+  last_synced_ledger: number;
+  window_event_count: number;
+  window_invocation_count: number;
+  window_duration: string;
+}
+
+export interface CreateSubscriptionRequest {
+  contract_id: string;
+  webhook_url: string;
+  severity_filter?: string;
+}
+
+export interface AlertSubscription {
+  id: string;
+  contract_id: string;
+  webhook_url: string;
+  severity_filter: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubscriptionsResponse {
+  subscriptions: AlertSubscription[];
+}
 

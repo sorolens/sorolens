@@ -1,7 +1,7 @@
 package main
 
-import "fmt"
+import "github.com/sorolens/sorolens/cli/cmd"
 
 func main() {
-	fmt.Println("sorolens/cli")
+	cmd.Execute()
 }

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Sorolens logo">
+  <title>Sorolens</title>
+  <ellipse cx="32" cy="32" rx="28" ry="16" stroke="#06B6D4" stroke-width="3.5"/>
+  <polyline points="10,32 20,32 24,20 28,44 32,20 36,44 40,32 54,32"
+    stroke="#06B6D4" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

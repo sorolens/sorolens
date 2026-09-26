@@ -20,6 +20,10 @@ target/
 *.exe
 *.test
 sorolens-bin
+**/coverage.out
+/cli/cli
+/services/indexer/indexer
 
 # Misc
 .DS_Store
+.env

@@ -1,0 +1,40 @@
+{
+  "name": "@sorolens/discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sorolens contributor Discord bot: /link GitHub->Discord and auto-assign Contributor / Core Contributor roles on PR merge.",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "dotenv -e .env -- tsx watch src/index.ts",
+    "register": "dotenv -e .env -- tsx src/register-commands.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.0.0",
+    "@octokit/webhooks": "^13.4.0",
+    "better-sqlite3": "^11.3.0",
+    "discord.js": "^14.16.0",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.5.0",
+    "dotenv-cli": "^7.4.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@11.10.0": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true
+  }
+}

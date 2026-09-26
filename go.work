@@ -3,5 +3,6 @@ go 1.26
 use (
 	./apps/api
 	./cli
+	./packages/go-client
 	./services/indexer
 )

@@ -216,6 +216,48 @@ CREATE INDEX idx_invocations_ledger_closed_at ON invocations (ledger_closed_at D
 CREATE INDEX idx_invocations_status ON invocations (contract_id, status);
 
 -- ============================================================
+-- call_edges
+-- Cross-contract call graph (migration 000009). One row per
+-- parent -> child invocation edge inside a single transaction,
+-- materialised by the indexer from the Soroban host diagnostic
+-- event stream (fn_call / fn_return / core_metrics).
+--
+-- The transaction's ROOT invocation is deliberately not duplicated
+-- here: it already lives in `invocations` (tx_hash PRIMARY KEY).
+-- call_edges therefore only describes the tree *below* the root.
+--
+-- span ids are deterministic call-path strings built by the
+-- indexer ("0" is the root, then "0.0", "0.1", "0.0.0", ...), so
+-- re-indexing a transaction is idempotent and the whole tree can be
+-- rebuilt from a single ordered read of (tx_hash, child_span_id).
+-- ============================================================
+CREATE TABLE call_edges (
+    tx_hash            TEXT        NOT NULL,
+    parent_span_id     TEXT        NOT NULL,          -- span id of the caller ("0" is the root)
+    child_span_id      TEXT        NOT NULL,          -- span id of the callee; encodes call depth
+    callee_contract_id TEXT,                          -- called contract, null for a host function
+    function_name      TEXT,
+    cpu                BIGINT      NOT NULL DEFAULT 0, -- from core_metrics, 0 when not emitted
+    mem                BIGINT      NOT NULL DEFAULT 0, -- from core_metrics, 0 when not emitted
+    fee_share          BIGINT      NOT NULL DEFAULT 0, -- share of the root resource fee, stroops
+    depth              INTEGER     NOT NULL DEFAULT 1, -- 1 for a direct child of the root
+    network            TEXT        NOT NULL DEFAULT 'testnet',
+    ledger             BIGINT,
+    ledger_closed_at   TIMESTAMPTZ,
+    inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (tx_hash, child_span_id)
+);
+
+-- Primary query pattern: every edge of one transaction for the trace endpoint.
+CREATE INDEX idx_call_edges_tx_hash ON call_edges (tx_hash, child_span_id);
+
+-- Reverse view: "which contracts call this one?".
+CREATE INDEX idx_call_edges_callee ON call_edges (callee_contract_id);
+
+-- Backfill driver: transactions whose call graph is not materialised yet.
+CREATE INDEX idx_call_edges_ledger ON call_edges (ledger DESC);
+
+-- ============================================================
 -- storage_entries
 -- Snapshot of current contract storage state.
 -- Updated on every indexer run for all active contracts.
@@ -253,6 +295,72 @@ CREATE TABLE sync_state (
     error_message  TEXT,                               -- last error, if any
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ============================================================
+-- storage_entry_history
+-- Append-only history of storage entries (migration 000005). Every write
+-- to storage_entries also appends a versioned row here, so the snapshot/
+-- replay endpoint can answer "what was live at ledger N?".
+-- ============================================================
+CREATE TABLE storage_entry_history (
+    id                   BIGSERIAL   PRIMARY KEY,
+    contract_id          TEXT        NOT NULL,
+    key_xdr              TEXT        NOT NULL,
+    key_decoded          JSONB,
+    value_xdr            TEXT,
+    value_decoded        JSONB,
+    durability           TEXT        NOT NULL,
+    live_until_ledger    BIGINT,
+    last_modified_ledger BIGINT,
+    status               TEXT        NOT NULL DEFAULT 'live',
+    recorded_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (contract_id, key_xdr, last_modified_ledger)
+);
+
+CREATE INDEX idx_storage_history_lookup
+    ON storage_entry_history (contract_id, key_xdr, last_modified_ledger DESC);
+
+-- ============================================================
+-- api_keys
+-- Scoped API credentials (migration 000004). Only the SHA-256 hash of the
+-- plaintext token is stored; the token is shown once at creation.
+-- ============================================================
+CREATE TABLE api_keys (
+    id           TEXT        PRIMARY KEY,
+    name         TEXT        NOT NULL,
+    key_prefix   TEXT        NOT NULL,
+    key_hash     TEXT        NOT NULL UNIQUE,
+    scopes       TEXT[]      NOT NULL DEFAULT '{}',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ,
+    revoked_at   TIMESTAMPTZ
+);
+
+CREATE INDEX idx_api_keys_hash ON api_keys (key_hash) WHERE revoked_at IS NULL;
+
+-- ============================================================
+-- multi-network (migration 000003)
+-- events, invocations, storage_entries, and monitored_contracts gained a
+-- `network` column defaulting to 'testnet', so the indexer and API can track
+-- testnet, mainnet, and futurenet simultaneously. Existing rows are
+-- backfilled to 'testnet' for backward compatibility.
+-- ============================================================
+
+-- ============================================================
+-- webhook signing (migration 000010)
+-- alert_subscriptions gained the HMAC-SHA256 signing material for outgoing
+-- watchdog deliveries (see docs/webhooks.md). signing_secret is the
+-- recoverable "whsec_..." key the delivery worker signs with; HMAC needs the
+-- raw key, so (unlike api_keys.key_hash) it cannot be stored as a one-way
+-- hash alone. signing_secret_hash is its SHA-256 digest, kept alongside it as
+-- the auditable digest. signing_secret_created_at / _rotated_at drive the
+-- 5-minute window in which the reveal endpoint returns the key.
+-- ============================================================
+ALTER TABLE alert_subscriptions
+    ADD COLUMN signing_secret            TEXT        NOT NULL,
+    ADD COLUMN signing_secret_hash       TEXT        NOT NULL,
+    ADD COLUMN signing_secret_created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ADD COLUMN signing_secret_rotated_at TIMESTAMPTZ;
 ```
 
 ### Index justifications
@@ -266,6 +374,9 @@ CREATE TABLE sync_state (
 | `idx_invocations_contract_ledger` | Same pattern as events; the invocation list is paginated with newest-first ordering. |
 | `idx_invocations_ledger_closed_at` | Time-range filter for resource-usage charts. |
 | `idx_invocations_status` | Supports the "show only failures" filter on the invocations list. |
+| `idx_call_edges_tx_hash` | The trace endpoint reads every edge of one transaction, parent before child; matches the primary key and its ordering. |
+| `idx_call_edges_callee` | Powers the reverse "which contracts call this one?" lookup for the cross-contract graph. |
+| `idx_call_edges_ledger` | Drives the historical call-graph backfill, which walks transactions oldest-first. |
 | `idx_storage_live_until` | The TTL health view needs to order by `live_until_ledger ASC` for a given contract; partial index on `status = 'live'` avoids scanning archived rows. |
 | `idx_storage_durability` | Supports filtering the storage view by entry type. |
 
@@ -280,6 +391,27 @@ All routes return `Content-Type: application/json`. Errors follow:
 ```
 
 Cursor pagination uses an opaque `cursor` token (base64 of `{ledger}:{id}`) rather than offset. This is safe against inserts during pagination and aligns with how the RPC itself paginates.
+
+#### Authentication and scopes
+
+Every list endpoint accepts an optional `?network=testnet|mainnet|futurenet`
+filter (omitted or `all` means every network).
+
+Requests may carry a scoped API key via `Authorization: Bearer <token>` or
+`X-API-Key: <token>`. Scope enforcement is driven by a route metadata table
+keyed by the chi route pattern (`internal/middleware/scopes.go`):
+
+| Scope | Grants |
+|---|---|
+| `read:contracts` | contract, event, invocation, storage, stats, and snapshot reads |
+| `write:contracts` | `POST /api/v1/contracts` |
+| `read:watchdog` | all `/api/v1/watchdog/*` reads |
+| `admin:*` | everything, including API key management |
+
+A presented key that lacks the required scope receives `403` with
+`{"error":"missing scope","required":"<scope>"}`. Unknown or revoked keys
+receive `401`. Requests that present no credential keep the public v0.1 read
+surface open; API key management always requires a credential.
 
 ---
 
@@ -465,6 +597,61 @@ Full detail for a single invocation, including all associated events.
 
 ---
 
+#### `GET /api/v1/invocations/:tx_hash/trace`
+
+Cross-contract call tree for a transaction, materialised by the indexer into
+`call_edges`. The tree is rooted at the transaction's `invocations` row (span id
+`"0"`) and each child node is a row from `call_edges`. A transaction with no
+recorded cross-contract calls still returns its root with `has_edges: false`,
+which is the common case on RPC nodes that do not enable diagnostic events.
+
+Requires the `read:contracts` scope.
+
+**Path params:** `tx_hash` - 64 lowercase hex characters (case is normalised).
+
+**Response `200`:**
+```json
+{
+  "tx_hash": "32f7e5c3...",
+  "status": "SUCCESS",
+  "network": "testnet",
+  "ledger": 490252,
+  "root": {
+    "span_id": "0",
+    "contract_id": "CABC...",
+    "function_name": "swap",
+    "cpu": 4883530,
+    "mem": 2298162,
+    "fee_share": 123456,
+    "depth": 0,
+    "children": [
+      {
+        "span_id": "0.0",
+        "parent_span_id": "0",
+        "contract_id": "CDEF...",
+        "function_name": "transfer",
+        "cpu": 120000,
+        "mem": 40000,
+        "fee_share": 74000,
+        "depth": 1,
+        "children": []
+      }
+    ]
+  },
+  "edge_count": 1,
+  "has_edges": true,
+  "truncated": false
+}
+```
+
+`truncated` is `true` when the indexer's depth/edge caps dropped frames, or when
+an edge referenced a parent that was not in the result set (the orphan is still
+returned, hung off the root, so no data is lost).
+
+**Responses:** `200`, `400 Bad Request` (malformed hash), `404 Not Found`.
+
+---
+
 ### 4.4 Storage Entries
 
 #### `GET /api/v1/contracts/:id/storage`
@@ -497,7 +684,42 @@ Paginated storage entry list.
 
 ---
 
-### 4.5 Stats
+### 4.5 Snapshot / replay
+
+#### `GET /api/v1/contracts/:id/snapshot?ledger=N`
+
+Replays the contract's storage state and last known event as they were at
+ledger `N`. Used by the ledger scrubber on the contract detail page.
+
+**Responses:**
+- `200`: `{ contract_id, network, ledger, first_tracked_ledger, storage, last_event }`.
+- `404`: contract is unknown, or `N` precedes the first ledger the contract
+  was tracked at (the message names that ledger).
+- `422`: `ledger` is missing or not a positive integer.
+
+---
+
+### 4.6 API keys
+
+Scoped credentials are managed under `/api/v1/api-keys` and require the
+`admin:*` scope.
+
+#### `POST /api/v1/api-keys`
+
+Create a key. Body: `{ "name": string, "scopes": string[] }`. Returns `201`
+with the plaintext `key` exactly once; only its SHA-256 hash is persisted.
+
+#### `GET /api/v1/api-keys`
+
+List key metadata (never the token).
+
+#### `DELETE /api/v1/api-keys/:id`
+
+Revoke a key. Returns `204`.
+
+---
+
+### 4.7 Stats
 
 #### `GET /api/v1/stats/global`
 
@@ -518,6 +740,87 @@ Network-wide summary across all tracked contracts.
   "indexer_last_run_at": "2026-07-26T10:00:01Z"
 }
 ```
+
+---
+
+### 4.8 Version
+
+#### `GET /api/v1/version`
+
+Build metadata for the running API binary. Used by support and incident
+response to answer "which version is running?" without shell access to the
+host. Public: it is not in the scope table, so no API key is required.
+
+**Response `200`:**
+```json
+{
+  "commit": "d09cb51f1a2b3c4d",
+  "build_date": "2026-09-25T12:00:00Z",
+  "go_version": "go1.26.0",
+  "api_version": "v1"
+}
+```
+
+`commit` and `build_date` are injected at build time:
+
+```bash
+go build -ldflags "-X main.Commit=$(git rev-parse HEAD) -X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
+```
+
+The CI `go` job builds the API binary with these ldflags on every push and PR.
+A binary built without them reports `"dev"` for `commit` and `"unknown"` for
+`build_date`, so the endpoint always returns all four fields.
+
+---
+
+### 4.9 Webhook subscriptions
+
+Watchdog alert webhooks. Every delivery is signed with HMAC-SHA256; the wire
+format and verification algorithm are published in [`docs/webhooks.md`](docs/webhooks.md).
+Listing is `read:watchdog`-scoped; everything that mints a subscription or
+touches its signing secret requires an admin scope **and** an admin role,
+because the secret is signing key material.
+
+#### `POST /api/v1/watchdog/subscriptions`
+
+Creates a subscription and generates a 32-byte `whsec_...` signing secret,
+stored with its SHA-256 digest. The plaintext secret is returned **once**.
+
+```json
+{
+  "id": "sub_1700000000000000000",
+  "contract_id": "CABC...",
+  "webhook_url": "https://example.com/hooks/sorolens",
+  "severity_filter": "Critical",
+  "created_at": "2026-09-25T12:00:00Z",
+  "updated_at": "2026-09-25T12:00:00Z",
+  "signing_secret": "whsec_..."
+}
+```
+
+#### `GET /api/v1/watchdog/subscriptions`
+
+Lists subscriptions. The response never includes `signing_secret`.
+
+#### `DELETE /api/v1/watchdog/subscriptions/:id`
+
+Deletes a subscription. `204` on success, `404` if unknown.
+
+#### `GET /api/v1/watchdog/subscriptions/:id/signing-secret`
+
+Returns the plaintext secret, but only within **5 minutes** of creation or of
+the most recent rotation. Outside that window it answers `403 FORBIDDEN` and the
+caller must rotate. This keeps long-lived key material out of the API surface.
+
+```json
+{ "id": "sub_...", "signing_secret": "whsec_...", "created_at": "...", "rotated_at": "..." }
+```
+
+#### `POST /api/v1/watchdog/subscriptions/:id/rotate`
+
+Generates a new secret, invalidates the previous one for future deliveries and
+returns the new plaintext (re-opening the reveal window). Same body as the
+reveal endpoint.
 
 ---
 

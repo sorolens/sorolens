@@ -2,6 +2,10 @@ packages:
   - 'apps/web'
   - 'packages/*'
 
+allowBuilds:
+  esbuild: true
+  sharp: true
+
 onlyBuiltDependencies:
   - esbuild
   - sharp

@@ -1,3 +1,17 @@
+// Package config loads runtime configuration for the API from environment
+// variables. It provides a Config struct with database, Redis, Soroban RPC,
+// and indexer settings, and a Load function that validates required variables
+// and applies defaults.
+//
+// # Environment variables
+//
+// Required: DATABASE_URL, REDIS_URL.
+// Optional with defaults: SOROBAN_RPC_URL (testnet), STELLAR_NETWORK (testnet),
+// PORT (8080), LOG_LEVEL (info), INDEXER_POLL_INTERVAL (5m),
+// INDEXER_LEDGER_WINDOW (120960 ledgers ≈ 7 days), INDEXER_MAX_DURATION (270s).
+//
+// Load collects every missing required variable into a single error message
+// so the process fails fast with actionable output.
 package config
 
 import (
@@ -30,6 +44,10 @@ type Config struct {
 	IndexerLedgerWindow int
 	// IndexerMaxDuration is the wall-clock budget for a single indexer run.
 	IndexerMaxDuration time.Duration
+	// InitialAdminGitHubID, when set, seeds a user with the admin role on
+	// startup. The user is keyed by this value as both its ID and GitHub ID so
+	// requests authenticated with X-User-ID or X-GitHub-ID resolve to it.
+	InitialAdminGitHubID string
 }
 
 // Load reads configuration from environment variables and returns an error
@@ -37,13 +55,14 @@ type Config struct {
 // single, actionable message.
 func Load() (*Config, error) {
 	cfg := &Config{
-		DatabaseURL:       os.Getenv("DATABASE_URL"),
-		DirectDatabaseURL: os.Getenv("DIRECT_DATABASE_URL"),
-		RedisURL:          os.Getenv("REDIS_URL"),
-		SorobanRPCURL:     getEnvDefault("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org"),
-		StellarNetwork:    getEnvDefault("STELLAR_NETWORK", "testnet"),
-		Port:              getEnvDefault("PORT", "8080"),
-		LogLevel:          getEnvDefault("LOG_LEVEL", "info"),
+		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		DirectDatabaseURL:    os.Getenv("DIRECT_DATABASE_URL"),
+		RedisURL:             os.Getenv("REDIS_URL"),
+		SorobanRPCURL:        getEnvDefault("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org"),
+		StellarNetwork:       getEnvDefault("STELLAR_NETWORK", "testnet"),
+		Port:                 getEnvDefault("PORT", "8080"),
+		LogLevel:             getEnvDefault("LOG_LEVEL", "info"),
+		InitialAdminGitHubID: os.Getenv("INITIAL_ADMIN_GITHUB_ID"),
 	}
 
 	pollStr := getEnvDefault("INDEXER_POLL_INTERVAL", "5m")
@@ -81,6 +100,8 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
+// getEnvDefault returns the value of the environment variable named by the key.
+// If the variable is not present, it returns the provided default value.
 func getEnvDefault(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

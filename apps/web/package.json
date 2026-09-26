@@ -8,28 +8,30 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --environment jsdom"
+    "test": "vitest run --environment jsdom",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@sorolens/ui": "workspace:*",
+    "@sorolens/xdr": "workspace:*",
     "next": "^15.3.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "recharts": "^2.15.3",
-    "@sorolens/ui": "workspace:*",
-    "@sorolens/xdr": "workspace:*"
+    "recharts": "^2.15.3"
   },
   "devDependencies": {
+    "@next/eslint-plugin-next": "^15.3.1",
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/postcss": "^4.1.6",
+    "@testing-library/jest-dom": "^6.4.8",
+    "@testing-library/react": "^16.0.1",
     "@types/node": "^22.15.3",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "@testing-library/jest-dom": "^6.4.8",
-    "@testing-library/react": "^16.0.1",
     "@vitejs/plugin-react": "^4.3.0",
     "jsdom": "^26.1.0",
-    "vitest": "^2.1.9",
     "tailwindcss": "^4.1.6",
-    "@tailwindcss/postcss": "^4.1.6",
-    "@next/eslint-plugin-next": "^15.3.1",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.9"
   }
 }

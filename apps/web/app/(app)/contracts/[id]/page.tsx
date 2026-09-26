@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MonoId } from "@sorolens/ui";
 import {
@@ -8,6 +9,7 @@ import {
   getContractEvents,
   getContractStorage,
   getContractStats,
+  getContractSnapshot,
   ApiError,
 } from "@/lib/api";
 import type {
@@ -23,7 +25,11 @@ import { WindowSelector } from "@/components/WindowSelector";
 import { EventVolumeChart } from "@/components/EventVolumeChart";
 import { InvocationChart } from "@/components/InvocationChart";
 import { EventsTable } from "@/components/EventsTable";
+import { CallTracePanel } from "@/components/CallTracePanel";
 import { StoragePanel } from "@/components/StoragePanel";
+import { SnapshotPanel } from "@/components/SnapshotPanel";
+import { HealthScoreCard } from "@/components/HealthScoreCard";
+import { useEventStream } from "@/hooks/useEventStream";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -54,6 +60,16 @@ function ContractDetailContent({ id }: { id: string }) {
   const [storageHasMore, setStorageHasMore] = useState(false);
   const [currentLedger, setCurrentLedger] = useState(0);
 
+  const { isConnected: isStreamConnected } = useEventStream({
+    contractId: id,
+    onEvent: (newEvent) => {
+      setEvents((prev) => {
+        if (prev.some((e) => e.id === newEvent.id)) return prev;
+        return [newEvent, ...prev];
+      });
+    },
+  });
+
   useEffect(() => {
     let cancelled = false;
 
@@ -66,7 +82,10 @@ function ContractDetailContent({ id }: { id: string }) {
           if (err instanceof ApiError && err.status === 404) {
             notFound();
           }
-          setContractError(err instanceof Error ? err.message : "Failed to load contract");
+          // Backend not reachable. Surface a friendly not-found panel
+          // rather than a red error, since the user cannot distinguish
+          // "we do not have this contract" from "the API is down."
+          setContractError("Contract not found");
         }
       } finally {
         if (!cancelled) setContractLoading(false);
@@ -175,6 +194,16 @@ function ContractDetailContent({ id }: { id: string }) {
     }
   }, [id, storageCursor]);
 
+  // Prefill the trace panel with the newest event's transaction so the most
+  // recent cross-contract call tree loads without any typing. Declared with the
+  // other hooks, above the early returns, to keep hook order stable.
+  const latestTxHash = useMemo(() => {
+    if (events.length === 0) return undefined;
+    return events.reduce((newest, event) =>
+      event.ledger >= newest.ledger ? event : newest,
+    ).tx_hash;
+  }, [events]);
+
   if (contractLoading) {
     return (
       <div>
@@ -198,8 +227,20 @@ function ContractDetailContent({ id }: { id: string }) {
 
   if (contractError) {
     return (
-      <div className="flex flex-col items-center justify-center py-24">
-        <p className="mb-2 text-lg text-[var(--color-danger)]">{contractError}</p>
+      <div className="mx-auto max-w-xl rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
+        <p className="text-lg font-medium text-[var(--color-text-primary)]">
+          {contractError}
+        </p>
+        <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+          Check the contract ID and try again, or return to the{" "}
+          <Link
+            href="/contracts"
+            className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
+          >
+            contracts list
+          </Link>
+          .
+        </p>
       </div>
     );
   }
@@ -310,7 +351,15 @@ function ContractDetailContent({ id }: { id: string }) {
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Events</h2>
+        <div className="mb-4 flex items-center gap-3">
+          <h2 className="text-xl font-semibold">Events</h2>
+          {isStreamConnected && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/40 px-2.5 py-0.5 text-xs font-medium text-green-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+              Live
+            </span>
+          )}
+        </div>
         {eventsLoading ? (
           <TableSkeleton />
         ) : (
@@ -320,6 +369,11 @@ function ContractDetailContent({ id }: { id: string }) {
             hasMore={eventsHasMore}
           />
         )}
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-4 text-xl font-semibold">Call trace</h2>
+        <CallTracePanel initialTxHash={latestTxHash} />
       </section>
 
       <section className="mb-8">
@@ -334,6 +388,15 @@ function ContractDetailContent({ id }: { id: string }) {
             hasMore={storageHasMore}
           />
         )}
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-4 text-xl font-semibold">Snapshot / replay</h2>
+        <SnapshotPanel contractId={id} currentLedger={currentLedger} />
+      </section>
+
+      <section className="mb-8">
+        <HealthScoreCard contractId={id} />
       </section>
     </div>
   );

@@ -11,6 +11,7 @@ type RPCClient interface {
 	GetLatestLedger(ctx context.Context) (*LatestLedger, error)
 	GetEvents(ctx context.Context, startLedger, endLedger uint32, filters []EventFilter) (*GetEventsResult, error)
 	GetTransaction(ctx context.Context, hash string) (*TransactionResult, error)
+	GetLedgerEntries(ctx context.Context, keys []string) (*GetLedgerEntriesResult, error)
 }
 
 // Store is the subset of the data store the poller needs.
@@ -21,6 +22,40 @@ type Store interface {
 	BatchInsertInvocations(ctx context.Context, invocations []Invocation) error
 	GetSyncState(ctx context.Context, contractID string) (SyncState, error)
 	UpsertSyncState(ctx context.Context, s SyncState) error
+	CreateNextMonthPartition(ctx context.Context) error
+	CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error
+
+	// GetIndexerCursor returns the last committed ledger for a network, or 0 if none.
+	GetIndexerCursor(ctx context.Context, network string) (uint32, error)
+	// SetIndexerCursor updates the last committed ledger for a network.
+	SetIndexerCursor(ctx context.Context, network string, ledger uint32) error
+	// BatchInsertWithCursor atomically writes events, invocations, the
+	// cross-contract call graph edges of those transactions, contract sync
+	// state, and advances the network indexer cursor within a single database
+	// transaction. Bundling call edges here is what stops a crash from
+	// committing a cursor with a half-materialised call graph behind it.
+	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, callEdges []CallEdge, syncState SyncState) error
+
+	// RecentHourlyActivity returns per-hour activity buckets for the most
+	// recent `hours` hours (oldest first), aggregated across events and
+	// invocations. Used by the anomaly detector to build a rolling baseline.
+	RecentHourlyActivity(ctx context.Context, contractID string, hours int) ([]HourlyActivity, error)
+	// InsertAlert persists an anomaly/health alert row (severity Warning for
+	// anomaly spikes). Implementations may de-duplicate on (tx_hash,
+	// contract_id).
+	InsertAlert(ctx context.Context, a Alert) error
+	// InsertContractUpgrade records a Wasm-hash change for a contract. The
+	// store is responsible for ignoring duplicate (contract, tx) rows.
+	InsertContractUpgrade(ctx context.Context, u ContractUpgrade) error
+	// UpdateContractWasmHash records the now-current on-chain Wasm hash for a
+	// contract so subsequent polls can diff against it.
+	UpdateContractWasmHash(ctx context.Context, contractID, wasmHash string) error
+
+	// ContractHealthInputs aggregates the raw signals that feed the composite
+	// health score (issue #137). It never errors on empty data.
+	ContractHealthInputs(ctx context.Context, contractID string) (HealthInputs, error)
+	// UpsertContractHealthScore caches a computed 0-100 health score.
+	UpsertContractHealthScore(ctx context.Context, h ContractHealthScore) error
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -77,19 +112,59 @@ type TransactionResult struct {
 	ApplicationOrder int
 	ResultXDR        string
 	ResourceFee      int64
+	// ResultMetaXDR is the base64 TransactionMeta; DiagnosticEventsXDR is the
+	// base64 DiagnosticEvent array carried inside it (TransactionMetaV3 ->
+	// sorobanMeta.diagnosticEvents), exposed directly by getTransaction when
+	// the RPC node enables diagnostic events. The call graph is built from it.
+	ResultMetaXDR       string
+	DiagnosticEventsXDR []string
+}
+
+// LedgerEntry mirrors soroban.LedgerEntry.
+type LedgerEntry struct {
+	// Key is the base64-encoded LedgerKey that was requested.
+	Key string
+	// XDR is the base64-encoded LedgerEntry from getLedgerEntries.
+	XDR string
+	// LastModifiedLedgerSeq is the most recent ledger in which the entry
+	// was modified.
+	LastModifiedLedgerSeq uint32
+}
+
+// GetLedgerEntriesResult mirrors soroban.GetLedgerEntriesResult.
+type GetLedgerEntriesResult struct {
+	Entries        []LedgerEntry
+	LatestLedger   uint32
+	KeysNotFound   []string
+	DuplicatedKeys []string
+}
+
+// WasmHashResult mirrors soroban.GetWasmHashResult.
+
+// ContractUpgrade mirrors store.ContractUpgrade.
+type ContractUpgrade struct {
+	ContractID string
+	FromHash   string
+	ToHash     string
+	Ledger     uint32
+	TxHash     string
+	At         time.Time
 }
 
 // Contract mirrors store.Contract (fields the poller needs).
 type Contract struct {
-	ID     string
-	Status string
+	ID      string
+	Status  string
 	Network string
+	// WasmHash is the current on-chain Wasm hash the poller last observed.
+	WasmHash string
 }
 
 // Event mirrors store.Event.
 type Event struct {
 	ID               string
 	ContractID       string
+	Network          string
 	Ledger           uint32
 	LedgerClosedAt   time.Time
 	TxHash           string
@@ -103,15 +178,86 @@ type Event struct {
 type Invocation struct {
 	TxHash           string
 	ContractID       string
+	Network          string
 	Ledger           uint32
 	LedgerClosedAt   time.Time
 	Status           string
 	ResultXDR        string
-	ApplicationOrder int
+	// ResourceFeeCharged is the root invocation's resource fee in stroops. It
+	// is also the pot distributed across the transaction's top-level
+	// cross-contract call edges (call_edges.fee_share).
+	ResourceFeeCharged int64
+	ApplicationOrder   int
+}
+
+// CallEdge mirrors store.CallEdge: one parent -> child invocation edge of a
+// transaction's cross-contract call graph. The root invocation is not an edge;
+// it already lives in the invocations table (tx_hash PRIMARY KEY).
+type CallEdge struct {
+	TxHash           string
+	ParentSpanID     string
+	ChildSpanID      string
+	CalleeContractID string
+	FunctionName     string
+	CPU              int64
+	Mem              int64
+	FeeShare         int64
+	Depth            int
+	// Network, Ledger and LedgerClosedAt are stamped by the poller from the
+	// contract being polled and the transaction result.
+	Network        string
+	Ledger         uint32
+	LedgerClosedAt time.Time
 }
 
 // SyncState mirrors store.SyncState.
 type SyncState struct {
 	ContractID string
 	LastLedger uint32
+}
+
+// HourlyActivity is one per-hour aggregate bucket for a contract, used by the
+// anomaly detector. CPU and fees are totals over the hour.
+type HourlyActivity struct {
+	Hour        time.Time // bucket start, UTC
+	EventCount  int64
+	InvokeCount int64
+	CPU         int64 // sum of cpu_insn
+	Fees        int64 // sum of resource fees, stroops
+}
+
+// Alert mirrors store.ContractAlert. TxHash carries a synthetic, deterministic
+// key (see anomaly job) so implementations can de-duplicate re-runs.
+type Alert struct {
+	ContractID string
+	Severity   string // Info | Warning | Critical
+	Message    string
+	Ledger     int64
+	TxHash     string
+	Timestamp  time.Time
+}
+
+// HealthInputs mirrors store.HealthScoreInputs (issue #137). It carries the
+// raw aggregates an implementation gathers so the pure healthscore package can
+// compute the composite score without importing apps/api.
+type HealthInputs struct {
+	HealthyChecks     int64
+	TotalChecks       int64
+	WatchdogStatus    string
+	TotalInvocations  int64
+	FailedInvocations int64
+	Activity          []HourlyActivity
+	TotalStorage      int64
+	ExpiringStorage   int64
+}
+
+// ContractHealthScore mirrors store.ContractHealthScore.
+type ContractHealthScore struct {
+	ContractID           string
+	Score                int32
+	ComponentUptime      int32
+	ComponentErrorRate   int32
+	ComponentPerformance int32
+	ComponentStorageTTL  int32
+	ComputedAt           time.Time
 }

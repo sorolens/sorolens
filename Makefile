@@ -2,8 +2,11 @@ MIGRATE_IMAGE      := migrate/migrate:v4.17.1
 MIGRATIONS_DIR     := apps/api/internal/db/migrations
 DB_URL_LOCAL       := postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable
 DB_URL_DOCKER      := postgres://sorolens:sorolens@postgres:5432/sorolens?sslmode=disable
+OAPI_CODEGEN := oapi-codegen
+OAPI_SPEC    := docs/openapi.yaml
+CLIENT_DIR   := packages/go-client
 
-.PHONY: up down logs psql migrate-up migrate-down migrate-new test lint dev build
+.PHONY: up down logs psql migrate-up migrate-down migrate-new test lint dev build client-go openapi lint-openapi
 
 ## up: start all Docker services in the background
 up:
@@ -58,6 +61,16 @@ test:
 	cd cli && go test -race ./...
 	pnpm test
 
+## openapi: regenerate the Go client from the OpenAPI spec
+client-go:
+	@command -v $(OAPI_CODEGEN) >/dev/null 2>&1 || go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1
+	cd $(CLIENT_DIR) && $(OAPI_CODEGEN) --config oapi-codegen.yaml ../../$(OAPI_SPEC)
+	cd $(CLIENT_DIR) && go mod tidy
+
+## openapi: validate the OpenAPI spec with redocly (if installed)
+lint-openapi:
+	@command -v npx >/dev/null 2>&1 && npx --yes @redocly/cli lint $(OAPI_SPEC) || echo "npx unavailable; skipped redocly lint"
+
 ## lint: run golangci-lint and pnpm lint across the monorepo
 lint:
 	cd apps/api && golangci-lint run ./... || true
@@ -74,4 +87,5 @@ build:
 	cd apps/api && go build ./...
 	cd services/indexer && go build ./...
 	cd cli && go build ./...
+	cd $(CLIENT_DIR) && go build ./...
 	pnpm build
