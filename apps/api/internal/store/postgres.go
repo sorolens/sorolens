@@ -64,25 +64,63 @@ func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Con
 	return c, nil
 }
 
-// ListContracts returns a list of contracts matching the optional filters,
-// ordered by ID. The cursor is the last-seen contract ID (lexicographic order).
+// ListContracts returns a list of contracts matching the optional filters.
+//
+// Results are ordered by the requested sort column (see ContractFilters.Sort),
+// tie-broken by contract ID so the ordering is total. The cursor is the ID of
+// the last row from the previous page; because that row's sort value is read
+// from the same filtered set, keyset pagination is correct for every sort
+// column and direction.
 func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	// cursor is the last-seen contract ID (lexicographic order).
-	rows, err := s.pool.Query(ctx, `
+
+	sortCol, descending := NormalizeContractSort(f.Sort, f.Order)
+	dir, cmp := "ASC", ">"
+	if descending {
+		dir, cmp = "DESC", "<"
+	}
+
+	// Only the columns needed for ordering are derived; the default added_at
+	// sort stays a plain column scan.
+	derived := ""
+	switch sortCol {
+	case ContractSortEventsCount:
+		derived = `,
+			(SELECT COUNT(*) FROM events ev WHERE ev.contract_id = c.id) AS events_count`
+	case ContractSortLastActivity:
+		derived = `,
+			GREATEST(
+				COALESCE((SELECT MAX(ev.ledger_closed_at) FROM events ev WHERE ev.contract_id = c.id), 'epoch'::timestamptz),
+				COALESCE((SELECT MAX(iv.ledger_closed_at) FROM invocations iv WHERE iv.contract_id = c.id), 'epoch'::timestamptz)
+			) AS last_activity`
+	}
+
+	// The filtered set is built once and reused for the cursor lookup below.
+	// sortCol/dir/cmp are chosen from a whitelist, never from client input
+	// directly, so the fmt.Sprintf interpolation is injection-safe.
+	query := fmt.Sprintf(`
+		WITH filtered AS (
+			SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+			       c.backfill_complete_at, c.status, c.added_at%s
+			FROM contracts c
+			WHERE ($1 = '' OR c.network = $1)
+			  AND ($2 = '' OR c.status = $2)
+			  AND ($3 = '' OR EXISTS (
+			        SELECT 1 FROM contract_tags t
+			        WHERE t.contract_id = c.id AND t.tag = $3))
+		)
 		SELECT id, network, label, wasm_hash, created_at_ledger,
 		       backfill_complete_at, status, added_at
-		FROM contracts
-		WHERE ($1 = '' OR id > $1)
-		  AND ($2 = '' OR network = $2)
-		  AND ($3 = '' OR status = $3)
-		  AND ($4 = '' OR EXISTS (
-		        SELECT 1 FROM contract_tags t
-		        WHERE t.contract_id = contracts.id AND t.tag = $4))
-		ORDER BY id ASC
-		LIMIT $5`, cursor, f.Network, f.Status, f.Tag, limit+1)
+		FROM filtered
+		WHERE ($4 = '' OR (filtered.%s, filtered.id) %s (
+		        SELECT f2.%s, f2.id FROM filtered f2 WHERE f2.id = $4))
+		ORDER BY filtered.%s %s, filtered.id %s
+		LIMIT $5`,
+		derived, sortCol, cmp, sortCol, sortCol, dir, dir)
+
+	rows, err := s.pool.Query(ctx, query, f.Network, f.Status, f.Tag, cursor, limit+1)
 	if err != nil {
 		return nil, "", err
 	}

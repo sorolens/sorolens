@@ -400,7 +400,13 @@ Register a contract for tracking.
 List all tracked contracts.
 
 **Query params:** `network` (filter by network), `status` (filter by status),
-`tag` (show only contracts carrying this tag).
+`tag` (show only contracts carrying this tag), `sort`
+(`added_at` | `last_activity` | `events_count`, default `added_at`), and
+`order` (`asc` | `desc`, default `desc`). `added_at` orders by when tracking
+began, `last_activity` by the most recent indexed event or invocation
+(contracts with no indexed activity sort last), and `events_count` by the
+number of indexed events. Unknown `sort` or `order` values return `400 Bad
+Request`; pagination remains cursor-based and follows the selected ordering.
 
 **Response `200`:**
 ```json

@@ -294,7 +294,9 @@ func (h *Handler) RegisterContract(w http.ResponseWriter, r *http.Request) {
 
 // ListContracts handles GET /api/v1/contracts.
 //
-// Query params: cursor, limit, network (testnet|mainnet|futurenet), status.
+// Query params: cursor, limit, network (testnet|mainnet|futurenet), status,
+// tag, sort (added_at|last_activity|events_count), order (asc|desc). Unknown
+// sort columns or orders are rejected with 400.
 func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
 	if !ok {
@@ -304,6 +306,24 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 	network, ok := networkParam(r)
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	sortCol := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("sort")))
+	if sortCol == "" {
+		sortCol = store.ContractSortAddedAt
+	}
+	if !store.ValidContractSort(sortCol) {
+		writeError(w, r, http.StatusBadRequest, CodeInvalidInput,
+			"sort must be one of: added_at, last_activity, events_count")
+		return
+	}
+	order := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("order")))
+	if order == "" {
+		order = store.SortDesc
+	}
+	if !store.ValidContractOrder(order) {
+		writeError(w, r, http.StatusBadRequest, CodeInvalidInput,
+			"order must be one of: asc, desc")
 		return
 	}
 	limit := intQuery(r, "limit", 50)
@@ -316,6 +336,8 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		Network: network,
 		Status:  r.URL.Query().Get("status"),
 		Tag:     tag,
+		Sort:    sortCol,
+		Order:   order,
 	}
 
 	contracts, nextRaw, err := h.Store.ListContracts(r.Context(), rawCursor, limit, f)

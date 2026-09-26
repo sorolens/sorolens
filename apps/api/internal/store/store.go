@@ -115,7 +115,8 @@ type UserStore interface {
 	GetUserByGitHubID(ctx context.Context, githubID string) (User, error)
 }
 
-// ContractFilters holds optional query filters for listing contracts.
+// ContractFilters holds optional query filters and ordering for listing
+// contracts.
 type ContractFilters struct {
 	// Network restricts results to one of testnet | mainnet | futurenet.
 	// Empty means all networks.
@@ -126,6 +127,12 @@ type ContractFilters struct {
 	// Tag restricts results to contracts carrying this tag. Empty means
 	// no tag filter.
 	Tag string
+	// Sort selects the ordering column: ContractSortAddedAt,
+	// ContractSortLastActivity, or ContractSortEventsCount. Empty means the
+	// default (ContractSortAddedAt).
+	Sort string
+	// Order is SortAsc or SortDesc. Empty means the default (SortDesc).
+	Order string
 }
 
 // NewStore returns a Store backed by the given pgxpool.Pool.

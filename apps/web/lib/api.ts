@@ -95,6 +95,8 @@ export function listContracts(
     network?: string;
     status?: string;
     tag?: string;
+    sort?: "added_at" | "last_activity" | "events_count";
+    order?: "asc" | "desc";
   },
 ): Promise<ContractsListResponse> {
   const search = new URLSearchParams();
@@ -103,6 +105,8 @@ export function listContracts(
   if (params?.network) search.set("network", params.network);
   if (params?.status) search.set("status", params.status);
   if (params?.tag) search.set("tag", params.tag);
+  if (params?.sort) search.set("sort", params.sort);
+  if (params?.order) search.set("order", params.order);
   const qs = search.toString();
   return fetchJson<ContractsListResponse>(
     `${API_URL}/api/v1/contracts${qs ? "?" + qs : ""}`,

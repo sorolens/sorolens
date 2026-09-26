@@ -16,6 +16,7 @@ export interface OpenAPIParameter {
   description?: string;
   type?: "string" | "integer";
   default?: string;
+  enum?: string[];
 }
 
 export interface OpenAPIRequestBody {
@@ -85,6 +86,22 @@ export const openApiDocument: OpenAPIDocument = {
           { name: "limit", in: "query", type: "integer", default: "50" },
           networkParam,
           { name: "status", in: "query", description: "pending | backfilling | active | paused | error" },
+          {
+            name: "sort",
+            in: "query",
+            type: "string",
+            enum: ["added_at", "last_activity", "events_count"],
+            default: "added_at",
+            description: "Column to order by (default added_at)",
+          },
+          {
+            name: "order",
+            in: "query",
+            type: "string",
+            enum: ["asc", "desc"],
+            default: "desc",
+            description: "Sort direction (default desc)",
+          },
         ],
       },
       post: {

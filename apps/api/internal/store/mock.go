@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -87,14 +88,20 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 	if m.ListContractsErr != nil {
 		return nil, "", m.ListContractsErr
 	}
-	if limit <= 0 {
+	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	var out []Contract
+
+	sortCol, descending := NormalizeContractSort(f.Sort, f.Order)
+
+	type row struct {
+		contract     Contract
+		lastActivity time.Time
+		eventsCount  int64
+	}
+
+	rows := make([]row, 0, len(m.contracts))
 	for _, c := range m.contracts {
-		if cursor != "" && c.ID <= cursor {
-			continue
-		}
 		if f.Network != "" && c.Network != f.Network {
 			continue
 		}
@@ -105,15 +112,93 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 			continue
 		}
 		c.Tags = m.tagsFor(c.ID)
-		out = append(out, c)
+		rows = append(rows, row{
+			contract:     c,
+			lastActivity: m.contractLastActivity(c.ID),
+			eventsCount:  m.contractEventCount(c.ID),
+		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+
+	sort.Slice(rows, func(i, j int) bool {
+		var cmp int
+		switch sortCol {
+		case ContractSortEventsCount:
+			switch {
+			case rows[i].eventsCount < rows[j].eventsCount:
+				cmp = -1
+			case rows[i].eventsCount > rows[j].eventsCount:
+				cmp = 1
+			}
+		case ContractSortLastActivity:
+			cmp = rows[i].lastActivity.Compare(rows[j].lastActivity)
+		default: // added_at
+			cmp = rows[i].contract.AddedAt.Compare(rows[j].contract.AddedAt)
+		}
+		if cmp == 0 {
+			cmp = strings.Compare(rows[i].contract.ID, rows[j].contract.ID)
+		}
+		if descending {
+			return cmp > 0
+		}
+		return cmp < 0
+	})
+
+	// Keyset pagination: the cursor is the last row of the previous page, so
+	// the next page is everything after it in the sorted order. A cursor that
+	// is not in the filtered set yields no rows, matching the SQL backend.
+	if cursor != "" {
+		idx := -1
+		for i := range rows {
+			if rows[i].contract.ID == cursor {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			return nil, "", nil
+		}
+		rows = rows[idx+1:]
+	}
+
 	var nextCursor string
-	if len(out) > limit {
-		nextCursor = out[limit-1].ID
-		out = out[:limit]
+	if len(rows) > limit {
+		nextCursor = rows[limit-1].contract.ID
+		rows = rows[:limit]
+	}
+
+	out := make([]Contract, len(rows))
+	for i := range rows {
+		out[i] = rows[i].contract
 	}
 	return out, nextCursor, nil
+}
+
+// contractEventCount returns the number of indexed events for a contract.
+func (m *MockStore) contractEventCount(contractID string) int64 {
+	var n int64
+	for _, e := range m.events {
+		if e.ContractID == contractID {
+			n++
+		}
+	}
+	return n
+}
+
+// contractLastActivity returns the most recent event or invocation ledger
+// close time for a contract, or the Unix epoch when it has no indexed activity.
+func (m *MockStore) contractLastActivity(contractID string) time.Time {
+	latest := time.Unix(0, 0).UTC()
+	for _, e := range m.events {
+		if e.ContractID == contractID && e.LedgerClosedAt.After(latest) {
+			latest = e.LedgerClosedAt
+		}
+	}
+	for _, inv := range m.invocations {
+		if inv.ContractID == contractID && inv.LedgerClosedAt.After(latest) {
+			latest = inv.LedgerClosedAt
+		}
+	}
+	return latest
 }
 
 // tagsFor returns the sorted tags for a contract, always non-nil.
