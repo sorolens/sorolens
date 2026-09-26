@@ -28,6 +28,7 @@ type FullStore interface {
 	WatchlistStore
 	UserStore
 	PerformanceStore
+	GroupStore
 	GlobalEventStore
 	LabelStore
 	FailedEventStore

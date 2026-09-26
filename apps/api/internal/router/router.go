@@ -195,6 +195,22 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 			r.Get("/{contractId}/status", h.WatchlistStatus)
 		})
 
+		// Groups (contract portfolios). Ownership is per-user via the same
+		// X-User-ID contract as the watchlist, so the routes are unscoped.
+		r.Route("/groups", func(r chi.Router) {
+			r.Post("/", h.CreateGroup)
+			r.Get("/", h.ListGroups)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", h.GetGroup)
+				r.Patch("/", h.UpdateGroup)
+				r.Delete("/", h.DeleteGroup)
+				r.Get("/stats", h.GroupStats)
+				r.Post("/contracts", h.AddGroupContract)
+				r.Delete("/contracts", h.RemoveGroupContract)
+				r.Delete("/contracts/{contractId}", h.RemoveGroupContract)
+			})
+		})
+
 		// Watchdog: data from the on-chain sorolens-watchdog contract.
 		// Watchdog stats are written by the indexer, not the API, so they
 		// rely on the TTL rather than write invalidation.

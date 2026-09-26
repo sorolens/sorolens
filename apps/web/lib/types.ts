@@ -422,3 +422,53 @@ export interface AlertSubscription {
 export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
 }
+
+// ---- groups (contract portfolios) ------------------------------------------
+
+export interface Group {
+  id: string;
+  owner_id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface GroupStats {
+  group_id: string;
+  contract_count: number;
+  event_count: number;
+  invocation_count: number;
+  storage_entry_count: number;
+  average_health_score: number;
+}
+
+export interface GroupSummary extends Group {
+  stats: GroupStats;
+}
+
+export interface GroupContract {
+  contract_id: string;
+  network: string;
+  label: string;
+  status: string;
+  health_score: number | null;
+  last_activity_at: string | null;
+}
+
+export interface GroupDetail extends Group {
+  contracts: GroupContract[];
+}
+
+export interface GroupsListResponse {
+  groups: GroupSummary[];
+}
+
+export interface GroupMembershipResponse {
+  group_id: string;
+  contract_id: string;
+}
+
+export interface GroupDeletedResponse {
+  deleted: boolean;
+}
+
+
