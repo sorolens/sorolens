@@ -55,6 +55,9 @@ func TestListAllEventsPostgres(t *testing.T) {
 	if err := s.BatchInsertEvents(ctx, events); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
+	if err := s.BatchInsertEvents(ctx, events); err != nil {
+		t.Fatalf("reinsert duplicate events: %v", err)
+	}
 
 	page1, next, err := s.ListAllEvents(ctx, "", 4, store.GlobalEventFilters{})
 	if err != nil || len(page1) != 4 || next == "" || page1[0].Ledger != 5005 {

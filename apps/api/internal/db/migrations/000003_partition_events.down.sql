@@ -16,6 +16,7 @@ BEGIN
     CREATE TABLE events (
       id                 TEXT        PRIMARY KEY,
       contract_id        TEXT        NOT NULL REFERENCES contracts (id),
+      network            TEXT        NOT NULL DEFAULT 'testnet',
       ledger             BIGINT      NOT NULL,
       ledger_closed_at   TIMESTAMPTZ NOT NULL,
       tx_hash            TEXT        NOT NULL,
@@ -30,7 +31,7 @@ BEGIN
 
     -- Copy data back.
     INSERT INTO events
-      SELECT id, contract_id, ledger, ledger_closed_at, tx_hash, type,
+      SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
              topic_xdr, value_xdr, topic_decoded, value_decoded,
              in_successful_call, inserted_at
       FROM events_new;
@@ -39,6 +40,7 @@ BEGIN
     CREATE INDEX idx_events_contract_ledger ON events (contract_id, ledger DESC);
     CREATE INDEX idx_events_tx_hash ON events (tx_hash);
     CREATE INDEX idx_events_ledger_closed_at ON events (ledger_closed_at DESC);
+    CREATE INDEX idx_events_network_ledger ON events (network, ledger DESC);
 
     -- Drop the partitioned table and its partitions.
     DROP TABLE events_new;

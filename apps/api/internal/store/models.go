@@ -100,6 +100,17 @@ type GlobalStats struct {
 	TotalStorageEntries int64
 }
 
+// SearchResult is one typed result from the global search endpoint.
+type SearchResult struct {
+	Type         string
+	ID           string
+	Label        string
+	Network      string
+	ContractID   string
+	TxHash       string
+	FunctionName string
+}
+
 // AlertSubscription represents a webhook subscription for watchdog alerts.
 type AlertSubscription struct {
 	ID             string

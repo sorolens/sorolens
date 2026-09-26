@@ -20,11 +20,19 @@ BEGIN
     -- Rename the original table so we can recreate it as partitioned.
     ALTER TABLE events RENAME TO events_old;
 
+    -- PostgreSQL preserves indexes when a table is renamed. Drop the old
+    -- indexes before recreating them on the partitioned parent table.
+    DROP INDEX IF EXISTS idx_events_contract_ledger;
+    DROP INDEX IF EXISTS idx_events_tx_hash;
+    DROP INDEX IF EXISTS idx_events_ledger_closed_at;
+    DROP INDEX IF EXISTS idx_events_network_ledger;
+
     -- Create the partitioned table with the same columns.
     -- Primary key must include the partition key (ledger_closed_at).
     CREATE TABLE events (
       id                 TEXT        NOT NULL,
       contract_id        TEXT        NOT NULL REFERENCES contracts (id),
+      network            TEXT        NOT NULL DEFAULT 'testnet',
       ledger             BIGINT      NOT NULL,
       ledger_closed_at   TIMESTAMPTZ NOT NULL,
       tx_hash            TEXT        NOT NULL,
@@ -40,7 +48,7 @@ BEGIN
 
     -- Copy all existing data into the partitioned table.
     INSERT INTO events
-      SELECT id, contract_id, ledger, ledger_closed_at, tx_hash, type,
+      SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
              topic_xdr, value_xdr, topic_decoded, value_decoded,
              in_successful_call, inserted_at
       FROM events_old;
@@ -76,6 +84,8 @@ BEGIN
 
     -- Drop the old table.
     DROP TABLE events_old;
+
+    CREATE INDEX idx_events_network_ledger ON events (network, ledger DESC);
 
   END IF;
 END $$;

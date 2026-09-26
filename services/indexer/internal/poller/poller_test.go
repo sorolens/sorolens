@@ -54,6 +54,7 @@ func (f *fakeRPC) GetLatestLedger(ctx context.Context) (*LatestLedger, error) {
 func (f *fakeRPC) GetEvents(_ context.Context, start, end uint32, filters []EventFilter) (*GetEventsResult, error) {
 	f.mu.Lock()
 	f.eventsCalls = append(f.eventsCalls, getEventsCall{start, end, filters})
+	onGetEvents := f.onGetEvents
 	key := ""
 	if len(filters) > 0 && len(filters[0].ContractIDs) > 0 {
 		key = filters[0].ContractIDs[0]

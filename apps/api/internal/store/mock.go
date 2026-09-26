@@ -42,6 +42,7 @@ type MockStore struct {
 	GetContractErr              error
 	ListContractsErr            error
 	GetGlobalStatsErr           error
+	SearchErr                   error
 	ListEventsErr               error
 	ListInvocationsErr          error
 	ListStorageErr              error
@@ -68,7 +69,10 @@ type MockStore struct {
 
 func (m *MockStore) UpsertLabel(_ context.Context, label Label) error {
 	for i, existing := range m.labels {
-		if existing.Label == label.Label && (label.Public || existing.WorkspaceID == label.WorkspaceID) { m.labels[i] = label; return nil }
+		if existing.Label == label.Label && (label.Public || existing.WorkspaceID == label.WorkspaceID) {
+			m.labels[i] = label
+			return nil
+		}
 	}
 	m.labels = append(m.labels, label)
 	return nil
@@ -78,15 +82,27 @@ func (m *MockStore) ListLabels(_ context.Context, workspaceID, query string) ([]
 	query = strings.ToLower(query)
 	var out []Label
 	for _, label := range m.labels {
-		if !label.Public && label.WorkspaceID != workspaceID { continue }
-		if query == "" || strings.Contains(strings.ToLower(label.Label), query) || strings.Contains(strings.ToLower(label.Value), query) { out = append(out, label) }
+		if !label.Public && label.WorkspaceID != workspaceID {
+			continue
+		}
+		if query == "" || strings.Contains(strings.ToLower(label.Label), query) || strings.Contains(strings.ToLower(label.Value), query) {
+			out = append(out, label)
+		}
 	}
 	return out, nil
 }
 
 func (m *MockStore) ResolveLabel(_ context.Context, workspaceID, query string) (Label, error) {
-	for _, label := range m.labels { if label.Public && strings.EqualFold(label.Label, query) { return label, nil } }
-	for _, label := range m.labels { if !label.Public && label.WorkspaceID == workspaceID && strings.EqualFold(label.Label, query) { return label, nil } }
+	for _, label := range m.labels {
+		if label.Public && strings.EqualFold(label.Label, query) {
+			return label, nil
+		}
+	}
+	for _, label := range m.labels {
+		if !label.Public && label.WorkspaceID == workspaceID && strings.EqualFold(label.Label, query) {
+			return label, nil
+		}
+	}
 	return Label{}, ErrNotFound
 }
 
@@ -210,6 +226,53 @@ func (m *MockStore) GetGlobalStats(_ context.Context) (GlobalStats, error) {
 		return GlobalStats{}, m.GetGlobalStatsErr
 	}
 	return m.globalStats, nil
+}
+
+func (m *MockStore) Search(_ context.Context, query string) ([]SearchResult, error) {
+	if m.SearchErr != nil {
+		return nil, m.SearchErr
+	}
+	query = strings.ToLower(query)
+	results := make([]SearchResult, 0, 30)
+	contracts := make([]Contract, 0, len(m.contracts))
+	for _, contract := range m.contracts {
+		contracts = append(contracts, contract)
+	}
+	sort.Slice(contracts, func(i, j int) bool { return contracts[i].ID < contracts[j].ID })
+	for _, contract := range contracts {
+		if strings.Contains(strings.ToLower(contract.ID), query) || strings.Contains(strings.ToLower(contract.Label), query) {
+			results = append(results, SearchResult{Type: "contract", ID: contract.ID, Label: contract.Label, Network: contract.Network})
+			if len(results) == 10 {
+				break
+			}
+		}
+	}
+	eventCount := 0
+	seenEvents := make(map[string]bool)
+	for _, event := range m.events {
+		if eventCount == 10 {
+			break
+		}
+		if strings.Contains(strings.ToLower(event.TxHash), query) && !seenEvents[event.TxHash] {
+			seenEvents[event.TxHash] = true
+			results = append(results, SearchResult{Type: "event", Network: event.Network, ContractID: event.ContractID, TxHash: event.TxHash})
+			eventCount++
+		}
+	}
+	functionCount := 0
+	seenFunctions := make(map[string]bool)
+	for _, invocation := range m.invocations {
+		key := invocation.ContractID + "\x00" + invocation.FunctionName
+		if functionCount == 10 {
+			break
+		}
+		if invocation.FunctionName != "" && strings.Contains(strings.ToLower(invocation.FunctionName), query) && !seenFunctions[key] {
+			seenFunctions[key] = true
+			results = append(results, SearchResult{Type: "function", Network: invocation.Network, ContractID: invocation.ContractID, FunctionName: invocation.FunctionName})
+			functionCount++
+		}
+	}
+	return results, nil
 }
 
 // SetGlobalStats lets tests control what GetGlobalStats returns.

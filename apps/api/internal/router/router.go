@@ -134,8 +134,8 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// GET /api/v1/alerts          — grouped view (default)
 		// GET /api/v1/alerts?flat=true — raw ContractAlert feed
 		get("/alerts", h.ListAlerts)
-		// Search contracts (issue #181)
-		get("/search", h.SearchContracts)
+		// Global search across contracts, events, and invocation functions.
+		get("/search", h.Search)
 
 		// Cross-contract comparison (issue #324): one round-trip that fans
 		// out to the per-contract stats/health lookups in parallel.

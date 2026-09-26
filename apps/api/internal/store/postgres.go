@@ -174,7 +174,7 @@ func networkOrDefault(network string) string {
 	return network
 }
 
-// BatchInsertEvents inserts multiple events in a single batch operation. It ignores duplicate events based on the primary key (id).
+// BatchInsertEvents inserts multiple events in a single batch operation and ignores rows that conflict with an available unique constraint.
 func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) error {
 	if len(events) == 0 {
 		return nil
@@ -194,7 +194,7 @@ func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) e
 				 topic_xdr, value_xdr, topic_decoded, value_decoded,
 				 in_successful_call, inserted_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-			ON CONFLICT (id) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 			e.ID, e.ContractID, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
 			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
 			e.InSuccessfulCall, time.Now(),
@@ -478,6 +478,57 @@ func (s *postgresStore) GetGlobalStats(ctx context.Context) (GlobalStats, error)
 	var g GlobalStats
 	err := row.Scan(&g.TrackedContracts, &g.TotalEvents, &g.TotalInvocations, &g.TotalStorageEntries)
 	return g, err
+}
+
+// Search returns up to ten matching results from each searchable source.
+func (s *postgresStore) Search(ctx context.Context, query string) ([]SearchResult, error) {
+	rows, err := s.pool.Query(ctx, `
+		(SELECT 'contract'::text AS type, id, COALESCE(label, ''), network,
+		        ''::text AS contract_id, ''::text AS tx_hash, ''::text AS function_name
+		 FROM contracts
+		 WHERE id ILIKE '%' || $1 || '%' OR COALESCE(label, '') ILIKE '%' || $1 || '%'
+		 ORDER BY id
+		 LIMIT 10)
+		UNION ALL
+		(SELECT 'event'::text, ''::text, ''::text, network,
+		        contract_id, tx_hash, ''::text
+		 FROM (SELECT DISTINCT ON (tx_hash) network, contract_id, tx_hash
+		       FROM events
+		       WHERE tx_hash ILIKE '%' || $1 || '%'
+		       ORDER BY tx_hash, ledger DESC, id DESC) matches
+		 ORDER BY tx_hash
+		 LIMIT 10)
+		UNION ALL
+		(SELECT 'function'::text, ''::text, ''::text, network,
+		        contract_id, ''::text, function_name
+		 FROM (SELECT DISTINCT ON (contract_id, function_name)
+		              network, contract_id, function_name
+		       FROM invocations
+		       WHERE function_name IS NOT NULL
+		         AND function_name ILIKE '%' || $1 || '%'
+		       ORDER BY contract_id, function_name, ledger DESC, tx_hash DESC) matches
+		 ORDER BY function_name, contract_id
+		 LIMIT 10)`, query)
+	if err != nil {
+		return nil, fmt.Errorf("search: %w", err)
+	}
+	defer rows.Close()
+
+	results := make([]SearchResult, 0)
+	for rows.Next() {
+		var result SearchResult
+		if err := rows.Scan(
+			&result.Type, &result.ID, &result.Label, &result.Network,
+			&result.ContractID, &result.TxHash, &result.FunctionName,
+		); err != nil {
+			return nil, fmt.Errorf("scan search result: %w", err)
+		}
+		results = append(results, result)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate search results: %w", err)
+	}
+	return results, nil
 }
 
 // ---- partition management -------------------------------------------------

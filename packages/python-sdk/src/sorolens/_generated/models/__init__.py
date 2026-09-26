@@ -62,7 +62,6 @@ from .failed_event_event import FailedEventEvent
 from .forecast_point import ForecastPoint
 from .forecast_series import ForecastSeries
 from .forecast_series_metric import ForecastSeriesMetric
-from .get_api_v1_search_response_200 import GetApiV1SearchResponse200
 from .get_contract_forecast_response_200 import GetContractForecastResponse200
 from .get_contract_report_format import GetContractReportFormat
 from .get_contract_report_history_response_200 import (
@@ -128,6 +127,8 @@ from .register_contract_body_network import RegisterContractBodyNetwork
 from .requeue_failed_event_response_200 import RequeueFailedEventResponse200
 from .role_error import RoleError
 from .scope_error import ScopeError
+from .search_result import SearchResult
+from .search_result_type import SearchResultType
 from .slack_command_body import SlackCommandBody
 from .slack_message import SlackMessage
 from .slack_message_blocks_item import SlackMessageBlocksItem
@@ -258,7 +259,6 @@ __all__ = (
     "ForecastPoint",
     "ForecastSeries",
     "ForecastSeriesMetric",
-    "GetApiV1SearchResponse200",
     "GetContractForecastResponse200",
     "GetContractReportFormat",
     "GetContractReportHistoryResponse200",
@@ -320,6 +320,8 @@ __all__ = (
     "RequeueFailedEventResponse200",
     "RoleError",
     "ScopeError",
+    "SearchResult",
+    "SearchResultType",
     "SlackCommandBody",
     "SlackMessage",
     "SlackMessageBlocksItem",

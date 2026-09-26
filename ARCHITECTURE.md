@@ -499,6 +499,21 @@ no-op.
 
 ### 4.2 Events
 
+#### `GET /api/v1/search?q=`
+
+Searches tracked contracts by ID or label, event transaction hashes, and
+invocation function names. Matching is case-insensitive and supports both
+prefix and substring matches. The response contains up to 10 results per
+source as a typed JSON array:
+
+```json
+[
+  { "type": "contract", "id": "C...", "label": "My Contract", "network": "testnet" },
+  { "type": "event", "contract_id": "C...", "tx_hash": "d9e771ac...", "network": "testnet" },
+  { "type": "function", "contract_id": "C...", "function_name": "transfer", "network": "testnet" }
+]
+```
+
 #### `GET /api/v1/contracts/:id/events`
 
 Paginated event list for a contract.

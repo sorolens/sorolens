@@ -2581,8 +2581,8 @@ paths:
     get:
       tags:
         - Contracts
-      summary: Search contracts
-      description: Search contracts by ID or label
+      summary: Search across contracts, events, and functions
+      description: Search contract IDs and labels, event transaction hashes, and invocation function names. Returns up to 10 results per type as a typed array.
       parameters:
         - name: q
           in: query
@@ -2590,25 +2590,17 @@ paths:
           required: true
           schema:
             type: string
-        - name: limit
-          in: query
-          description: Maximum number of results
-          required: false
-          schema:
-            type: integer
-            default: 10
       responses:
         "200":
-          description: OK
+          description: Matching contracts, events, and invocation functions.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Contract"
+                type: array
+                items:
+                  $ref: "#/components/schemas/SearchResult"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
   /api/v1/compare:
@@ -3411,6 +3403,31 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    SearchResult:
+      type: object
+      required: [type, network]
+      properties:
+        type:
+          type: string
+          enum: [contract, event, function]
+        id:
+          type: string
+          description: Contract ID; present for contract results.
+        label:
+          type: string
+          description: Contract label; present for contract results when set.
+        network:
+          type: string
+        contract_id:
+          type: string
+          description: Contract associated with an event or invocation function result.
+        tx_hash:
+          type: string
+          description: Matching event transaction hash.
+        function_name:
+          type: string
+          description: Matching invocation function name.
+
     Error:
       type: object
       required: [error]

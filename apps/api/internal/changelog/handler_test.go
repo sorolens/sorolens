@@ -284,7 +284,10 @@ func TestGetBadge_unknownHashShowsUnknown(t *testing.T) {
 	}
 }
 
-
 func (f *fakeStore) SearchContracts(_ context.Context, query string, limit int) ([]store.Contract, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) Search(_ context.Context, _ string) ([]store.SearchResult, error) {
 	return nil, nil
 }

@@ -104,6 +104,13 @@ const (
 	Invocations ForecastSeriesMetric = "invocations"
 )
 
+// Defines values for SearchResultType.
+const (
+	SearchResultTypeContract SearchResultType = "contract"
+	SearchResultTypeEvent    SearchResultType = "event"
+	SearchResultTypeFunction SearchResultType = "function"
+)
+
 // Defines values for SlackMessageResponseType.
 const (
 	Ephemeral SlackMessageResponseType = "ephemeral"
@@ -985,6 +992,29 @@ type ScopeError struct {
 	Required string `json:"required"`
 }
 
+// SearchResult defines model for SearchResult.
+type SearchResult struct {
+	// ContractId Contract associated with an event or invocation function result.
+	ContractId *string `json:"contract_id,omitempty"`
+
+	// FunctionName Matching invocation function name.
+	FunctionName *string `json:"function_name,omitempty"`
+
+	// Id Contract ID; present for contract results.
+	Id *string `json:"id,omitempty"`
+
+	// Label Contract label; present for contract results when set.
+	Label   *string `json:"label,omitempty"`
+	Network string  `json:"network"`
+
+	// TxHash Matching event transaction hash.
+	TxHash *string          `json:"tx_hash,omitempty"`
+	Type   SearchResultType `json:"type"`
+}
+
+// SearchResultType defines model for SearchResult.Type.
+type SearchResultType string
+
 // SlackMessage defines model for SlackMessage.
 type SlackMessage struct {
 	Blocks       *[]map[string]interface{} `json:"blocks,omitempty"`
@@ -1725,9 +1755,6 @@ type GetApiV1ResolveParams struct {
 type GetApiV1SearchParams struct {
 	// Q Search query
 	Q string `form:"q" json:"q"`
-
-	// Limit Maximum number of results
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // LiveActivityParams defines parameters for LiveActivity.
@@ -6696,22 +6723,6 @@ func NewGetApiV1SearchRequest(server string, params *GetApiV1SearchParams) (*htt
 			}
 		}
 
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -10989,10 +11000,9 @@ func (r GetApiV1ResolveResponse) StatusCode() int {
 type GetApiV1SearchResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *struct {
-		Items *[]Contract `json:"items,omitempty"`
-	}
-	JSON500 *InternalError
+	JSON200      *[]SearchResult
+	JSON422      *InvalidInput
+	JSON500      *InternalError
 }
 
 // Status returns HTTPResponse.Status
@@ -15166,13 +15176,18 @@ func ParseGetApiV1SearchResponse(rsp *http.Response) (*GetApiV1SearchResponse, e
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Items *[]Contract `json:"items,omitempty"`
-		}
+		var dest []SearchResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest InvalidInput
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest InternalError
