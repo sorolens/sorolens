@@ -255,6 +255,33 @@ BREAKING CHANGE: the cursor field in getEvents responses is now named
 ```
 ### Scope values
 Use the package or app name as the scope: `api`, `indexer`, `web`, `xdr`, `cli`, `contracts`, `ci`, `docs`.
+### Enforced locally with commitlint and Husky
+The rules above are checked automatically. The root `package.json` declares `@commitlint/cli`, `@commitlint/config-conventional`, and `husky`, and its `prepare` script installs a `commit-msg` git hook. A message that does not follow the format is rejected before the commit is created, so you find out locally instead of waiting for CI or review.
+A bad message fails like this:
+```text
+$ git commit -m "fixed the indexer"
+⧗   input: fixed the indexer
+✖   subject may not be empty [subject-empty]
+✖   type may not be empty [type-empty]
+
+✖   found 2 problems, 0 warnings
+ⓘ   Get help: https://github.com/conventional-changelog/commitlint/#what-is-commitlint
+
+husky - commit-msg script failed (code 1)
+```
+Use a Conventional Commit message instead:
+```bash
+git commit -m "fix(indexer): prevent duplicate event upsert on cursor retry"
+```
+The configured rules live in `commitlint.config.js` at the repo root and extend `@commitlint/config-conventional`, with the subject line capped at 72 characters as described above. You can run the same check manually:
+```bash
+# lint the message of the most recent commit
+pnpm exec commitlint --from HEAD~1 --to HEAD
+
+# lint an arbitrary message
+echo "chore: upgrade golangci-lint" | pnpm exec commitlint
+```
+The hook is installed by `pnpm install` at the repo root. If it is missing (for example after `pnpm install --ignore-scripts`, or in a checkout made before this was added), run `pnpm exec husky` from the repo root and commit again.
 ---
 ## PR checklist
 Before marking your PR ready for review, verify each item:
