@@ -200,3 +200,35 @@ type HealthScoreInputs struct {
 	TotalStorage      int64
 	ExpiringStorage   int64
 }
+
+// VerificationDiagnostic is one actionable item produced by a contract source
+// verification attempt (issue #263). It is persisted as JSONB and returned
+// verbatim to API clients, so the JSON field names are part of the API shape.
+type VerificationDiagnostic struct {
+	Code     string `json:"code"`
+	Severity string `json:"severity"` // error | warning | info
+	Message  string `json:"message"`
+	Hint     string `json:"hint,omitempty"`
+}
+
+// ContractVerification is the persisted outcome of a source-verification
+// attempt for one contract (issue #263). There is exactly one row per
+// contract: the most recent submission replaces the previous verdict.
+type ContractVerification struct {
+	ContractID     string
+	Status         string // pending | verified | failed
+	OnChainHash    string
+	CompiledHash   string
+	Matched        bool
+	SourceKind     string // archive | git | ""
+	SourceRef      string // archive filename, or "<git url>@<commit>"
+	SourceDigest   string // sha256 of the archive, or of the git ref
+	StellarVersion string
+	RustcVersion   string
+	CargoVersion   string
+	Diagnostics    []VerificationDiagnostic
+	BuildLog       string
+	SubmittedAt    time.Time
+	VerifiedAt     *time.Time
+	UpdatedAt      time.Time
+}

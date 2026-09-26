@@ -12,30 +12,31 @@ import (
 
 // MockStore is an in-memory Store + QueryStore implementation for unit tests.
 type MockStore struct {
-	contracts          map[string]Contract
-	events             []Event
-	invocations        []Invocation
-	storageEntries     []StorageEntry
-	syncStates         map[string]SyncState
-	globalStats        GlobalStats
-	monitored          map[string]MonitoredContract
-	healthChecks       []HealthCheck
-	alerts             []ContractAlert
-	apiKeys            []APIKey
-	contractUpgrades   []ContractUpgrade
-	contractTags       map[string]map[string]bool
-	watchlist          map[string]map[string]bool
-	alertSubscriptions []AlertSubscription
-	users              map[string]User
-	healthScores       map[string]ContractHealthScore
-	wasmBinaries       map[string]ContractWasm
-	failedEvents       map[int64]FailedEvent
-	failedEventSeq     int64
-	indexerCursors     map[string]uint32
-	contractSpecs      map[string]ContractSpec
-	contractVersions   map[string][]ContractVersion
-	alertGroups        []AlertGroup
-	labels             []Label
+	contracts             map[string]Contract
+	events                []Event
+	invocations           []Invocation
+	storageEntries        []StorageEntry
+	syncStates            map[string]SyncState
+	globalStats           GlobalStats
+	monitored             map[string]MonitoredContract
+	healthChecks          []HealthCheck
+	alerts                []ContractAlert
+	apiKeys               []APIKey
+	contractUpgrades      []ContractUpgrade
+	contractTags          map[string]map[string]bool
+	watchlist             map[string]map[string]bool
+	alertSubscriptions    []AlertSubscription
+	users                 map[string]User
+	healthScores          map[string]ContractHealthScore
+	wasmBinaries          map[string]ContractWasm
+	contractSpecs         map[string]ContractSpec
+	failedEvents          map[int64]FailedEvent
+	failedEventSeq        int64
+	indexerCursors        map[string]uint32
+	contractVersions      map[string][]ContractVersion
+	contractVerifications map[string]ContractVerification
+	alertGroups           []AlertGroup
+	labels                []Label
 
 	// Error injection
 	UpsertContractErr           error
@@ -59,13 +60,18 @@ type MockStore struct {
 	RecordContractVersionErr    error
 	ListContractVersionsErr     error
 	GetLatestContractVersionErr error
-	UpsertContractSpecErr       error
-	GetContractSpecErr          error
-	GetWasmErr                  error
-	InsertFailedEventErr        error
-	ListFailedEventsErr         error
-	GetFailedEventErr           error
-	DeleteFailedEventErr        error
+
+	UpsertVerificationErr error
+	GetVerificationErr    error
+
+	UpsertContractSpecErr error
+	GetContractSpecErr    error
+	GetWasmErr            error
+
+	InsertFailedEventErr error
+	ListFailedEventsErr  error
+	GetFailedEventErr    error
+	DeleteFailedEventErr error
 }
 
 func (m *MockStore) UpsertLabel(_ context.Context, label Label) error {
@@ -110,18 +116,21 @@ func (m *MockStore) ResolveLabel(_ context.Context, workspaceID, query string) (
 // NewMockStore returns an initialized MockStore.
 func NewMockStore() *MockStore {
 	return &MockStore{
-		contracts:          make(map[string]Contract),
-		syncStates:         make(map[string]SyncState),
-		monitored:          make(map[string]MonitoredContract),
-		contractTags:       make(map[string]map[string]bool),
-		watchlist:          make(map[string]map[string]bool),
-		alerts:             make([]ContractAlert, 0),
-		alertSubscriptions: make([]AlertSubscription, 0),
-		users:              make(map[string]User),
-		wasmBinaries:       make(map[string]ContractWasm),
-		indexerCursors:     make(map[string]uint32),
-		contractSpecs:      make(map[string]ContractSpec),
-		contractVersions:   make(map[string][]ContractVersion),
+		contracts:             make(map[string]Contract),
+		syncStates:            make(map[string]SyncState),
+		monitored:             make(map[string]MonitoredContract),
+		contractTags:          make(map[string]map[string]bool),
+		watchlist:             make(map[string]map[string]bool),
+		alerts:                make([]ContractAlert, 0),
+		alertSubscriptions:    make([]AlertSubscription, 0),
+		users:                 make(map[string]User),
+		wasmBinaries:          make(map[string]ContractWasm),
+		failedEvents:          make(map[int64]FailedEvent),
+		labels:                make([]Label, 0),
+		indexerCursors:        make(map[string]uint32),
+		contractSpecs:         make(map[string]ContractSpec),
+		contractVerifications: make(map[string]ContractVerification),
+		contractVersions:      make(map[string][]ContractVersion),
 	}
 }
 

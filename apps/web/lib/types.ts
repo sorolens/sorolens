@@ -448,3 +448,35 @@ export interface AlertSubscription {
 export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
 }
+
+// ---- source verification ---------------------------------------------------
+
+export interface VerificationDiagnostic {
+  code: string;
+  severity: string;
+  message: string;
+  hint?: string;
+}
+
+export interface ContractVerification {
+  contract_id: string;
+  status: string;
+  matched: boolean;
+  on_chain_hash?: string;
+  compiled_wasm_hash?: string;
+  source: {
+    kind: string;
+    ref?: string;
+    digest?: string;
+  };
+  toolchain: {
+    stellar?: string;
+    rustc?: string;
+    cargo?: string;
+  };
+  diagnostics: VerificationDiagnostic[];
+  build_log?: string;
+  submitted_at: string;
+  verified_at?: string;
+  updated_at: string;
+}

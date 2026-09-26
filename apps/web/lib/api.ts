@@ -34,6 +34,7 @@ import type {
   WatchlistResponse,
   WatchlistStatusResponse,
   HealthScoreResponse,
+  ContractVerification,
   LabelResolution,
 } from "./types";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
@@ -410,6 +411,20 @@ export function getContractHealthScore(
 ): Promise<HealthScoreResponse> {
   return fetchJson<HealthScoreResponse>(
     `${API_URL}/api/v1/contracts/${id}/health-score`
+  );
+}
+
+// ---- source verification ---------------------------------------------------
+
+/**
+ * Fetch the cached source-verification verdict for a contract. Returns a 404
+ * ApiError when the contract has never been submitted for verification.
+ */
+export function getContractVerification(
+  id: string
+): Promise<ContractVerification> {
+  return fetchJson<ContractVerification>(
+    `${API_URL}/api/v1/contracts/${id}/verification`
   );
 }
 

@@ -46,6 +46,9 @@ from .contract_tag_request import ContractTagRequest
 from .contract_tags import ContractTags
 from .contract_upgrade import ContractUpgrade
 from .contract_validation_result import ContractValidationResult
+from .contract_verification import ContractVerification
+from .contract_verification_request import ContractVerificationRequest
+from .contract_verification_status import ContractVerificationStatus
 from .create_alert_subscription import CreateAlertSubscription
 from .create_alert_subscription_channel_type import CreateAlertSubscriptionChannelType
 from .create_alert_subscription_severity_filter import (
@@ -202,6 +205,14 @@ from .v2_watchlist_item import V2WatchlistItem
 from .v2_watchlist_list import V2WatchlistList
 from .v2_watchlist_status import V2WatchlistStatus
 from .validate_contract_body import ValidateContractBody
+from .verification_diagnostic import VerificationDiagnostic
+from .verification_diagnostic_severity import VerificationDiagnosticSeverity
+from .verification_expected_input import VerificationExpectedInput
+from .verification_source import VerificationSource
+from .verification_source_input import VerificationSourceInput
+from .verification_source_input_kind import VerificationSourceInputKind
+from .verification_source_kind import VerificationSourceKind
+from .verification_toolchain import VerificationToolchain
 from .watchdog_stats import WatchdogStats
 from .watchlist import Watchlist
 from .watchlist_item import WatchlistItem
@@ -251,6 +262,9 @@ __all__ = (
     "ContractTags",
     "ContractUpgrade",
     "ContractValidationResult",
+    "ContractVerification",
+    "ContractVerificationRequest",
+    "ContractVerificationStatus",
     "CreateAlertSubscription",
     "CreateAlertSubscriptionChannelType",
     "CreateAlertSubscriptionSeverityFilter",
@@ -401,6 +415,14 @@ __all__ = (
     "V2WatchlistList",
     "V2WatchlistStatus",
     "ValidateContractBody",
+    "VerificationDiagnostic",
+    "VerificationDiagnosticSeverity",
+    "VerificationExpectedInput",
+    "VerificationSource",
+    "VerificationSourceInput",
+    "VerificationSourceInputKind",
+    "VerificationSourceKind",
+    "VerificationToolchain",
     "WatchdogStats",
     "Watchlist",
     "WatchlistItem",

@@ -40,6 +40,8 @@ tags:
     description: Global and per-contract statistics
   - name: Contracts
     description: Tracked contract registration and lookup
+  - name: Verification
+    description: Contract source verification and Wasm hash matching
   - name: Events
     description: Contract events
   - name: Invocations
@@ -705,6 +707,80 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/verify:
+    post:
+      tags: [Verification]
+      summary: Verify contract source against the on-chain Wasm hash
+      operationId: verifyContractSource
+      description: |
+        Rebuilds the submitted source in an isolated sandbox and compares the
+        resulting SHA-256 Wasm hash with the hash recorded on-chain for this
+        contract. Supply exactly one source payload: `source.kind` is either
+        `archive` (with `source.content_base64`) or `git` (with `source.url`
+        and `source.commit`). `source.subdir` and `artifact` are optional
+        overrides for multi-crate sources and for naming the built `.wasm`
+        directly.
+
+        A build that runs but does not match is a successful request: it
+        returns 200 with `status: failed`, `matched: false`, and diagnostics
+        explaining the likely cause. Use 422 for malformed input: an unknown
+        `kind`, a missing payload, or a body over 16 MiB. A deployment without
+        a build sandbox answers 503 rather than pretending to verify.
+      security:
+        - ApiKeyAuth: [write:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContractVerificationRequest"
+      responses:
+        "200":
+          description: Verification verdict, including a hash mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractVerification"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          description: No build sandbox is configured on this deployment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/contracts/{id}/verification:
+    get:
+      tags: [Verification]
+      summary: Read the stored source verification for a contract
+      operationId: getContractVerification
+      description: |
+        Returns the most recent verification record for the contract. Responds
+        404 both when the contract itself is unknown and when the contract
+        exists but has never been submitted for source verification.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: Stored verification record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractVerification"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -5059,3 +5135,140 @@ components:
           items:
             type: object
             additionalProperties: true
+
+    ContractVerificationRequest:
+      type: object
+      required: [source]
+      properties:
+        source:
+          $ref: "#/components/schemas/VerificationSourceInput"
+        artifact:
+          type: string
+          description: |
+            Built `.wasm` path relative to the crate directory, bypassing
+            artifact discovery in multi-artifact workspaces.
+        expected:
+          $ref: "#/components/schemas/VerificationExpectedInput"
+
+    VerificationSourceInput:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [archive, git]
+          description: |
+            `archive` requires `content_base64`; `git` requires `url` and
+            `commit`.
+        filename:
+          type: string
+          description: Archive name, used in the build log. Archive sources only.
+        content_base64:
+          type: string
+          description: |
+            Standard-base64 encoded `.tar.gz` of the contract source. Archive
+            sources only. The decoded payload is capped at 8 MiB.
+        url:
+          type: string
+          format: uri
+          description: HTTPS Git URL to clone. Git sources only.
+        commit:
+          type: string
+          description: Commit, tag, or branch to check out. Git sources only.
+        subdir:
+          type: string
+          description: |
+            Crate directory inside the materialized source, for archives or
+            repositories holding more than one crate.
+
+    VerificationExpectedInput:
+      type: object
+      properties:
+        stellar_version:
+          type: string
+          description: |
+            Stellar CLI version the contract was originally built with. A
+            mismatch is reported as a diagnostic rather than a hard failure.
+        rustc_version:
+          type: string
+          description: rustc version the contract was originally built with.
+
+    ContractVerification:
+      type: object
+      required: [contract_id, status, matched, source, toolchain, diagnostics, submitted_at, updated_at]
+      properties:
+        contract_id:
+          type: string
+        status:
+          type: string
+          enum: [verified, failed]
+          description: |
+            `verified` when the recompiled hash matches the on-chain hash,
+            `failed` otherwise. Diagnostics explain a failure.
+        matched:
+          type: boolean
+        on_chain_hash:
+          type: string
+          description: Wasm hash recorded on-chain for the contract (hex).
+        compiled_wasm_hash:
+          type: string
+          description: SHA-256 hash produced by the rebuild (hex).
+        source:
+          $ref: "#/components/schemas/VerificationSource"
+        toolchain:
+          $ref: "#/components/schemas/VerificationToolchain"
+        diagnostics:
+          type: array
+          items:
+            $ref: "#/components/schemas/VerificationDiagnostic"
+        build_log:
+          type: string
+          description: Captured build output, truncated when very large.
+        submitted_at:
+          type: string
+          format: date-time
+        verified_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    VerificationSource:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [archive, git]
+        ref:
+          type: string
+          description: Archive filename or resolved Git commit.
+        digest:
+          type: string
+          description: SHA-256 digest of the submitted source.
+
+    VerificationToolchain:
+      type: object
+      properties:
+        stellar:
+          type: string
+        rustc:
+          type: string
+        cargo:
+          type: string
+
+    VerificationDiagnostic:
+      type: object
+      required: [code, severity, message]
+      properties:
+        code:
+          type: string
+        severity:
+          type: string
+          enum: [error, warning, info]
+        message:
+          type: string
+        hint:
+          type: string
+          description: Actionable suggestion for resolving the finding.

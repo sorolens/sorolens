@@ -294,6 +294,12 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		"GET /api/v1/contracts/{id}/wasm": true,
 		// Bulk untrack/tag (#176): a v1 write surface with no v2 twin yet.
 		"POST /api/v1/contracts/batch": true,
+		// Contract source verification (issue #263): submitting source runs a
+		// compiler and returns a verdict document, and the read endpoint serves
+		// the cached verdict. Both stay v1-only until they are given the v2
+		// envelope.
+		"POST /api/v1/contracts/{id}/verify":      true,
+		"GET /api/v1/contracts/{id}/verification": true,
 	}
 
 	var missing []string

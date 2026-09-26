@@ -31,6 +31,7 @@ type APIStore interface {
 	store.ContractWasmStore
 	store.FailedEventStore
 	store.GlobalEventStore
+	store.ContractVerificationStore
 	store.LabelStore
 }
 
@@ -61,8 +62,14 @@ type Handler struct {
 	Logger      *slog.Logger
 	// Cold is optional; when set, event queries fall back to object storage for
 	// ledger ranges that are no longer in Postgres.
-	Cold ColdEventReader
-	StreamHub   *StreamHub
+	Cold      ColdEventReader
+	StreamHub *StreamHub
+
+	// Verifier rebuilds submitted contract source and compares the resulting
+	// Wasm hash against the on-chain hash (issue #263). It is nil on
+	// deployments without a build sandbox (for example the Vercel serverless
+	// entrypoint), in which case POST /contracts/{id}/verify answers 503.
+	Verifier ContractVerifier
 
 	// Cache stores hot GET responses (issue #143). Nil disables caching.
 	Cache middleware.ResponseCache

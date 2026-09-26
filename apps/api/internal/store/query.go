@@ -33,6 +33,7 @@ type FullStore interface {
 	PerformanceStore
 	ContractWasmStore
 	GlobalEventStore
+	ContractVerificationStore
 	LabelStore
 	FailedEventStore
 }
