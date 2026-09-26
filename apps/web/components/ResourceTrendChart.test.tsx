@@ -59,11 +59,15 @@ describe("ResourceTrendChart", () => {
   });
 
   it("renders one line per metric with the trend data", () => {
-    render(<ResourceTrendChart data={[POINT, { ...POINT, date: "2026-07-04" }]} />);
+    render(
+      <ResourceTrendChart data={[POINT, { ...POINT, date: "2026-07-04" }]} />
+    );
 
     const chart = screen.getByTestId("line-chart");
     expect(chart).toHaveAttribute("data-points", "2");
-    expect(screen.queryByText("No resource usage data yet")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No resource usage data yet")
+    ).not.toBeInTheDocument();
 
     const lines = screen.getAllByTestId("line");
     expect(lines.map((l) => l.getAttribute("data-key"))).toEqual([

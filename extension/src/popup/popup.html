@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sorolens</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <img
+        class="logo"
+        src="../icons/icon-32.png"
+        alt=""
+        width="20"
+        height="20"
+      />
+      <h1>Sorolens</h1>
+      <span
+        class="dot"
+        id="connection-dot"
+        data-state="unknown"
+        title="Checking API connection…"
+      ></span>
+    </header>
+
+    <main>
+      <section class="panel" id="detected-panel" hidden>
+        <h2>On this page</h2>
+        <ul class="list" id="detected-list"></ul>
+      </section>
+
+      <p class="empty" id="empty-state">
+        No Soroban contract IDs found on this page. Open a contract on Stellar
+        Expert or Stellar Lab, or paste an ID below.
+      </p>
+
+      <section class="panel">
+        <h2>Track a contract</h2>
+        <form class="manual" id="manual-form">
+          <input
+            id="manual-input"
+            class="input"
+            type="text"
+            placeholder="C…"
+            spellcheck="false"
+            autocomplete="off"
+            autocapitalize="off"
+            aria-label="Soroban contract ID"
+          />
+          <button class="button primary" type="submit" id="manual-submit">
+            Track
+          </button>
+        </form>
+        <p class="hint" id="manual-hint">
+          Paste a 56-character Soroban contract ID (starts with <code>C</code>).
+        </p>
+      </section>
+
+      <p class="notice" id="notice" hidden></p>
+    </main>
+
+    <footer>
+      <div class="meta" id="meta"></div>
+      <div class="actions">
+        <button class="button ghost" type="button" id="refresh-button">
+          Refresh
+        </button>
+        <button class="button ghost" type="button" id="options-button">
+          Settings
+        </button>
+      </div>
+    </footer>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

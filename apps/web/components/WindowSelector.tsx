@@ -14,7 +14,11 @@ interface WindowSelectorProps {
   options?: TimeWindow[];
 }
 
-export function WindowSelector({ selected, onChange, options }: WindowSelectorProps) {
+export function WindowSelector({
+  selected,
+  onChange,
+  options,
+}: WindowSelectorProps) {
   const windows = options
     ? options
         .map((value) => WINDOWS.find((w) => w.value === value))

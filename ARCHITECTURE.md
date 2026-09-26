@@ -1,4 +1,4 @@
-# ARCHITECTURE.md
+# Architecture
 ## Sorolens System Architecture
 
 ---
@@ -55,7 +55,7 @@ This flow runs when a contract ID is first submitted to the system (either via t
    - Calls RPC getLedgerEntries for the contract instance entry
      - If not found: return 404 (contract does not exist on-chain)
    - Inserts row into `contracts` table with status = "backfilling"
-   - Returns 201 Accepted
+   - Returns 201 Created
 
 2. On next cron run (at most 5 minutes later), the indexer sees
    the contract in "backfilling" status.
@@ -79,12 +79,12 @@ This flow runs when a contract ID is first submitted to the system (either via t
    Repeats with cursor until no more pages.
 
 6. For each event batch:
-   - Decode XDR ScVal topics and value (via local XDR lib)
+   - Decode XDR ScVal topics and value (via a local XDR library)
    - Upsert into `events` table (on conflict: skip duplicate by event `id`)
 
 7. For each unique txHash seen in events:
    - Call RPC getTransaction for any txHash not already in `invocations`
-   - Parse status, result_xdr, resource fees from resultXdr.feeCharged
+   - Parse status, result_xdr, and resource fees from resultXdr.feeCharged
    - Upsert into `invocations` table
 
 8. Call RPC getLedgerEntries for the contract instance + any known
@@ -108,7 +108,10 @@ This flow runs for all contracts in "active" status on every 5-minute cron tick.
    If lock is already held: exit immediately (previous run still in progress).
 
 2. Indexer queries `sync_state` for each tracked contract:
-   SELECT contract_id, last_ledger FROM sync_state WHERE status = 'active'
+   SELECT s.contract_id, s.last_ledger
+   FROM sync_state s
+   JOIN contracts c ON c.id = s.contract_id
+   WHERE c.status = 'active'
 
 3. Calls RPC getLatestLedger -> current_ledger
 
@@ -123,12 +126,12 @@ This flow runs for all contracts in "active" status on every 5-minute cron tick.
 
 5. Same upsert logic as backfill steps 6-8.
 
-6. Refreshes storage_entries for all keys belonging to active contracts
+6. Refresh `storage_entries` for all keys belonging to active contracts
    by calling getLedgerEntries in batches of 100 keys.
 
-7. Updates sync_state.last_ledger = current_ledger for each contract.
+7. Update `sync_state.last_ledger = current_ledger` for each contract.
 
-8. Releases global Redis lock.
+8. Release the global Redis lock.
 ```
 
 ---
@@ -176,7 +179,7 @@ CREATE TABLE events (
 -- Primary query pattern: all events for a contract, newest first.
 CREATE INDEX idx_events_contract_ledger ON events (contract_id, ledger DESC);
 
--- Support filtering by transaction hash (e.g. "show all events in this tx").
+-- Support filtering by transaction hash (e.g., "show all events in this tx").
 CREATE INDEX idx_events_tx_hash ON events (tx_hash);
 
 -- Time-range queries from the dashboard.
@@ -253,56 +256,6 @@ CREATE TABLE sync_state (
     error_message  TEXT,                               -- last error, if any
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
--- ============================================================
--- storage_entry_history
--- Append-only history of storage entries (migration 000005). Every write
--- to storage_entries also appends a versioned row here, so the snapshot/
--- replay endpoint can answer "what was live at ledger N?".
--- ============================================================
-CREATE TABLE storage_entry_history (
-    id                   BIGSERIAL   PRIMARY KEY,
-    contract_id          TEXT        NOT NULL,
-    key_xdr              TEXT        NOT NULL,
-    key_decoded          JSONB,
-    value_xdr            TEXT,
-    value_decoded        JSONB,
-    durability           TEXT        NOT NULL,
-    live_until_ledger    BIGINT,
-    last_modified_ledger BIGINT,
-    status               TEXT        NOT NULL DEFAULT 'live',
-    recorded_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (contract_id, key_xdr, last_modified_ledger)
-);
-
-CREATE INDEX idx_storage_history_lookup
-    ON storage_entry_history (contract_id, key_xdr, last_modified_ledger DESC);
-
--- ============================================================
--- api_keys
--- Scoped API credentials (migration 000004). Only the SHA-256 hash of the
--- plaintext token is stored; the token is shown once at creation.
--- ============================================================
-CREATE TABLE api_keys (
-    id           TEXT        PRIMARY KEY,
-    name         TEXT        NOT NULL,
-    key_prefix   TEXT        NOT NULL,
-    key_hash     TEXT        NOT NULL UNIQUE,
-    scopes       TEXT[]      NOT NULL DEFAULT '{}',
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_used_at TIMESTAMPTZ,
-    revoked_at   TIMESTAMPTZ
-);
-
-CREATE INDEX idx_api_keys_hash ON api_keys (key_hash) WHERE revoked_at IS NULL;
-
--- ============================================================
--- multi-network (migration 000003)
--- events, invocations, storage_entries, and monitored_contracts gained a
--- `network` column defaulting to 'testnet', so the indexer and API can track
--- testnet, mainnet, and futurenet simultaneously. Existing rows are
--- backfilled to 'testnet' for backward compatibility.
--- ============================================================
 ```
 
 ### Index justifications
@@ -329,6 +282,16 @@ All routes return `Content-Type: application/json`. Errors follow:
 { "error": "human readable message", "code": "ERROR_CODE" }
 ```
 
+Request bodies are capped at 1 MiB by default. A request whose
+`Content-Length` exceeds the cap is rejected before its body is read, and any
+other body is bounded with `http.MaxBytesReader`; both paths return `413` with:
+
+```json
+{ "error": { "code": "PAYLOAD_TOO_LARGE", "message": "request body exceeds the 1048576 byte limit", "request_id": "..." } }
+```
+
+Set `REQUEST_MAX_BODY_BYTES` to change the cap.
+
 Cursor pagination uses an opaque `cursor` token (base64 of `{ledger}:{id}`) rather than offset. This is safe against inserts during pagination and aligns with how the RPC itself paginates.
 
 #### Authentication and scopes
@@ -351,6 +314,15 @@ A presented key that lacks the required scope receives `403` with
 `{"error":"missing scope","required":"<scope>"}`. Unknown or revoked keys
 receive `401`. Requests that present no credential keep the public v0.1 read
 surface open; API key management always requires a credential.
+
+#### Profiling: `/debug/pprof/*`
+
+The Go runtime profiling handlers (`net/http/pprof`) are mounted on the same
+router at `/debug/pprof/*` but are admin-only. Every request from a caller
+without the `admin` role — anonymous requests included — receives `403`, so
+the surface is not advertised. An admin gets the standard pprof index at
+`/debug/pprof/` and the named profiles (`goroutine`, `heap`, `allocs`, …),
+`cmdline`, `profile`, `symbol` and `trace` beneath it.
 
 ---
 
@@ -476,6 +448,47 @@ Paginated event list for a contract.
 
 ### 4.3 Invocations
 
+#### `GET /api/v1/invocations`
+
+Global invocation explorer: resource usage for every tracked contract, newest
+first (`ledger DESC, tx_hash DESC`). Backs the dashboard's `/invocations` page.
+
+**Query params:** `cursor`, `limit` (default 50, max 200), `contract_id`, `fn`
+(function name), `status` (`SUCCESS`/`FAILED`/`NOT_FOUND`), `network`, `from` /
+`to` (ledger bounds), `since` / `until` (inclusive `ledger_closed_at` bounds, as
+`YYYY-MM-DD` or RFC3339).
+
+Pagination is keyset-based: the cursor encodes the `(ledger, tx_hash)` position,
+which is the sort tuple, so pages stay stable while the indexer appends rows.
+
+**Response `200`:**
+```json
+{
+  "invocations": [
+    {
+      "tx_hash": "32f7e5c3...",
+      "contract_id": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "network": "testnet",
+      "ledger": 490252,
+      "ledger_closed_at": "2026-07-26T10:00:21Z",
+      "status": "SUCCESS",
+      "function_name": "transfer",
+      "resource_fee_charged": 123456,
+      "cpu_insn": 4883530,
+      "mem_byte": 2298162,
+      "ledger_read_byte": 21812,
+      "ledger_write_byte": 1808
+    }
+  ],
+  "next_cursor": "NDkwMjUyOmFiYzEyMw=="
+}
+```
+
+`next_cursor` is an empty string on the last page. Invalid `cursor`, `since`,
+`until`, or `network` values return `422`.
+
+---
+
 #### `GET /api/v1/contracts/:id/invocations`
 
 Paginated invocation list.
@@ -583,6 +596,23 @@ ledger `N`. Used by the ledger scrubber on the contract detail page.
 
 ---
 
+#### `GET /api/v1/contracts/:id/snapshot.json`
+
+Portable JSON export of the contract's current state: the four sections
+`metadata`, `storage`, `events`, and `summary`, wrapped in a versioned
+envelope (`schema_version`, `contract_id`, `network`, `ledger`). The document
+is deterministic for an unchanged store (stable field order, sorted
+collections, no wall-clock fields), so exports can be archived or diffed.
+Served with `Content-Type: application/json; charset=utf-8` and
+`Content-Disposition: attachment; filename="<id>-snapshot.json"`; when the
+client sends `Accept-Encoding: gzip` the body is gzip-compressed.
+
+**Responses:**
+- `200`: the four-section export described above.
+- `404`: contract is unknown.
+
+---
+
 ### 4.6 API keys
 
 Scoped credentials are managed under `/api/v1/api-keys` and require the
@@ -604,6 +634,7 @@ Revoke a key. Returns `204`.
 ---
 
 ### 4.7 Stats
+### 4.5 Stats
 
 #### `GET /api/v1/stats/global`
 
@@ -627,24 +658,6 @@ Network-wide summary across all tracked contracts.
 
 ---
 
-### 4.8 Dashboard summary
-
-#### `GET /api/v1/contracts/:id/summary`
-
-Composite document for the contract dashboard: totals, the newest event, the
-newest invocation, and the cached health score, so a page load costs one
-request instead of four. Each sub-query is an aggregate or a `LIMIT 1` newest-row
-lookup, so the work per request is constant (no per-row queries). Responses are
-memoized in-process for 5 seconds.
-
-**Responses:**
-- `200`: `{ contract_id, network, label, status, generated_at, stats, latest_event, latest_invocation, health_score }`.
-  `latest_event`, `latest_invocation`, and `health_score` are `null` until the
-  indexer has produced the corresponding data.
-- `404`: the contract is unknown.
-
----
-
 ## 5. Design Decisions with Rationale
 
 ### 5.1 Cron-driven indexer over a persistent worker
@@ -659,7 +672,7 @@ memoized in-process for 5 seconds.
 **Tradeoffs:**
 - 5-minute minimum latency for new events. For an observability tool (not a trading system), this is acceptable.
 - Cold start on each run adds a few seconds of overhead.
-- Cannot hold long-running TCP connections to Soroban RPC (not needed; RPC is HTTP).
+- Cannot hold long-running TCP connections to Soroban RPC (unnecessary; RPC is HTTP).
 
 **Migration path to a persistent worker:** When event volume or contract count makes 5-minute cron latency unacceptable, extract the indexer binary and run it as a Fly.io Machine (free tier) or a Railway worker. The indexer already exposes a `Run()` function with a configurable poll interval; no structural change is required. The Redis advisory lock mechanism is already in place to prevent duplicate runs regardless of how the indexer is deployed.
 
@@ -671,7 +684,7 @@ memoized in-process for 5 seconds.
 
 **Rationale:** Vercel serverless functions have a maximum execution time (approximately 60 seconds for Pro, 10 seconds for free). Long-lived SSE connections are not supported on Vercel serverless. HTTP polling with a 5-second interval and a cursor is the only viable approach without a separate persistent WebSocket server.
 
-**Tradeoffs:** 5-second polling is slightly higher latency than SSE and uses more requests. For an observability tool where data is already indexed with 5-minute granularity, this is acceptable. Clients deduplicate by event `id`.
+**Tradeoffs:** Five-second polling has slightly higher latency than SSE and uses more requests. For an observability tool where data is already indexed with 5-minute granularity, this is acceptable. Clients deduplicate by event `id`.
 
 **Migration path:** If Sorolens is ever deployed with a persistent server, replace the polling client code with an SSE or WebSocket endpoint backed by a Go `net/http` SSE handler. The API contract (cursor-based event list) does not change.
 
@@ -700,3 +713,43 @@ Upstash Redis is used because it is serverless (no idle cost), has a free tier, 
 - Postgres `WHERE (ledger, id) < (cursor_ledger, cursor_id) ORDER BY ledger DESC, id DESC LIMIT N` uses the composite index efficiently.
 
 **Tradeoff:** Clients cannot jump to an arbitrary page number. This is acceptable for an observability dashboard where users scroll through a feed; it is not a spreadsheet export use case.
+
+---
+
+### 5.5 PWA / Web Push (issue #275)
+
+**Decision:** Ship installability and push-notification delivery as a Progressive Web App (Workbox service worker + VAPID Web Push) rather than a native mobile wrapper.
+
+**Rationale:** A PWA requires no App Store review cycle, works on all major mobile browsers, and can be maintained purely within the existing Next.js codebase. VAPID push is the W3C standard supported natively by all modern browsers and does not require any cloud push SDK.
+
+**New API surface** (Next.js App Router route handlers in `apps/web/app/api/push/`):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET`  | `/api/push/vapid-public-key` | Returns the VAPID public key for `PushManager.subscribe()`. Public by design. |
+| `POST` | `/api/push/subscribe`        | Saves a `PushSubscription` JSON blob (endpoint + keys) to the server-side store. |
+| `DELETE`| `/api/push/subscribe`       | Removes a subscription by endpoint. |
+| `PUT`  | `/api/push/subscribe`        | Internal endpoint: fans out a push payload to all stored subscriptions. Auth-guarded by `PUSH_INTERNAL_SECRET`. |
+
+**Environment variables** (server-side only — never `NEXT_PUBLIC_*`):
+
+| Variable | Purpose |
+|----------|---------|
+| `VAPID_PUBLIC_KEY`   | Base64url-encoded EC P-256 public key |
+| `VAPID_PRIVATE_KEY`  | Base64url-encoded EC P-256 private key |
+| `VAPID_SUBJECT`      | Contact URI for the VAPID JWT (`mailto:` or `https:`) |
+| `PUSH_INTERNAL_SECRET` | Shared secret for the `PUT` push-send endpoint |
+
+**#127 dependency:** Issue #127 ("pluggable notification channels") specifies Slack/Discord/PagerDuty integrations, not Web Push. The server-side alert-triggered push path is **stubbed** — the `PUT /api/push/subscribe` route exists and works, but the indexer/notifier does not yet call it. When #127 or a dedicated push-delivery issue lands, the notifier should call `PUT /api/push/subscribe` with `x-push-secret: $PUSH_INTERNAL_SECRET` when a Critical alert fires. This is documented in `apps/web/app/api/push/subscribe/route.ts`.
+
+**Subscription persistence:** The current `POST /api/push/subscribe` stores subscriptions in-process (a `Map`). This is lost on serverless cold starts. Before enabling push in production, replace the `Map` with a Postgres table (a simple `push_subscriptions(endpoint TEXT PK, keys JSONB, created_at TIMESTAMPTZ)` suffices) and call the Go API to persist it.
+
+**Client-side PWA components:**
+- `apps/web/public/manifest.webmanifest` — Web App Manifest with icons, shortcuts, and `display: standalone`.
+- `apps/web/next.config.ts` — wraps Next.js with `@ducanh2912/next-pwa` (Workbox) to generate a service worker that precaches the app shell and runtime-caches API responses (stale-while-revalidate, 5-minute TTL).
+- `apps/web/lib/alertQueue.ts` — IndexedDB-backed offline alert queue (via `idb`).
+- `apps/web/hooks/useOfflineAlertQueue.ts` — React hook that reads/writes the queue and tracks `navigator.onLine`.
+- `apps/web/hooks/usePushSubscription.ts` — React hook managing the push subscription lifecycle (idle → subscribing → subscribed → denied).
+- `apps/web/components/OfflineAlert.tsx` — `OfflineBanner` (shown when offline) + `OfflineAlertPanel` (the `/offline-alerts` page body).
+- `apps/web/app/offline-alerts/page.tsx` — dedicated page for the queued-alert view.
+

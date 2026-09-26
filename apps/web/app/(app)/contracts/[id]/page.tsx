@@ -21,7 +21,11 @@ import type {
   TimeWindow,
 } from "@/lib/types";
 import { StatCard } from "@/components/StatCard";
-import { CardSkeleton, ChartSkeleton, TableSkeleton } from "@/components/Skeleton";
+import {
+  CardSkeleton,
+  ChartSkeleton,
+  TableSkeleton,
+} from "@/components/Skeleton";
 import { WindowSelector } from "@/components/WindowSelector";
 import { EventVolumeChart } from "@/components/EventVolumeChart";
 import { InvocationChart } from "@/components/InvocationChart";
@@ -152,9 +156,9 @@ function ContractDetailContent({ id }: { id: string }) {
     async function loadEvents() {
       setEventsLoading(true);
       try {
-        const data = await getContractEvents(id, { 
-          limit: 50, 
-          in_successful_call: showFailedOnly ? false : undefined 
+        const data = await getContractEvents(id, {
+          limit: 50,
+          in_successful_call: showFailedOnly ? false : undefined,
         });
         if (!cancelled) {
           setEvents(data.events);
@@ -203,10 +207,10 @@ function ContractDetailContent({ id }: { id: string }) {
   const handleLoadMoreEvents = useCallback(async () => {
     if (!eventsCursor) return;
     try {
-      const data = await getContractEvents(id, { 
-        cursor: eventsCursor, 
+      const data = await getContractEvents(id, {
+        cursor: eventsCursor,
         limit: 50,
-        in_successful_call: showFailedOnly ? false : undefined 
+        in_successful_call: showFailedOnly ? false : undefined,
       });
       setEvents((prev) => [...prev, ...data.events]);
       setEventsCursor(data.cursor);
@@ -219,7 +223,10 @@ function ContractDetailContent({ id }: { id: string }) {
   const handleLoadMoreStorage = useCallback(async () => {
     if (!storageCursor) return;
     try {
-      const data = await getContractStorage(id, { cursor: storageCursor, limit: 100 });
+      const data = await getContractStorage(id, {
+        cursor: storageCursor,
+        limit: 100,
+      });
       setStorage((prev) => [...prev, ...data.entries]);
       setStorageCursor(data.cursor);
       setStorageHasMore(data.has_more);
@@ -309,8 +316,7 @@ function ContractDetailContent({ id }: { id: string }) {
               Last ledger: {contract.sync.last_ledger.toLocaleString()}
             </span>
             <span>
-              Last sync:{" "}
-              {new Date(contract.sync.last_run_at).toLocaleString()}
+              Last sync: {new Date(contract.sync.last_run_at).toLocaleString()}
             </span>
           </div>
         )}

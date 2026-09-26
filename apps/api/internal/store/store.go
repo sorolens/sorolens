@@ -37,6 +37,7 @@ type Store interface {
 	// page. Returns the next cursor (empty string when there are no more
 	// pages) as the second return value.
 	ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error)
+	SearchContracts(ctx context.Context, query string, limit int) ([]Contract, error)
 
 	// BatchInsertEvents inserts events, ignoring duplicates by primary key.
 	// All rows are sent in a single network round-trip.
@@ -77,6 +78,20 @@ type Store interface {
 	// If any operation fails or the process crashes mid-poll before commit,
 	// the entire batch is rolled back atomically.
 	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error
+
+	// RecordContractVersion appends a new entry to the contract_versions table
+	// if the given wasm_hash has not been seen before for this contract.
+	// It is a no-op (returns nil) when the (contract_id, wasm_hash) pair already
+	// exists, making repeated indexer calls idempotent.
+	RecordContractVersion(ctx context.Context, v ContractVersion) error
+
+	// ListContractVersions returns all recorded Wasm hash entries for the given
+	// contract, sorted chronologically by first_seen_ledger ascending.
+	ListContractVersions(ctx context.Context, contractID string) ([]ContractVersion, error)
+
+	// GetLatestContractVersion returns the most recently seen ContractVersion for
+	// the given contract. Returns ErrNotFound when no version has been recorded yet.
+	GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error)
 }
 
 // AlertSubscriptionStore is the read/write surface for alert webhook subscriptions.
@@ -113,6 +128,13 @@ type UserStore interface {
 	// GetUserByGitHubID returns the user whose GitHub ID matches, or
 	// ErrNotFound.
 	GetUserByGitHubID(ctx context.Context, githubID string) (User, error)
+}
+
+// LabelStore persists public and workspace-scoped human-readable identifiers.
+type LabelStore interface {
+	UpsertLabel(ctx context.Context, label Label) error
+	ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error)
+	ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error)
 }
 
 // ContractFilters holds optional query filters for listing contracts.

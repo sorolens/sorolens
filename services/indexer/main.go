@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -13,12 +14,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/sorolens/sorolens/services/indexer/internal/coordinator"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/poller"
 	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
 )
 
 func main() {
+	defer reportPanic()
+
 	tp, _ := poller.InitTracer()
 	if tp != nil {
 		defer tp.Shutdown(context.Background())
@@ -29,11 +34,31 @@ func main() {
 	pollInterval := flag.Duration("poll-interval", 5*time.Minute, "Sleep between passes (continuous mode)")
 	ledgerWindow := flag.Uint("ledger-window", 120960, "Ledger window per getEvents call")
 	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics HTTP server (empty disables it)")
+	// Sharded topology (issue #272). The default role preserves the original
+	// single-process behaviour: index every contract in this process.
+	role := flag.String("role", envString("INDEXER_ROLE", "all"), "Role: all, coordinator, or worker")
+	shardCount := flag.Int("shard-count", envInt("INDEXER_SHARD_COUNT", coordinator.DefaultShardCount), "Number of shards contracts are spread across")
+	workerID := flag.String("worker-id", envString("INDEXER_WORKER_ID", ""), "Unique id for this process (required for coordinator and worker roles)")
+	shardStoreKind := flag.String("shard-store", envString("INDEXER_SHARD_STORE", ""), "Shard store backend: memory (single node only)")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
+
+	// Error reporting is disabled entirely when SENTRY_DSN is unset:
+	// sentry-go falls back to a no-op transport, so reportPanic below still
+	// runs safely but delivers nothing.
+	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:         dsn,
+			Environment: envString("SENTRY_ENVIRONMENT", "production"),
+		}); err != nil {
+			log.Error("sentry init", "err", err)
+		} else {
+			defer sentry.Flush(2 * time.Second)
+		}
+	}
 
 	cfg := poller.Config{
 		LedgerWindow:         uint32(*ledgerWindow),
@@ -107,6 +132,8 @@ func main() {
 
 	// Start nightly performance job
 	go func() {
+		defer reportPanic()
+
 		type perfStore interface {
 			ComputeAndStoreBaselines(ctx context.Context, snapshotDate time.Time) error
 			CheckAndEmitRegressions(ctx context.Context, snapshotDate time.Time) (int, error)
@@ -134,9 +161,58 @@ func main() {
 		}
 	}()
 
-	log.Info("sorolens/indexer starting", "mode", *mode)
-	if err := p.Run(ctx, *mode); err != nil {
-		log.Error("indexer error", "err", err)
+	switch *role {
+	case "", "all":
+		log.Info("sorolens/indexer starting", "mode", *mode, "role", "all")
+		if err := p.Run(ctx, *mode); err != nil {
+			log.Error("indexer error", "err", err)
+			os.Exit(1)
+		}
+
+	case "coordinator", "worker":
+		shardStore, err := buildShardStore(*shardStoreKind)
+		if err != nil {
+			log.Error("indexer: shard store unavailable", "role", *role, "err", err)
+			os.Exit(1)
+		}
+		if *workerID == "" {
+			log.Error("indexer: --worker-id is required for the coordinator and worker roles")
+			os.Exit(1)
+		}
+
+		shardCfg := coordinator.Config{
+			ShardCount:        *shardCount,
+			WorkerID:          *workerID,
+			HeartbeatInterval: envDuration("INDEXER_HEARTBEAT_INTERVAL", coordinator.DefaultHeartbeatInterval),
+			StaleAfter:        envDuration("INDEXER_WORKER_STALE_AFTER", coordinator.DefaultStaleAfter),
+			RebalanceInterval: envDuration("INDEXER_REBALANCE_INTERVAL", coordinator.DefaultRebalanceInterval),
+		}
+
+		if *role == "coordinator" {
+			log.Info("sorolens/indexer starting", "role", "coordinator", "worker_id", *workerID, "shards", *shardCount)
+			if err := coordinator.New(shardStore, log, shardCfg).Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Error("indexer coordinator error", "err", err)
+				os.Exit(1)
+			}
+		} else {
+			// The poller is wrapped so it only ever sees the contracts this
+			// worker's shards cover; every other store call passes through.
+			scoped := newScopedStore(st)
+			wp := poller.NewWithRPCClients(clients, scoped, redis, cfg, log)
+			wp.SetMetrics(recorder)
+			run := func(passCtx context.Context, contractIDs []string) error {
+				scoped.SetScope(contractIDs)
+				return wp.Run(passCtx, "once")
+			}
+			log.Info("sorolens/indexer starting", "role", "worker", "worker_id", *workerID, "shards", *shardCount)
+			if err := coordinator.NewWorker(shardStore, log, shardCfg).Run(ctx, run); err != nil && !errors.Is(err, context.Canceled) {
+				log.Error("indexer worker error", "err", err)
+				os.Exit(1)
+			}
+		}
+
+	default:
+		log.Error("indexer: unknown --role", "role", *role, "want", "all, coordinator, or worker")
 		os.Exit(1)
 	}
 	log.Info("sorolens/indexer done")
@@ -267,6 +343,9 @@ func (s *stubRPC) GetLedgerEntries(ctx context.Context, keys []string) (*poller.
 	}
 	return &poller.GetLedgerEntriesResult{}, nil
 }
+func (s *stubRPC) GetContractWasmHash(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
 
 type stubStore struct{}
 
@@ -277,6 +356,12 @@ func (s *stubStore) BatchInsertEvents(ctx context.Context, events []poller.Event
 	return nil
 }
 func (s *stubStore) BatchInsertInvocations(ctx context.Context, invocations []poller.Invocation) error {
+	return nil
+}
+
+// InsertFailedEvent parks an event that exhausted its insert retries in the DLQ
+// (issue #202). The stub drops it; the real store is wired in apps/api.
+func (s *stubStore) InsertFailedEvent(_ context.Context, _ poller.FailedEvent) error {
 	return nil
 }
 func (s *stubStore) GetSyncState(ctx context.Context, contractID string) (poller.SyncState, error) {
@@ -290,7 +375,7 @@ func (s *stubStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, 
 	return nil
 }
 func (s *stubStore) GetIndexerCursor(_ context.Context, _ string) (uint32, error) { return 0, nil }
-func (s *stubStore) SetIndexerCursor(_ context.Context, _ string, _ uint32) error  { return nil }
+func (s *stubStore) SetIndexerCursor(_ context.Context, _ string, _ uint32) error { return nil }
 func (s *stubStore) BatchInsertWithCursor(_ context.Context, _ string, _ uint32, _ []poller.Event, _ []poller.Invocation, _ poller.SyncState) error {
 	return nil
 }
@@ -310,6 +395,12 @@ func (s *stubStore) ContractHealthInputs(_ context.Context, _ string) (poller.He
 func (s *stubStore) UpsertContractHealthScore(_ context.Context, _ poller.ContractHealthScore) error {
 	return nil
 }
+func (s *stubStore) RecordContractVersion(_ context.Context, _ poller.ContractVersion) error {
+	return nil
+}
+func (s *stubStore) GetLatestContractVersion(_ context.Context, _ string) (poller.ContractVersion, error) {
+	return poller.ContractVersion{}, poller.ErrVersionNotFound
+}
 
 type stubRedis struct{}
 
@@ -317,6 +408,19 @@ func (r *stubRedis) SetNX(ctx context.Context, key, value string, ttl time.Durat
 	return true, nil
 }
 func (r *stubRedis) Del(ctx context.Context, key string) error { return nil }
+
+// reportPanic reports a recovered panic to Sentry (a no-op when Sentry was
+// not initialized), flushes, then re-panics so the process still crashes and
+// exits with the same non-zero status it always has. Every goroutine that
+// can panic needs its own deferred call: recover only ever catches a panic
+// on the same goroutine's call stack.
+func reportPanic() {
+	if err := recover(); err != nil {
+		sentry.CurrentHub().Recover(err)
+		sentry.Flush(2 * time.Second)
+		panic(err)
+	}
+}
 
 // startMetricsServer serves the Prometheus /metrics endpoint on addr and
 // returns the server so the caller can shut it down. It returns nil when addr
@@ -387,4 +491,39 @@ func envFloat(key string, def float64) float64 {
 		return def
 	}
 	return f
+}
+
+// envDuration reads a duration env var with a default. Values use Go duration
+// syntax, e.g. "30s" or "2m".
+func envDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return def
+	}
+	return d
+}
+
+// buildShardStore resolves the store the coordinator and workers share.
+//
+// Only the in-memory backend is wired today. It keeps the shard table inside
+// one process, which is enough to exercise the topology on a single node but is
+// NOT safe for replicas: each process would hold its own table and believe it
+// owned every shard. Real horizontal scaling needs a coordinator.Store backed
+// by Postgres; the schema it must write is
+// apps/api/internal/db/migrations/000011_indexer_shards.up.sql. It fails fast
+// rather than silently degrading to per-process ownership.
+func buildShardStore(kind string) (coordinator.Store, error) {
+	switch kind {
+	case "memory":
+		return coordinator.NewMemStore(), nil
+	default:
+		return nil, fmt.Errorf(
+			"set --shard-store=memory for a single-node run; multi-replica sharding requires a shared coordinator.Store (see docs/indexer-sharding.md), got %q",
+			kind,
+		)
+	}
 }

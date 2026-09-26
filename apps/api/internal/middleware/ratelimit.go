@@ -27,14 +27,14 @@ type RedisClient interface {
 func RateLimit(rc RedisClient, lookup APIKeyLookup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/health" || r.URL.Path == "/readyz" {
+			if r.URL.Path == "/health" || r.URL.Path == "/readyz" || r.URL.Path == "/api/version" {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			ip := clientIP(r)
 			limit := 100
-			
+
 			// Check if authenticated
 			token := extractAPIKey(r)
 			if token != "" {

@@ -23,6 +23,7 @@ type Client struct {
 	baseURL    string
 	httpClient *http.Client
 	timeout    time.Duration
+	apiKey     string
 }
 
 // New creates a Client targeting baseURL with the given request timeout.
@@ -36,11 +37,40 @@ func New(baseURL string, timeout time.Duration) *Client {
 	}
 }
 
+// WithAPIKey returns the client with an API key attached to every request.
+// The key is sent as both X-API-Key and Authorization: Bearer, matching the
+// authentication schemes accepted by the Sorolens API.
+func (c *Client) WithAPIKey(key string) *Client {
+	c.apiKey = key
+	return c
+}
+
 // ListEventsOpts holds optional filters for listing events.
 type ListEventsOpts struct {
 	Type   string
 	Limit  int
 	Cursor string
+}
+
+// ListContractsOpts holds optional filters for listing contracts.
+type ListContractsOpts struct {
+	Status string
+	Limit  int
+	Cursor string
+}
+
+// ListInvocationsOpts holds optional filters for listing invocations.
+type ListInvocationsOpts struct {
+	Status string
+	Fn     string
+	Limit  int
+	Cursor string
+}
+
+// ListAlertsOpts holds optional filters for listing watchdog alerts.
+type ListAlertsOpts struct {
+	Severity string
+	Limit    int
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body any, out any) error {
@@ -73,6 +103,10 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -139,6 +173,69 @@ func (c *Client) GetStorage(ctx context.Context, contractID string) ([]StorageEn
 	return out.Storage, err
 }
 
+// ListContracts fetches a paginated list of tracked contracts.
+func (c *Client) ListContracts(ctx context.Context, opts ListContractsOpts) (ContractsResponse, error) {
+	q := url.Values{}
+	if opts.Status != "" {
+		q.Set("status", opts.Status)
+	}
+	if opts.Limit > 0 {
+		q.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	if opts.Cursor != "" {
+		q.Set("cursor", opts.Cursor)
+	}
+	path := "/api/v1/contracts"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out ContractsResponse
+	err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return out, err
+}
+
+// ListInvocations fetches a paginated list of invocations for a contract.
+func (c *Client) ListInvocations(ctx context.Context, contractID string, opts ListInvocationsOpts) (InvocationsResponse, error) {
+	q := url.Values{}
+	if opts.Status != "" {
+		q.Set("status", opts.Status)
+	}
+	if opts.Fn != "" {
+		q.Set("fn", opts.Fn)
+	}
+	if opts.Limit > 0 {
+		q.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	if opts.Cursor != "" {
+		q.Set("cursor", opts.Cursor)
+	}
+	path := "/api/v1/contracts/" + contractID + "/invocations"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out InvocationsResponse
+	err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return out, err
+}
+
+// ListAlerts fetches watchdog alerts, optionally filtered by severity.
+func (c *Client) ListAlerts(ctx context.Context, opts ListAlertsOpts) (AlertsResponse, error) {
+	q := url.Values{}
+	if opts.Severity != "" {
+		q.Set("severity", opts.Severity)
+	}
+	if opts.Limit > 0 {
+		q.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	path := "/api/v1/watchdog/alerts"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out AlertsResponse
+	err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return out, err
+}
+
 // TrackContract registers a contract for tracking.
 func (c *Client) TrackContract(ctx context.Context, contractID, alias, network string) (Contract, error) {
 	body := map[string]string{
@@ -151,10 +248,24 @@ func (c *Client) TrackContract(ctx context.Context, contractID, alias, network s
 	return out, err
 }
 
+// SaveLabel creates or updates a public or workspace label.
+func (c *Client) SaveLabel(ctx context.Context, label, value, scope string) (Label, error) {
+	var out Label
+	err := c.do(ctx, http.MethodPost, "/api/v1/labels", map[string]string{"label": label, "value": value, "scope": scope}, &out)
+	return out, err
+}
+
 // GetGlobalStats fetches network-wide aggregate statistics.
 func (c *Client) GetGlobalStats(ctx context.Context) (GlobalStats, error) {
 	var out GlobalStats
 	err := c.do(ctx, http.MethodGet, "/api/v1/stats/global", nil, &out)
+	return out, err
+}
+
+// GetMonitoredContract fetches the watchdog's on-chain health status for a monitored contract.
+func (c *Client) GetMonitoredContract(ctx context.Context, contractID string) (MonitoredContract, error) {
+	var out MonitoredContract
+	err := c.do(ctx, http.MethodGet, "/api/v1/watchdog/contracts/"+contractID, nil, &out)
 	return out, err
 }
 

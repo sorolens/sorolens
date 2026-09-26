@@ -54,7 +54,7 @@ export function CompareView({ initialIds, initialWindow }: CompareViewProps) {
     const params = new URLSearchParams();
     if (selectedIds.length > 0) params.set("ids", selectedIds.join(","));
     if (timeWindow !== "7d") params.set("window", timeWindow);
-    const qs = params.toString();
+    const qs = params.toString().replace(/%2C/g, ",");
     router.replace(qs ? `/compare?${qs}` : "/compare", { scroll: false });
   }, [selectedIds, timeWindow, router]);
 
@@ -76,7 +76,9 @@ export function CompareView({ initialIds, initialWindow }: CompareViewProps) {
       .catch((err: unknown) => {
         if (cancelled) return;
         setEntries([]);
-        setError(err instanceof Error ? err.message : "Failed to load comparison");
+        setError(
+          err instanceof Error ? err.message : "Failed to load comparison"
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -92,7 +94,9 @@ export function CompareView({ initialIds, initialWindow }: CompareViewProps) {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Compare Contracts</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Compare Contracts
+          </h1>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
             Compare up to 4 contracts side by side across networks. Metrics more
             than 20% worse than the best are highlighted amber, and more than
