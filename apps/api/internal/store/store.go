@@ -74,6 +74,19 @@ type AlertSubscriptionStore interface {
 	ListAll(ctx context.Context) ([]AlertSubscription, error)
 }
 
+// ContractTagStore is the read/write surface for user-defined contract tags.
+// Tags are stored in the contract_tags table, one row per (contract, tag).
+type ContractTagStore interface {
+	// AddContractTag adds a tag to a contract. Adding an existing tag is a
+	// no-op (idempotent).
+	AddContractTag(ctx context.Context, contractID, tag string) error
+	// RemoveContractTag removes a tag from a contract. Removing a tag that
+	// is not present is a no-op (idempotent).
+	RemoveContractTag(ctx context.Context, contractID, tag string) error
+	// ListContractTags returns a contract's tags in ascending order.
+	ListContractTags(ctx context.Context, contractID string) ([]string, error)
+}
+
 // WatchlistStore is the interface for per-user watchlist (bookmark) operations.
 type WatchlistStore interface {
 	// AddToWatchlist adds a contract to a user's watchlist.
@@ -110,6 +123,9 @@ type ContractFilters struct {
 	// Status restricts results to one contract status (e.g. "active").
 	// Empty means all statuses.
 	Status string
+	// Tag restricts results to contracts carrying this tag. Empty means
+	// no tag filter.
+	Tag string
 }
 
 // NewStore returns a Store backed by the given pgxpool.Pool.

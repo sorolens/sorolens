@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,12 @@ type contractResponse struct {
 	BackfillCompleteAt *time.Time `json:"backfill_complete_at"`
 	Status             string     `json:"status"`
 	AddedAt            time.Time  `json:"added_at"`
+	Tags               []string   `json:"tags"`
+}
+
+type contractTagsResponse struct {
+	ContractID string   `json:"contract_id"`
+	Tags       []string `json:"tags"`
 }
 
 type eventResponse struct {
@@ -143,6 +150,10 @@ func networkParam(r *http.Request) (string, bool) {
 }
 
 func contractFromStore(c store.Contract) contractResponse {
+	tags := c.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	return contractResponse{
 		ID:                 c.ID,
 		Network:            c.Network,
@@ -152,6 +163,7 @@ func contractFromStore(c store.Contract) contractResponse {
 		BackfillCompleteAt: c.BackfillCompleteAt,
 		Status:             c.Status,
 		AddedAt:            c.AddedAt,
+		Tags:               tags,
 	}
 }
 
@@ -216,6 +228,27 @@ var validNetworks = map[string]bool{
 	"standalone": true,
 }
 
+// maxTagLength bounds a user-defined tag. Tags are lowercased and limited to a
+// conservative charset so they render predictably and cannot be used to smuggle
+// arbitrary text into the dashboard.
+const maxTagLength = 32
+
+// invalidTagMessage is the shared 422 message for a malformed tag.
+const invalidTagMessage = "tag must be 1-32 characters: lowercase letters, digits, hyphen, or underscore, starting with a letter or digit"
+
+var tagRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+
+// normalizeTag trims surrounding whitespace and lowercases a tag so that
+// "Prod" and " prod " are stored and matched as "prod".
+func normalizeTag(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// validTag reports whether t is a non-empty, well-formed tag.
+func validTag(t string) bool {
+	return t != "" && len(t) <= maxTagLength && tagRe.MatchString(t)
+}
+
 func validateContractID(id string) bool {
 	return len(id) == 56 && strings.HasPrefix(id, "C")
 }
@@ -274,9 +307,15 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := intQuery(r, "limit", 50)
+	tag := normalizeTag(r.URL.Query().Get("tag"))
+	if tag != "" && !validTag(tag) {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, invalidTagMessage)
+		return
+	}
 	f := store.ContractFilters{
 		Network: network,
 		Status:  r.URL.Query().Get("status"),
+		Tag:     tag,
 	}
 
 	contracts, nextRaw, err := h.Store.ListContracts(r.Context(), rawCursor, limit, f)
@@ -310,6 +349,75 @@ func (h *Handler) GetContract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, contractFromStore(c))
+}
+
+// AddContractTag handles POST /api/v1/contracts/{id}/tags.
+//
+// Body: {"tag": "prod"}. Adding a tag that is already present is idempotent.
+// Tags are normalized to lowercase before being stored.
+func (h *Handler) AddContractTag(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req struct {
+		Tag string `json:"tag"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid JSON body")
+		return
+	}
+	tag := normalizeTag(req.Tag)
+	if !validTag(tag) {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, invalidTagMessage)
+		return
+	}
+	if _, err := h.Store.GetContract(r.Context(), id); errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "contract not found")
+		return
+	} else if err != nil {
+		h.Logger.Error("get contract for tag", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch contract")
+		return
+	}
+	if err := h.Store.AddContractTag(r.Context(), id, tag); err != nil {
+		h.Logger.Error("add contract tag", "err", err, "contract_id", id)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to add tag")
+		return
+	}
+	tags, err := h.Store.ListContractTags(r.Context(), id)
+	if err != nil {
+		h.Logger.Error("list contract tags", "err", err, "contract_id", id)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to add tag")
+		return
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+	writeJSON(w, http.StatusOK, contractTagsResponse{ContractID: id, Tags: tags})
+}
+
+// RemoveContractTag handles DELETE /api/v1/contracts/{id}/tags/{tag}.
+//
+// Removing a tag that is not present is a no-op (idempotent).
+func (h *Handler) RemoveContractTag(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	tag := normalizeTag(chi.URLParam(r, "tag"))
+	if !validTag(tag) {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, invalidTagMessage)
+		return
+	}
+	if _, err := h.Store.GetContract(r.Context(), id); errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "contract not found")
+		return
+	} else if err != nil {
+		h.Logger.Error("get contract for tag", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch contract")
+		return
+	}
+	if err := h.Store.RemoveContractTag(r.Context(), id, tag); err != nil {
+		h.Logger.Error("remove contract tag", "err", err, "contract_id", id)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to remove tag")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ListEvents handles GET /api/v1/contracts/{id}/events.

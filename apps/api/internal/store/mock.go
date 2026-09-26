@@ -20,6 +20,7 @@ type MockStore struct {
 	alerts             []ContractAlert
 	apiKeys            []APIKey
 	contractUpgrades   []ContractUpgrade
+	contractTags       map[string]map[string]bool
 	watchlist          map[string]map[string]bool
 	alertSubscriptions []AlertSubscription
 	users              map[string]User
@@ -49,6 +50,7 @@ func NewMockStore() *MockStore {
 		contracts:          make(map[string]Contract),
 		syncStates:         make(map[string]SyncState),
 		monitored:          make(map[string]MonitoredContract),
+		contractTags:       make(map[string]map[string]bool),
 		watchlist:          make(map[string]map[string]bool),
 		alerts:             make([]ContractAlert, 0),
 		alertSubscriptions: make([]AlertSubscription, 0),
@@ -77,6 +79,7 @@ func (m *MockStore) GetContract(_ context.Context, contractID string) (Contract,
 	if !ok {
 		return Contract{}, ErrNotFound
 	}
+	c.Tags = m.tagsFor(contractID)
 	return c, nil
 }
 
@@ -98,6 +101,10 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 		if f.Status != "" && c.Status != f.Status {
 			continue
 		}
+		if f.Tag != "" && !m.contractTags[c.ID][f.Tag] {
+			continue
+		}
+		c.Tags = m.tagsFor(c.ID)
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -107,6 +114,17 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+// tagsFor returns the sorted tags for a contract, always non-nil.
+func (m *MockStore) tagsFor(contractID string) []string {
+	set := m.contractTags[contractID]
+	out := make([]string, 0, len(set))
+	for tag := range set {
+		out = append(out, tag)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (m *MockStore) BatchInsertEvents(_ context.Context, events []Event) error {
@@ -574,6 +592,27 @@ func (m *MockStore) ListAll(_ context.Context) ([]AlertSubscription, error) {
 	out := make([]AlertSubscription, len(m.alertSubscriptions))
 	copy(out, m.alertSubscriptions)
 	return out, nil
+}
+
+// ---- store.ContractTagStore -------------------------------------------------
+
+func (m *MockStore) AddContractTag(_ context.Context, contractID, tag string) error {
+	if m.contractTags[contractID] == nil {
+		m.contractTags[contractID] = make(map[string]bool)
+	}
+	m.contractTags[contractID][tag] = true
+	return nil
+}
+
+func (m *MockStore) RemoveContractTag(_ context.Context, contractID, tag string) error {
+	if m.contractTags[contractID] != nil {
+		delete(m.contractTags[contractID], tag)
+	}
+	return nil
+}
+
+func (m *MockStore) ListContractTags(_ context.Context, contractID string) ([]string, error) {
+	return m.tagsFor(contractID), nil
 }
 
 // ---- store.WatchlistStore ---------------------------------------------------

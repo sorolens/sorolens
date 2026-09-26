@@ -368,7 +368,6 @@ describe("ContractsPage", () => {
   });
 
   // ── Pagination: next enabled and advances when has_more=true ─────────────
-
   it("Next button is enabled and triggers next page fetch when has_more=true", async () => {
     mockListContracts
       .mockResolvedValueOnce({
@@ -396,5 +395,56 @@ describe("ContractsPage", () => {
     await waitFor(() =>
       expect(mockListContracts).toHaveBeenCalledTimes(2),
     );
+  });
+
+  // ── Tags: filter input is forwarded to the API ─────────────────────────────
+
+  it("passes the tag filter to listContracts", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    const tagInput = screen.getByLabelText(/filter contracts by tag/i);
+    fireEvent.change(tagInput, { target: { value: "prod" } });
+
+    await waitFor(() =>
+      expect(mockListContracts).toHaveBeenLastCalledWith(
+        expect.objectContaining({ tag: "prod" }),
+      ),
+    );
+  });
+
+  // ── Tags: clicking a tag chip sets the filter ──────────────────────────────
+
+  it("filters by tag when a tag chip is clicked", async () => {
+    mockListContracts.mockResolvedValue({
+      contracts: [{ ...CONTRACT_A, tags: ["prod"] }, CONTRACT_B],
+      cursor: null,
+      has_more: false,
+    });
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    fireEvent.click(screen.getByText("prod"));
+
+    await waitFor(() =>
+      expect(mockListContracts).toHaveBeenLastCalledWith(
+        expect.objectContaining({ tag: "prod" }),
+      ),
+    );
+  });
+
+  // ── Tags: chips render for tagged contracts ────────────────────────────────
+
+  it("renders a chip for each contract tag", async () => {
+    mockListContracts.mockResolvedValue({
+      contracts: [{ ...CONTRACT_A, tags: ["prod", "defi"] }, CONTRACT_B],
+      cursor: null,
+      has_more: false,
+    });
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    expect(screen.getByText("prod")).toBeDefined();
+    expect(screen.getByText("defi")).toBeDefined();
   });
 });

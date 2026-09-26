@@ -55,6 +55,8 @@ func New(h *handler.Handler) http.Handler {
 		r.With(scope, contributor).Post("/contracts", h.RegisterContract)
 		get("/contracts", h.ListContracts)
 		get("/contracts/{id}", h.GetContract)
+		r.With(scope, contributor).Post("/contracts/{id}/tags", h.AddContractTag)
+		r.With(scope, contributor).Delete("/contracts/{id}/tags/{tag}", h.RemoveContractTag)
 		get("/contracts/{id}/events", h.ListEvents)
 		get("/contracts/{id}/invocations", h.ListInvocations)
 		get("/contracts/{id}/storage", h.ListStorageEntries)

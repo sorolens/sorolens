@@ -12,6 +12,10 @@ type Contract struct {
 	BackfillCompleteAt *time.Time
 	Status             string // pending | backfilling | active | paused | error
 	AddedAt            time.Time
+	// Tags are user-defined labels (e.g. "prod", "staging"). They live in
+	// the contract_tags table and are loaded alongside the contract by the
+	// read paths; UpsertContract does not write them.
+	Tags []string
 }
 
 // Event is a single contract event indexed from the Soroban RPC.

@@ -151,6 +151,7 @@ paths:
           schema:
             type: string
           description: Filter by contract status (pending, active, backfilling, error, paused).
+        - $ref: "#/components/parameters/TagParam"
       responses:
         "200":
           description: Page of contracts
@@ -232,6 +233,74 @@ paths:
                 $ref: "#/components/schemas/Contract"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/tags:
+    post:
+      tags: [Contracts]
+      summary: Add a tag to a contract
+      description: |
+        Adds a user-defined tag to a contract. The tag is trimmed and
+        lowercased before storage. Adding a tag that is already present is a
+        no-op, so the operation is idempotent.
+      operationId: addContractTag
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContractTagRequest"
+      responses:
+        "200":
+          description: The contract's full, sorted tag list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractTags"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/tags/{tag}:
+    delete:
+      tags: [Contracts]
+      summary: Remove a tag from a contract
+      description: |
+        Removes a user-defined tag from a contract. Removing a tag that is not
+        present is a no-op.
+      operationId: removeContractTag
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - $ref: "#/components/parameters/TagPath"
+      responses:
+        "204":
+          description: Tag removed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1091,6 +1160,26 @@ components:
         type: string
         enum: [testnet, mainnet, futurenet, standalone]
       description: Network filter; empty means all networks.
+    TagParam:
+      name: tag
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 32
+        pattern: "^[a-z0-9][a-z0-9_-]*$"
+      description: Show only contracts carrying this tag.
+    TagPath:
+      name: tag
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 32
+        pattern: "^[a-z0-9][a-z0-9_-]*$"
+      description: Tag to remove.
     UserIDHeader:
       name: X-User-ID
       in: header
@@ -1193,7 +1282,7 @@ components:
 
     Contract:
       type: object
-      required: [id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at]
+      required: [id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at, tags]
       properties:
         id:
           type: string
@@ -1216,6 +1305,33 @@ components:
         added_at:
           type: string
           format: date-time
+        tags:
+          type: array
+          items:
+            type: string
+          description: User-defined tags, sorted ascending. Always present; empty when the contract has no tags.
+
+    ContractTagRequest:
+      type: object
+      required: [tag]
+      properties:
+        tag:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: "^[a-z0-9][a-z0-9_-]*$"
+          description: Tag label. Trimmed and lowercased before storage.
+
+    ContractTags:
+      type: object
+      required: [contract_id, tags]
+      properties:
+        contract_id:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
 
     Event:
       type: object

@@ -11,6 +11,7 @@ export interface Contract {
   } | null;
   storage_entry_count: number;
   expiring_entry_count: number;
+  tags: string[];
 }
 
 export interface ContractDetail extends Contract {
@@ -102,6 +103,12 @@ export interface ContractSummary {
   status: string;
   wasm_hash: string | null;
   added_at: string;
+  tags: string[];
+}
+
+export interface ContractTagsResponse {
+  contract_id: string;
+  tags: string[];
 }
 
 export interface ContractsListResponse {

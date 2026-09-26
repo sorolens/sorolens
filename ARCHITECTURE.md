@@ -297,6 +297,23 @@ CREATE TABLE api_keys (
 CREATE INDEX idx_api_keys_hash ON api_keys (key_hash) WHERE revoked_at IS NULL;
 
 -- ============================================================
+-- contract_tags
+-- User-defined multi-tags per contract (migration 000013). One row per
+-- (contract, tag), e.g. "prod", "defi", "staging", so an operator can
+-- organize a large fleet by role, environment, or team. The tag index
+-- backs the dashboard's "list contracts carrying tag X" filter.
+-- ============================================================
+CREATE TABLE contract_tags (
+    contract_id TEXT        NOT NULL REFERENCES contracts (id) ON DELETE CASCADE,
+    tag         TEXT        NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (contract_id, tag)
+);
+
+-- Cross-contract lookup: "which contracts carry tag X?".
+CREATE INDEX idx_contract_tags_tag ON contract_tags (tag);
+
+-- ============================================================
 -- multi-network (migration 000003)
 -- events, invocations, storage_entries, and monitored_contracts gained a
 -- `network` column defaulting to 'testnet', so the indexer and API can track
@@ -318,6 +335,7 @@ CREATE INDEX idx_api_keys_hash ON api_keys (key_hash) WHERE revoked_at IS NULL;
 | `idx_invocations_status` | Supports the "show only failures" filter on the invocations list. |
 | `idx_storage_live_until` | The TTL health view needs to order by `live_until_ledger ASC` for a given contract; partial index on `status = 'live'` avoids scanning archived rows. |
 | `idx_storage_durability` | Supports filtering the storage view by entry type. |
+| `idx_contract_tags_tag` | Cross-contract lookup for the dashboard's tag filter ("which contracts carry tag X?"). The `(contract_id, tag)` primary key already serves per-contract tag reads, so only the reverse direction needs an index. |
 
 ---
 
@@ -343,7 +361,7 @@ keyed by the chi route pattern (`internal/middleware/scopes.go`):
 | Scope | Grants |
 |---|---|
 | `read:contracts` | contract, event, invocation, storage, stats, and snapshot reads |
-| `write:contracts` | `POST /api/v1/contracts` |
+| `write:contracts` | `POST /api/v1/contracts` and contract tag writes |
 | `read:watchdog` | all `/api/v1/watchdog/*` reads |
 | `admin:*` | everything, including API key management |
 
@@ -381,7 +399,8 @@ Register a contract for tracking.
 
 List all tracked contracts.
 
-**Query params:** `network` (filter by network), `status` (filter by status).
+**Query params:** `network` (filter by network), `status` (filter by status),
+`tag` (show only contracts carrying this tag).
 
 **Response `200`:**
 ```json
@@ -393,7 +412,8 @@ List all tracked contracts.
       "label": "My Token Contract",
       "status": "active",
       "wasm_hash": "a1b2c3d4...",
-      "added_at": "2026-07-01T10:00:00Z"
+      "added_at": "2026-07-01T10:00:00Z",
+      "tags": ["prod", "defi"]
     }
   ]
 }
@@ -419,7 +439,8 @@ Get a single contract's metadata and sync state.
     "last_run_at": "2026-07-26T10:00:00Z"
   },
   "storage_entry_count": 42,
-  "expiring_entry_count": 3
+  "expiring_entry_count": 3,
+  "tags": ["prod", "defi"]
 }
 ```
 
@@ -432,6 +453,45 @@ Get a single contract's metadata and sync state.
 Stop tracking a contract. Data is retained but the indexer stops polling.
 
 **Response:** `204 No Content`.
+
+---
+
+#### `POST /api/v1/contracts/:id/tags`
+
+Add a user-defined tag to a contract. Tags are free-form labels (e.g. `prod`,
+`defi`, `staging`) that let an operator organize a large fleet and filter the
+contracts list. Requires the `write:contracts` scope and the `contributor`
+role.
+
+Tags are normalized before storage: surrounding whitespace is trimmed and the
+value is lowercased. A tag must be 1-32 characters matching
+`^[a-z0-9][a-z0-9_-]*$` (lowercase letters, digits, hyphen, or underscore,
+starting with a letter or digit); anything else receives `422`.
+
+**Request body:**
+```json
+{ "tag": "prod" }
+```
+
+**Responses:**
+- `200 OK`: the contract's full, sorted tag list. Adding a tag that is already
+  present is a no-op, so the operation is idempotent.
+  ```json
+  { "contract_id": "CDLZFC3S...", "tags": ["defi", "prod"] }
+  ```
+- `404 Not Found`: no tracked contract with that ID.
+- `422 Unprocessable Entity`: missing or malformed tag.
+
+---
+
+#### `DELETE /api/v1/contracts/:id/tags/:tag`
+
+Remove a user-defined tag from a contract. Requires the `write:contracts`
+scope and the `contributor` role. Removing a tag that is not present is a
+no-op.
+
+**Response:** `204 No Content`. `404 Not Found` when the contract is unknown,
+`422 Unprocessable Entity` when the tag is malformed.
 
 ---
 
