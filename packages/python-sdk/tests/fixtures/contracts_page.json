@@ -8,7 +8,8 @@
       "created_at_ledger": 51234,
       "backfill_complete_at": "2026-01-15T12:00:00Z",
       "status": "active",
-      "added_at": "2026-01-15T11:30:00Z"
+      "added_at": "2026-01-15T11:30:00Z",
+      "tags": ["prod"]
     },
     {
       "id": "CBECJ5JYFLYQZQWZMFIIWOJHTBLXEWQOGXFVN5BPOVQTQFSXJPWBBV6",
@@ -18,7 +19,8 @@
       "created_at_ledger": 90001,
       "backfill_complete_at": null,
       "status": "backfilling",
-      "added_at": "2026-02-01T08:15:00Z"
+      "added_at": "2026-02-01T08:15:00Z",
+      "tags": []
     }
   ],
   "next_cursor": "eyJvZmZzZXQiOjJ9"
