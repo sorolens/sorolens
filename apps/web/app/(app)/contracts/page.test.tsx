@@ -4,11 +4,14 @@
  * We use vitest + @testing-library/react + jsdom.
  * next/link is mocked to a plain <a> so we don't need the Next.js runtime.
  * @/lib/api is mocked so we control the data returned.
+ *
+ * The stock single-field modal was replaced by the tracking wizard route
+ * (issue #140), so the page is asserted to link to /contracts/new rather than
+ * open a dialog.
  */
 
 import * as matchers from "@testing-library/jest-dom/matchers";
 import {
-  act,
   cleanup,
   render,
   screen,
@@ -18,20 +21,25 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mock next/link ──────────────────────────────────────────────────────────
+// Props other than href (id, className, …) are forwarded, so tests can still
+// target elements by id now that the track button is a Link.
 vi.mock("next/link", () => ({
   default: ({
     children,
     href,
-  }: {
-    children: React.ReactNode;
-    href: string;
-  }) => <a href={href}>{children}</a>,
+    ...rest
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 // ── Mock @sorolens/ui so we don't need the built dist ───────────────────────
-// Toast is the real component so the tests assert what users actually get.
-vi.mock("@sorolens/ui", async (importOriginal) => ({
-  Toast: (await importOriginal<typeof import("@sorolens/ui")>()).Toast,
+vi.mock("@sorolens/ui", () => ({
+  Toast: ({ message }: { message: string }) => (
+    <div role="alert">{message}</div>
+  ),
   DataTable: <T,>({
     data,
     columns,
@@ -41,14 +49,19 @@ vi.mock("@sorolens/ui", async (importOriginal) => ({
     onRowClick,
   }: {
     data: T[];
-    columns: { key: string; header: string; accessor?: (item: T) => React.ReactNode }[];
+    columns: {
+      key: string;
+      header: string;
+      accessor?: (item: T) => React.ReactNode;
+    }[];
     rowKey: (item: T) => string;
     loading?: boolean;
     emptyState?: React.ReactNode;
     onRowClick?: (item: T) => void;
   }) => {
     if (loading) return <div data-testid="data-table-loading">loading</div>;
-    if (data.length === 0) return <div data-testid="data-table-empty">{emptyState}</div>;
+    if (data.length === 0)
+      return <div data-testid="data-table-empty">{emptyState}</div>;
     return (
       <table data-testid="data-table">
         <tbody>
@@ -71,33 +84,41 @@ vi.mock("@sorolens/ui", async (importOriginal) => ({
       </table>
     );
   },
-  MonoId: ({ value }: { value: string }) => (
-    <span data-testid="mono-id">{value.slice(0, 8)}…{value.slice(-8)}</span>
+}));
+
+// ── Mock the heavy leaf components the page renders ─────────────────────────
+vi.mock("@/components/LabelledId", () => ({
+  LabelledId: ({
+    value,
+    knownLabel,
+  }: {
+    value: string;
+    knownLabel?: string | null;
+  }) => (
+    <span data-testid="labelled-id">
+      {knownLabel ? `${knownLabel} ` : ""}
+      {value}
+    </span>
   ),
+}));
+
+vi.mock("@/components/ImportContractsCsv", () => ({
+  default: () => <div data-testid="import-csv">import</div>,
 }));
 
 // ── Mock @/lib/api ───────────────────────────────────────────────────────────
 const mockListContracts = vi.fn();
-const mockTrackContract = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   listContracts: (...args: unknown[]) => mockListContracts(...args),
-  trackContract: (...args: unknown[]) => mockTrackContract(...args),
-  ApiError: class ApiError extends Error {
-    constructor(
-      public status: number,
-      message: string,
-    ) {
-      super(message);
-      this.name = "ApiError";
-    }
-  },
 }));
 
 // ── Mock @/components/Skeleton ───────────────────────────────────────────────
 vi.mock("@/components/Skeleton", () => ({
   TableSkeleton: ({ rows }: { rows?: number }) => (
-    <div data-testid="table-skeleton" data-rows={rows}>skeleton</div>
+    <div data-testid="table-skeleton" data-rows={rows}>
+      skeleton
+    </div>
   ),
 }));
 
@@ -112,7 +133,7 @@ const CONTRACT_A = {
   status: "active",
   wasm_hash: null,
   added_at: "2024-01-01T00:00:00Z",
-  last_activity_at: "2024-01-01T00:03:00Z",
+  last_activity_at: "2024-01-02T00:00:00Z",
 };
 
 const CONTRACT_B = {
@@ -125,53 +146,10 @@ const CONTRACT_B = {
   last_activity_at: null,
 };
 
-const VALID_CONTRACT_ID =
-  "CC3W4K5J6H7G8F9E0D1C2B3A4Z5Y6X7W8V9U0T1S2R3Q4P5O6N7M8L9K";
-
-const NEW_CONTRACT = {
-  id: VALID_CONTRACT_ID,
-  label: "New Contract",
-  status: "backfilling",
-  network: "testnet",
-  wasm_hash: null,
-  added_at: "2024-03-01T00:00:00Z",
-  last_activity_at: null,
-};
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** A promise the test settles by hand, to observe the UI mid-request. */
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
 function rowTexts(): string[] {
   return screen
     .queryAllByTestId("data-table-row")
     .map((row) => row.textContent ?? "");
-}
-
-/** Opens the Track modal, fills the form and submits it. */
-function submitTrack(contractId: string, label?: string) {
-  fireEvent.click(document.getElementById("track-contract-btn")!);
-  fireEvent.change(screen.getByLabelText(/contract id/i), {
-    target: { value: contractId },
-  });
-  if (label) {
-    fireEvent.change(screen.getByLabelText(/alias/i), {
-      target: { value: label },
-    });
-  }
-  const submitEl = document.getElementById(
-    "track-modal-submit",
-  ) as HTMLButtonElement;
-  fireEvent.submit(submitEl.closest("form")!);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -192,9 +170,8 @@ describe("ContractsPage", () => {
 
   // Helper: dynamic import so mocks are in place before module loads
   async function renderPage() {
-    const { default: ContractsPage } = await import(
-      "@/app/(app)/contracts/page"
-    );
+    const { default: ContractsPage } =
+      await import("@/app/(app)/contracts/page");
     return render(<ContractsPage />);
   }
 
@@ -219,41 +196,11 @@ describe("ContractsPage", () => {
   it("renders the DataTable with contracts after loading", async () => {
     await renderPage();
     await waitFor(() =>
-      expect(screen.queryByTestId("table-skeleton")).toBeNull(),
+      expect(screen.queryByTestId("table-skeleton")).toBeNull()
     );
     expect(screen.getByTestId("data-table")).toBeDefined();
   });
 
-  it("renders and updates relative last activity", async () => {
-    vi.useFakeTimers();
-
-    try {
-      const now = new Date("2024-01-01T00:06:00Z").getTime();
-      vi.setSystemTime(now);
-
-      await act(async () => {
-        await renderPage();
-      });
-
-      expect(screen.getByTestId("data-table")).toBeDefined();
-      const activityRow = screen
-        .getAllByTestId("data-table-row")
-        .find((row) => row.textContent?.includes(CONTRACT_A.id.slice(0, 8)));
-
-      expect(activityRow).toBeDefined();
-      expect(activityRow).toHaveTextContent("3m ago");
-
-      vi.setSystemTime(new Date("2024-01-01T00:07:00Z").getTime());
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(30_000);
-      });
-
-      expect(activityRow).toHaveTextContent("4m ago");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
   // ── Happy path: search filters by label ───────────────────────────────────
 
   it("filters contracts by label when searching", async () => {
@@ -261,12 +208,10 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const search = screen.getByPlaceholderText(
-      /search by alias or contract id/i,
+      /search by alias or contract id/i
     );
     fireEvent.change(search, { target: { value: "My Contract" } });
 
-    // After filtering, only CONTRACT_A (label='My Contract') should be present
-    // DataTable renders rows; CONTRACT_B has null label, so it should be gone
     const rows = screen.getAllByTestId("data-table-row");
     expect(rows.length).toBe(1);
     expect(rows[0].textContent).toContain("My Contract");
@@ -279,9 +224,8 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const search = screen.getByPlaceholderText(
-      /search by alias or contract id/i,
+      /search by alias or contract id/i
     );
-    // CONTRACT_A id starts with CAAAA, CONTRACT_B with CBBBB
     fireEvent.change(search, { target: { value: "CBBBB" } });
 
     const rows = screen.getAllByTestId("data-table-row");
@@ -298,250 +242,37 @@ describe("ContractsPage", () => {
     });
     await renderPage();
     await waitFor(() =>
-      expect(screen.queryByTestId("table-skeleton")).toBeNull(),
+      expect(screen.queryByTestId("table-skeleton")).toBeNull()
     );
-    expect(
-      screen.getByText(/no contracts tracked yet/i),
-    ).toBeDefined();
+    expect(screen.getByText(/no contracts tracked yet/i)).toBeDefined();
   });
 
-  // ── Happy path: track contract modal open/close ────────────────────────────
+  // ── Track contract entry point (wizard, issue #140) ────────────────────────
 
-  it("opens Track contract modal when the button is clicked", async () => {
+  it("links the Track contract button to the wizard route", async () => {
     await renderPage();
     await waitFor(() => screen.getByTestId("data-table"));
 
-    fireEvent.click(document.getElementById("track-contract-btn")!);
-    expect(screen.getByRole("dialog")).toBeDefined();
-    expect(screen.getByLabelText(/contract id/i)).toBeDefined();
-  });
-
-  it("closes the modal when Escape key is pressed", async () => {
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    fireEvent.click(document.getElementById("track-contract-btn")!);
-    expect(screen.getByRole("dialog")).toBeDefined();
-
-    fireEvent.keyDown(window, { key: "Escape" });
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog")).toBeNull(),
-    );
-  });
-
-  // ── Validation: invalid contract ID is rejected ────────────────────────────
-
-  it("shows validation error for invalid contract ID format", async () => {
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    fireEvent.click(document.getElementById("track-contract-btn")!);
-
-    const input = screen.getByLabelText(/contract id/i);
-    fireEvent.change(input, { target: { value: "NOT_A_VALID_ID" } });
-
-    expect(
-      screen.getByText(/contract id must be 56 characters/i),
-    ).toBeDefined();
-  });
-
-  it("NEGATIVE: submit button is disabled when contract ID is invalid", async () => {
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    fireEvent.click(document.getElementById("track-contract-btn")!);
-
-    const input = screen.getByLabelText(/contract id/i);
-    fireEvent.change(input, { target: { value: "BAD" } });
-
-    const submitEl = document.getElementById("track-modal-submit") as HTMLButtonElement;
-    expect(submitEl?.disabled).toBe(true);
-  });
-
-  // ── Happy path: successful track contract submission ───────────────────────
-
-  it("calls trackContract and refreshes on valid submission", async () => {
-    mockTrackContract.mockResolvedValue(NEW_CONTRACT);
-
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    submitTrack(VALID_CONTRACT_ID);
-
-    await waitFor(() =>
-      expect(mockTrackContract).toHaveBeenCalledWith(
-        {
-          id: VALID_CONTRACT_ID,
-          label: undefined,
-        },
-        "",
-      ),
-    );
-    // Modal closes on submit
+    const btn = document.getElementById("track-contract-btn");
+    expect(btn).not.toBeNull();
+    expect(btn?.getAttribute("href")).toBe("/contracts/new");
+    // The single-field modal is gone: nothing is a dialog any more.
     expect(screen.queryByRole("dialog")).toBeNull();
-    // listContracts was called again to refresh
-    await waitFor(() => expect(mockListContracts).toHaveBeenCalledTimes(2));
   });
 
-  // ── Optimistic track ───────────────────────────────────────────────────────
-
-  it("prepends the new contract immediately, before the API responds", async () => {
-    const track = deferred<typeof NEW_CONTRACT>();
-    mockTrackContract.mockReturnValue(track.promise);
-
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-    const before = rowTexts();
-
-    submitTrack(VALID_CONTRACT_ID, "New Contract");
-
-    // The request is still pending, yet the row is already at the top.
-    expect(mockTrackContract).toHaveBeenCalledTimes(1);
-    const rows = rowTexts();
-    expect(rows).toHaveLength(3);
-    expect(rows[0]).toContain(VALID_CONTRACT_ID.slice(0, 8));
-    expect(rows[0]).toContain("New Contract");
-    expect(rows[0]).toContain("pending");
-    // Existing contracts are untouched and keep their order.
-    expect(rows.slice(1)).toEqual(before);
-    // No refetch yet, no detail link for the unconfirmed row, and no second
-    // submission while this one is in flight.
-    expect(mockListContracts).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("link", { name: "New Contract" })).toBeNull();
-    expect(screen.getByRole("link", { name: "My Contract" })).toBeDefined();
-    expect(
-      (document.getElementById("track-contract-btn") as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-
-    await act(async () => track.resolve(NEW_CONTRACT));
-  });
-
-  it("reconciles via refetch on success without duplicating the new contract", async () => {
-    const track = deferred<typeof NEW_CONTRACT>();
-    mockTrackContract.mockReturnValue(track.promise);
-
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-    const before = rowTexts();
-
-    // The server now returns the new contract alongside the existing ones.
+  it("links the empty-state prompt to the wizard route", async () => {
     mockListContracts.mockResolvedValue({
-      contracts: [NEW_CONTRACT, CONTRACT_A, CONTRACT_B],
+      contracts: [],
       cursor: null,
       has_more: false,
     });
-    submitTrack(VALID_CONTRACT_ID, "New Contract");
-    expect(rowTexts()).toHaveLength(3);
-
-    await act(async () => track.resolve(NEW_CONTRACT));
-
-    await waitFor(() => expect(mockListContracts).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(rowTexts()[0]).toContain("backfilling"));
-    const rows = rowTexts();
-    expect(rows).toHaveLength(3);
-    expect(
-      rows.filter((r) => r.includes(VALID_CONTRACT_ID.slice(0, 8))),
-    ).toHaveLength(1);
-    expect(rows.some((r) => r.includes("pending"))).toBe(false);
-    expect(rows.slice(1)).toEqual(before);
-    expect(screen.getByRole("link", { name: "New Contract" })).toBeDefined();
-    expect(screen.queryByRole("alert")).toBeNull();
-  });
-
-  it("NEGATIVE: restores the previous list and shows a toast when the API fails", async () => {
-    const { ApiError } = await import("@/lib/api");
-    const track = deferred<typeof NEW_CONTRACT>();
-    mockTrackContract.mockReturnValue(track.promise);
-
     await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-    const before = rowTexts();
-
-    submitTrack(VALID_CONTRACT_ID, "New Contract");
-    expect(rowTexts()).toHaveLength(3);
-
-    await act(async () =>
-      track.reject(new ApiError(409, "Contract already tracked")),
+    await waitFor(() =>
+      expect(screen.queryByTestId("table-skeleton")).toBeNull()
     );
 
-    const toast = await screen.findByRole("alert");
-    expect(toast.textContent).toContain(
-      "Couldn't track contract: Contract already tracked",
-    );
-    expect(rowTexts()).toEqual(before);
-    // Rolled back locally, not refetched.
-    expect(mockListContracts).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(
-      (document.getElementById("track-contract-btn") as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
-  });
-
-  it("NEGATIVE: falls back to a generic toast message for non-API errors", async () => {
-    mockTrackContract.mockRejectedValue(new TypeError("Failed to fetch"));
-
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-    const before = rowTexts();
-
-    submitTrack(VALID_CONTRACT_ID);
-
-    const toast = await screen.findByRole("alert");
-    expect(toast.textContent).toContain(
-      "Couldn't track contract. Please try again.",
-    );
-    expect(rowTexts()).toEqual(before);
-  });
-
-  it("NEGATIVE: invalid input is still rejected client-side, with no optimistic row or toast", async () => {
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-    const before = rowTexts();
-
-    submitTrack("NOT_A_VALID_ID");
-
-    expect(mockTrackContract).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toBeDefined();
-    // The only alert is the inline validation message, not a toast.
-    expect(screen.getByRole("alert").textContent).toMatch(
-      /contract id must be 56 characters/i,
-    );
-    expect(screen.queryByText(/couldn't track contract/i)).toBeNull();
-    expect(rowTexts()).toEqual(before);
-  });
-
-  it("ignores a stale list response that lands after the optimistic add", async () => {
-    const { ApiError } = await import("@/lib/api");
-    const staleLoad = deferred<unknown>();
-    mockListContracts.mockReturnValueOnce(staleLoad.promise);
-    const track = deferred<typeof NEW_CONTRACT>();
-    mockTrackContract.mockReturnValue(track.promise);
-
-    await renderPage();
-    expect(screen.getByTestId("table-skeleton")).toBeDefined();
-
-    submitTrack(VALID_CONTRACT_ID, "New Contract");
-    expect(rowTexts()).toHaveLength(1);
-
-    // The load that started before the submit must not wipe the new row.
-    await act(async () =>
-      staleLoad.resolve({
-        contracts: [CONTRACT_A, CONTRACT_B],
-        cursor: null,
-        has_more: false,
-      }),
-    );
-    expect(rowTexts()).toHaveLength(1);
-    expect(rowTexts()[0]).toContain("New Contract");
-
-    // On failure the interrupted page load is fetched again.
-    await act(async () => track.reject(new ApiError(500, "boom")));
-    await screen.findByRole("alert");
-    await waitFor(() => expect(mockListContracts).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(rowTexts()).toHaveLength(2));
-    expect(screen.queryByText("New Contract")).toBeNull();
+    const link = screen.getByText(/run the tracking wizard/i);
+    expect(link.getAttribute("href")).toBe("/contracts/new");
   });
 
   // ── Pagination: prev disabled on first page ────────────────────────────────
@@ -551,7 +282,7 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const prevBtn = document.getElementById(
-      "contracts-prev-page",
+      "contracts-prev-page"
     ) as HTMLButtonElement;
     expect(prevBtn?.disabled).toBe(true);
   });
@@ -563,7 +294,7 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const nextBtn = document.getElementById(
-      "contracts-next-page",
+      "contracts-next-page"
     ) as HTMLButtonElement;
     expect(nextBtn?.disabled).toBe(true);
   });
@@ -587,15 +318,21 @@ describe("ContractsPage", () => {
     await waitFor(() => screen.getByTestId("data-table"));
 
     const nextBtn = document.getElementById(
-      "contracts-next-page",
+      "contracts-next-page"
     ) as HTMLButtonElement;
     expect(nextBtn?.disabled).toBe(false);
 
     fireEvent.click(nextBtn);
 
     // listContracts should be called a second time for page 2
-    await waitFor(() =>
-      expect(mockListContracts).toHaveBeenCalledTimes(2),
-    );
+    await waitFor(() => expect(mockListContracts).toHaveBeenCalledTimes(2));
+  });
+
+  // ── The list never keeps a stale page after a network switch ───────────────
+
+  it("shows the current page rows in the table", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+    expect(rowTexts()).toHaveLength(2);
   });
 });

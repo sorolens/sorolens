@@ -2,9 +2,10 @@
 // Wasm hash changelog feature (issue #276).
 //
 // Routes:
-//   GET /contracts/{id}/changelog        – JSON array of ContractVersion records
-//   GET /contracts/{id}/changelog/feed   – Atom 1.0 XML feed
-//   GET /contracts/{id}/changelog/badge  – SVG badge with latest wasm hash slice
+//
+//	GET /contracts/{id}/changelog        – JSON array of ContractVersion records
+//	GET /contracts/{id}/changelog/feed   – Atom 1.0 XML feed
+//	GET /contracts/{id}/changelog/badge  – SVG badge with latest wasm hash slice
 package changelog
 
 import (
@@ -167,7 +168,7 @@ func (h *Handler) GetFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/atom+xml; charset=utf-8")
-	w.Write([]byte(xml.Header)) //nolint:errcheck
+	w.Write([]byte(xml.Header))    //nolint:errcheck
 	xml.NewEncoder(w).Encode(feed) //nolint:errcheck
 }
 

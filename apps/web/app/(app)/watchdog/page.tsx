@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getWatchdogStats,
   listMonitoredContracts,
@@ -27,21 +27,30 @@ const ZERO_STATS: WatchdogStats = {
   critical_alerts: 0,
 };
 
+// Same page size as the /contracts list.
+const PAGE_SIZE = 20;
+
 export default function WatchdogPage() {
   const { network } = useNetwork();
   const [stats, setStats] = useState<WatchdogStats>(ZERO_STATS);
-  const [contracts, setContracts] = useState<MonitoredContract[] | null>(null);
+  const [contracts, setContracts] = useState<MonitoredContract[]>([]);
+  const [contractsLoading, setContractsLoading] = useState(true);
   const [alerts, setAlerts] = useState<ContractAlert[] | null>(null);
   const [alertsCursor, setAlertsCursor] = useState("");
   const [alertsLoading, setAlertsLoading] = useState(false);
+
+  // Pagination state: stack of cursors, index 0 = first page. nextCursor is
+  // the API's next_cursor for the current page ("" on the last page).
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const [cursorIndex, setCursorIndex] = useState(0);
+  const [nextCursor, setNextCursor] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       const filter = networkFilter(network);
-      const [s, c, a] = await Promise.all([
+      const [s, a] = await Promise.all([
         getWatchdogStats(filter).catch(() => ZERO_STATS),
-        listMonitoredContracts({ limit: 50, network: filter }).catch(() => ({ contracts: [], next_cursor: "" })),
         listAlerts(undefined, { limit: 20, network: filter }).catch(() => ({
           alerts: [],
           next_cursor: "",
@@ -49,7 +58,6 @@ export default function WatchdogPage() {
       ]);
       if (cancelled) return;
       setStats(s);
-      setContracts(c.contracts ?? []);
       setAlerts(a.alerts ?? []);
       setAlertsCursor(a.next_cursor ?? "");
     }
@@ -58,6 +66,61 @@ export default function WatchdogPage() {
       cancelled = true;
     };
   }, [network]);
+
+  // Only the most recent loadContracts() may write to state, so a slow
+  // response can't overwrite a newer page.
+  const loadSeq = useRef(0);
+
+  const loadContracts = useCallback(
+    async (cursor: string | null) => {
+      const seq = ++loadSeq.current;
+      setContractsLoading(true);
+      try {
+        const data = await listMonitoredContracts({
+          cursor: cursor ?? undefined,
+          limit: PAGE_SIZE,
+          network: networkFilter(network),
+        });
+        if (seq !== loadSeq.current) return;
+        setContracts(data.contracts ?? []);
+        setNextCursor(data.next_cursor ?? "");
+      } catch {
+        if (seq !== loadSeq.current) return;
+        // Backend not reachable yet: show the empty state, not an error.
+        setContracts([]);
+        setNextCursor("");
+      } finally {
+        if (seq === loadSeq.current) setContractsLoading(false);
+      }
+    },
+    [network]
+  );
+
+  useEffect(() => {
+    loadContracts(cursors[cursorIndex]);
+  }, [loadContracts, cursors, cursorIndex]);
+
+  // Reset to the first page when the network filter changes. The ref guard
+  // keeps this from firing an extra fetch on mount.
+  const prevNetwork = useRef(network);
+  useEffect(() => {
+    if (prevNetwork.current !== network) {
+      prevNetwork.current = network;
+      setCursors([null]);
+      setCursorIndex(0);
+    }
+  }, [network]);
+
+  const handleNext = () => {
+    if (!nextCursor) return;
+    setCursors([...cursors.slice(0, cursorIndex + 1), nextCursor]);
+    setCursorIndex(cursorIndex + 1);
+  };
+
+  const handlePrev = () => {
+    if (cursorIndex === 0) return;
+    setCursorIndex(cursorIndex - 1);
+  };
 
   // Fetch the next alerts page and append it to the current feed.
   async function loadMoreAlerts() {
@@ -118,7 +181,7 @@ export default function WatchdogPage() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Monitored contracts</h2>
         </div>
-        {contracts === null ? (
+        {contractsLoading ? (
           <TableSkeleton />
         ) : contracts.length === 0 ? (
           <EmptyState
@@ -170,6 +233,37 @@ export default function WatchdogPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Pagination controls */}
+        {!contractsLoading && contracts.length > 0 && (
+          <div className="mt-4 flex items-center justify-between">
+            <span className="text-xs text-[var(--color-text-secondary)]">
+              Page {cursorIndex + 1}
+            </span>
+            <div className="flex gap-2">
+              <button
+                id="watchdog-contracts-prev-page"
+                type="button"
+                onClick={handlePrev}
+                disabled={cursorIndex === 0}
+                aria-label="Previous page"
+                className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] hover:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ← Previous
+              </button>
+              <button
+                id="watchdog-contracts-next-page"
+                type="button"
+                onClick={handleNext}
+                disabled={!nextCursor}
+                aria-label="Next page"
+                className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] hover:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next →
+              </button>
+            </div>
           </div>
         )}
       </section>

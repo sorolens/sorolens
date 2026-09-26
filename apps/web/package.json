@@ -12,13 +12,17 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ducanh2912/next-pwa": "^10.2.9",
     "@sentry/nextjs": "^11.0.0",
     "@sorolens/ui": "workspace:*",
     "@sorolens/xdr": "workspace:*",
+    "cmdk": "^1.1.1",
+    "idb": "^8.0.3",
     "next": "^15.3.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "recharts": "^2.15.3"
+    "recharts": "^2.15.3",
+    "use-debounce": "^10.1.1"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^15.3.1",
@@ -29,10 +33,13 @@
     "@types/node": "^22.15.3",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^4.3.0",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.1.6",
     "typescript": "^5.5.0",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "web-push": "^3.6.7"
   }
 }

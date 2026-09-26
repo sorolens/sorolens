@@ -12,7 +12,11 @@ import {
 } from "@/lib/api";
 import { CHANNELS, buildSubscriptionRequest } from "@/lib/notifications";
 import { TableSkeleton } from "@/components/Skeleton";
-import type { AlertSubscription, ChannelType, MonitoredContract } from "@/lib/types";
+import type {
+  AlertSubscription,
+  ChannelType,
+  MonitoredContract,
+} from "@/lib/types";
 
 const STORAGE_KEY = "sorolens_user_id";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -82,7 +86,11 @@ export default function NotificationsPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const built = buildSubscriptionRequest({ contractId, channel, destination: dest });
+    const built = buildSubscriptionRequest({
+      contractId,
+      channel,
+      destination: dest,
+    });
     if ("error" in built) {
       setFormError(built.error);
       return;
@@ -90,7 +98,10 @@ export default function NotificationsPage() {
     setSaving(true);
     setFormError(null);
     try {
-      const created = await createSubscription(built.request, userId || undefined);
+      const created = await createSubscription(
+        built.request,
+        userId || undefined
+      );
       setSubs((prev) => [created, ...prev]);
       setDest("");
     } catch (err) {
@@ -117,14 +128,20 @@ export default function NotificationsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <Link href="/watchdog" className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+        <Link
+          href="/watchdog"
+          className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+        >
           ← Watchdog
         </Link>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Notification channels</h1>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">
+          Notification channels
+        </h1>
         <p className="mt-2 max-w-2xl text-sm text-[var(--color-text-secondary)]">
-          Send Critical watchdog alerts for a contract to Slack, Discord, PagerDuty, or any
-          webhook, formatted natively for each channel. Integration secrets are stored server
-          side and never shown again after you save them.
+          Send Critical watchdog alerts for a contract to Slack, Discord,
+          PagerDuty, or any webhook, formatted natively for each channel.
+          Integration secrets are stored server side and never shown again after
+          you save them.
         </p>
       </div>
 
@@ -152,7 +169,9 @@ export default function NotificationsPage() {
         </label>
 
         <fieldset className="flex flex-col gap-1 text-sm">
-          <legend className="mb-1 text-[var(--color-text-secondary)]">Channel</legend>
+          <legend className="mb-1 text-[var(--color-text-secondary)]">
+            Channel
+          </legend>
           <div className="flex flex-wrap gap-2">
             {(Object.keys(CHANNELS) as ChannelType[]).map((c) => (
               <label
@@ -182,7 +201,9 @@ export default function NotificationsPage() {
         </fieldset>
 
         <label className="flex flex-col gap-1 text-sm md:col-span-2">
-          <span className="text-[var(--color-text-secondary)]">{meta.destinationLabel}</span>
+          <span className="text-[var(--color-text-secondary)]">
+            {meta.destinationLabel}
+          </span>
           <input
             type={channel === "pagerduty" ? "password" : "url"}
             autoComplete="off"
@@ -191,7 +212,9 @@ export default function NotificationsPage() {
             placeholder={meta.placeholder}
             className={`${inputClass} font-mono`}
           />
-          <span className="text-xs text-[var(--color-text-secondary)]">{meta.help}</span>
+          <span className="text-xs text-[var(--color-text-secondary)]">
+            {meta.help}
+          </span>
         </label>
 
         <div className="flex items-center gap-3 md:col-span-2">
@@ -213,34 +236,57 @@ export default function NotificationsPage() {
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">Active channels</h2>
         {loadError ? (
-          <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-300">
+          <p
+            role="alert"
+            className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-300"
+          >
             {loadError}
           </p>
         ) : loading ? (
           <TableSkeleton rows={3} />
         ) : subs.length === 0 ? (
           <p className="rounded-lg border border-dashed border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-text-secondary)]">
-            No notification channels yet. Add one above to get Critical alerts where your team works.
+            No notification channels yet. Add one above to get Critical alerts
+            where your team works.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="border-b border-[var(--color-border)] text-xs uppercase tracking-wide text-[var(--color-text-secondary)]">
                 <tr>
-                  <th scope="col" className="px-4 py-3 font-medium">Contract</th>
-                  <th scope="col" className="px-4 py-3 font-medium">Channel</th>
-                  <th scope="col" className="px-4 py-3 font-medium">Destination</th>
-                  <th scope="col" className="px-4 py-3 font-medium">Added</th>
-                  <th scope="col" className="px-4 py-3"><span className="sr-only">Actions</span></th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Contract
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Channel
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Destination
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Added
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {subs.map((s) => (
-                  <tr key={s.id} className="border-b border-[var(--color-border)] last:border-0">
+                  <tr
+                    key={s.id}
+                    className="border-b border-[var(--color-border)] last:border-0"
+                  >
                     <td className="px-4 py-3 font-mono text-xs">
-                      <MonoId value={s.contract_id} headChars={6} tailChars={6} />
+                      <MonoId
+                        value={s.contract_id}
+                        headChars={6}
+                        tailChars={6}
+                      />
                     </td>
-                    <td className="px-4 py-3">{CHANNELS[s.channel_type]?.label ?? s.channel_type}</td>
+                    <td className="px-4 py-3">
+                      {CHANNELS[s.channel_type]?.label ?? s.channel_type}
+                    </td>
                     <td className="max-w-xs truncate px-4 py-3 font-mono text-xs text-[var(--color-text-secondary)]">
                       {destination(s)}
                     </td>
@@ -268,9 +314,11 @@ export default function NotificationsPage() {
       <section className="rounded-lg border border-[var(--color-border)] p-5 text-sm">
         <h2 className="font-semibold">Slack slash command</h2>
         <p className="mt-2 text-[var(--color-text-secondary)]">
-          Check a contract&apos;s status from Slack with <code>/sorolens &lt;contract_id&gt;</code>.
-          Create a slash command in your Slack app with this request URL, and set the app&apos;s
-          signing secret as <code>SLACK_SIGNING_SECRET</code> on the API so requests are verified.
+          Check a contract&apos;s status from Slack with{" "}
+          <code>/sorolens &lt;contract_id&gt;</code>. Create a slash command in
+          your Slack app with this request URL, and set the app&apos;s signing
+          secret as <code>SLACK_SIGNING_SECRET</code> on the API so requests are
+          verified.
         </p>
         <code className="mt-3 block overflow-x-auto rounded bg-black/30 p-3 font-mono text-xs">
           {API_URL}/integrations/slack/commands

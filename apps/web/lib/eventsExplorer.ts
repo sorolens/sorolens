@@ -17,7 +17,10 @@ export function currentCursor(history: CursorHistory): string {
 }
 
 /** Advance to the page loaded by `nextCursor`. */
-export function pushPage(history: CursorHistory, nextCursor: string): CursorHistory {
+export function pushPage(
+  history: CursorHistory,
+  nextCursor: string
+): CursorHistory {
   if (!nextCursor) return history;
   return [...history, nextCursor];
 }
@@ -39,7 +42,7 @@ export function pageNumber(history: CursorHistory): number {
  */
 export function dateRangeToBounds(
   from: string,
-  to: string,
+  to: string
 ): { since?: string; until?: string } {
   const valid = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
   const out: { since?: string; until?: string } = {};
@@ -50,7 +53,8 @@ export function dateRangeToBounds(
 
 /** Validation message for a date range, or null when it is usable. */
 export function dateRangeError(from: string, to: string): string | null {
-  if (from && to && from > to) return "The start date must be on or before the end date.";
+  if (from && to && from > to)
+    return "The start date must be on or before the end date.";
   return null;
 }
 
@@ -61,7 +65,7 @@ export function formatEventData(value: unknown): string {
     return JSON.stringify(
       value,
       (_key, v) => (typeof v === "bigint" ? v.toString() : v),
-      2,
+      2
     );
   } catch {
     return String(value);
@@ -70,6 +74,9 @@ export function formatEventData(value: unknown): string {
 
 /** One-line preview of the event data for the collapsed row. */
 export function previewEventData(value: unknown, max = 60): string {
-  const compact = value === null || value === undefined ? "null" : formatEventData(value).replace(/\s+/g, " ");
+  const compact =
+    value === null || value === undefined
+      ? "null"
+      : formatEventData(value).replace(/\s+/g, " ");
   return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
 }

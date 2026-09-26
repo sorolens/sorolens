@@ -37,6 +37,7 @@ type Store interface {
 	// page. Returns the next cursor (empty string when there are no more
 	// pages) as the second return value.
 	ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error)
+	SearchContracts(ctx context.Context, query string, limit int) ([]Contract, error)
 
 	// BatchInsertEvents inserts events, ignoring duplicates by primary key.
 	// All rows are sent in a single network round-trip.
@@ -127,6 +128,13 @@ type UserStore interface {
 	// GetUserByGitHubID returns the user whose GitHub ID matches, or
 	// ErrNotFound.
 	GetUserByGitHubID(ctx context.Context, githubID string) (User, error)
+}
+
+// LabelStore persists public and workspace-scoped human-readable identifiers.
+type LabelStore interface {
+	UpsertLabel(ctx context.Context, label Label) error
+	ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error)
+	ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error)
 }
 
 // ContractFilters holds optional query filters for listing contracts.

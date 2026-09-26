@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -16,15 +17,20 @@ import (
 type FullStore interface {
 	Store
 	QueryStore
+	LiveStore
+	ArchiveStore
 	WatchdogStore
 	ContractUpgradeStore
 	HealthScoreStore
 	APIKeyStore
 	AlertSubscriptionStore
+	AlertGroupStore
 	WatchlistStore
 	UserStore
 	PerformanceStore
 	GlobalEventStore
+	LabelStore
+	FailedEventStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
@@ -119,6 +125,10 @@ type QueryStore interface {
 	// "latest invocation" lookups (e.g. the dashboard summary) without walking
 	// the ascending paginated list.
 	RecentInvocations(ctx context.Context, contractID string, limit int) ([]Invocation, error)
+
+	// StreamEventsCSV streams contract events as CSV without buffering all rows.
+	// The caller is responsible for setting appropriate HTTP headers.
+	StreamEventsCSV(ctx context.Context, contractID string, f EventFilters, w io.Writer) error
 
 	// ContractFirstLedger returns the earliest ledger for which the contract
 	// has indexed data (events or invocations). It returns 0 when nothing has
@@ -235,6 +245,56 @@ func topicFilterJSON(topic string) string {
 		return "[]"
 	}
 	return string(b)
+}
+
+func (s *postgresStore) StreamEventsCSV(ctx context.Context, contractID string, f EventFilters, w io.Writer) (err error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+		       topic_xdr, value_xdr, topic_decoded, value_decoded,
+		       in_successful_call, inserted_at
+		FROM events
+		WHERE contract_id = $1
+		  AND ($2 = '' OR network = $2)
+		  AND ($3 = '' OR type = $3)
+		  AND ($4 = 0   OR ledger >= $4)
+		  AND ($5 = 0   OR ledger <= $5)
+		ORDER BY ledger ASC, id ASC`,
+		contractID, f.Network, f.Type, f.From, f.To,
+	)
+	if err != nil {
+		return fmt.Errorf("stream events csv: %w", err)
+	}
+	defer rows.Close()
+
+	csvWriter, err := newEventsCSVWriter(w)
+	if err != nil {
+		return fmt.Errorf("stream events csv: %w", err)
+	}
+	defer flushEventsCSV(csvWriter, &err)
+
+	// The JSON columns are passed through as stored: re-encoding them here
+	// would reorder object keys and could disagree with the stored text.
+	var row []string
+	for rows.Next() {
+		var e Event
+		var topicXDR, topicDec, valDec []byte
+		if err := rows.Scan(
+			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
+			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
+			&e.InSuccessfulCall, &e.InsertedAt,
+		); err != nil {
+			return err
+		}
+		row = eventCSVRecord(e, string(topicXDR), string(topicDec), string(valDec))
+		if err := csvWriter.Write(row); err != nil {
+			return err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	// flushEventsCSV reports any buffered or flush-time write failure.
+	return nil
 }
 
 // ---- RecentEvents -----------------------------------------------------------

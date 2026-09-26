@@ -27,6 +27,7 @@ type ResponseCache interface {
 const (
 	CacheNamespaceContracts = "contracts"
 	CacheNamespaceWatchdog  = "watchdog"
+	CacheNamespaceLabels    = "labels"
 )
 
 // cacheKeyPrefix is the Redis key prefix for cached responses; keys are
@@ -53,7 +54,18 @@ func CacheCollectors() []prometheus.Collector {
 // cacheKey identifies a response by method, path and canonical (sorted)
 // query string, so ?a=1&b=2 and ?b=2&a=1 share an entry.
 func cacheKey(namespace string, r *http.Request) string {
-	return cacheKeyPrefix + namespace + ":" + r.Method + " " + r.URL.Path + "?" + r.URL.Query().Encode()
+	identity := ""
+	if namespace == CacheNamespaceLabels {
+		identity = r.Header.Get("X-User-ID")
+		if identity == "" {
+			identity = r.Header.Get("X-GitHub-Login")
+		}
+	}
+	key := cacheKeyPrefix + namespace + ":"
+	if identity != "" {
+		key += identity + ":"
+	}
+	return key + r.Method + " " + r.URL.Path + "?" + r.URL.Query().Encode()
 }
 
 // Cache returns middleware that serves GET responses for the namespace from

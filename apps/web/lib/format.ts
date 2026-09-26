@@ -27,7 +27,7 @@ const ELLIPSIS = "...";
 export function truncateMiddle(
   value: string,
   head: number = CONTRACT_ID_HEAD_CHARS,
-  tail: number = CONTRACT_ID_TAIL_CHARS,
+  tail: number = CONTRACT_ID_TAIL_CHARS
 ): string {
   if (!value) {
     return value;

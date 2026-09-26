@@ -371,6 +371,22 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list events")
 		return
 	}
+
+	// Cold-storage fallback (issue #146): if the hot store has nothing for a
+	// ledger range that starts at `from`, the rows may have been archived to
+	// Parquet. Serve them transparently so old ledgers stay queryable. The
+	// first page is fetched from the archive with the same ordering the
+	// Postgres path uses; archive-backed pages are not cursor-paginated, so
+	// next_cursor stays empty.
+	if len(events) == 0 && h.Cold != nil && f.From > 0 && rawCursor == "" {
+		archived, coldErr := h.Cold.Events(r.Context(), contractID, f.From, f.To, intQuery(r, "limit", 50))
+		if coldErr != nil {
+			h.Logger.Error("list archived events", "err", coldErr, "contract_id", contractID)
+		} else if len(archived) > 0 {
+			events = archived
+		}
+	}
+
 	resp := make([]eventResponse, len(events))
 	for i, e := range events {
 		resp[i] = eventFromStore(e)
@@ -396,7 +412,7 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 	f := store.InvocationFilters{
 		Status:       r.URL.Query().Get("status"),
-		FunctionName: r.URL.Query().Get("fn"),
+		FunctionName: r.URL.Query().Get("function_name"),
 		Network:      network,
 		From:         uint32Query(r, "from"),
 		To:           uint32Query(r, "to"),
@@ -784,4 +800,42 @@ func (h *Handler) StreamEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
 	writeJSON(w, http.StatusOK, map[string]any{"events": resp})
+}
+
+func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	limit := intQuery(r, "limit", 10)
+
+	contracts, err := h.Store.SearchContracts(r.Context(), q, limit)
+	if err != nil {
+		h.Logger.Error("search contracts", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to search contracts")
+		return
+	}
+
+	if contracts == nil {
+		contracts = []store.Contract{}
+	}
+
+	var res []contractResponse
+	for _, c := range contracts {
+		res = append(res, contractResponse{
+			ID:                 c.ID,
+			Network:            c.Network,
+			Label:              c.Label,
+			WasmHash:           c.WasmHash,
+			CreatedAtLedger:    c.CreatedAtLedger,
+			BackfillCompleteAt: c.BackfillCompleteAt,
+			Status:             c.Status,
+			AddedAt:            c.AddedAt,
+		})
+	}
+
+	// API typically returns a list of results wrapped or just the array.
+	// We'll return an array directly for simplicity or wrapped in { results: ... } if preferred.
+	// Looking at other routes, List returns { items: [...] }. But a simple array is fine too.
+	// Wait, List returns { items: [...], next_cursor: ... }. Let's return { items: [...] } for consistency.
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"items": res,
+	})
 }

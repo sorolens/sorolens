@@ -190,7 +190,7 @@ export default function InvocationsPage() {
         if (seq === loadSeq.current) setLoading(false);
       }
     },
-    [filters, network],
+    [filters, network]
   );
 
   useEffect(() => {

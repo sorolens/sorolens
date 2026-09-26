@@ -16,6 +16,18 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
+// Flush forwards to the underlying writer so SSE handlers behind Logger can
+// still stream; without it the w.(http.Flusher) assertion fails.
+func (r *statusRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap lets http.ResponseController reach the underlying writer, e.g. to
+// extend the write deadline for streams and pprof profiles.
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
 // Logger logs each request with method, path, status, duration, and request ID.
 func Logger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

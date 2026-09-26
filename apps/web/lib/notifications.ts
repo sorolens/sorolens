@@ -52,22 +52,29 @@ function isURL(value: string, schemes: string[]): boolean {
  * error message or the request body to send.
  */
 export function buildSubscriptionRequest(
-  form: SubscriptionForm,
+  form: SubscriptionForm
 ): { error: string } | { request: CreateSubscriptionRequest } {
   const contractId = form.contractId.trim().toUpperCase();
   const destination = form.destination.trim();
   if (!contractId) return { error: "Choose a contract." };
-  if (!destination) return { error: `${CHANNELS[form.channel].destinationLabel} is required.` };
+  if (!destination)
+    return { error: `${CHANNELS[form.channel].destinationLabel} is required.` };
 
   switch (form.channel) {
     case "pagerduty":
       return {
-        request: { contract_id: contractId, channel_type: "pagerduty", routing_key: destination },
+        request: {
+          contract_id: contractId,
+          channel_type: "pagerduty",
+          routing_key: destination,
+        },
       };
     case "slack":
     case "discord":
       if (!isURL(destination, ["https:"])) {
-        return { error: `${CHANNELS[form.channel].destinationLabel} must be an https URL.` };
+        return {
+          error: `${CHANNELS[form.channel].destinationLabel} must be an https URL.`,
+        };
       }
       break;
     default:
@@ -76,6 +83,10 @@ export function buildSubscriptionRequest(
       }
   }
   return {
-    request: { contract_id: contractId, channel_type: form.channel, webhook_url: destination },
+    request: {
+      contract_id: contractId,
+      channel_type: form.channel,
+      webhook_url: destination,
+    },
   };
 }

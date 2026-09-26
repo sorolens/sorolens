@@ -1,0 +1,10 @@
+{
+  "id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+  "network": "testnet",
+  "label": "fixture-counter",
+  "wasm_hash": "8f4d1c6a0e2b7d9c3a5f8e1b4d7c0a2f6e9b3d5c8a1f4e7b0d3c6a9f2e5b8d1c",
+  "created_at_ledger": 1234567,
+  "backfill_complete_at": "2026-01-15T10:00:00Z",
+  "status": "active",
+  "added_at": "2026-01-15T10:05:00Z"
+}

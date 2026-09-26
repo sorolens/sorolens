@@ -28,7 +28,9 @@ vi.mock("recharts", () => ({
   ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => (
     <div data-testid="recharts-container">{children}</div>
   ),
-  AreaChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  AreaChart: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   Area: () => <div data-testid="recharts-area" />,
 }));
 
@@ -41,11 +43,7 @@ const ID_A = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const ID_B = "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
 const ID_C = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";
 
-function contract(
-  id: string,
-  label: string,
-  network: string,
-): ContractSummary {
+function contract(id: string, label: string, network: string): ContractSummary {
   return {
     id,
     network,
@@ -53,6 +51,7 @@ function contract(
     status: "active",
     wasm_hash: null,
     added_at: "2026-09-01T00:00:00Z",
+    last_activity_at: null,
   };
 }
 
@@ -109,7 +108,9 @@ describe("CompareView", () => {
   it("fetches the comparison in one round-trip and renders both columns", async () => {
     render(<CompareView initialIds={[ID_A, ID_B]} initialWindow="7d" />);
 
-    await waitFor(() => expect(screen.getByText("90% worse")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("90% worse")).toBeInTheDocument()
+    );
 
     expect(mockGetCompare).toHaveBeenCalledWith([ID_A, ID_B], "7d");
     // Both columns rendered.
@@ -123,10 +124,9 @@ describe("CompareView", () => {
     render(<CompareView initialIds={[ID_A, ID_B]} initialWindow="7d" />);
 
     await waitFor(() =>
-      expect(mockReplace).toHaveBeenCalledWith(
-        `/compare?ids=${ID_A},${ID_B}`,
-        { scroll: false },
-      ),
+      expect(mockReplace).toHaveBeenCalledWith(`/compare?ids=${ID_A},${ID_B}`, {
+        scroll: false,
+      })
     );
   });
 
@@ -156,8 +156,8 @@ describe("CompareView", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText("No data yet for this contract."),
-      ).toBeInTheDocument(),
+        screen.getByText("No data yet for this contract.")
+      ).toBeInTheDocument()
     );
     expect(screen.getByTestId("sparkline-empty")).toBeInTheDocument();
   });

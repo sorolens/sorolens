@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sorolens/sorolens/apps/api/internal/config"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/router"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
@@ -74,7 +75,7 @@ func TestOpenAPICoversEveryRoute(t *testing.T) {
 		DB:     &store.MockPinger{Healthy: true},
 		Redis:  &store.MockPinger{Healthy: true},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	})
+	}, config.DefaultRequestMaxBodyBytes)
 	routes, ok := r.(chi.Routes)
 	if !ok {
 		t.Fatalf("router is %T, want chi.Routes", r)
@@ -82,6 +83,10 @@ func TestOpenAPICoversEveryRoute(t *testing.T) {
 
 	live := map[string]bool{}
 	err := chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		// pprof debug routes are internal endpoints not part of the public API.
+		if strings.HasPrefix(route, "/debug/") {
+			return nil
+		}
 		route = strings.ReplaceAll(route, "/*/", "/")
 		if len(route) > 1 {
 			route = strings.TrimSuffix(route, "/")

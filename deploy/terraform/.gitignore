@@ -1,0 +1,13 @@
+# Terraform working files
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+# Real variable files hold environment details; only the example is tracked.
+*.tfvars
+!*.tfvars.example
+# Modules and examples are consumed with users' own provider versions, so
+# lock files are not committed (see deploy/terraform/README.md).
+.terraform.lock.hcl

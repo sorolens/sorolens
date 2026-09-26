@@ -11,6 +11,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/sorolens/sorolens/apps/api/internal/config"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/router"
@@ -30,7 +31,7 @@ func newCachedServer(t *testing.T, ms *store.MockStore) http.Handler {
 		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Cache:       &middleware.RedisCache{Client: client},
 		CacheTTL:    30 * time.Second,
-	})
+	}, config.DefaultRequestMaxBodyBytes)
 }
 
 func TestResponseCacheOnContractRoutes(t *testing.T) {

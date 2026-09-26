@@ -80,12 +80,21 @@ export function SeverityBadge({ severity }: { severity: AlertSeverity }) {
 /** Returns a Tailwind color class based on uptime percentage. */
 function uptimeTone(pct: number): { border: string; text: string } {
   if (pct >= 99) {
-    return { border: "border-[var(--color-safe)]", text: "text-[var(--color-safe)]" };
+    return {
+      border: "border-[var(--color-safe)]",
+      text: "text-[var(--color-safe)]",
+    };
   }
   if (pct >= 95) {
-    return { border: "border-[var(--color-warning)]", text: "text-[var(--color-warning)]" };
+    return {
+      border: "border-[var(--color-warning)]",
+      text: "text-[var(--color-warning)]",
+    };
   }
-  return { border: "border-[var(--color-danger)]", text: "text-[var(--color-danger)]" };
+  return {
+    border: "border-[var(--color-danger)]",
+    text: "text-[var(--color-danger)]",
+  };
 }
 
 interface UptimeBadgeProps {
@@ -101,7 +110,7 @@ interface UptimeBadgeProps {
  * While the value is loading, a skeleton placeholder is shown instead.
  */
 export function UptimeBadge({ window, pct }: UptimeBadgeProps) {
-  if (pct === null) {
+  if (pct == null) {
     return (
       <span className="inline-flex items-center rounded-full border border-[var(--color-border)] px-3 py-1 text-xs font-medium text-[var(--color-text-secondary)] animate-pulse">
         {window} —

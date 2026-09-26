@@ -1,35 +1,39 @@
 package handler_test
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/sorolens/sorolens/apps/api/internal/config"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/router"
-	"time"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 	"log/slog"
 	"os"
+	"time"
 )
 
 type mockRedisClient struct{}
+
 func (m *mockRedisClient) Incr(ctx context.Context, key string) (int64, error) { return 1, nil }
-func (m *mockRedisClient) Expire(ctx context.Context, key string, expiration time.Duration) (bool, error) { return true, nil }
+func (m *mockRedisClient) Expire(ctx context.Context, key string, expiration time.Duration) (bool, error) {
+	return true, nil
+}
 
 func newTestHandler(ms *store.MockStore, dbHealthy, redisHealthy bool) http.Handler {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	h := &handler.Handler{
-		Store:  ms,
-		DB:     &store.MockPinger{Healthy: dbHealthy},
-		Redis:  &store.MockPinger{Healthy: redisHealthy},
+		Store:       ms,
+		DB:          &store.MockPinger{Healthy: dbHealthy},
+		Redis:       &store.MockPinger{Healthy: redisHealthy},
 		RedisClient: &mockRedisClient{},
-		Logger: logger,
+		Logger:      logger,
 	}
-	return router.New(h)
+	return router.New(h, config.DefaultRequestMaxBodyBytes)
 }
 
 // seedRoleStore returns a MockStore with an admin and a contributor user so
@@ -358,5 +362,44 @@ func TestContentTypeMiddleware(t *testing.T) {
 
 	if w.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("want 415, got %d", w.Code)
+	}
+}
+
+func TestSearchContracts(t *testing.T) {
+	ms := store.NewMockStore()
+	_ = ms.UpsertContract(context.Background(), store.Contract{ID: "C12345", Label: "TokenContract", Network: "testnet"})
+	_ = ms.UpsertContract(context.Background(), store.Contract{ID: "C67890", Label: "Other", Network: "testnet"})
+
+	srv := newTestHandler(ms, true, true)
+
+	// test hitting the search with a matching query
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=token", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+
+	var res map[string][]map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&res); err != nil {
+		t.Fatal(err)
+	}
+	items := res["items"]
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	if items[0]["id"] != "C12345" {
+		t.Fatalf("want C12345, got %v", items[0]["id"])
+	}
+	
+	// test hitting search with a query matching multiple (or limit)
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=C", nil)
+	w2 := httptest.NewRecorder()
+	srv.ServeHTTP(w2, req2)
+	var res2 map[string][]map[string]any
+	_ = json.NewDecoder(w2.Body).Decode(&res2)
+	if len(res2["items"]) != 2 {
+		t.Fatalf("want 2 items, got %d", len(res2["items"]))
 	}
 }

@@ -19,6 +19,9 @@ export interface ContractDetail extends Contract {
 
 export interface ContractEvent {
   id: string;
+  /** The API has always returned this; the type was missing it. */
+  contract_id: string;
+  network: string;
   ledger: number;
   ledger_closed_at: string;
   tx_hash: string;
@@ -105,6 +108,12 @@ export interface VolumePoint {
   count: number;
 }
 
+/** One hour bucket of invocation frequency (issue #185). */
+export interface InvocationFrequencyPoint {
+  hour: string; // "HH:00" UTC hour start
+  count: number;
+}
+
 export interface StatsResponse {
   event_volume: VolumePoint[];
   invocation_count: VolumePoint[];
@@ -139,6 +148,29 @@ export interface ContractsListResponse {
 export interface TrackContractRequest {
   id: string;
   label?: string;
+  /** Network the contract lives on: testnet | mainnet | futurenet | standalone. */
+  network?: string;
+}
+
+/**
+ * Result of the tracking wizard's pre-flight check
+ * (POST /api/v1/contracts/validate). `valid` reflects the id's StrKey format
+ * and the network; `already_tracked` is advisory so the wizard can redirect to
+ * the existing entry instead of creating a duplicate.
+ */
+export interface ValidateContractResponse {
+  valid: boolean;
+  contract_id: string;
+  network: string;
+  already_tracked: boolean;
+  label: string | null;
+  reason: string | null;
+}
+
+export interface LabelResolution {
+  label: string;
+  value: string;
+  scope: string;
 }
 
 export type TimeWindow = "24h" | "7d" | "30d" | "all";
@@ -155,6 +187,42 @@ export interface UptimeResponse {
   /** Uptime percentage in the range [0, 100] with up to 2 decimal places. */
   uptime_pct: number;
 }
+
+/**
+ * One contract's service-level summary for a calendar month (issue #266).
+ * Derived from watchdog health checks and alerts, not from a separate source.
+ */
+export interface MonthlySLA {
+  contract_id: string;
+  /** Reporting period, YYYY-MM (UTC). */
+  month: string;
+  /** Healthy checks / total checks * 100. Zero when there are no checks. */
+  uptime_pct: number;
+  total_checks: number;
+  healthy_checks: number;
+  /** Outages: transitions from Healthy into any other status. */
+  incidents: number;
+  /** Mean time to recovery in seconds, across incidents that recovered. */
+  mttr_seconds: number;
+  total_downtime_seconds: number;
+  longest_outage_seconds: number;
+  /** True when the month ends mid-incident, so MTTR excludes that incident. */
+  ongoing_outage: boolean;
+  critical_alerts: number;
+  warning_alerts: number;
+  info_alerts: number;
+  total_alerts: number;
+  first_check: string | null;
+  last_check: string | null;
+}
+
+export interface SLAHistoryResponse {
+  contract_id: string;
+  /** Oldest first, so it maps straight onto a chart's x-axis. */
+  months: MonthlySLA[];
+}
+
+export type ReportFormat = "json" | "csv" | "pdf";
 
 export interface MonitoredContract {
   contract_id: string;
@@ -252,6 +320,32 @@ export interface GlobalStats {
   total_storage_entries: number;
 }
 
+// ---- live dashboard (#139) --------------------------------------------------
+
+export interface RecentEventsResponse {
+  events: ContractEvent[];
+}
+
+/**
+ * One contract's event activity over the live window.
+ *
+ * `per_minute` always has exactly `minutes` buckets, oldest first, so the
+ * sparkline's x-axis stays contiguous and does not shift between refreshes.
+ */
+export interface ContractEventRate {
+  contract_id: string;
+  label: string;
+  network: string;
+  total: number;
+  per_minute: number[];
+}
+
+export interface LiveActivityResponse {
+  minutes: number;
+  window_start: string;
+  contracts: ContractEventRate[];
+}
+
 export interface WatchlistItem {
   contract_id: string;
   added_at: string;
@@ -328,4 +422,3 @@ export interface AlertSubscription {
 export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
 }
-

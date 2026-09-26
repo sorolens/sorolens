@@ -8,18 +8,29 @@
 
 // Registers jest-dom matchers with vitest, including their types.
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventsTable } from "./EventsTable";
 import type { ContractEvent } from "@/lib/types";
 
 const EVENT: ContractEvent = {
   id: "evt_1",
+  contract_id: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  network: "testnet",
   ledger: 120_400,
   ledger_closed_at: "2026-07-03T08:00:00Z",
   tx_hash: "a1b2c3",
   type: "transfer",
-  topic_decoded: ["transfer", "GD2E2SJSD2C5SQGMH2YPIXI6F7NS2S6MZ2G4T3VDWXQH2FQT4M6URPLT"],
+  topic_decoded: [
+    "transfer",
+    "GD2E2SJSD2C5SQGMH2YPIXI6F7NS2S6MZ2G4T3VDWXQH2FQT4M6URPLT",
+  ],
   topic_xdr: ["AAAAAA=="],
   value_decoded: { amount: 1000 },
   value_xdr: "AAAAAw==",
@@ -52,9 +63,7 @@ describe("EventsTable copy JSON button", () => {
 
     // JSON.stringify(decoded event, null, 2) per the issue's guidance.
     await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith(
-        JSON.stringify(EVENT, null, 2)
-      )
+      expect(writeText).toHaveBeenCalledWith(JSON.stringify(EVENT, null, 2))
     );
   });
 

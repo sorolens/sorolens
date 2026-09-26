@@ -18,6 +18,35 @@ type postgresStore struct {
 	pool *pgxpool.Pool
 }
 
+func (s *postgresStore) UpsertLabel(ctx context.Context, label Label) error {
+	if label.Public {
+		_, err := s.pool.Exec(ctx, `INSERT INTO labels_public (label, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (label) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, label.Label, label.Value)
+		return err
+	}
+	_, err := s.pool.Exec(ctx, `INSERT INTO labels_workspace (workspace_id, label, value, updated_at) VALUES ($1, $2, $3, NOW()) ON CONFLICT (workspace_id, label) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`, label.WorkspaceID, label.Label, label.Value)
+	return err
+}
+
+func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error) {
+	rows, err := s.pool.Query(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public FROM labels_workspace WHERE workspace_id = $1) labels WHERE label ILIKE '%' || $2 || '%' OR value ILIKE '%' || $2 || '%' ORDER BY label LIMIT 100`, workspaceID, query)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	var labels []Label
+	for rows.Next() {
+		var label Label
+		if err := rows.Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public); err != nil { return nil, err }
+		labels = append(labels, label)
+	}
+	return labels, rows.Err()
+}
+
+func (s *postgresStore) ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error) {
+	var label Label
+	err := s.pool.QueryRow(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public, 2 AS priority FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public, 1 AS priority FROM labels_workspace WHERE workspace_id = $1) labels WHERE lower(label) = lower($2) ORDER BY priority LIMIT 1`, workspaceID, query).Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public)
+	if errors.Is(err, pgx.ErrNoRows) { return Label{}, ErrNotFound }
+	return label, err
+}
+
 // ---- contracts ------------------------------------------------------------
 
 // UpsertContract inserts or updates a contract in the database. It uses the contract ID as the unique constraint for upserting.
@@ -596,3 +625,45 @@ func nullableText(s string) *string {
 	return &s
 }
 
+func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit int) ([]Contract, error) {
+	if query == "" {
+		return []Contract{}, nil
+	}
+
+	q := `
+		SELECT
+			id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at, last_activity_at
+		FROM contracts
+		WHERE id ILIKE $1 OR label ILIKE $1
+		ORDER BY added_at DESC
+		LIMIT $2
+	`
+
+	// Add % wildcards for simple ILIKE search
+	searchPattern := "%" + query + "%"
+
+	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var contracts []Contract
+	for rows.Next() {
+		var c Contract
+		if err := rows.Scan(
+			&c.ID, &c.Network, &c.Label, &c.WasmHash,
+			&c.CreatedAtLedger, &c.BackfillCompleteAt, &c.Status,
+			&c.AddedAt, &c.LastActivityAt,
+		); err != nil {
+			return nil, err
+		}
+		contracts = append(contracts, c)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return contracts, nil
+}

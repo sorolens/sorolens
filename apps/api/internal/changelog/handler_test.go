@@ -160,7 +160,8 @@ func makeRequest(method, path string) *http.Request {
 // ---- tests -----------------------------------------------------------------
 
 // TestGetChangelog_200_returnsVersionArray is an end-to-end integration test:
-//   ingestion → store → GET /contracts/{id}/changelog → 200 JSON array.
+//
+//	ingestion → store → GET /contracts/{id}/changelog → 200 JSON array.
 func TestGetChangelog_200_returnsVersionArray(t *testing.T) {
 	h := changelog.New(seededStore())
 
@@ -281,4 +282,9 @@ func TestGetBadge_unknownHashShowsUnknown(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "unknown") {
 		t.Fatalf("expected badge to show 'unknown', got: %s", w.Body.String())
 	}
+}
+
+
+func (f *fakeStore) SearchContracts(_ context.Context, query string, limit int) ([]store.Contract, error) {
+	return nil, nil
 }
