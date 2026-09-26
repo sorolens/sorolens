@@ -1,9 +1,13 @@
 /**
- * Tests for apps/web/components/EventsTable.tsx (issue #183: copy JSON button).
+ * Tests for apps/web/components/EventsTable.tsx
  *
- * We use vitest + @testing-library/react + jsdom.
- * @sorolens/ui resolves to its source via the vitest alias, so the real
- * CopyButton is exercised. The clipboard is mocked.
+ * One suite for two features that share the row: the CSS-truncated topic/value
+ * columns expose their full strings via `title` for hover discoverability, and
+ * the copy column serialises the fully-decoded event (issue #183).
+ *
+ * We use vitest + @testing-library/react + jsdom. @sorolens/ui resolves to its
+ * source via the vitest alias, so the real CopyButton is exercised. The
+ * clipboard is mocked.
  */
 
 // Registers jest-dom matchers with vitest, including their types.
@@ -18,6 +22,21 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventsTable } from "./EventsTable";
 import type { ContractEvent } from "@/lib/types";
+
+const CONTRACT_ID = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQAHHAGQFW2J";
+
+const event: ContractEvent = {
+  id: "evt-1",
+  ledger: 42,
+  ledger_closed_at: "2026-09-24T00:00:00Z",
+  tx_hash: "a".repeat(64),
+  type: "contract",
+  topic_decoded: [CONTRACT_ID, "transfer"],
+  topic_xdr: [],
+  value_decoded: CONTRACT_ID,
+  value_xdr: "AAAA",
+  in_successful_call: true,
+};
 
 const EVENT: ContractEvent = {
   id: "evt_1",
@@ -36,6 +55,16 @@ const EVENT: ContractEvent = {
   value_xdr: "AAAAAw==",
   in_successful_call: true,
 };
+
+describe("EventsTable topic and value tooltips", () => {
+  it("exposes the full topic and value in a hover tooltip", () => {
+    render(<EventsTable events={[event]} />);
+
+    // Both the topic and the value cell carry the truncated string as `title`.
+    // The copy button's own title is its label, so it is not counted here.
+    expect(screen.getAllByTitle(CONTRACT_ID)).toHaveLength(2);
+  });
+});
 
 describe("EventsTable copy JSON button", () => {
   const writeText = vi.fn().mockResolvedValue(undefined);

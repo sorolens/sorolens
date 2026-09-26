@@ -1,5 +1,5 @@
 export { MonoId } from "./MonoId";
-export type { MonoIdProps } from "./MonoId";
+export type { MonoIdProps, MonoIdVariant } from "./MonoId";
 export { CopyButton } from "./CopyButton";
 export type { CopyButtonProps } from "./CopyButton";
 export { Badge } from "./Badge";
