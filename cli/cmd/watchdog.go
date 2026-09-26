@@ -5,9 +5,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/cobra"
+	watchdogregister "github.com/sorolens/sorolens/cli/cmd/watchdog"
 	"github.com/sorolens/sorolens/cli/internal/client"
 	"github.com/sorolens/sorolens/cli/internal/format"
+	"github.com/spf13/cobra"
 )
 
 // watchdogCmd is the parent command for watchdog-related subcommands.
@@ -25,6 +26,7 @@ var watchdogStatusCmd = &cobra.Command{
 
 func init() {
 	watchdogCmd.AddCommand(watchdogStatusCmd)
+	watchdogCmd.AddCommand(watchdogregister.NewRegisterCommand())
 	rootCmd.AddCommand(watchdogCmd)
 }
 
