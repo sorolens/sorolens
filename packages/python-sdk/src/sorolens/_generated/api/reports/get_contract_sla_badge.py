@@ -36,10 +36,20 @@ def _get_kwargs(
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
 ) -> Error | None:
+    if response.status_code == 422:
+        response_422 = Error.from_dict(response.json())
+
+        return response_422
+
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
 
         return response_500
+
+    if response.status_code == 501:
+        response_501 = Error.from_dict(response.json())
+
+        return response_501
 
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
@@ -64,7 +74,10 @@ def sync_detailed(
     client: AuthenticatedClient | Client,
     month: str | Unset = UNSET,
 ) -> Response[Error]:
-    """SVG uptime badge for a contract
+    """Get an SLA badge SVG for a contract
+
+     Shields.io-style SVG badge showing a month's uptime, suitable for
+    embedding in a README.
 
     Args:
         contract_id (str):
@@ -96,7 +109,10 @@ def sync(
     client: AuthenticatedClient | Client,
     month: str | Unset = UNSET,
 ) -> Error | None:
-    """SVG uptime badge for a contract
+    """Get an SLA badge SVG for a contract
+
+     Shields.io-style SVG badge showing a month's uptime, suitable for
+    embedding in a README.
 
     Args:
         contract_id (str):
@@ -123,7 +139,10 @@ async def asyncio_detailed(
     client: AuthenticatedClient | Client,
     month: str | Unset = UNSET,
 ) -> Response[Error]:
-    """SVG uptime badge for a contract
+    """Get an SLA badge SVG for a contract
+
+     Shields.io-style SVG badge showing a month's uptime, suitable for
+    embedding in a README.
 
     Args:
         contract_id (str):
@@ -153,7 +172,10 @@ async def asyncio(
     client: AuthenticatedClient | Client,
     month: str | Unset = UNSET,
 ) -> Error | None:
-    """SVG uptime badge for a contract
+    """Get an SLA badge SVG for a contract
+
+     Shields.io-style SVG badge showing a month's uptime, suitable for
+    embedding in a README.
 
     Args:
         contract_id (str):

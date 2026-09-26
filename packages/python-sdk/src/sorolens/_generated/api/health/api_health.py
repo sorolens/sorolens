@@ -1,33 +1,19 @@
 from http import HTTPStatus
-from typing import Any, cast
-from urllib.parse import quote
+from typing import Any
 
 import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.error import Error
-from ...types import UNSET, Response, Unset
+from ...models.api_health_response_200 import ApiHealthResponse200
+from ...types import Response
 
 
-def _get_kwargs(
-    contract_id: str,
-    *,
-    limit: int | Unset = 12,
-) -> dict[str, Any]:
-
-    params: dict[str, Any] = {}
-
-    params["limit"] = limit
-
-    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
+def _get_kwargs() -> dict[str, Any]:
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/api/v1/reports/{contract_id}/history".format(
-            contract_id=quote(str(contract_id), safe=""),
-        ),
-        "params": params,
+        "url": "/api/v1/health",
     }
 
     return _kwargs
@@ -35,15 +21,11 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Any | Error | None:
+) -> ApiHealthResponse200 | None:
     if response.status_code == 200:
-        response_200 = cast(Any, None)
+        response_200 = ApiHealthResponse200.from_dict(response.json())
+
         return response_200
-
-    if response.status_code == 500:
-        response_500 = Error.from_dict(response.json())
-
-        return response_500
 
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
@@ -53,7 +35,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Any | Error]:
+) -> Response[ApiHealthResponse200]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -63,29 +45,20 @@ def _build_response(
 
 
 def sync_detailed(
-    contract_id: str,
     *,
-    client: AuthenticatedClient,
-    limit: int | Unset = 12,
-) -> Response[Any | Error]:
-    """List historical monthly SLA reports for a contract
-
-    Args:
-        contract_id (str):
-        limit (int | Unset):  Default: 12.
+    client: AuthenticatedClient | Client,
+) -> Response[ApiHealthResponse200]:
+    """Health probe with postgres and redis reachability
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any | Error]
+        Response[ApiHealthResponse200]
     """
 
-    kwargs = _get_kwargs(
-        contract_id=contract_id,
-        limit=limit,
-    )
+    kwargs = _get_kwargs()
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -95,56 +68,39 @@ def sync_detailed(
 
 
 def sync(
-    contract_id: str,
     *,
-    client: AuthenticatedClient,
-    limit: int | Unset = 12,
-) -> Any | Error | None:
-    """List historical monthly SLA reports for a contract
-
-    Args:
-        contract_id (str):
-        limit (int | Unset):  Default: 12.
+    client: AuthenticatedClient | Client,
+) -> ApiHealthResponse200 | None:
+    """Health probe with postgres and redis reachability
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Any | Error
+        ApiHealthResponse200
     """
 
     return sync_detailed(
-        contract_id=contract_id,
         client=client,
-        limit=limit,
     ).parsed
 
 
 async def asyncio_detailed(
-    contract_id: str,
     *,
-    client: AuthenticatedClient,
-    limit: int | Unset = 12,
-) -> Response[Any | Error]:
-    """List historical monthly SLA reports for a contract
-
-    Args:
-        contract_id (str):
-        limit (int | Unset):  Default: 12.
+    client: AuthenticatedClient | Client,
+) -> Response[ApiHealthResponse200]:
+    """Health probe with postgres and redis reachability
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any | Error]
+        Response[ApiHealthResponse200]
     """
 
-    kwargs = _get_kwargs(
-        contract_id=contract_id,
-        limit=limit,
-    )
+    kwargs = _get_kwargs()
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
@@ -152,29 +108,21 @@ async def asyncio_detailed(
 
 
 async def asyncio(
-    contract_id: str,
     *,
-    client: AuthenticatedClient,
-    limit: int | Unset = 12,
-) -> Any | Error | None:
-    """List historical monthly SLA reports for a contract
-
-    Args:
-        contract_id (str):
-        limit (int | Unset):  Default: 12.
+    client: AuthenticatedClient | Client,
+) -> ApiHealthResponse200 | None:
+    """Health probe with postgres and redis reachability
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Any | Error
+        ApiHealthResponse200
     """
 
     return (
         await asyncio_detailed(
-            contract_id=contract_id,
             client=client,
-            limit=limit,
         )
     ).parsed

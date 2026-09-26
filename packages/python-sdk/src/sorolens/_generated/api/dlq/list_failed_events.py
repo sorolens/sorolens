@@ -1,43 +1,22 @@
 from http import HTTPStatus
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error import Error
-from ...models.list_alerts_network import ListAlertsNetwork
-from ...models.list_alerts_severity import ListAlertsSeverity
+from ...models.list_failed_events_response_200 import ListFailedEventsResponse200
 from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
-    flat: bool | Unset = UNSET,
-    contract_id: str | Unset = UNSET,
-    severity: ListAlertsSeverity | Unset = UNSET,
-    network: ListAlertsNetwork | Unset = UNSET,
     cursor: str | Unset = UNSET,
-    limit: int | Unset = 100,
+    limit: int | Unset = UNSET,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
-
-    params["flat"] = flat
-
-    params["contract_id"] = contract_id
-
-    json_severity: str | Unset = UNSET
-    if not isinstance(severity, Unset):
-        json_severity = severity.value
-
-    params["severity"] = json_severity
-
-    json_network: str | Unset = UNSET
-    if not isinstance(network, Unset):
-        json_network = network.value
-
-    params["network"] = json_network
 
     params["cursor"] = cursor
 
@@ -47,7 +26,7 @@ def _get_kwargs(
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/api/v1/alerts",
+        "url": "/api/v1/dlq",
         "params": params,
     }
 
@@ -56,9 +35,10 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Any | Error | None:
+) -> Error | ListFailedEventsResponse200 | None:
     if response.status_code == 200:
-        response_200 = cast(Any, None)
+        response_200 = ListFailedEventsResponse200.from_dict(response.json())
+
         return response_200
 
     if response.status_code == 422:
@@ -79,7 +59,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Any | Error]:
+) -> Response[Error | ListFailedEventsResponse200]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -90,37 +70,27 @@ def _build_response(
 
 def sync_detailed(
     *,
-    client: AuthenticatedClient,
-    flat: bool | Unset = UNSET,
-    contract_id: str | Unset = UNSET,
-    severity: ListAlertsSeverity | Unset = UNSET,
-    network: ListAlertsNetwork | Unset = UNSET,
+    client: AuthenticatedClient | Client,
     cursor: str | Unset = UNSET,
-    limit: int | Unset = 100,
-) -> Response[Any | Error]:
-    """List alert groups (or raw alerts with ?flat=true)
+    limit: int | Unset = UNSET,
+) -> Response[Error | ListFailedEventsResponse200]:
+    """List dead-lettered indexer events
+
+     Events that exhausted retries, newest-first, opaque cursor pagination.
 
     Args:
-        flat (bool | Unset):
-        contract_id (str | Unset):
-        severity (ListAlertsSeverity | Unset):
-        network (ListAlertsNetwork | Unset):
         cursor (str | Unset):
-        limit (int | Unset):  Default: 100.
+        limit (int | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any | Error]
+        Response[Error | ListFailedEventsResponse200]
     """
 
     kwargs = _get_kwargs(
-        flat=flat,
-        contract_id=contract_id,
-        severity=severity,
-        network=network,
         cursor=cursor,
         limit=limit,
     )
@@ -134,38 +104,28 @@ def sync_detailed(
 
 def sync(
     *,
-    client: AuthenticatedClient,
-    flat: bool | Unset = UNSET,
-    contract_id: str | Unset = UNSET,
-    severity: ListAlertsSeverity | Unset = UNSET,
-    network: ListAlertsNetwork | Unset = UNSET,
+    client: AuthenticatedClient | Client,
     cursor: str | Unset = UNSET,
-    limit: int | Unset = 100,
-) -> Any | Error | None:
-    """List alert groups (or raw alerts with ?flat=true)
+    limit: int | Unset = UNSET,
+) -> Error | ListFailedEventsResponse200 | None:
+    """List dead-lettered indexer events
+
+     Events that exhausted retries, newest-first, opaque cursor pagination.
 
     Args:
-        flat (bool | Unset):
-        contract_id (str | Unset):
-        severity (ListAlertsSeverity | Unset):
-        network (ListAlertsNetwork | Unset):
         cursor (str | Unset):
-        limit (int | Unset):  Default: 100.
+        limit (int | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Any | Error
+        Error | ListFailedEventsResponse200
     """
 
     return sync_detailed(
         client=client,
-        flat=flat,
-        contract_id=contract_id,
-        severity=severity,
-        network=network,
         cursor=cursor,
         limit=limit,
     ).parsed
@@ -173,37 +133,27 @@ def sync(
 
 async def asyncio_detailed(
     *,
-    client: AuthenticatedClient,
-    flat: bool | Unset = UNSET,
-    contract_id: str | Unset = UNSET,
-    severity: ListAlertsSeverity | Unset = UNSET,
-    network: ListAlertsNetwork | Unset = UNSET,
+    client: AuthenticatedClient | Client,
     cursor: str | Unset = UNSET,
-    limit: int | Unset = 100,
-) -> Response[Any | Error]:
-    """List alert groups (or raw alerts with ?flat=true)
+    limit: int | Unset = UNSET,
+) -> Response[Error | ListFailedEventsResponse200]:
+    """List dead-lettered indexer events
+
+     Events that exhausted retries, newest-first, opaque cursor pagination.
 
     Args:
-        flat (bool | Unset):
-        contract_id (str | Unset):
-        severity (ListAlertsSeverity | Unset):
-        network (ListAlertsNetwork | Unset):
         cursor (str | Unset):
-        limit (int | Unset):  Default: 100.
+        limit (int | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any | Error]
+        Response[Error | ListFailedEventsResponse200]
     """
 
     kwargs = _get_kwargs(
-        flat=flat,
-        contract_id=contract_id,
-        severity=severity,
-        network=network,
         cursor=cursor,
         limit=limit,
     )
@@ -215,39 +165,29 @@ async def asyncio_detailed(
 
 async def asyncio(
     *,
-    client: AuthenticatedClient,
-    flat: bool | Unset = UNSET,
-    contract_id: str | Unset = UNSET,
-    severity: ListAlertsSeverity | Unset = UNSET,
-    network: ListAlertsNetwork | Unset = UNSET,
+    client: AuthenticatedClient | Client,
     cursor: str | Unset = UNSET,
-    limit: int | Unset = 100,
-) -> Any | Error | None:
-    """List alert groups (or raw alerts with ?flat=true)
+    limit: int | Unset = UNSET,
+) -> Error | ListFailedEventsResponse200 | None:
+    """List dead-lettered indexer events
+
+     Events that exhausted retries, newest-first, opaque cursor pagination.
 
     Args:
-        flat (bool | Unset):
-        contract_id (str | Unset):
-        severity (ListAlertsSeverity | Unset):
-        network (ListAlertsNetwork | Unset):
         cursor (str | Unset):
-        limit (int | Unset):  Default: 100.
+        limit (int | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Any | Error
+        Error | ListFailedEventsResponse200
     """
 
     return (
         await asyncio_detailed(
             client=client,
-            flat=flat,
-            contract_id=contract_id,
-            severity=severity,
-            network=network,
             cursor=cursor,
             limit=limit,
         )
