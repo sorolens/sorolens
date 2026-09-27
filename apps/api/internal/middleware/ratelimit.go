@@ -27,7 +27,12 @@ type RedisClient interface {
 func RateLimit(rc RedisClient, lookup APIKeyLookup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/health" || r.URL.Path == "/readyz" || r.URL.Path == "/api/version" {
+			// Health probes, the version endpoint, and the Prometheus scrape
+			// endpoint are exempt: a scrape must not be throttled (it would
+			// otherwise create gaps in the series during incident response)
+			// and must never consume another caller's budget.
+			if r.URL.Path == "/health" || r.URL.Path == "/readyz" ||
+				r.URL.Path == "/api/version" || r.URL.Path == "/metrics" {
 				next.ServeHTTP(w, r)
 				return
 			}

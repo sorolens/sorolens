@@ -98,8 +98,7 @@ describe("getResourceTrend", () => {
   it("aggregates invocations fetched with a 30-day since bound", async () => {
     mockGetContractInvocations.mockResolvedValue({
       invocations: [invocation({ ledger_closed_at: "2026-07-03T08:00:00Z" })],
-      cursor: null,
-      has_more: false,
+      next_cursor: null,
     });
 
     const points = await getResourceTrend("CCONTRACT", 30);

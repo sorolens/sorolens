@@ -36,7 +36,10 @@ const (
 // hash covers the uncompressed entity.
 func ETag(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		// Streams bypass the recorder entirely: it buffers until the handler
+		// returns and does not implement http.Flusher, so an SSE handler
+		// behind it would answer 500 "streaming unsupported".
+		if (r.Method != http.MethodGet && r.Method != http.MethodHead) || etagExcludedPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -59,6 +62,11 @@ var etagExcludedPaths = []string{
 	"/stream/events",
 	"/events/stream",
 	"/ws",
+	// Bulk CSV exports are generated per request and sent with
+	// Cache-Control: no-store. Buffering them would defeat the streaming
+	// response, and emitting a validator for a no-store entity invites
+	// 304s that contradict the caching directive.
+	"/events.csv",
 }
 
 // etagExcludedPath reports whether the request path is an event stream or

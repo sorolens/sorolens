@@ -11,6 +11,7 @@ export interface Contract {
   } | null;
   storage_entry_count: number;
   expiring_entry_count: number;
+  tags: string[];
 }
 
 export interface ContractDetail extends Contract {
@@ -19,6 +20,9 @@ export interface ContractDetail extends Contract {
 
 export interface ContractEvent {
   id: string;
+  /** The API has always returned this; the type was missing it. */
+  contract_id: string;
+  network: string;
   ledger: number;
   ledger_closed_at: string;
   tx_hash: string;
@@ -134,6 +138,8 @@ export interface ContractSummary {
   wasm_hash: string | null;
   added_at: string;
   last_activity_at: string | null;
+  /** User-defined tags. Absent on optimistic rows built before a response. */
+  tags?: string[];
 }
 
 export interface ContractsListResponse {
@@ -142,9 +148,49 @@ export interface ContractsListResponse {
   has_more: boolean;
 }
 
+/** Body of POST /api/v1/contracts/:id/tags — the contract's full tag list. */
+export interface ContractTagsResponse {
+  contract_id: string;
+  tags: string[];
+}
+
+// ---- bulk contract actions (#176) ------------------------------------------
+
+export type BatchContractsAction = "untrack" | "tag";
+
+export interface BatchContractsRequest {
+  ids: string[];
+  action: BatchContractsAction;
+  // args.label is the tag to apply for action "tag".
+  args?: { label?: string };
+}
+
+export interface BatchContractsResponse {
+  action: BatchContractsAction;
+  requested: number;
+  affected: number;
+}
+
 export interface TrackContractRequest {
   id: string;
   label?: string;
+  /** Network the contract lives on: testnet | mainnet | futurenet | standalone. */
+  network?: string;
+}
+
+/**
+ * Result of the tracking wizard's pre-flight check
+ * (POST /api/v1/contracts/validate). `valid` reflects the id's StrKey format
+ * and the network; `already_tracked` is advisory so the wizard can redirect to
+ * the existing entry instead of creating a duplicate.
+ */
+export interface ValidateContractResponse {
+  valid: boolean;
+  contract_id: string;
+  network: string;
+  already_tracked: boolean;
+  label: string | null;
+  reason: string | null;
 }
 
 export interface LabelResolution {
@@ -300,6 +346,32 @@ export interface GlobalStats {
   total_storage_entries: number;
 }
 
+// ---- live dashboard (#139) --------------------------------------------------
+
+export interface RecentEventsResponse {
+  events: ContractEvent[];
+}
+
+/**
+ * One contract's event activity over the live window.
+ *
+ * `per_minute` always has exactly `minutes` buckets, oldest first, so the
+ * sparkline's x-axis stays contiguous and does not shift between refreshes.
+ */
+export interface ContractEventRate {
+  contract_id: string;
+  label: string;
+  network: string;
+  total: number;
+  per_minute: number[];
+}
+
+export interface LiveActivityResponse {
+  minutes: number;
+  window_start: string;
+  contracts: ContractEventRate[];
+}
+
 export interface WatchlistItem {
   contract_id: string;
   added_at: string;
@@ -375,4 +447,36 @@ export interface AlertSubscription {
 
 export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
+}
+
+// ---- source verification ---------------------------------------------------
+
+export interface VerificationDiagnostic {
+  code: string;
+  severity: string;
+  message: string;
+  hint?: string;
+}
+
+export interface ContractVerification {
+  contract_id: string;
+  status: string;
+  matched: boolean;
+  on_chain_hash?: string;
+  compiled_wasm_hash?: string;
+  source: {
+    kind: string;
+    ref?: string;
+    digest?: string;
+  };
+  toolchain: {
+    stellar?: string;
+    rustc?: string;
+    cargo?: string;
+  };
+  diagnostics: VerificationDiagnostic[];
+  build_log?: string;
+  submitted_at: string;
+  verified_at?: string;
+  updated_at: string;
 }

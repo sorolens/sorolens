@@ -1,6 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import "@testing-library/jest-dom";
+import * as matchers from "@testing-library/jest-dom/matchers";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, it, expect } from "vitest";
+
+expect.extend(matchers);
+
+afterEach(() => {
+  cleanup();
+});
 import {
   ContractChangelog,
   ContractVersionEntry,
