@@ -149,12 +149,14 @@ func main() {
 	}
 
 	<-ctx.Done()
-	logger.Info("shutting down")
+	logger.Info("shutting down on SIGTERM/SIGINT, draining in-flight requests")
 
+	// Drain in-flight requests with a 30s timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error("shutdown", "err", err)
+		logger.Error("shutdown error", "err", err)
 	}
 	if metricsSrv != nil {
 		if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
