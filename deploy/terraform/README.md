@@ -29,11 +29,11 @@ A Pulumi (TypeScript) equivalent is in [deploy/pulumi](../pulumi).
 
 ## Versions
 
-| | |
-|---|---|
-| Terraform | >= 1.9.0 to use the modules; >= 1.11 to run their tests |
-| hashicorp/aws | ~> 6.0 |
-| hashicorp/random | ~> 3.6 |
+|                  |                                                         |
+| ---------------- | ------------------------------------------------------- |
+| Terraform        | >= 1.9.0 to use the modules; >= 1.11 to run their tests |
+| hashicorp/aws    | ~> 6.0                                                  |
+| hashicorp/random | ~> 3.6                                                  |
 
 `.terraform.lock.hcl` files are not committed: modules are consumed with the
 caller's provider versions, and the example is a template you copy.

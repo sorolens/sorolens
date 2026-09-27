@@ -154,7 +154,7 @@ func main() {
 	// Drain in-flight requests with a 30s timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown error", "err", err)
 	}

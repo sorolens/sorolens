@@ -50,12 +50,12 @@ created in parallel. Building images the first time adds to that.
 Sorolens is not fully packaged for self-hosting yet. This guide is honest
 about the gaps; each links to where it is being fixed.
 
-| Gap | Effect on this guide |
-|---|---|
-| **No published images** (#96; #381 adds `apps/api/Dockerfile`) | You build and push the three images yourself (step 1). The indexer and dashboard have no Dockerfile in the repository yet. |
-| **Indexer is stubbed on `main`** (`services/indexer/main.go` uses stub RPC/store/Redis) | The indexer task starts, but indexes nothing until it is wired to real dependencies. |
-| **Migrations** (duplicate version numbers on `main`; #381 renumbers them and packages them) | Step 4 applies them with psql, as the repository's `docker compose` setup does, until #381 lands. |
-| **Dashboard API URL is fixed at build time** (`NEXT_PUBLIC_API_URL`) | Build the dashboard image for this deployment's URL (step 1 and step 5). |
+| Gap                                                                                         | Effect on this guide                                                                                                       |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **No published images** (#96; #381 adds `apps/api/Dockerfile`)                              | You build and push the three images yourself (step 1). The indexer and dashboard have no Dockerfile in the repository yet. |
+| **Indexer is stubbed on `main`** (`services/indexer/main.go` uses stub RPC/store/Redis)     | The indexer task starts, but indexes nothing until it is wired to real dependencies.                                       |
+| **Migrations** (duplicate version numbers on `main`; #381 renumbers them and packages them) | Step 4 applies them with psql, as the repository's `docker compose` setup does, until #381 lands.                          |
+| **Dashboard API URL is fixed at build time** (`NEXT_PUBLIC_API_URL`)                        | Build the dashboard image for this deployment's URL (step 1 and step 5).                                                   |
 
 ## Prerequisites
 
@@ -94,10 +94,10 @@ aws ecr get-login-password | docker login --username AWS --password-stdin $REGIS
 Build with an explicit tag (the module rejects `:latest`). What each image
 must do:
 
-| Image | Requirements |
-|---|---|
-| API | Serves on `$PORT` (8080) and answers `GET /health`. With #381: `docker build -f apps/api/Dockerfile -t $REGISTRY/sorolens-api:0.1.0 .` |
-| Indexer | Entrypoint is the indexer binary (`services/indexer`); the module passes `-mode=continuous -poll-interval=5m`. |
+| Image     | Requirements                                                                                                                                  |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| API       | Serves on `$PORT` (8080) and answers `GET /health`. With #381: `docker build -f apps/api/Dockerfile -t $REGISTRY/sorolens-api:0.1.0 .`        |
+| Indexer   | Entrypoint is the indexer binary (`services/indexer`); the module passes `-mode=continuous -poll-interval=5m`.                                |
 | Dashboard | Next.js server listening on `$PORT` (3000). Build it with `NEXT_PUBLIC_API_URL=https://<your domain>` (see step 5 if you have no domain yet). |
 
 ```sh
@@ -119,15 +119,15 @@ cp terraform.tfvars.example terraform.tfvars
 
 Edit `terraform.tfvars`:
 
-| Variable | What to set |
-|---|---|
-| `region` | Your region, e.g. `us-east-1`. |
-| `api_image`, `indexer_image`, `dashboard_image` | The three images from step 1. |
-| `certificate_arn`, `domain_name`, `route53_zone_id` | HTTPS setup (recommended). The certificate must cover `domain_name`. |
-| `allow_http_only = true` | Only instead of the three above, for a throwaway evaluation stack. |
-| `stellar_network` | `testnet` (default), `mainnet` or `futurenet`. |
-| `soroban_rpc_urls` | Required for mainnet, e.g. `{ mainnet = "https://your-provider.example.com" }`. |
-| `watchdog_contract_id` | Your deployed watchdog contract, if any. |
+| Variable                                            | What to set                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `region`                                            | Your region, e.g. `us-east-1`.                                                  |
+| `api_image`, `indexer_image`, `dashboard_image`     | The three images from step 1.                                                   |
+| `certificate_arn`, `domain_name`, `route53_zone_id` | HTTPS setup (recommended). The certificate must cover `domain_name`.            |
+| `allow_http_only = true`                            | Only instead of the three above, for a throwaway evaluation stack.              |
+| `stellar_network`                                   | `testnet` (default), `mainnet` or `futurenet`.                                  |
+| `soroban_rpc_urls`                                  | Required for mainnet, e.g. `{ mainnet = "https://your-provider.example.com" }`. |
+| `watchdog_contract_id`                              | Your deployed watchdog contract, if any.                                        |
 
 Every module input is documented in
 [modules/aws](../../deploy/terraform/modules/aws/README.md#inputs).
@@ -146,13 +146,13 @@ terraform apply sorolens.tfplan
 
 Outputs you will use:
 
-| Output | Use |
-|---|---|
-| `url` | The dashboard; the API is `url` + `/api/v1`. |
-| `health_url` | Quick API check. |
-| `dashboard_build_api_url` | The value to build the dashboard image with. |
-| `migrations_run_task_command` | Runs the migrations task (step 4). |
-| `cluster_name`, `service_names`, `log_group_names` | Operations and logs. |
+| Output                                             | Use                                          |
+| -------------------------------------------------- | -------------------------------------------- |
+| `url`                                              | The dashboard; the API is `url` + `/api/v1`. |
+| `health_url`                                       | Quick API check.                             |
+| `dashboard_build_api_url`                          | The value to build the dashboard image with. |
+| `migrations_run_task_command`                      | Runs the migrations task (step 4).           |
+| `cluster_name`, `service_names`, `log_group_names` | Operations and logs.                         |
 
 ## 4. Run database migrations
 
@@ -256,15 +256,15 @@ recovery window, and your ECR repositories.
 > module defaults, before storage, I/O, data transfer and free tier. Check the
 > [AWS Pricing Calculator](https://calculator.aws/) for your region and usage.
 
-| Item | Default size | ≈ USD / month |
-|---|---|---|
-| Aurora PostgreSQL Serverless v2 | 0.5 ACU minimum, billed around the clock (`db_min_capacity = 0` allows auto-pause) | ~44 + storage/I/O |
-| NAT gateway | 1 | ~33 + data processed |
-| Application Load Balancer | 1 | ~16 + LCUs |
-| ECS Fargate | 3 tasks × 0.25 vCPU / 0.5 GB | ~27 |
-| ElastiCache | 1 × cache.t4g.micro | ~12 |
-| Secrets Manager, CloudWatch Logs | 2 secrets, 30-day logs | a few dollars |
-| **Total** | | **roughly 130–150** |
+| Item                             | Default size                                                                       | ≈ USD / month        |
+| -------------------------------- | ---------------------------------------------------------------------------------- | -------------------- |
+| Aurora PostgreSQL Serverless v2  | 0.5 ACU minimum, billed around the clock (`db_min_capacity = 0` allows auto-pause) | ~44 + storage/I/O    |
+| NAT gateway                      | 1                                                                                  | ~33 + data processed |
+| Application Load Balancer        | 1                                                                                  | ~16 + LCUs           |
+| ECS Fargate                      | 3 tasks × 0.25 vCPU / 0.5 GB                                                       | ~27                  |
+| ElastiCache                      | 1 × cache.t4g.micro                                                                | ~12                  |
+| Secrets Manager, CloudWatch Logs | 2 secrets, 30-day logs                                                             | a few dollars        |
+| **Total**                        |                                                                                    | **roughly 130–150**  |
 
 `single_nat_gateway = false`, `db_instance_count = 2` and
 `redis_num_cache_clusters = 2` buy availability at extra cost.

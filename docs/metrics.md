@@ -20,11 +20,11 @@ how to scrape them.
 
 ## Endpoints
 
-| Service | Endpoint | Auth | Default address |
-|---|---|---|---|
-| API | `GET /metrics` | none | `PORT` (8080) |
-| API admin listener | `GET /metrics` | none | `METRICS_PORT` (only if set) |
-| Indexer | `GET /metrics` | none | `INDEXER_METRICS_ADDR` (`:9100`) |
+| Service            | Endpoint       | Auth | Default address                  |
+| ------------------ | -------------- | ---- | -------------------------------- |
+| API                | `GET /metrics` | none | `PORT` (8080)                    |
+| API admin listener | `GET /metrics` | none | `METRICS_PORT` (only if set)     |
+| Indexer            | `GET /metrics` | none | `INDEXER_METRICS_ADDR` (`:9100`) |
 
 Both services return the Prometheus text exposition format
 (`Content-Type: text/plain; version=0.0.4`).
@@ -72,13 +72,13 @@ PromQL:
 
 ### API
 
-| Metric | Type | Labels | Description |
-|---|---|---|---|
-| `sorolens_http_requests_total` | Counter | `method`, `route`, `status` | Completed HTTP requests. |
-| `sorolens_http_request_duration_seconds` | Histogram | `method`, `route`, `status` | Request latency in seconds. |
-| `sorolens_http_requests_in_flight` | Gauge | – | Requests currently being served. |
-| `sorolens_api_cache_requests_total` | Counter | `namespace`, `result` | Response cache lookups. `namespace` is `contracts`, `watchdog`, or `labels`; `result` is `hit` or `miss`. |
-| `sorolens_api_cache_purges_total` | Counter | `namespace` | Cache namespace purges triggered by a successful write (e.g. `POST /api/v1/contracts` purges `contracts`). |
+| Metric                                   | Type      | Labels                      | Description                                                                                                |
+| ---------------------------------------- | --------- | --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `sorolens_http_requests_total`           | Counter   | `method`, `route`, `status` | Completed HTTP requests.                                                                                   |
+| `sorolens_http_request_duration_seconds` | Histogram | `method`, `route`, `status` | Request latency in seconds.                                                                                |
+| `sorolens_http_requests_in_flight`       | Gauge     | –                           | Requests currently being served.                                                                           |
+| `sorolens_api_cache_requests_total`      | Counter   | `namespace`, `result`       | Response cache lookups. `namespace` is `contracts`, `watchdog`, or `labels`; `result` is `hit` or `miss`.  |
+| `sorolens_api_cache_purges_total`        | Counter   | `namespace`                 | Cache namespace purges triggered by a successful write (e.g. `POST /api/v1/contracts` purges `contracts`). |
 
 The `route` label is the **chi route pattern**, not the raw request path — for
 example `/api/v1/contracts/{id}` rather than
@@ -106,13 +106,13 @@ Every metric carries a `network` label. Its value is the configured network
 (`testnet`, `mainnet`, or `futurenet`); when the indexer is wired with a single
 unnamed RPC client, the value is `default`.
 
-| Metric | Type | Labels | Description |
-| --- | --- | --- | --- |
-| `sorolens_indexer_lag_ledgers` | Gauge | `network` | Number of ledgers between the network head and the last ledger the indexer has committed for that network: `latest_ledger - last_indexed_ledger`. **This is the primary indexer health signal.** |
-| `sorolens_indexer_head_ledger` | Gauge | `network` | Latest ledger sequence reported by the network's Soroban RPC. |
-| `sorolens_indexer_last_indexed_ledger` | Gauge | `network` | Last ledger sequence committed by the indexer for the network (its indexer cursor). |
-| `sorolens_indexer_events_processed_total` | Counter | `network` | Contract events persisted. |
-| `sorolens_indexer_run_duration_seconds` | Histogram | `mode` | Duration of a full indexer pass (`once` or `continuous`). |
+| Metric                                    | Type      | Labels    | Description                                                                                                                                                                                      |
+| ----------------------------------------- | --------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sorolens_indexer_lag_ledgers`            | Gauge     | `network` | Number of ledgers between the network head and the last ledger the indexer has committed for that network: `latest_ledger - last_indexed_ledger`. **This is the primary indexer health signal.** |
+| `sorolens_indexer_head_ledger`            | Gauge     | `network` | Latest ledger sequence reported by the network's Soroban RPC.                                                                                                                                    |
+| `sorolens_indexer_last_indexed_ledger`    | Gauge     | `network` | Last ledger sequence committed by the indexer for the network (its indexer cursor).                                                                                                              |
+| `sorolens_indexer_events_processed_total` | Counter   | `network` | Contract events persisted.                                                                                                                                                                       |
+| `sorolens_indexer_run_duration_seconds`   | Histogram | `mode`    | Duration of a full indexer pass (`once` or `continuous`).                                                                                                                                        |
 
 Notes:
 
@@ -130,10 +130,10 @@ Notes:
 
 Both services also register the standard Go and process collectors:
 
-| Metric family | Description |
-|---|---|
-| `go_*` | Goroutines, GC pauses, heap and stack usage, `go_info`. |
-| `process_*` | CPU seconds, open file descriptors, resident memory, start time. |
+| Metric family | Description                                                      |
+| ------------- | ---------------------------------------------------------------- |
+| `go_*`        | Goroutines, GC pauses, heap and stack usage, `go_info`.          |
+| `process_*`   | CPU seconds, open file descriptors, resident memory, start time. |
 
 The most useful of these for operators are `go_goroutines` (leak detection),
 `go_gc_duration_seconds`, and `process_resident_memory_bytes`.
@@ -195,12 +195,12 @@ scrape_configs:
   - job_name: sorolens-api
     metrics_path: /metrics
     static_configs:
-      - targets: ["api.internal:9090"]   # METRICS_PORT
+      - targets: ["api.internal:9090"] # METRICS_PORT
 
   - job_name: sorolens-indexer
     metrics_path: /metrics
     static_configs:
-      - targets: ["indexer.internal:9100"]   # INDEXER_METRICS_ADDR
+      - targets: ["indexer.internal:9100"] # INDEXER_METRICS_ADDR
 ```
 
 Because the indexer runs as a cron job (GitHub Actions) in the default

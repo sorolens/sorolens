@@ -48,9 +48,9 @@ export const MESSAGE_TYPES = Object.values(MESSAGE);
 export function isSorolensMessage(value) {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      typeof (/** @type {SorolensMessage} */ (value).type) === "string" &&
-      MESSAGE_TYPES.includes(/** @type {SorolensMessage} */ (value).type),
+    typeof value === "object" &&
+    typeof (/** @type {SorolensMessage} */ (value).type) === "string" &&
+    MESSAGE_TYPES.includes(/** @type {SorolensMessage} */ (value).type)
   );
 }
 

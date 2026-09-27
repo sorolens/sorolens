@@ -44,7 +44,7 @@ export function AddToGroup({ contractId }: { contractId: string }) {
     setSelected((prev) =>
       prev.includes(groupID)
         ? prev.filter((id) => id !== groupID)
-        : [...prev, groupID],
+        : [...prev, groupID]
     );
   };
 
@@ -57,7 +57,7 @@ export function AddToGroup({ contractId }: { contractId: string }) {
         await addContractToGroup(groupID, contractId, userId);
       }
       setConfirmation(
-        `Added to ${selected.length} group${selected.length === 1 ? "" : "s"}`,
+        `Added to ${selected.length} group${selected.length === 1 ? "" : "s"}`
       );
       setSelected([]);
       setOpen(false);
@@ -151,7 +151,10 @@ export function AddToGroup({ contractId }: { contractId: string }) {
             )}
 
             {error && (
-              <p className="mb-3 text-sm text-[var(--color-danger)]" role="alert">
+              <p
+                className="mb-3 text-sm text-[var(--color-danger)]"
+                role="alert"
+              >
                 {error}
               </p>
             )}

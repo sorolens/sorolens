@@ -2141,75 +2141,6 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
-
-components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: http
-      scheme: bearer
-      description: "Scoped API key. Send as `Authorization: Bearer <token>` (or `X-API-Key`)."
-    RoleAuth:
-      type: apiKey
-      in: header
-      name: X-User-ID
-      description: |
-        Role-based auth. Resolve a user identity from one of
-        X-User-ID, X-GitHub-Login, X-User-Sub, or X-GitHub-ID and enforce the
-        minimum role declared next to this security scheme.
-    IdentityHeaderAuth:
-      type: apiKey
-      in: header
-      name: X-User-ID
-      description: Watchlist and contract-group endpoints read the user ID from X-User-ID.
-
-  parameters:
-    ContractID:
-      name: id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: Contract ID (starts with C).
-    Cursor:
-      name: cursor
-      in: query
-      required: false
-      schema:
-        type: string
-      description: Opaque pagination cursor from a previous response.
-    Limit:
-      name: limit
-      in: query
-      required: false
-      schema:
-        type: integer
-        minimum: 1
-        maximum: 200
-      description: Page size (default 50, clamped to 200).
-    NetworkParam:
-      name: network
-      in: query
-      required: false
-      schema:
-        type: string
-        enum: [testnet, mainnet, futurenet, standalone]
-      description: Network filter; empty means all networks.
-    UserIDHeader:
-      name: X-User-ID
-      in: header
-      required: true
-      schema:
-        type: string
-      description: Caller user ID.
-    GroupID:
-      name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-      description: Group ID.
                 type: object
                 description: See /api/v1/contracts/{id}/snapshot; already v2-conformant.
         "404":
@@ -3667,6 +3598,303 @@ components:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /api/v1/rules:
+    get:
+      tags: [Alert rules]
+      summary: List alert rules
+      description: |
+        Returns every stored rule, newest first. A rule is the source text of
+        the Sorolens rule language plus its scope (contract, network) and the
+        parsed `for` window.
+      operationId: listAlertRules
+      security:
+        - ApiKeyAuth: [read:contracts]
+      responses:
+        "200":
+          description: Rules, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AlertRule"
+        "500":
+          description: Internal error
+    post:
+      tags: [Alert rules]
+      summary: Create an alert rule
+      description: |
+        Parses and validates `source` before storing it, so a malformed rule
+        can never reach the evaluator. Returns 422 with a structured
+        diagnostic (line, column, hint) when the rule does not validate, and
+        409 when an identical rule already exists.
+      operationId: createAlertRule
+      security:
+        - ApiKeyAuth: [write:contracts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, source]
+              properties:
+                name: { type: string }
+                source:
+                  type: string
+                  example: "fee_per_invocation > 0.5 XLM for 5m"
+                severity:
+                  type: string
+                  enum: [Info, Warning, Critical]
+                  default: Warning
+                contract_id: { type: string }
+                network: { type: string }
+      responses:
+        "201":
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRule"
+        "409":
+          description: An identical rule already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Rule did not validate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal error
+
+  /api/v1/rules/validate:
+    post:
+      tags: [Alert rules]
+      summary: Validate a rule without storing it
+      description: |
+        Parses and checks the rule, returning either the normalized source
+        with the metrics it references, or a structured diagnostic. Never
+        writes.
+      operationId: validateAlertRule
+      security:
+        - ApiKeyAuth: [read:contracts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source: { type: string }
+      responses:
+        "200":
+          description: Validation outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean }
+                  normalized: { type: string }
+                  metrics:
+                    type: array
+                    items: { type: string }
+                  window: { type: string }
+                  errors:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RuleDiagnostic"
+        "422":
+          description: Invalid JSON body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/rules/preview:
+    post:
+      tags: [Alert rules]
+      summary: Evaluate a rule against live metric samples
+      description: |
+        Runs the real evaluator against the contract's recent per-minute
+        metric buckets so the dashboard editor can show exactly what the
+        indexer would decide.
+      operationId: previewAlertRule
+      security:
+        - ApiKeyAuth: [write:contracts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source]
+              properties:
+                source: { type: string }
+                contract_id: { type: string }
+                window: { type: string, example: "1h" }
+      responses:
+        "200":
+          description: Evaluation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean }
+                  fired: { type: boolean }
+                  op: { type: string }
+                  value: { type: number, nullable: true }
+                  threshold: { type: number, nullable: true }
+                  reason: { type: string }
+                  window: { type: string }
+                  evaluated_at: { type: string, format: date-time }
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        at: { type: string, format: date-time }
+                        value: { type: number, nullable: true }
+                        fired: { type: boolean }
+                  errors:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RuleDiagnostic"
+        "422":
+          description: Invalid JSON body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal error
+
+  /api/v1/rules/metrics:
+    get:
+      tags: [Alert rules]
+      summary: Rule metric catalog
+      description: |
+        Every metric the rule language understands, with its unit and a short
+        description, plus the aggregation functions and valid network names.
+        The dashboard editor uses this for autocomplete and unit hints.
+      operationId: listRuleMetrics
+      security:
+        - ApiKeyAuth: [read:contracts]
+      responses:
+        "200":
+          description: Metric catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metrics:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        unit: { type: string }
+                        description: { type: string }
+                  aggregations:
+                    type: array
+                    items: { type: string }
+                  networks:
+                    type: array
+                    items: { type: string }
+
+  /api/v1/rules/library:
+    get:
+      tags: [Alert rules]
+      summary: Curated sample rules
+      description: |
+        A small library of example rules that are guaranteed to validate.
+        The dashboard offers them as starting points in the editor.
+      operationId: listRuleLibrary
+      security:
+        - ApiKeyAuth: [read:contracts]
+      responses:
+        "200":
+          description: Sample rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        description: { type: string }
+                        severity: { type: string }
+                        source: { type: string }
+
+  /api/v1/rules/{id}:
+    patch:
+      tags: [Alert rules]
+      summary: Enable or pause a rule
+      operationId: setAlertRuleEnabled
+      security:
+        - ApiKeyAuth: [write:contracts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRule"
+        "404":
+          description: Rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Alert rules]
+      summary: Delete a rule
+      operationId: deleteAlertRule
+      security:
+        - ApiKeyAuth: [write:contracts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        "204":
+          description: Rule deleted
+        "404":
+          description: Rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+
 
 components:
   securitySchemes:
@@ -3686,7 +3914,7 @@ components:
       type: apiKey
       in: header
       name: X-User-ID
-      description: Watchlist endpoints read the user ID from X-User-ID.
+      description: Watchlist and contract-group endpoints read the user ID from X-User-ID.
 
   parameters:
     ContractID:
@@ -3803,6 +4031,14 @@ components:
         type: string
       description: Opaque alert cursor from a previous page's next_cursor.
 
+    GroupID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Group ID.
 
   headers:
     XCache:
@@ -3872,6 +4108,33 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    AlertRule:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        source:
+          type: string
+          description: Rule text in the Sorolens rule language.
+          example: "error_rate > 5% for 15m"
+        severity: { type: string, enum: [Info, Warning, Critical] }
+        contract_id: { type: string }
+        network: { type: string }
+        window: { type: string, example: "15m" }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    RuleDiagnostic:
+      type: object
+      description: >
+        A rule validation problem, positioned for the dashboard editor.
+      properties:
+        message: { type: string }
+        hint: { type: string }
+        line: { type: integer }
+        column: { type: integer }
+
     Error:
       type: object
       required: [error]
@@ -4965,58 +5228,6 @@ components:
               type: boolean
               description: Present and true only when storage hit the 1000-entry cap.
 
-    APIKey:
-      type: object
-      required: [id, name, key_prefix, scopes, created_at, last_used_at, revoked_at]
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        key_prefix:
-          type: string
-        scopes:
-          type: array
-          items:
-            type: string
-        created_at:
-          type: string
-          format: date-time
-        last_used_at:
-          type: string
-          format: date-time
-          nullable: true
-        revoked_at:
-          type: string
-          format: date-time
-          nullable: true
-
-    Watchlist:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/WatchlistItem"
-
-    WatchlistItem:
-      type: object
-      required: [contract_id, added_at]
-      properties:
-        contract_id:
-          type: string
-        added_at:
-          type: string
-          format: date-time
-
-    InWatchlist:
-      type: object
-      required: [in_watchlist]
-      properties:
-        in_watchlist:
-          type: boolean
-
     Group:
       type: object
       required: [id, owner_id, name, created_at]
@@ -5121,29 +5332,6 @@ components:
       properties:
         deleted:
           type: boolean
-
-    WatchdogStats:
-      type: object
-      required: [total_monitored, healthy, degraded, unresponsive, total_alerts, critical_alerts]
-      properties:
-        total_monitored:
-          type: integer
-          format: int64
-        healthy:
-          type: integer
-          format: int64
-        degraded:
-          type: integer
-          format: int64
-        unresponsive:
-          type: integer
-          format: int64
-        total_alerts:
-          type: integer
-          format: int64
-        critical_alerts:
-          type: integer
-          format: int64
 
     FailedEvent:
       type: object

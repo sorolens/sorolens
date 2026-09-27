@@ -76,6 +76,22 @@ type Poller struct {
 	// metrics records the per-network lag gauges on every pass (issue #198).
 	// It is nil unless SetMetrics is called; nil disables metric recording.
 	metrics *metrics.Recorder
+	// ruleEval runs user-defined alert rules after each indexing pass. It is
+	// nil unless SetRuleEvaluator is called, so deployments without the rule
+	// store are unaffected.
+	ruleEval RuleEvaluator
+}
+
+// RuleEvaluator is the rule engine the poller invokes at the end of a pass
+// (see the rulesengine package).
+type RuleEvaluator interface {
+	EvaluatePass(ctx context.Context) error
+}
+
+// SetRuleEvaluator attaches the rule engine. It must be called before Run; a
+// nil evaluator disables rule evaluation.
+func (p *Poller) SetRuleEvaluator(ev RuleEvaluator) {
+	p.ruleEval = ev
 }
 
 // SetMetrics attaches the Prometheus recorder the poller updates on every
@@ -236,6 +252,13 @@ func (p *Poller) processAll(ctx context.Context) error {
 		p.runAnomalyDetection(ctx)
 	}
 	p.runHealthScores(ctx)
+
+	// User-defined alert rules run last, on the freshly indexed data.
+	if p.ruleEval != nil {
+		if err := p.ruleEval.EvaluatePass(ctx); err != nil {
+			p.log.Error("rule evaluation pass", "err", err)
+		}
+	}
 	return nil
 }
 

@@ -124,7 +124,7 @@ export function installFetch(handler) {
     },
     countFor(method, pathname) {
       return calls.filter(
-        (call) => call.method === method && call.url.pathname === pathname,
+        (call) => call.method === method && call.url.pathname === pathname
       ).length;
     },
   };

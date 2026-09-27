@@ -28,7 +28,10 @@ interface ContainerDefinition {
   secrets: { name: string; valueFrom: string }[];
 }
 
-async function container(s: SorolensAws, key: "api" | "dashboard" | "indexer" | "migrations"): Promise<ContainerDefinition> {
+async function container(
+  s: SorolensAws,
+  key: "api" | "dashboard" | "indexer" | "migrations"
+): Promise<ContainerDefinition> {
   const json = await valueOf(s.taskDefinitions[key].containerDefinitions);
   return (JSON.parse(json) as ContainerDefinition[])[0]!;
 }
@@ -63,7 +66,10 @@ describe("SorolensAws", () => {
     });
 
     it("only lets Sorolens tasks reach PostgreSQL and Redis", async () => {
-      for (const [rules, port] of [[s.dbIngressRules, 5432], [s.redisIngressRules, 6379]] as const) {
+      for (const [rules, port] of [
+        [s.dbIngressRules, 5432],
+        [s.redisIngressRules, 6379],
+      ] as const) {
         expect(rules).toHaveLength(2);
         for (const r of rules) {
           expect(await valueOf(r.cidrIpv4)).toBeUndefined();
@@ -83,19 +89,37 @@ describe("SorolensAws", () => {
 
     it("runs exactly one indexer, never two at once", async () => {
       expect(await valueOf(s.services.indexer.desiredCount)).toBe(1);
-      expect(await valueOf(s.services.indexer.deploymentMaximumPercent)).toBe(100);
-      expect(await valueOf(s.services.indexer.deploymentMinimumHealthyPercent)).toBe(0);
-      expect((await container(s, "indexer")).command).toEqual(["-mode=continuous", "-poll-interval=5m"]);
+      expect(await valueOf(s.services.indexer.deploymentMaximumPercent)).toBe(
+        100
+      );
+      expect(
+        await valueOf(s.services.indexer.deploymentMinimumHealthyPercent)
+      ).toBe(0);
+      expect((await container(s, "indexer")).command).toEqual([
+        "-mode=continuous",
+        "-poll-interval=5m",
+      ]);
     });
 
     it("injects connection URLs only as secrets", async () => {
       for (const key of ["api", "indexer", "migrations"] as const) {
         const c = await container(s, key);
-        expect(names(c.secrets)).toEqual(expect.arrayContaining(["DATABASE_URL", "REDIS_URL"]));
+        expect(names(c.secrets)).toEqual(
+          expect.arrayContaining(["DATABASE_URL", "REDIS_URL"])
+        );
       }
-      for (const key of ["api", "dashboard", "indexer", "migrations"] as const) {
+      for (const key of [
+        "api",
+        "dashboard",
+        "indexer",
+        "migrations",
+      ] as const) {
         const c = await container(s, key);
-        for (const secret of ["DATABASE_URL", "DIRECT_DATABASE_URL", "REDIS_URL"]) {
+        for (const secret of [
+          "DATABASE_URL",
+          "DIRECT_DATABASE_URL",
+          "REDIS_URL",
+        ]) {
           expect(names(c.environment)).not.toContain(secret);
         }
         expect(JSON.stringify(c)).not.toContain("MockGeneratedPassword");
@@ -104,14 +128,25 @@ describe("SorolensAws", () => {
     });
 
     it("stores TLS connection URLs in Secrets Manager", async () => {
-      expect(await valueOf(s.databaseUrlSecretVersion.secretString)).toMatch(/^postgres:\/\/sorolens:.+\?sslmode=require$/);
-      expect(await valueOf(s.redisUrlSecretVersion.secretString)).toMatch(/^rediss:\/\//);
+      expect(await valueOf(s.databaseUrlSecretVersion.secretString)).toMatch(
+        /^postgres:\/\/sorolens:.+\?sslmode=require$/
+      );
+      expect(await valueOf(s.redisUrlSecretVersion.secretString)).toMatch(
+        /^rediss:\/\//
+      );
     });
 
     it("grants the execution role only its own secrets and the task role nothing", async () => {
-      const policy = JSON.parse(await valueOf(s.executionRolePolicy.policy)) as { Statement: { Sid: string; Resource: string | string[] }[] };
-      const secrets = policy.Statement.find((st) => st.Sid === "ReadReferencedSecrets")!;
-      expect(secrets.Resource).toEqual([await valueOf(s.databaseUrlSecretArn), await valueOf(s.redisUrlSecretArn)]);
+      const policy = JSON.parse(
+        await valueOf(s.executionRolePolicy.policy)
+      ) as { Statement: { Sid: string; Resource: string | string[] }[] };
+      const secrets = policy.Statement.find(
+        (st) => st.Sid === "ReadReferencedSecrets"
+      )!;
+      expect(secrets.Resource).toEqual([
+        await valueOf(s.databaseUrlSecretArn),
+        await valueOf(s.redisUrlSecretArn),
+      ]);
       expect(secrets.Resource).not.toContain("*");
       expect(await valueOf(s.taskRole.inlinePolicies)).toBeUndefined();
       expect(await valueOf(s.taskRole.managedPolicyArns)).toBeUndefined();
@@ -121,13 +156,21 @@ describe("SorolensAws", () => {
       expect(s.httpListener).toBeDefined();
       expect(s.httpsListener).toBeUndefined();
       expect(s.httpRedirectListener).toBeUndefined();
-      expect(await valueOf(s.url)).toBe("http://sorolens-alb-123456.us-east-1.elb.amazonaws.com");
+      expect(await valueOf(s.url)).toBe(
+        "http://sorolens-alb-123456.us-east-1.elb.amazonaws.com"
+      );
       expect(await valueOf(s.loadBalancer.dropInvalidHeaderFields)).toBe(true);
     });
 
     it("uses the first two zones and a single NAT gateway", async () => {
-      expect(await Promise.all(s.privateSubnets.map((sub) => valueOf(sub.availabilityZone)))).toEqual(["us-east-1a", "us-east-1b"]);
-      expect(await Promise.all(s.privateSubnets.map((sub) => valueOf(sub.cidrBlock)))).toEqual(["10.40.128.0/20", "10.40.144.0/20"]);
+      expect(
+        await Promise.all(
+          s.privateSubnets.map((sub) => valueOf(sub.availabilityZone))
+        )
+      ).toEqual(["us-east-1a", "us-east-1b"]);
+      expect(
+        await Promise.all(s.privateSubnets.map((sub) => valueOf(sub.cidrBlock)))
+      ).toEqual(["10.40.128.0/20", "10.40.144.0/20"]);
       expect(s.natGateways).toHaveLength(1);
     });
 
@@ -140,22 +183,28 @@ describe("SorolensAws", () => {
 
   it("serves HTTPS with a redirect and an alias record when a domain is given", async () => {
     const s = stack({
-      certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000",
+      certificateArn:
+        "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000",
       domainName: "sorolens.example.com",
       route53ZoneId: "Z0000000000000000000",
     });
     expect(s.httpListener).toBeUndefined();
-    expect(await valueOf(s.httpsListener!.sslPolicy)).toBe("ELBSecurityPolicy-TLS13-1-2-2021-06");
+    expect(await valueOf(s.httpsListener!.sslPolicy)).toBe(
+      "ELBSecurityPolicy-TLS13-1-2-2021-06"
+    );
     const redirect = await valueOf(s.httpRedirectListener!.defaultActions);
     expect(redirect[0]?.redirect?.protocol).toBe("HTTPS");
     expect(await valueOf(s.dnsRecord!.name)).toBe("sorolens.example.com");
     expect(await valueOf(s.url)).toBe("https://sorolens.example.com");
     const env = (await container(s, "dashboard")).environment;
-    expect(env.find((e) => e.name === "NEXT_PUBLIC_API_URL")?.value).toBe("https://sorolens.example.com");
+    expect(env.find((e) => e.name === "NEXT_PUBLIC_API_URL")?.value).toBe(
+      "https://sorolens.example.com"
+    );
   });
 
   it("wires extra secrets, the migrations command and explicit topology", async () => {
-    const sentry = "arn:aws:secretsmanager:us-east-1:123456789012:secret:sentry-dsn";
+    const sentry =
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:sentry-dsn";
     const s = stack({
       allowHttpOnly: true,
       apiExtraSecrets: { SENTRY_DSN: sentry },
@@ -164,27 +213,69 @@ describe("SorolensAws", () => {
       singleNatGateway: false,
     });
     expect(names((await container(s, "api")).secrets)).toContain("SENTRY_DSN");
-    expect(names((await container(s, "indexer")).secrets)).not.toContain("SENTRY_DSN");
-    const policy = JSON.parse(await valueOf(s.executionRolePolicy.policy)) as { Statement: { Sid: string; Resource: string[] }[] };
-    expect(policy.Statement.find((st) => st.Sid === "ReadReferencedSecrets")!.Resource).toContain(sentry);
-    expect((await container(s, "migrations")).command).toEqual(["/app/migrate", "up"]);
-    expect(await Promise.all(s.privateSubnets.map((sub) => valueOf(sub.availabilityZone)))).toEqual(["eu-west-1b", "eu-west-1c"]);
+    expect(names((await container(s, "indexer")).secrets)).not.toContain(
+      "SENTRY_DSN"
+    );
+    const policy = JSON.parse(await valueOf(s.executionRolePolicy.policy)) as {
+      Statement: { Sid: string; Resource: string[] }[];
+    };
+    expect(
+      policy.Statement.find((st) => st.Sid === "ReadReferencedSecrets")!
+        .Resource
+    ).toContain(sentry);
+    expect((await container(s, "migrations")).command).toEqual([
+      "/app/migrate",
+      "up",
+    ]);
+    expect(
+      await Promise.all(
+        s.privateSubnets.map((sub) => valueOf(sub.availabilityZone))
+      )
+    ).toEqual(["eu-west-1b", "eu-west-1c"]);
     expect(s.natGateways).toHaveLength(2);
-    const natIds = await Promise.all(s.privateRoutes.map((r) => valueOf(r.natGatewayId)));
+    const natIds = await Promise.all(
+      s.privateRoutes.map((r) => valueOf(r.natGatewayId))
+    );
     expect(new Set(natIds).size).toBe(2);
   });
 
   it.each([
-    ["a :latest image", { apiImage: "ghcr.io/example/sorolens-api:latest" }, /apiImage/],
-    ["an untagged image", { indexerImage: "ghcr.io/example/sorolens-indexer" }, /indexerImage/],
-    ["a Route 53 zone without a domain", { route53ZoneId: "Z0000000000000000000" }, /route53ZoneId/],
-    ["three availability zones", { availabilityZones: ["a", "b", "c"] }, /availabilityZones/],
+    [
+      "a :latest image",
+      { apiImage: "ghcr.io/example/sorolens-api:latest" },
+      /apiImage/,
+    ],
+    [
+      "an untagged image",
+      { indexerImage: "ghcr.io/example/sorolens-indexer" },
+      /indexerImage/,
+    ],
+    [
+      "a Route 53 zone without a domain",
+      { route53ZoneId: "Z0000000000000000000" },
+      /route53ZoneId/,
+    ],
+    [
+      "three availability zones",
+      { availabilityZones: ["a", "b", "c"] },
+      /availabilityZones/,
+    ],
     ["zero API tasks", { apiDesiredCount: 0 }, /apiDesiredCount/],
     ["a small VPC", { vpcCidr: "10.0.0.0/24" }, /vpcCidr/],
-    ["a non-16 database version", { dbEngineVersion: "15.4" }, /dbEngineVersion/],
-    ["mainnet without an RPC endpoint", { stellarNetwork: "mainnet" as const }, /mainnet/],
+    [
+      "a non-16 database version",
+      { dbEngineVersion: "15.4" },
+      /dbEngineVersion/,
+    ],
+    [
+      "mainnet without an RPC endpoint",
+      { stellarNetwork: "mainnet" as const },
+      /mainnet/,
+    ],
   ])("rejects %s", (_label, args, message) => {
-    expect(() => stack({ allowHttpOnly: true, ...args })).toThrow(SorolensConfigError);
+    expect(() => stack({ allowHttpOnly: true, ...args })).toThrow(
+      SorolensConfigError
+    );
     expect(() => stack({ allowHttpOnly: true, ...args })).toThrow(message);
   });
 });

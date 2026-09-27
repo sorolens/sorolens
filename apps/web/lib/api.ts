@@ -42,6 +42,13 @@ import type {
   GroupStats,
   ContractVerification,
   LabelResolution,
+  RulesResponse,
+  AlertRule,
+  CreateRuleRequest,
+  RuleValidation,
+  RulePreview,
+  RuleCatalogResponse,
+  RuleLibraryResponse,
 } from "./types";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
 
@@ -699,7 +706,7 @@ export function getGroup(id: string, userId: string): Promise<GroupDetail> {
 export function renameGroup(
   id: string,
   name: string,
-  userId: string,
+  userId: string
 ): Promise<Group> {
   return fetchJson<Group>(`${API_URL}/api/v1/groups/${id}`, {
     method: "PATCH",
@@ -710,7 +717,7 @@ export function renameGroup(
 
 export function deleteGroup(
   id: string,
-  userId: string,
+  userId: string
 ): Promise<GroupDeletedResponse> {
   return fetchJson<GroupDeletedResponse>(`${API_URL}/api/v1/groups/${id}`, {
     method: "DELETE",
@@ -718,10 +725,7 @@ export function deleteGroup(
   });
 }
 
-export function getGroupStats(
-  id: string,
-  userId: string,
-): Promise<GroupStats> {
+export function getGroupStats(id: string, userId: string): Promise<GroupStats> {
   return fetchJson<GroupStats>(`${API_URL}/api/v1/groups/${id}/stats`, {
     headers: { "X-User-ID": userId },
   });
@@ -730,7 +734,7 @@ export function getGroupStats(
 export function addContractToGroup(
   groupId: string,
   contractId: string,
-  userId: string,
+  userId: string
 ): Promise<GroupMembershipResponse> {
   return fetchJson<GroupMembershipResponse>(
     `${API_URL}/api/v1/groups/${groupId}/contracts`,
@@ -738,20 +742,93 @@ export function addContractToGroup(
       method: "POST",
       body: JSON.stringify({ contract_id: contractId }),
       headers: { "X-User-ID": userId },
-    },
+    }
   );
 }
 
 export function removeContractFromGroup(
   groupId: string,
   contractId: string,
-  userId: string,
+  userId: string
 ): Promise<GroupMembershipResponse> {
   return fetchJson<GroupMembershipResponse>(
     `${API_URL}/api/v1/groups/${groupId}/contracts/${contractId}`,
     {
       method: "DELETE",
       headers: { "X-User-ID": userId },
-    },
+    }
   );
+}
+
+// ---- alert rules (rule language) -------------------------------------------
+
+export function listRules(): Promise<RulesResponse> {
+  return fetchJson<RulesResponse>(`${API_URL}/api/v1/rules`);
+}
+
+// Rule authoring mutates shared state, so the API requires a contributor
+// identity; userId is forwarded as X-User-ID (see lib/user.ts).
+export function createRule(
+  req: CreateRuleRequest,
+  userId?: string
+): Promise<AlertRule> {
+  return fetchJson<AlertRule>(`${API_URL}/api/v1/rules`, {
+    method: "POST",
+    body: JSON.stringify(req),
+    headers: userId ? { "X-User-ID": userId } : undefined,
+  });
+}
+
+export function deleteRule(id: number, userId?: string): Promise<void> {
+  return fetchNoContent(`${API_URL}/api/v1/rules/${id}`, {
+    method: "DELETE",
+    headers: userId ? { "X-User-ID": userId } : undefined,
+  });
+}
+
+export function setRuleEnabled(
+  id: number,
+  enabled: boolean,
+  userId?: string
+): Promise<AlertRule> {
+  return fetchJson<AlertRule>(`${API_URL}/api/v1/rules/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+    headers: userId ? { "X-User-ID": userId } : undefined,
+  });
+}
+
+/**
+ * validateRule is a pure server-side check of the rule text. It returns
+ * `{ valid: false, errors }` for a bad rule rather than throwing, so the
+ * editor can render diagnostics inline.
+ */
+export function validateRule(source: string): Promise<RuleValidation> {
+  return fetchJson<RuleValidation>(`${API_URL}/api/v1/rules/validate`, {
+    method: "POST",
+    body: JSON.stringify({ source }),
+  });
+}
+
+/**
+ * previewRule evaluates the rule against the contract's recent metric
+ * samples using the real evaluator.
+ */
+export function previewRule(
+  source: string,
+  contractId?: string,
+  window?: string
+): Promise<RulePreview> {
+  return fetchJson<RulePreview>(`${API_URL}/api/v1/rules/preview`, {
+    method: "POST",
+    body: JSON.stringify({ source, contract_id: contractId, window }),
+  });
+}
+
+export function listRuleMetrics(): Promise<RuleCatalogResponse> {
+  return fetchJson<RuleCatalogResponse>(`${API_URL}/api/v1/rules/metrics`);
+}
+
+export function listRuleLibrary(): Promise<RuleLibraryResponse> {
+  return fetchJson<RuleLibraryResponse>(`${API_URL}/api/v1/rules/library`);
 }

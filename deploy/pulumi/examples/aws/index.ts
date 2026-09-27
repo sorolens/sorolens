@@ -21,7 +21,8 @@ const sorolens = new SorolensAws("sorolens", {
   availabilityZones: config.getObject<string[]>("availabilityZones"),
 
   stellarNetwork: (config.get("stellarNetwork") ?? "testnet") as StellarNetwork,
-  sorobanRpcUrls: config.getObject<Partial<Record<StellarNetwork, string>>>("sorobanRpcUrls"),
+  sorobanRpcUrls:
+    config.getObject<Partial<Record<StellarNetwork, string>>>("sorobanRpcUrls"),
   watchdogContractId: config.get("watchdogContractId"),
 
   dbDeletionProtection: config.getBoolean("dbDeletionProtection") ?? true,

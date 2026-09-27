@@ -38,25 +38,25 @@ type Group struct {
 	// GroupKey is the opaque string key: "contractID|severity|rule".
 	GroupKey string
 
-	ContractID        string
-	Severity          string
-	Rule              string
-	Count             int64
-	DedupeWindowSecs  int64
-	FirstSeen         time.Time
-	LastSeen          time.Time
-	LastMessage       string
-	BackfillEligible  bool
+	ContractID       string
+	Severity         string
+	Rule             string
+	Count            int64
+	DedupeWindowSecs int64
+	FirstSeen        time.Time
+	LastSeen         time.Time
+	LastMessage      string
+	BackfillEligible bool
 }
 
 // IncomingAlert is the minimal representation of an alert that the engine
 // needs to decide whether to open a new group or merge into an existing one.
 type IncomingAlert struct {
-	ContractID  string
-	Severity    string
-	Rule        string // may be empty
-	Message     string
-	Timestamp   time.Time
+	ContractID string
+	Severity   string
+	Rule       string // may be empty
+	Message    string
+	Timestamp  time.Time
 }
 
 // BuildGroupKey returns the canonical group key for an alert.

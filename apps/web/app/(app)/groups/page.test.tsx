@@ -6,7 +6,13 @@
  */
 
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -72,7 +78,7 @@ describe("GroupsPage", () => {
 
     expect(screen.getByRole("heading", { name: /groups/i })).toBeDefined();
     await waitFor(() =>
-      expect(screen.getByText("Core protocol")).toBeDefined(),
+      expect(screen.getByText("Core protocol")).toBeDefined()
     );
 
     expect(screen.getByText("120")).toBeDefined();
@@ -87,7 +93,7 @@ describe("GroupsPage", () => {
     await renderPage();
 
     await waitFor(() =>
-      expect(screen.getByText(/no groups yet/i)).toBeDefined(),
+      expect(screen.getByText(/no groups yet/i)).toBeDefined()
     );
   });
 
@@ -116,7 +122,7 @@ describe("GroupsPage", () => {
     fireEvent.click(document.getElementById("create-group-btn")!);
 
     await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toMatch(/could not create/i),
+      expect(screen.getByRole("alert").textContent).toMatch(/could not create/i)
     );
   });
 });

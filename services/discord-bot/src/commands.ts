@@ -12,12 +12,30 @@
  * configured. Every one of them counts against a per-user rate limit.
  */
 
-import type { ChatInputCommandInteraction, Client, Interaction, Guild } from "discord.js";
-import { apiKeyStore, getApiKey, getByDiscord, listLinks, unlink, upsertLink, type Link } from "./db.js";
+import type {
+  ChatInputCommandInteraction,
+  Client,
+  Interaction,
+  Guild,
+} from "discord.js";
+import {
+  apiKeyStore,
+  getApiKey,
+  getByDiscord,
+  listLinks,
+  unlink,
+  upsertLink,
+  type Link,
+} from "./db.js";
 import { countMergedPRs, getUser } from "./github.js";
 import { syncRoles, type Tiers } from "./roles.js";
 import { buildConnectUrl } from "./oauth.js";
-import { ApiError, SorolensApi, isValidContractId, type ApiCredentials } from "./api.js";
+import {
+  ApiError,
+  SorolensApi,
+  isValidContractId,
+  type ApiCredentials,
+} from "./api.js";
 import { alertsEmbed, statusEmbed, watchlistEmbed } from "./embeds.js";
 import { describeRetry, SlidingWindowRateLimiter } from "./ratelimit.js";
 import { ensureUserApiKey, revokeUserApiKey } from "./apikey.js";
@@ -27,7 +45,6 @@ import type { Config } from "./config.js";
 // commands.ts still get the definitions; the split lets the register
 // script skip loading the runtime config.
 export { commandDefinitions } from "./command-definitions.js";
-
 
 // ---- runtime handlers ------------------------------------------------------
 
@@ -41,7 +58,9 @@ export function registerHandlers(client: Client, ctx: CommandContext) {
     baseUrl: ctx.config.sorolensApiBaseUrl,
     apiKey: ctx.config.sorolensAdminApiKey,
   });
-  const limiter = new SlidingWindowRateLimiter(ctx.config.commandRateLimitPerMinute);
+  const limiter = new SlidingWindowRateLimiter(
+    ctx.config.commandRateLimitPerMinute
+  );
 
   client.on("interactionCreate", async (interaction: Interaction) => {
     if (!interaction.isChatInputCommand()) return;
@@ -54,10 +73,15 @@ export function registerHandlers(client: Client, ctx: CommandContext) {
       // acknowledged, or have expired past the 3s window.
       try {
         if (interaction.deferred || interaction.replied) {
-          await interaction.editReply({ content: `Something went wrong: ${msg}` });
+          await interaction.editReply({
+            content: `Something went wrong: ${msg}`,
+          });
         } else {
           // MessageFlags.Ephemeral === 1 << 6 (64).
-          await interaction.reply({ content: `Something went wrong: ${msg}`, flags: 64 });
+          await interaction.reply({
+            content: `Something went wrong: ${msg}`,
+            flags: 64,
+          });
         }
       } catch (reportErr) {
         console.warn("command failed to report error:", reportErr);
@@ -66,12 +90,11 @@ export function registerHandlers(client: Client, ctx: CommandContext) {
   });
 }
 
-
 async function handle(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
   api: SorolensApi,
-  limiter: SlidingWindowRateLimiter,
+  limiter: SlidingWindowRateLimiter
 ) {
   switch (interaction.commandName) {
     case "connect":
@@ -99,8 +122,10 @@ async function handle(
   }
 }
 
-
-async function handleConnect(interaction: ChatInputCommandInteraction, ctx: CommandContext) {
+async function handleConnect(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext
+) {
   const url = buildConnectUrl(interaction.user.id, ctx.config);
   await interaction.reply({
     content:
@@ -110,11 +135,10 @@ async function handleConnect(interaction: ChatInputCommandInteraction, ctx: Comm
   });
 }
 
-
 async function handleLink(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
-  api: SorolensApi,
+  api: SorolensApi
 ) {
   const gh = interaction.options.getString("github", true).trim();
   await interaction.deferReply({ flags: 64 });
@@ -145,7 +169,12 @@ async function handleLink(
   let syncMsg = "";
   if (guild) {
     const count = await countMergedPRs(user.login, ctx.config.githubRepo);
-    const result = await syncRoles(guild, interaction.user.id, count, ctx.tiers);
+    const result = await syncRoles(
+      guild,
+      interaction.user.id,
+      count,
+      ctx.tiers
+    );
     syncMsg = describeSync(count, result.targetTier);
   }
 
@@ -158,13 +187,18 @@ async function handleLink(
   });
 }
 
-
-async function handleUnlink(interaction: ChatInputCommandInteraction, api: SorolensApi) {
+async function handleUnlink(
+  interaction: ChatInputCommandInteraction,
+  api: SorolensApi
+) {
   const hadLink = getByDiscord(interaction.user.id) !== null;
   const result = await revokeUserApiKey(apiKeyStore, api, interaction.user.id);
   unlink(interaction.user.id);
   if (result.cleared && !result.revoked) {
-    console.warn("unlink: cleared local API key but revocation failed for", interaction.user.id);
+    console.warn(
+      "unlink: cleared local API key but revocation failed for",
+      interaction.user.id
+    );
   }
   await interaction.reply({
     content: hadLink
@@ -173,7 +207,6 @@ async function handleUnlink(interaction: ChatInputCommandInteraction, api: Sorol
     flags: 64,
   });
 }
-
 
 async function handleWhoAmI(interaction: ChatInputCommandInteraction) {
   const link = getByDiscord(interaction.user.id);
@@ -185,12 +218,15 @@ async function handleWhoAmI(interaction: ChatInputCommandInteraction) {
   });
 }
 
-
-async function handleMyPR(interaction: ChatInputCommandInteraction, ctx: CommandContext) {
+async function handleMyPR(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext
+) {
   const link = getByDiscord(interaction.user.id);
   if (!link) {
     await interaction.reply({
-      content: "You have not linked a GitHub account yet. Run `/link github <your-username>` first.",
+      content:
+        "You have not linked a GitHub account yet. Run `/link github <your-username>` first.",
       flags: 64,
     });
     return;
@@ -203,15 +239,14 @@ async function handleMyPR(interaction: ChatInputCommandInteraction, ctx: Command
   });
 }
 
-
-async function handleMembers(interaction: ChatInputCommandInteraction, ctx: CommandContext) {
+async function handleMembers(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext
+) {
   await interaction.deferReply({ flags: 64 });
 
   const filter = (interaction.options.getString("filter") ?? "all") as
-    | "all"
-    | "contributor"
-    | "core"
-    | "none";
+    "all" | "contributor" | "core" | "none";
 
   const links = listLinks(200);
   if (links.length === 0) {
@@ -225,20 +260,29 @@ async function handleMembers(interaction: ChatInputCommandInteraction, ctx: Comm
   for (const link of links) {
     let tier = "none";
     if (guild) {
-      const member = await guild.members.fetch(link.discordId).catch(() => null);
+      const member = await guild.members
+        .fetch(link.discordId)
+        .catch(() => null);
       if (member) {
         if (member.roles.cache.has(ctx.tiers.coreContributor)) tier = "core";
-        else if (member.roles.cache.has(ctx.tiers.contributor)) tier = "contributor";
+        else if (member.roles.cache.has(ctx.tiers.contributor))
+          tier = "contributor";
       }
     }
     if (filter !== "all" && tier !== filter) continue;
     const tierLabel =
-      tier === "core" ? "⭐ Core Contributor" : tier === "contributor" ? "✅ Contributor" : "— No role";
+      tier === "core"
+        ? "⭐ Core Contributor"
+        : tier === "contributor"
+          ? "✅ Contributor"
+          : "— No role";
     rows.push(`<@${link.discordId}> → \`${link.githubLogin}\` ${tierLabel}`);
   }
 
   if (rows.length === 0) {
-    await interaction.editReply({ content: `No members match filter **${filter}**.` });
+    await interaction.editReply({
+      content: `No members match filter **${filter}**.`,
+    });
     return;
   }
 
@@ -261,13 +305,12 @@ async function handleMembers(interaction: ChatInputCommandInteraction, ctx: Comm
   }
 }
 
-
 // ---- Sorolens API query commands -------------------------------------------
 
 async function handleStatus(
   interaction: ChatInputCommandInteraction,
   api: SorolensApi,
-  limiter: SlidingWindowRateLimiter,
+  limiter: SlidingWindowRateLimiter
 ) {
   if (!(await requireLink(interaction))) return;
   if (!(await enforceRateLimit(interaction, limiter))) return;
@@ -276,18 +319,20 @@ async function handleStatus(
 
   await interaction.deferReply({ flags: 64 });
   try {
-    const status = await api.getContractStatus(contractId, credsFor(interaction.user.id));
+    const status = await api.getContractStatus(
+      contractId,
+      credsFor(interaction.user.id)
+    );
     await interaction.editReply({ embeds: [statusEmbed(status)] });
   } catch (err) {
     await interaction.editReply({ content: describeApiError(err, contractId) });
   }
 }
 
-
 async function handleAlerts(
   interaction: ChatInputCommandInteraction,
   api: SorolensApi,
-  limiter: SlidingWindowRateLimiter,
+  limiter: SlidingWindowRateLimiter
 ) {
   if (!(await requireLink(interaction))) return;
   if (!(await enforceRateLimit(interaction, limiter))) return;
@@ -297,18 +342,21 @@ async function handleAlerts(
 
   await interaction.deferReply({ flags: 64 });
   try {
-    const alerts = await api.listAlerts(contractId, limit, credsFor(interaction.user.id));
+    const alerts = await api.listAlerts(
+      contractId,
+      limit,
+      credsFor(interaction.user.id)
+    );
     await interaction.editReply({ embeds: [alertsEmbed(contractId, alerts)] });
   } catch (err) {
     await interaction.editReply({ content: describeApiError(err, contractId) });
   }
 }
 
-
 async function handleWatch(
   interaction: ChatInputCommandInteraction,
   api: SorolensApi,
-  limiter: SlidingWindowRateLimiter,
+  limiter: SlidingWindowRateLimiter
 ) {
   if (!(await requireLink(interaction))) return;
   if (!(await enforceRateLimit(interaction, limiter))) return;
@@ -321,7 +369,7 @@ async function handleWatch(
     const watched = await api.addToWatchlist(contractId, creds);
     const count = await api.listWatchlist(creds).then(
       (ids) => ids.length,
-      () => undefined,
+      () => undefined
     );
     await interaction.editReply({
       embeds: [watchlistEmbed(contractId, watched, "watch", count)],
@@ -331,11 +379,10 @@ async function handleWatch(
   }
 }
 
-
 async function handleUnwatch(
   interaction: ChatInputCommandInteraction,
   api: SorolensApi,
-  limiter: SlidingWindowRateLimiter,
+  limiter: SlidingWindowRateLimiter
 ) {
   if (!(await requireLink(interaction))) return;
   if (!(await enforceRateLimit(interaction, limiter))) return;
@@ -348,7 +395,7 @@ async function handleUnwatch(
     const watched = await api.removeFromWatchlist(contractId, creds);
     const count = await api.listWatchlist(creds).then(
       (ids) => ids.length,
-      () => undefined,
+      () => undefined
     );
     await interaction.editReply({
       embeds: [watchlistEmbed(contractId, watched, "unwatch", count)],
@@ -357,7 +404,6 @@ async function handleUnwatch(
     await interaction.editReply({ content: describeApiError(err, contractId) });
   }
 }
-
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -368,11 +414,14 @@ function credsFor(discordId: string): ApiCredentials {
 }
 
 /** Reject the command when the caller has no GitHub link on file. */
-async function requireLink(interaction: ChatInputCommandInteraction): Promise<Link | null> {
+async function requireLink(
+  interaction: ChatInputCommandInteraction
+): Promise<Link | null> {
   const link = getByDiscord(interaction.user.id);
   if (!link) {
     await interaction.reply({
-      content: "Link your GitHub first with `/connect` (or `/link github <your-username>`).",
+      content:
+        "Link your GitHub first with `/connect` (or `/link github <your-username>`).",
       flags: 64,
     });
     return null;
@@ -383,7 +432,7 @@ async function requireLink(interaction: ChatInputCommandInteraction): Promise<Li
 /** Returns false (after replying) when the caller is over their budget. */
 async function enforceRateLimit(
   interaction: ChatInputCommandInteraction,
-  limiter: SlidingWindowRateLimiter,
+  limiter: SlidingWindowRateLimiter
 ): Promise<boolean> {
   const result = limiter.check(interaction.user.id);
   if (result.allowed) return true;
@@ -395,12 +444,16 @@ async function enforceRateLimit(
 }
 
 /** Validate + normalise the `contract` option, replying on invalid input. */
-async function contractArg(interaction: ChatInputCommandInteraction): Promise<string | null> {
-  const raw = interaction.options.getString("contract", true).trim().toUpperCase();
+async function contractArg(
+  interaction: ChatInputCommandInteraction
+): Promise<string | null> {
+  const raw = interaction.options
+    .getString("contract", true)
+    .trim()
+    .toUpperCase();
   if (!isValidContractId(raw)) {
     await interaction.reply({
-      content:
-        `\`${raw}\` is not a Stellar contract id. Expected 56 characters starting with \`C\`.`,
+      content: `\`${raw}\` is not a Stellar contract id. Expected 56 characters starting with \`C\`.`,
       flags: 64,
     });
     return null;
@@ -411,11 +464,13 @@ async function contractArg(interaction: ChatInputCommandInteraction): Promise<st
 /** Turn an API failure into something a Discord user can act on. */
 export function describeApiError(err: unknown, contractId: string): string {
   if (err instanceof ApiError) {
-    if (err.status === 404) return `Contract \`${contractId}\` is not tracked by Sorolens.`;
+    if (err.status === 404)
+      return `Contract \`${contractId}\` is not tracked by Sorolens.`;
     if (err.status === 401 || err.status === 403) {
       return "Your Sorolens API key was rejected or lacks scope. Run `/connect` again to refresh it.";
     }
-    if (err.status === 429) return "Sorolens API rate limit reached. Try again in a minute.";
+    if (err.status === 429)
+      return "Sorolens API rate limit reached. Try again in a minute.";
     return `Sorolens API error (${err.status}): ${err.message}`;
   }
   return "Could not reach the Sorolens API. Try again shortly.";
@@ -427,8 +482,16 @@ function tierFor(count: number, tiers: Tiers): string {
   return "Verified";
 }
 
-function describeSync(count: number, target: "core" | "contributor" | "none"): string {
-  const label = target === "core" ? "Core Contributor" : target === "contributor" ? "Contributor" : "Verified";
+function describeSync(
+  count: number,
+  target: "core" | "contributor" | "none"
+): string {
+  const label =
+    target === "core"
+      ? "Core Contributor"
+      : target === "contributor"
+        ? "Contributor"
+        : "Verified";
   return `You have **${count}** merged PR${count === 1 ? "" : "s"} and are now tier **${label}**.`;
 }
 
@@ -437,7 +500,7 @@ export async function syncOnMerge(
   guild: Guild,
   discordId: string,
   githubLogin: string,
-  ctx: CommandContext,
+  ctx: CommandContext
 ) {
   const count = await countMergedPRs(githubLogin, ctx.config.githubRepo);
   return syncRoles(guild, discordId, count, ctx.tiers);

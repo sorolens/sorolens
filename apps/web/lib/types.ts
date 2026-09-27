@@ -497,8 +497,6 @@ export interface GroupDeletedResponse {
   deleted: boolean;
 }
 
-
-
 // ---- source verification ---------------------------------------------------
 
 export interface VerificationDiagnostic {
@@ -529,4 +527,96 @@ export interface ContractVerification {
   submitted_at: string;
   verified_at?: string;
   updated_at: string;
+}
+
+// ---- alert rules (rule language) -------------------------------------------
+
+export type RuleSeverity = "Info" | "Warning" | "Critical";
+
+/** A positioned validation problem, rendered next to the editor line. */
+export interface RuleDiagnostic {
+  message: string;
+  hint?: string;
+  line: number;
+  column: number;
+}
+
+/** Response of POST /api/v1/rules/validate and /rules/preview. */
+export interface RuleValidation {
+  valid: boolean;
+  normalized?: string;
+  metrics?: string[];
+  window?: string;
+  errors?: RuleDiagnostic[];
+}
+
+/** A stored alert rule. */
+export interface AlertRule {
+  id: number;
+  name: string;
+  source: string;
+  severity: RuleSeverity;
+  contract_id?: string;
+  network?: string;
+  window?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RulesResponse {
+  rules: AlertRule[];
+}
+
+export interface CreateRuleRequest {
+  name: string;
+  source: string;
+  severity?: RuleSeverity;
+  contract_id?: string;
+  network?: string;
+}
+
+/** One entry of the server-side metric catalog. */
+export interface RuleMetric {
+  name: string;
+  unit: string;
+  description: string;
+}
+
+export interface RuleCatalogResponse {
+  metrics: RuleMetric[];
+  aggregations: string[];
+  networks: string[];
+}
+
+/** A curated sample rule from the server-side library. */
+export interface RuleLibraryEntry {
+  name: string;
+  description: string;
+  severity: string;
+  source: string;
+}
+
+export interface RuleLibraryResponse {
+  rules: RuleLibraryEntry[];
+}
+
+export interface RulePreviewPoint {
+  at: string;
+  value: number | null;
+  fired: boolean;
+}
+
+/** Response of POST /api/v1/rules/preview. */
+export interface RulePreview {
+  valid: boolean;
+  fired: boolean;
+  op?: string;
+  value: number | null;
+  threshold: number | null;
+  reason?: string;
+  window?: string;
+  evaluated_at: string;
+  points?: RulePreviewPoint[];
+  errors?: RuleDiagnostic[];
 }

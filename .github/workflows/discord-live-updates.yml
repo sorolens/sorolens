@@ -59,12 +59,12 @@ jobs:
         if: steps.closed.outputs.has_closed == 'true'
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_LIVE_UPDATES_WEBHOOK }}
-          PR_URL:      ${{ github.event.pull_request.html_url }}
-          PR_TITLE:    ${{ github.event.pull_request.title }}
-          PR_NUMBER:   ${{ github.event.pull_request.number }}
-          PR_AUTHOR:   ${{ github.event.pull_request.user.login }}
-          PR_AVATAR:   ${{ github.event.pull_request.user.avatar_url }}
-          ITEMS_JSON:  ${{ steps.enrich.outputs.items_json }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AVATAR: ${{ github.event.pull_request.user.avatar_url }}
+          ITEMS_JSON: ${{ steps.enrich.outputs.items_json }}
         run: |
           set -euo pipefail
           if [ -z "${WEBHOOK_URL:-}" ]; then

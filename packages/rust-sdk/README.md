@@ -10,10 +10,10 @@ harnesses, off-chain workers, and CLIs written in Rust.
 
 ## Features
 
-| Feature | Default | Description |
-| --- | --- | --- |
-| `async` | yes | Asynchronous `Client` built on `reqwest`. |
-| `blocking` | no | Blocking `BlockingClient` for CLIs and harnesses without an async runtime. |
+| Feature    | Default | Description                                                                |
+| ---------- | ------- | -------------------------------------------------------------------------- |
+| `async`    | yes     | Asynchronous `Client` built on `reqwest`.                                  |
+| `blocking` | no      | Blocking `BlockingClient` for CLIs and harnesses without an async runtime. |
 
 Both transports share the same request builders and response models, so a call
 made by one is byte-for-byte the same request as the other.
@@ -93,15 +93,15 @@ Watchlist endpoints use an identity header instead; set it with
 
 ## Endpoint coverage
 
-| Module | Endpoints |
-| --- | --- |
-| `contracts` | list, get, register |
-| `events` | list, stream |
-| `invocations` | list |
-| `storage` | list, snapshot |
-| `stats` | global stats, contract stats, forecast |
-| `watchdog` | stats, alerts, monitored contracts, health checks |
-| `health` | `/health`, `/readyz` |
+| Module        | Endpoints                                         |
+| ------------- | ------------------------------------------------- |
+| `contracts`   | list, get, register                               |
+| `events`      | list, stream                                      |
+| `invocations` | list                                              |
+| `storage`     | list, snapshot                                    |
+| `stats`       | global stats, contract stats, forecast            |
+| `watchdog`    | stats, alerts, monitored contracts, health checks |
+| `health`      | `/health`, `/readyz`                              |
 
 Admin API-key management and the per-user watchlist routes are not covered yet.
 
@@ -112,10 +112,10 @@ Every path is taken verbatim from `docs/openapi.yaml`; nothing is invented.
 Every operation returns `Result<T, Error>`. Non-2xx responses become
 `Error::Api(ApiError)`, carrying:
 
-* `status` — the HTTP status code,
-* `code` — the machine-readable code (`INVALID_INPUT`, `RATE_LIMITED`, ...),
-* `message` — the message from the API, or a synthesised fallback,
-* `request_id` — the server-side request id when the API supplies one.
+- `status` — the HTTP status code,
+- `code` — the machine-readable code (`INVALID_INPUT`, `RATE_LIMITED`, ...),
+- `message` — the message from the API, or a synthesised fallback,
+- `request_id` — the server-side request id when the API supplies one.
 
 Local validation failures (an empty contract ID, an out-of-range `horizon` or
 `limit`) are rejected with `Error::InvalidRequest` **before** any network call.

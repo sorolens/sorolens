@@ -32,11 +32,11 @@ restart never has to rebuild state.
 
 The same binary runs all three roles.
 
-| Role | Command | Responsibility |
-| --- | --- | --- |
-| `all` | `indexer` (default) | Current behaviour: index every contract in one process. |
-| `coordinator` | `indexer --role coordinator --worker-id coordinator-0` | Elect a leader, create shard rows, assign and reassign them. |
-| `worker` | `indexer --role worker --worker-id worker-3` | Heartbeat, resolve its shards to contracts, index only those. |
+| Role          | Command                                                | Responsibility                                                |
+| ------------- | ------------------------------------------------------ | ------------------------------------------------------------- |
+| `all`         | `indexer` (default)                                    | Current behaviour: index every contract in one process.       |
+| `coordinator` | `indexer --role coordinator --worker-id coordinator-0` | Elect a leader, create shard rows, assign and reassign them.  |
+| `worker`      | `indexer --role worker --worker-id worker-3`           | Heartbeat, resolve its shards to contracts, index only those. |
 
 `--worker-id` must be unique per process. It always is under Kubernetes if you
 derive it from the pod name, e.g. `--worker-id=$(POD_NAME)`.
@@ -87,15 +87,15 @@ in-flight pass cannot duplicate rows.
 
 ## Configuration
 
-| Flag | Env | Default | Meaning |
-| --- | --- | --- | --- |
-| `--role` | `INDEXER_ROLE` | `all` | `all`, `coordinator`, or `worker`. |
-| `--worker-id` | `INDEXER_WORKER_ID` | — | Unique id. Required for coordinator and worker. |
-| `--shard-count` | `INDEXER_SHARD_COUNT` | `64` | Total shards. Must match across all processes. |
-| `--shard-store` | `INDEXER_SHARD_STORE` | — | Shard store backend, see below. |
-| — | `INDEXER_HEARTBEAT_INTERVAL` | `5s` | Worker heartbeat cadence. |
-| — | `INDEXER_WORKER_STALE_AFTER` | `30s` | Silence before a worker is presumed dead. |
-| — | `INDEXER_REBALANCE_INTERVAL` | `10s` | Leader reconciliation cadence. |
+| Flag            | Env                          | Default | Meaning                                         |
+| --------------- | ---------------------------- | ------- | ----------------------------------------------- |
+| `--role`        | `INDEXER_ROLE`               | `all`   | `all`, `coordinator`, or `worker`.              |
+| `--worker-id`   | `INDEXER_WORKER_ID`          | —       | Unique id. Required for coordinator and worker. |
+| `--shard-count` | `INDEXER_SHARD_COUNT`        | `64`    | Total shards. Must match across all processes.  |
+| `--shard-store` | `INDEXER_SHARD_STORE`        | —       | Shard store backend, see below.                 |
+| —               | `INDEXER_HEARTBEAT_INTERVAL` | `5s`    | Worker heartbeat cadence.                       |
+| —               | `INDEXER_WORKER_STALE_AFTER` | `30s`   | Silence before a worker is presumed dead.       |
+| —               | `INDEXER_REBALANCE_INTERVAL` | `10s`   | Leader reconciliation cadence.                  |
 
 Choose the shard count so a single shard is comfortably smaller than one
 worker's throughput: reassignment moves whole shards, so a shard that takes

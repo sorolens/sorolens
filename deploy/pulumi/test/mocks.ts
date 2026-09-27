@@ -16,11 +16,13 @@ export async function installMocks(): Promise<void> {
             state.zoneId = "Z35SXDOTRQ7X7K";
             break;
           case "aws:rds/cluster:Cluster":
-            state.endpoint = "sorolens-db.cluster-mock.us-east-1.rds.amazonaws.com";
+            state.endpoint =
+              "sorolens-db.cluster-mock.us-east-1.rds.amazonaws.com";
             state.port = 5432;
             break;
           case "aws:elasticache/replicationGroup:ReplicationGroup":
-            state.primaryEndpointAddress = "master.sorolens-redis.mock.use1.cache.amazonaws.com";
+            state.primaryEndpointAddress =
+              "master.sorolens-redis.mock.use1.cache.amazonaws.com";
             break;
           case "random:index/randomPassword:RandomPassword":
             state.result = "MockGeneratedPassword0123456789ab";
@@ -42,7 +44,7 @@ export async function installMocks(): Promise<void> {
     },
     "sorolens-test",
     "test",
-    false,
+    false
   );
 }
 

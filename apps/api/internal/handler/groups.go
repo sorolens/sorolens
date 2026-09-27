@@ -184,7 +184,7 @@ func (h *Handler) ListGroups(w http.ResponseWriter, r *http.Request) {
 	for i, s := range summaries {
 		resp[i] = groupSummaryResponse{
 			groupResponse: groupFromStore(s.Group),
-			Stats:         groupStatsFromStore(store.GroupStats{
+			Stats: groupStatsFromStore(store.GroupStats{
 				GroupID:            s.ID,
 				ContractCount:      s.ContractCount,
 				EventCount:         s.EventCount,

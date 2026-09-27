@@ -52,26 +52,34 @@ test("findContractIds handles non-string and short input", () => {
 
 test("normalizeContractId trims, strips zero-width chars and upper-cases", () => {
   assert.equal(normalizeContractId(`  ${VALID}\n`), VALID);
-  assert.equal(normalizeContractId(`${VALID.slice(0, 10)}\u200b${VALID.slice(10)}`), VALID);
+  assert.equal(
+    normalizeContractId(`${VALID.slice(0, 10)}\u200b${VALID.slice(10)}`),
+    VALID
+  );
   assert.equal(normalizeContractId(VALID.toLowerCase()), VALID);
   assert.equal(normalizeContractId("not-a-contract"), null);
 });
 
 test("contractIdFromUrl reads explorer URLs", () => {
   assert.equal(
-    contractIdFromUrl(`https://stellar.expert/explorer/public/contract/${VALID}`),
-    VALID,
+    contractIdFromUrl(
+      `https://stellar.expert/explorer/public/contract/${VALID}`
+    ),
+    VALID
   );
   assert.equal(
     contractIdFromUrl(`https://lab.stellar.org/r/testnet/contract/${OTHER}`),
-    OTHER,
+    OTHER
   );
   assert.equal(contractIdFromUrl("https://stellar.org"), null);
   assert.equal(contractIdFromUrl(""), null);
 });
 
 test("shortenContractId keeps the head and tail", () => {
-  assert.equal(shortenContractId(VALID), `${VALID.slice(0, 6)}…${VALID.slice(-4)}`);
+  assert.equal(
+    shortenContractId(VALID),
+    `${VALID.slice(0, 6)}…${VALID.slice(-4)}`
+  );
   assert.equal(shortenContractId("short"), "short");
   assert.equal(shortenContractId(undefined), "");
 });

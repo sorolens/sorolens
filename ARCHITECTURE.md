@@ -1,4 +1,5 @@
 # Architecture
+
 ## Sorolens System Architecture
 
 ---
@@ -260,18 +261,18 @@ CREATE TABLE sync_state (
 
 ### Index justifications
 
-| Index | Justification |
-|---|---|
-| `idx_contracts_network` | Dashboard lists contracts per network; network filter is the most common WHERE clause on the contracts table. |
-| `idx_events_contract_ledger` | The most common dashboard query: "show me recent events for contract X." Composite index with ledger DESC avoids sort. |
-| `idx_events_tx_hash` | Supports the invocation-detail page which shows all events emitted in a given transaction. |
-| `idx_events_ledger_closed_at` | Time-range filtering on the events feed. |
-| `idx_invocations_contract_ledger` | Same pattern as events; the invocation list is paginated with newest-first ordering. |
-| `idx_invocations_ledger_closed_at` | Time-range filter for resource-usage charts. |
-| `idx_invocations_status` | Supports the "show only failures" filter on the invocations list. |
-| `idx_storage_live_until` | The TTL health view needs to order by `live_until_ledger ASC` for a given contract; partial index on `status = 'live'` avoids scanning archived rows. |
-| `idx_storage_durability` | Supports filtering the storage view by entry type. |
-| `idx_contract_tags_tag` | Cross-contract lookup for the dashboard's tag filter ("which contracts carry tag X?"). The `(contract_id, tag)` primary key already serves per-contract tag reads, so only the reverse direction needs an index. |
+| Index                              | Justification                                                                                                                                                                                                    |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idx_contracts_network`            | Dashboard lists contracts per network; network filter is the most common WHERE clause on the contracts table.                                                                                                    |
+| `idx_events_contract_ledger`       | The most common dashboard query: "show me recent events for contract X." Composite index with ledger DESC avoids sort.                                                                                           |
+| `idx_events_tx_hash`               | Supports the invocation-detail page which shows all events emitted in a given transaction.                                                                                                                       |
+| `idx_events_ledger_closed_at`      | Time-range filtering on the events feed.                                                                                                                                                                         |
+| `idx_invocations_contract_ledger`  | Same pattern as events; the invocation list is paginated with newest-first ordering.                                                                                                                             |
+| `idx_invocations_ledger_closed_at` | Time-range filter for resource-usage charts.                                                                                                                                                                     |
+| `idx_invocations_status`           | Supports the "show only failures" filter on the invocations list.                                                                                                                                                |
+| `idx_storage_live_until`           | The TTL health view needs to order by `live_until_ledger ASC` for a given contract; partial index on `status = 'live'` avoids scanning archived rows.                                                            |
+| `idx_storage_durability`           | Supports filtering the storage view by entry type.                                                                                                                                                               |
+| `idx_contract_tags_tag`            | Cross-contract lookup for the dashboard's tag filter ("which contracts carry tag X?"). The `(contract_id, tag)` primary key already serves per-contract tag reads, so only the reverse direction needs an index. |
 
 ---
 
@@ -288,7 +289,13 @@ Request bodies are capped at 1 MiB by default. A request whose
 other body is bounded with `http.MaxBytesReader`; both paths return `413` with:
 
 ```json
-{ "error": { "code": "PAYLOAD_TOO_LARGE", "message": "request body exceeds the 1048576 byte limit", "request_id": "..." } }
+{
+  "error": {
+    "code": "PAYLOAD_TOO_LARGE",
+    "message": "request body exceeds the 1048576 byte limit",
+    "request_id": "..."
+  }
+}
 ```
 
 Set `REQUEST_MAX_BODY_BYTES` to change the cap.
@@ -304,12 +311,12 @@ Requests may carry a scoped API key via `Authorization: Bearer <token>` or
 `X-API-Key: <token>`. Scope enforcement is driven by a route metadata table
 keyed by the chi route pattern (`internal/middleware/scopes.go`):
 
-| Scope | Grants |
-|---|---|
-| `read:contracts` | contract, event, invocation, storage, stats, snapshot, and interface-spec reads |
-| `write:contracts` | `POST /api/v1/contracts` and contract tag writes |
-| `read:watchdog` | all `/api/v1/watchdog/*` reads |
-| `admin:*` | everything, including API key management |
+| Scope             | Grants                                                                          |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `read:contracts`  | contract, event, invocation, storage, stats, snapshot, and interface-spec reads |
+| `write:contracts` | `POST /api/v1/contracts` and contract tag writes                                |
+| `read:watchdog`   | all `/api/v1/watchdog/*` reads                                                  |
+| `admin:*`         | everything, including API key management                                        |
 
 A presented key that lacks the required scope receives `403` with
 `{"error":"missing scope","required":"<scope>"}`. Unknown or revoked keys
@@ -334,6 +341,7 @@ the surface is not advertised. An admin gets the standard pprof index at
 Register a contract for tracking.
 
 **Request body:**
+
 ```json
 {
   "contract_id": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
@@ -343,6 +351,7 @@ Register a contract for tracking.
 ```
 
 **Responses:**
+
 - `201 Created`: contract accepted for backfill.
 - `400 Bad Request`: invalid contract ID format or missing fields.
 - `404 Not Found`: contract does not exist on-chain (getLedgerEntries returned no entry).
@@ -360,6 +369,7 @@ List all tracked contracts.
 default `asc`). Values outside those sets are rejected with `422`.
 
 **Response `200`:**
+
 ```json
 {
   "contracts": [
@@ -384,6 +394,7 @@ Apply one action to many contracts at once. Requires the `write:contracts`
 scope and at least the `contributor` role.
 
 **Request body:**
+
 ```json
 {
   "ids": ["CDLZFC3S...", "GABC..."],
@@ -392,15 +403,16 @@ scope and at least the `contributor` role.
 }
 ```
 
-| `action` | `args` | Effect |
-|---|---|---|
-| `untrack` | (none) | Permanently deletes the contracts together with every indexed row that references them: events, invocations, storage entries and history, sync state, upgrades, health scores, and performance baselines. Irreversible, so the dashboard confirms before sending. |
-| `tag` | `{ "label": "payments" }` | Sets `label` on each contract, replacing any existing alias. |
+| `action`  | `args`                    | Effect                                                                                                                                                                                                                                                            |
+| --------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `untrack` | (none)                    | Permanently deletes the contracts together with every indexed row that references them: events, invocations, storage entries and history, sync state, upgrades, health scores, and performance baselines. Irreversible, so the dashboard confirms before sending. |
+| `tag`     | `{ "label": "payments" }` | Sets `label` on each contract, replacing any existing alias.                                                                                                                                                                                                      |
 
 A request may target at most 100 distinct IDs; unknown IDs are ignored
 rather than failing the whole batch.
 
 **Response `200`:**
+
 ```json
 { "action": "untrack", "requested": 2, "affected": 2 }
 ```
@@ -415,6 +427,7 @@ label), `500`.
 Get a single contract's metadata and sync state.
 
 **Response `200`:**
+
 ```json
 {
   "id": "CDLZFC3S...",
@@ -459,6 +472,7 @@ and `err`, `tuple` uses `tuple`, and `bytes_n` carries `n`. A reference to a
 user-defined type is `{"kind":"udt","name":"..."}`.
 
 **Response `200`:**
+
 ```json
 {
   "contract_id": "CDLZFC3S...",
@@ -482,13 +496,14 @@ user-defined type is `{"kind":"udt","name":"..."}`.
 ```
 
 **Responses:**
+
 - `200`: the parsed interface.
 - `404`: the contract is not tracked (message: "contract not found"), or it is
-tracked but its spec has not been parsed yet (message: "no parsed interface
-spec is available for this contract yet"). A contract whose Wasm carries no
-`contractspecv0` section — for example one not built with `#[contractimpl]` —
-never gets a row, so it answers `404` indefinitely; the indexer logs a warning
-rather than failing the indexing pass.
+  tracked but its spec has not been parsed yet (message: "no parsed interface
+  spec is available for this contract yet"). A contract whose Wasm carries no
+  `contractspecv0` section — for example one not built with `#[contractimpl]` —
+  never gets a row, so it answers `404` indefinitely; the indexer logs a warning
+  rather than failing the indexing pass.
 
 ---
 
@@ -505,11 +520,13 @@ value is lowercased. A tag must be 1-32 characters matching
 starting with a letter or digit); anything else receives `422`.
 
 **Request body:**
+
 ```json
 { "tag": "prod" }
 ```
 
 **Responses:**
+
 - `200 OK`: the contract's full, sorted tag list. Adding a tag that is already
   present is a no-op, so the operation is idempotent.
   ```json
@@ -539,16 +556,17 @@ Paginated event list for a contract.
 
 **Query params:**
 
-| Param | Type | Default | Notes |
-|---|---|---|---|
-| `cursor` | string | (none) | Opaque cursor from previous response. |
-| `limit` | integer | 50 | Max 500. |
-| `topic` | string | (none) | Filter: match events where topic[0] decodes to this symbol string. |
-| `tx_hash` | string | (none) | Filter by transaction hash. |
-| `since` | ISO-8601 | (none) | Return events after this timestamp. |
-| `until` | ISO-8601 | (none) | Return events before this timestamp. |
+| Param     | Type     | Default | Notes                                                              |
+| --------- | -------- | ------- | ------------------------------------------------------------------ |
+| `cursor`  | string   | (none)  | Opaque cursor from previous response.                              |
+| `limit`   | integer  | 50      | Max 500.                                                           |
+| `topic`   | string   | (none)  | Filter: match events where topic[0] decodes to this symbol string. |
+| `tx_hash` | string   | (none)  | Filter by transaction hash.                                        |
+| `since`   | ISO-8601 | (none)  | Return events after this timestamp.                                |
+| `until`   | ISO-8601 | (none)  | Return events before this timestamp.                               |
 
 **Response `200`:**
+
 ```json
 {
   "events": [
@@ -586,6 +604,7 @@ and no `limit`: an export is meant to be complete.
 `*_decoded` columns hold JSON.
 
 **Responses:**
+
 - `200`: the header row, then one row per matching event ordered by
   `(ledger, id)` ascending. The export is deterministic, so an unchanged store
   produces an identical file and a diff means the data changed. An unknown
@@ -622,6 +641,7 @@ Pagination is keyset-based: the cursor encodes the `(ledger, tx_hash)` position,
 which is the sort tuple, so pages stay stable while the indexer appends rows.
 
 **Response `200`:**
+
 ```json
 {
   "invocations": [
@@ -656,6 +676,7 @@ Paginated invocation list.
 **Query params:** `cursor`, `limit` (max 500), `status` (`SUCCESS`/`FAILED`), `since`, `until`, `function_name`.
 
 **Response `200`:**
+
 ```json
 {
   "invocations": [
@@ -665,7 +686,11 @@ Paginated invocation list.
       "ledger_closed_at": "2026-07-26T10:00:21Z",
       "status": "SUCCESS",
       "function_name": "transfer",
-      "args_decoded": { "from": "GABC...", "to": "GDEF...", "amount": "1000000000" },
+      "args_decoded": {
+        "from": "GABC...",
+        "to": "GDEF...",
+        "amount": "1000000000"
+      },
       "result_decoded": null,
       "resource_fee_charged": 123456,
       "cpu_insn": 4883530,
@@ -686,6 +711,7 @@ Paginated invocation list.
 Full detail for a single invocation, including all associated events.
 
 **Response `200`:**
+
 ```json
 {
   "tx_hash": "32f7e5c3...",
@@ -718,6 +744,7 @@ Paginated storage entry list.
 **Query params:** `cursor`, `limit` (max 200), `durability` (`temporary`/`persistent`/`instance`), `status` (`live`/`archived`), `expiring_within` (integer: show only entries with `live_until_ledger - current_ledger <= N`).
 
 **Response `200`:**
+
 ```json
 {
   "current_ledger": 490314,
@@ -749,6 +776,7 @@ Replays the contract's storage state and last known event as they were at
 ledger `N`. Used by the ledger scrubber on the contract detail page.
 
 **Responses:**
+
 - `200`: `{ contract_id, network, ledger, first_tracked_ledger, storage, last_event }`.
 - `404`: contract is unknown, or `N` precedes the first ledger the contract
   was tracked at (the message names that ledger).
@@ -768,6 +796,7 @@ Served with `Content-Type: application/json; charset=utf-8` and
 client sends `Accept-Encoding: gzip` the body is gzip-compressed.
 
 **Responses:**
+
 - `200`: the four-section export described above.
 - `404`: contract is unknown.
 
@@ -800,6 +829,7 @@ Revoke a key. Returns `204`.
 Network-wide summary across all tracked contracts.
 
 **Response `200`:**
+
 ```json
 {
   "tracked_contracts": 12,
@@ -884,6 +914,41 @@ the chi route table and fails if a v1 route has no v2 counterpart.
 
 ---
 
+### 4.11 Alert rules
+
+User-defined alert rules are the one surface where clients author logic rather
+than query data. A rule is a string in the Sorolens rule language; the API
+validates it before storing it, and the indexer evaluates enabled rules at the
+end of every pass.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/rules` | List stored rules. |
+| `POST` | `/api/v1/rules` | Create a rule (validated; `422` with a positioned diagnostic on failure). |
+| `PATCH` | `/api/v1/rules/{id}` | Enable or pause a rule. |
+| `DELETE` | `/api/v1/rules/{id}` | Delete a rule. |
+| `POST` | `/api/v1/rules/validate` | Validate rule text without writing. |
+| `POST` | `/api/v1/rules/preview` | Evaluate against the contract's recent metric samples. |
+| `GET` | `/api/v1/rules/metrics` | The closed metric catalog. |
+| `GET` | `/api/v1/rules/library` | Curated starter rules. |
+
+Reads carry the `read:contracts` scope; authoring carries `write:contracts` and
+the `contributor` role, like contract registration.
+
+The language itself lives in `apps/api/rulelang` (a dependency-free leaf
+package imported by the indexer through the Go workspace): a hand-rolled lexer
+and recursive-descent parser, a
+closed metric catalog with units, semantic validation with "did you mean"
+hints, and a windowed evaluator supporting `avg`, `max`, `min`, `sum`, `rate`,
+and `count` over a `for` window. `GET /api/v1/rules/metrics` drives the
+dashboard editor's autocomplete, and `POST /api/v1/rules/preview` runs the same
+evaluator so the preview matches the indexer exactly.
+
+See [`docs/rule-language.md`](docs/rule-language.md) for the grammar and metric
+reference.
+
+---
+
 ## 5. Design Decisions with Rationale
 
 ### 5.1 Cron-driven indexer over a persistent worker
@@ -891,11 +956,13 @@ the chi route table and fails if a v1 route has no v2 counterpart.
 **Decision:** The indexer runs as a GitHub Actions scheduled workflow on a 5-minute cron, not as a long-running process.
 
 **Rationale:**
+
 - Zero hosting cost (GitHub Actions free tier covers this comfortably at 5-minute intervals for a small number of contracts).
 - No server to maintain or restart. Vercel and Neon are both serverless; the indexer being serverless is architecturally consistent.
 - GitHub Actions provides logging, history, and alerting for free.
 
 **Tradeoffs:**
+
 - 5-minute minimum latency for new events. For an observability tool (not a trading system), this is acceptable.
 - Cold start on each run adds a few seconds of overhead.
 - Cannot hold long-running TCP connections to Soroban RPC (unnecessary; RPC is HTTP).
@@ -933,6 +1000,7 @@ Upstash Redis is used because it is serverless (no idle cost), has a free tier, 
 **Decision:** All list endpoints use cursor-based pagination via an opaque `cursor` string, not `?page=N&limit=M` offset pagination.
 
 **Rationale:**
+
 - Events and invocations are append-only. During pagination, new rows are inserted. Offset pagination produces duplicate or missing rows if a page boundary shifts between requests.
 - Cursor pagination is stable: the cursor encodes the position (ledger + id) of the last returned row, not an offset.
 - Aligns with how Soroban RPC itself paginates `getEvents`.
@@ -957,7 +1025,7 @@ there is no duplicated query logic and scopes and roles behave identically.
 
 **Tradeoff:** Two handler layers must be kept in step. A route-parity test
 guards the surface mechanically, and the DTO duplication is deliberate: that
-duplication *is* the versioning contract.
+duplication _is_ the versioning contract.
 
 ---
 
@@ -1000,27 +1068,28 @@ the one-object-per-month layout bounds the work to the months touched.
 
 **New API surface** (Next.js App Router route handlers in `apps/web/app/api/push/`):
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET`  | `/api/push/vapid-public-key` | Returns the VAPID public key for `PushManager.subscribe()`. Public by design. |
-| `POST` | `/api/push/subscribe`        | Saves a `PushSubscription` JSON blob (endpoint + keys) to the server-side store. |
-| `DELETE`| `/api/push/subscribe`       | Removes a subscription by endpoint. |
-| `PUT`  | `/api/push/subscribe`        | Internal endpoint: fans out a push payload to all stored subscriptions. Auth-guarded by `PUSH_INTERNAL_SECRET`. |
+| Method   | Path                         | Purpose                                                                                                         |
+| -------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/push/vapid-public-key` | Returns the VAPID public key for `PushManager.subscribe()`. Public by design.                                   |
+| `POST`   | `/api/push/subscribe`        | Saves a `PushSubscription` JSON blob (endpoint + keys) to the server-side store.                                |
+| `DELETE` | `/api/push/subscribe`        | Removes a subscription by endpoint.                                                                             |
+| `PUT`    | `/api/push/subscribe`        | Internal endpoint: fans out a push payload to all stored subscriptions. Auth-guarded by `PUSH_INTERNAL_SECRET`. |
 
 **Environment variables** (server-side only — never `NEXT_PUBLIC_*`):
 
-| Variable | Purpose |
-|----------|---------|
-| `VAPID_PUBLIC_KEY`   | Base64url-encoded EC P-256 public key |
-| `VAPID_PRIVATE_KEY`  | Base64url-encoded EC P-256 private key |
-| `VAPID_SUBJECT`      | Contact URI for the VAPID JWT (`mailto:` or `https:`) |
-| `PUSH_INTERNAL_SECRET` | Shared secret for the `PUT` push-send endpoint |
+| Variable               | Purpose                                               |
+| ---------------------- | ----------------------------------------------------- |
+| `VAPID_PUBLIC_KEY`     | Base64url-encoded EC P-256 public key                 |
+| `VAPID_PRIVATE_KEY`    | Base64url-encoded EC P-256 private key                |
+| `VAPID_SUBJECT`        | Contact URI for the VAPID JWT (`mailto:` or `https:`) |
+| `PUSH_INTERNAL_SECRET` | Shared secret for the `PUT` push-send endpoint        |
 
 **#127 dependency:** Issue #127 ("pluggable notification channels") specifies Slack/Discord/PagerDuty integrations, not Web Push. The server-side alert-triggered push path is **stubbed** — the `PUT /api/push/subscribe` route exists and works, but the indexer/notifier does not yet call it. When #127 or a dedicated push-delivery issue lands, the notifier should call `PUT /api/push/subscribe` with `x-push-secret: $PUSH_INTERNAL_SECRET` when a Critical alert fires. This is documented in `apps/web/app/api/push/subscribe/route.ts`.
 
 **Subscription persistence:** The current `POST /api/push/subscribe` stores subscriptions in-process (a `Map`). This is lost on serverless cold starts. Before enabling push in production, replace the `Map` with a Postgres table (a simple `push_subscriptions(endpoint TEXT PK, keys JSONB, created_at TIMESTAMPTZ)` suffices) and call the Go API to persist it.
 
 **Client-side PWA components:**
+
 - `apps/web/public/manifest.webmanifest` — Web App Manifest with icons, shortcuts, and `display: standalone`.
 - `apps/web/next.config.ts` — wraps Next.js with `@ducanh2912/next-pwa` (Workbox) to generate a service worker that precaches the app shell and runtime-caches API responses (stale-while-revalidate, 5-minute TTL).
 - `apps/web/lib/alertQueue.ts` — IndexedDB-backed offline alert queue (via `idb`).

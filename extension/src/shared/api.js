@@ -127,7 +127,11 @@ export class SorolensClient {
       if (!response.ok) {
         throw new SorolensApiError(
           (payload && payload.error) || response.statusText || "Request failed",
-          { status: response.status, code: (payload && payload.code) || "", url },
+          {
+            status: response.status,
+            code: (payload && payload.code) || "",
+            url,
+          }
         );
       }
       return payload;
@@ -135,7 +139,7 @@ export class SorolensClient {
       if (error && error.name === "AbortError") {
         throw new SorolensApiError(
           `Sorolens API timed out after ${this.timeoutMs}ms`,
-          { status: 0, code: "timeout", url },
+          { status: 0, code: "timeout", url }
         );
       }
       throw error;
@@ -157,7 +161,7 @@ export class SorolensClient {
     try {
       return await this.request(
         "GET",
-        `/api/v1/contracts/${encodeURIComponent(contractId)}`,
+        `/api/v1/contracts/${encodeURIComponent(contractId)}`
       );
     } catch (error) {
       if (error instanceof SorolensApiError && error.status === 404) {
@@ -189,7 +193,7 @@ export class SorolensClient {
   async watchlistStatus(contractId) {
     const payload = await this.request(
       "GET",
-      `/api/v1/watchlist/${encodeURIComponent(contractId)}/status`,
+      `/api/v1/watchlist/${encodeURIComponent(contractId)}/status`
     );
     return Boolean(payload && payload.in_watchlist);
   }
@@ -214,7 +218,7 @@ export class SorolensClient {
   async removeFromWatchlist(contractId) {
     const payload = await this.request(
       "DELETE",
-      `/api/v1/watchlist/${encodeURIComponent(contractId)}`,
+      `/api/v1/watchlist/${encodeURIComponent(contractId)}`
     );
     return Boolean(payload && payload.in_watchlist);
   }
@@ -249,10 +253,13 @@ export class SorolensClient {
     const result = {
       contractId,
       tracked: contract.status === "fulfilled" && Boolean(contract.value),
-      inWatchlist:
-        watchlist.status === "fulfilled" && Boolean(watchlist.value),
+      inWatchlist: watchlist.status === "fulfilled" && Boolean(watchlist.value),
     };
-    if (contract.status === "fulfilled" && contract.value && contract.value.status) {
+    if (
+      contract.status === "fulfilled" &&
+      contract.value &&
+      contract.value.status
+    ) {
       result.status = contract.value.status;
     }
     if (errors.length > 0) {
@@ -285,7 +292,7 @@ export class SorolensClient {
       } catch (error) {
         warnings.push(
           `Contract is not indexed yet: ${describeError(error)}. ` +
-            "Registration needs an API key with write:contracts and a contributor identity.",
+            "Registration needs an API key with write:contracts and a contributor identity."
         );
       }
     }

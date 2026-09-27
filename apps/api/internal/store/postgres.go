@@ -30,12 +30,16 @@ func (s *postgresStore) UpsertLabel(ctx context.Context, label Label) error {
 
 func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error) {
 	rows, err := s.pool.Query(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public FROM labels_workspace WHERE workspace_id = $1) labels WHERE label ILIKE '%' || $2 || '%' OR value ILIKE '%' || $2 || '%' ORDER BY label LIMIT 100`, workspaceID, query)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var labels []Label
 	for rows.Next() {
 		var label Label
-		if err := rows.Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public); err != nil { return nil, err }
+		if err := rows.Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public); err != nil {
+			return nil, err
+		}
 		labels = append(labels, label)
 	}
 	return labels, rows.Err()
@@ -44,7 +48,9 @@ func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query strin
 func (s *postgresStore) ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error) {
 	var label Label
 	err := s.pool.QueryRow(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public, 2 AS priority FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public, 1 AS priority FROM labels_workspace WHERE workspace_id = $1) labels WHERE lower(label) = lower($2) ORDER BY priority LIMIT 1`, workspaceID, query).Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public)
-	if errors.Is(err, pgx.ErrNoRows) { return Label{}, ErrNotFound }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Label{}, ErrNotFound
+	}
 	return label, err
 }
 
@@ -760,4 +766,108 @@ func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit
 	}
 
 	return contracts, nil
+}
+
+// SearchEvents implements store.Store.SearchEvents (issue #159). The inner
+// DISTINCT ON picks the newest event per matching tx_hash before the outer
+// query re-sorts by recency and applies the caller's limit, so a single
+// transaction that emitted many events doesn't crowd out other matches.
+func (s *postgresStore) SearchEvents(ctx context.Context, query string, limit int) ([]Event, error) {
+	if query == "" {
+		return []Event{}, nil
+	}
+
+	q := `
+		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+		       topic_xdr, value_xdr, topic_decoded, value_decoded,
+		       in_successful_call, inserted_at
+		FROM (
+			SELECT DISTINCT ON (tx_hash)
+			       id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+			       topic_xdr, value_xdr, topic_decoded, value_decoded,
+			       in_successful_call, inserted_at
+			FROM events
+			WHERE tx_hash ILIKE $1
+			ORDER BY tx_hash, ledger_closed_at DESC
+		) matched
+		ORDER BY ledger_closed_at DESC
+		LIMIT $2
+	`
+
+	searchPattern := "%" + query + "%"
+
+	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []Event
+	for rows.Next() {
+		var e Event
+		var topicXDR, topicDec, valDec []byte
+		if err := rows.Scan(
+			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
+			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
+			&e.InSuccessfulCall, &e.InsertedAt,
+		); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(topicXDR, &e.TopicXDR)
+		_ = json.Unmarshal(topicDec, &e.TopicDecoded)
+		_ = json.Unmarshal(valDec, &e.ValueDecoded)
+		events = append(events, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}
+
+// SearchFunctions implements store.Store.SearchFunctions (issue #159). It
+// mirrors SearchEvents: an inner DISTINCT ON collapses each matching
+// function name to its most recent invocation, and the outer query re-sorts
+// by recency before applying the limit.
+func (s *postgresStore) SearchFunctions(ctx context.Context, query string, limit int) ([]FunctionMatch, error) {
+	if query == "" {
+		return []FunctionMatch{}, nil
+	}
+
+	q := `
+		SELECT function_name, contract_id, network, tx_hash, ledger_closed_at
+		FROM (
+			SELECT DISTINCT ON (function_name)
+			       function_name, contract_id, network, tx_hash, ledger_closed_at
+			FROM invocations
+			WHERE function_name ILIKE $1
+			ORDER BY function_name, ledger_closed_at DESC
+		) matched
+		ORDER BY ledger_closed_at DESC
+		LIMIT $2
+	`
+
+	searchPattern := "%" + query + "%"
+
+	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var matches []FunctionMatch
+	for rows.Next() {
+		var f FunctionMatch
+		if err := rows.Scan(&f.Name, &f.ContractID, &f.Network, &f.TxHash, &f.LedgerClosedAt); err != nil {
+			return nil, err
+		}
+		matches = append(matches, f)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return matches, nil
 }

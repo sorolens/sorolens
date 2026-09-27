@@ -22,7 +22,11 @@ const WATCHLIST_PATH = "/api/v1/watchlist";
 function defaultApi(request) {
   const { method, url } = request;
   if (method === "GET" && url.pathname === CONTRACT_PATH) {
-    return jsonResponse(200, { id: CONTRACT_ID, network: "testnet", status: "active" });
+    return jsonResponse(200, {
+      id: CONTRACT_ID,
+      network: "testnet",
+      status: "active",
+    });
   }
   if (method === "GET" && url.pathname === STATUS_PATH) {
     return jsonResponse(200, { in_watchlist: false });
@@ -30,7 +34,10 @@ function defaultApi(request) {
   if (method === "POST" && url.pathname === WATCHLIST_PATH) {
     return jsonResponse(201, { in_watchlist: true });
   }
-  if (method === "DELETE" && url.pathname === `/api/v1/watchlist/${CONTRACT_ID}`) {
+  if (
+    method === "DELETE" &&
+    url.pathname === `/api/v1/watchlist/${CONTRACT_ID}`
+  ) {
     return jsonResponse(200, { in_watchlist: false });
   }
   if (url.pathname === "/health") {
@@ -76,7 +83,7 @@ test("status rejects a malformed contract id without calling the API", async () 
   await withEnvironment({}, async ({ fetchStub }) => {
     const response = await handleMessage(
       { type: MESSAGE.status, contractId: "not-an-id" },
-      {},
+      {}
     );
     assert.deepEqual(response, { ok: false, error: "Invalid contract ID" });
     assert.equal(fetchStub.calls.length, 0);
@@ -87,7 +94,7 @@ test("status reports an indexed contract that is not on the watchlist", async ()
   await withEnvironment({}, async () => {
     const response = await handleMessage(
       { type: MESSAGE.status, contractId: CONTRACT_ID },
-      {},
+      {}
     );
     assert.equal(response.ok, true);
     assert.equal(response.status.tracked, true);
@@ -103,11 +110,15 @@ test("status caches results until force is requested", async () => {
     assert.ok(afterFirst >= 2);
 
     await handleMessage({ type: MESSAGE.status, contractId: CONTRACT_ID }, {});
-    assert.equal(fetchStub.calls.length, afterFirst, "second read must hit the cache");
+    assert.equal(
+      fetchStub.calls.length,
+      afterFirst,
+      "second read must hit the cache"
+    );
 
     await handleMessage(
       { type: MESSAGE.status, contractId: CONTRACT_ID, force: true },
-      {},
+      {}
     );
     assert.ok(fetchStub.calls.length > afterFirst, "force must refetch");
   });
@@ -127,17 +138,17 @@ test("statusBatch preserves the requested order", async () => {
     async () => {
       const response = await handleMessage(
         { type: MESSAGE.statusBatch, contractIds: [CONTRACT_ID, otherId] },
-        {},
+        {}
       );
       assert.deepEqual(
         response.statuses.map((status) => status.contractId),
-        [CONTRACT_ID, otherId],
+        [CONTRACT_ID, otherId]
       );
       assert.deepEqual(
         response.statuses.map((status) => status.tracked),
-        [true, false],
+        [true, false]
       );
-    },
+    }
   );
 });
 
@@ -163,13 +174,13 @@ test("track registers and watchlists, then reports the new status", async () => 
     async () => {
       const response = await handleMessage(
         { type: MESSAGE.track, contractId: CONTRACT_ID },
-        {},
+        {}
       );
       assert.equal(response.ok, true);
       assert.equal(response.outcome.registered, true);
       assert.equal(response.outcome.inWatchlist, true);
       assert.equal(response.status.inWatchlist, true);
-    },
+    }
   );
 });
 
@@ -196,13 +207,13 @@ test("track surfaces a forbidden registration as a warning", async () => {
     async () => {
       const response = await handleMessage(
         { type: MESSAGE.track, contractId: CONTRACT_ID },
-        {},
+        {}
       );
       assert.equal(response.ok, true);
       assert.equal(response.outcome.registered, false);
       assert.equal(response.outcome.inWatchlist, true);
       assert.equal(response.outcome.warnings.length, 1);
-    },
+    }
   );
 });
 
@@ -210,7 +221,7 @@ test("untrack removes the contract from the watchlist", async () => {
   await withEnvironment({}, async () => {
     const response = await handleMessage(
       { type: MESSAGE.untrack, contractId: CONTRACT_ID },
-      {},
+      {}
     );
     assert.equal(response.ok, true);
     assert.equal(response.status.inWatchlist, false);
@@ -221,8 +232,12 @@ test("scanResult stores the tab scan and getScan returns it", async () => {
   await withEnvironment({}, async () => {
     const scanned = [CONTRACT_ID];
     const stored = await handleMessage(
-      { type: MESSAGE.scanResult, contractIds: scanned, url: "https://stellar.expert/x" },
-      { tab: { id: 7, url: "https://stellar.expert/x" } },
+      {
+        type: MESSAGE.scanResult,
+        contractIds: scanned,
+        url: "https://stellar.expert/x",
+      },
+      { tab: { id: 7, url: "https://stellar.expert/x" } }
     );
     assert.deepEqual(stored, { ok: true });
 
@@ -230,7 +245,10 @@ test("scanResult stores the tab scan and getScan returns it", async () => {
     assert.equal(read.ok, true);
     assert.deepEqual(read.scan.contractIds, scanned);
 
-    const missing = await handleMessage({ type: MESSAGE.getScan, tabId: 99 }, {});
+    const missing = await handleMessage(
+      { type: MESSAGE.getScan, tabId: 99 },
+      {}
+    );
     assert.deepEqual(missing.scan, { contractIds: [], url: "" });
   });
 });
@@ -242,7 +260,7 @@ test("saveSettings and getSettings round-trip without leaking the key to sync", 
         type: MESSAGE.saveSettings,
         patch: { apiKey: "sl_secret", network: "testnet" },
       },
-      {},
+      {}
     );
     const response = await handleMessage({ type: MESSAGE.getSettings }, {});
     assert.equal(response.settings.apiKey, "sl_secret");
@@ -255,10 +273,7 @@ test("saveSettings and getSettings round-trip without leaking the key to sync", 
 
 test("testConnection reports latency when the API answers", async () => {
   await withEnvironment({}, async () => {
-    const response = await handleMessage(
-      { type: MESSAGE.testConnection },
-      {},
-    );
+    const response = await handleMessage({ type: MESSAGE.testConnection }, {});
     assert.equal(response.ok, true);
     assert.equal(response.apiBaseUrl, API_BASE);
     assert.equal(response.status, "ok");
@@ -270,9 +285,12 @@ test("testConnection surfaces an unreachable API", async () => {
   await withEnvironment(
     { api: () => jsonResponse(503, { error: "down" }) },
     async () => {
-      const response = await handleMessage({ type: MESSAGE.testConnection }, {});
+      const response = await handleMessage(
+        { type: MESSAGE.testConnection },
+        {}
+      );
       assert.equal(response.ok, false);
       assert.match(response.error, /Sorolens API error/);
-    },
+    }
   );
 });

@@ -19,6 +19,7 @@ import (
 	"github.com/sorolens/sorolens/services/indexer/internal/coordinator"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/poller"
+	"github.com/sorolens/sorolens/services/indexer/internal/rulesengine"
 	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
 )
 
@@ -112,6 +113,13 @@ func main() {
 	}
 
 	p := poller.NewWithRPCClients(clients, st, redis, cfg, log)
+
+	// User-defined alert rules. The stub store does not implement the rule
+	// surface, so this stays inert in local runs; a deployment that wires the
+	// real store gets rule evaluation at the end of every pass.
+	if rs, ok := any(st).(rulesengine.Store); ok {
+		p.SetRuleEvaluator(rulesengine.New(rs, log))
+	}
 
 	// Prometheus metrics (issue #198): the indexer exposes per-network lag on
 	// /metrics. The server is best-effort — a bind failure is logged but does

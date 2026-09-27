@@ -56,6 +56,17 @@ type Invocation struct {
 	InsertedAt         time.Time
 }
 
+// FunctionMatch is one distinct contract function name matched by the
+// global search endpoint (issue #159), paired with its most recently
+// recorded invocation so callers can link straight to that transaction.
+type FunctionMatch struct {
+	Name           string
+	ContractID     string
+	Network        string
+	TxHash         string
+	LedgerClosedAt time.Time
+}
+
 // StorageEntry is a snapshot of one contract storage key.
 type StorageEntry struct {
 	ContractID         string

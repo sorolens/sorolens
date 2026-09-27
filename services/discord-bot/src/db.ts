@@ -59,11 +59,13 @@ export function requireDb(): Database.Database {
 export function upsertLink(discordId: string, githubLogin: string): Link {
   const conn = requireDb();
   const existing = conn
-    .prepare("SELECT discord_id FROM links WHERE github_login = ? COLLATE NOCASE")
+    .prepare(
+      "SELECT discord_id FROM links WHERE github_login = ? COLLATE NOCASE"
+    )
     .get(githubLogin) as { discord_id: string } | undefined;
   if (existing && existing.discord_id !== discordId) {
     throw new Error(
-      `github login "${githubLogin}" is already linked to a different Discord user`,
+      `github login "${githubLogin}" is already linked to a different Discord user`
     );
   }
   conn
@@ -71,7 +73,7 @@ export function upsertLink(discordId: string, githubLogin: string): Link {
       `INSERT INTO links (discord_id, github_login) VALUES (?, ?)
        ON CONFLICT(discord_id) DO UPDATE SET
          github_login = excluded.github_login,
-         linked_at    = datetime('now')`,
+         linked_at    = datetime('now')`
     )
     .run(discordId, githubLogin);
   return getByDiscord(discordId)!;
@@ -79,7 +81,9 @@ export function upsertLink(discordId: string, githubLogin: string): Link {
 
 export function unlink(discordId: string): boolean {
   const conn = requireDb();
-  const r = conn.prepare("DELETE FROM links WHERE discord_id = ?").run(discordId);
+  const r = conn
+    .prepare("DELETE FROM links WHERE discord_id = ?")
+    .run(discordId);
   // The API key is useless without the link, and leaving it around would let
   // a re-linked account keep the previous owner's credential.
   conn.prepare("DELETE FROM user_api_keys WHERE discord_id = ?").run(discordId);
@@ -90,7 +94,7 @@ export function getByDiscord(discordId: string): Link | null {
   const conn = requireDb();
   const row = conn
     .prepare(
-      "SELECT discord_id AS discordId, github_login AS githubLogin, linked_at AS linkedAt FROM links WHERE discord_id = ?",
+      "SELECT discord_id AS discordId, github_login AS githubLogin, linked_at AS linkedAt FROM links WHERE discord_id = ?"
     )
     .get(discordId) as Link | undefined;
   return row ?? null;
@@ -100,7 +104,7 @@ export function getByGithub(githubLogin: string): Link | null {
   const conn = requireDb();
   const row = conn
     .prepare(
-      "SELECT discord_id AS discordId, github_login AS githubLogin, linked_at AS linkedAt FROM links WHERE github_login = ? COLLATE NOCASE",
+      "SELECT discord_id AS discordId, github_login AS githubLogin, linked_at AS linkedAt FROM links WHERE github_login = ? COLLATE NOCASE"
     )
     .get(githubLogin) as Link | undefined;
   return row ?? null;
@@ -110,7 +114,7 @@ export function listLinks(limit = 100, offset = 0): Link[] {
   const conn = requireDb();
   return conn
     .prepare(
-      "SELECT discord_id AS discordId, github_login AS githubLogin, linked_at AS linkedAt FROM links ORDER BY linked_at DESC LIMIT ? OFFSET ?",
+      "SELECT discord_id AS discordId, github_login AS githubLogin, linked_at AS linkedAt FROM links ORDER BY linked_at DESC LIMIT ? OFFSET ?"
     )
     .all(limit, offset) as Link[];
 }
@@ -121,7 +125,7 @@ export function listLinks(limit = 100, offset = 0): Link[] {
 export function setApiKey(
   discordId: string,
   key: string,
-  keyId: string | null = null,
+  keyId: string | null = null
 ): UserApiKey {
   const conn = requireDb();
   conn
@@ -130,7 +134,7 @@ export function setApiKey(
        ON CONFLICT(discord_id) DO UPDATE SET
          api_key    = excluded.api_key,
          key_id     = excluded.key_id,
-         created_at = datetime('now')`,
+         created_at = datetime('now')`
     )
     .run(discordId, key, keyId);
   return getApiKey(discordId)!;
@@ -140,7 +144,7 @@ export function getApiKey(discordId: string): UserApiKey | null {
   const conn = requireDb();
   const row = conn
     .prepare(
-      "SELECT discord_id AS discordId, api_key AS key, key_id AS keyId, created_at AS createdAt FROM user_api_keys WHERE discord_id = ?",
+      "SELECT discord_id AS discordId, api_key AS key, key_id AS keyId, created_at AS createdAt FROM user_api_keys WHERE discord_id = ?"
     )
     .get(discordId) as UserApiKey | undefined;
   return row ?? null;
@@ -148,7 +152,9 @@ export function getApiKey(discordId: string): UserApiKey | null {
 
 export function clearApiKey(discordId: string): boolean {
   const conn = requireDb();
-  const r = conn.prepare("DELETE FROM user_api_keys WHERE discord_id = ?").run(discordId);
+  const r = conn
+    .prepare("DELETE FROM user_api_keys WHERE discord_id = ?")
+    .run(discordId);
   return r.changes > 0;
 }
 
@@ -158,6 +164,7 @@ export function clearApiKey(discordId: string): boolean {
  */
 export const apiKeyStore = {
   get: getApiKey,
-  set: (discordId: string, key: string, keyId: string | null) => setApiKey(discordId, key, keyId),
+  set: (discordId: string, key: string, keyId: string | null) =>
+    setApiKey(discordId, key, keyId),
   clear: clearApiKey,
 };

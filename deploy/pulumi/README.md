@@ -14,8 +14,10 @@ import { SorolensAws } from "@sorolens/pulumi";
 
 const sorolens = new SorolensAws("sorolens", {
   apiImage: "123456789012.dkr.ecr.us-east-1.amazonaws.com/sorolens-api:0.1.0",
-  indexerImage: "123456789012.dkr.ecr.us-east-1.amazonaws.com/sorolens-indexer:0.1.0",
-  dashboardImage: "123456789012.dkr.ecr.us-east-1.amazonaws.com/sorolens-dashboard:0.1.0",
+  indexerImage:
+    "123456789012.dkr.ecr.us-east-1.amazonaws.com/sorolens-indexer:0.1.0",
+  dashboardImage:
+    "123456789012.dkr.ecr.us-east-1.amazonaws.com/sorolens-dashboard:0.1.0",
   certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/...",
   domainName: "sorolens.example.com",
   route53ZoneId: "Z0000000000000000000",

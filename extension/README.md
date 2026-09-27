@@ -57,14 +57,14 @@ between the two files is the `background` block and
 
 Open the popup → **Settings** (or the extension's Options page):
 
-| Setting | Where it is stored | Notes |
-| --- | --- | --- |
-| API key (#131) | `storage.local` | Scoped key; `write:contracts` lets the extension register contracts that are not indexed yet. Never synced, never sent to a page script. |
-| User ID | `storage.sync` | Sent as `X-User-ID`, the identity the `/watchlist` routes key on. Copy `sorolens_user_id` from the dashboard's `localStorage` to share one watchlist. |
-| API base URL | `storage.sync` | Defaults to `https://api.sorolens.xyz`. Host access is requested at save time, so self-hosted APIs work. |
-| Default network | `storage.sync` | `mainnet`, `testnet`, `futurenet` or `standalone`. |
-| Watchlist toggle | `storage.sync` | Off means "register for indexing only". |
-| Inline buttons | `storage.sync` | Off keeps detection (badge + popup) but injects no page UI. |
+| Setting          | Where it is stored | Notes                                                                                                                                                 |
+| ---------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API key (#131)   | `storage.local`    | Scoped key; `write:contracts` lets the extension register contracts that are not indexed yet. Never synced, never sent to a page script.              |
+| User ID          | `storage.sync`     | Sent as `X-User-ID`, the identity the `/watchlist` routes key on. Copy `sorolens_user_id` from the dashboard's `localStorage` to share one watchlist. |
+| API base URL     | `storage.sync`     | Defaults to `https://api.sorolens.xyz`. Host access is requested at save time, so self-hosted APIs work.                                              |
+| Default network  | `storage.sync`     | `mainnet`, `testnet`, `futurenet` or `standalone`.                                                                                                    |
+| Watchlist toggle | `storage.sync`     | Off means "register for indexing only".                                                                                                               |
+| Inline buttons   | `storage.sync`     | Off keeps detection (badge + popup) but injects no page UI.                                                                                           |
 
 ## What the button does
 
@@ -99,7 +99,7 @@ Notes on the design:
 - The **content script does no network I/O**. It detects IDs, injects buttons
   and forwards clicks to the service worker, so the API key stays out of the
   page context and the same client code serves the popup.
-- Buttons are inserted *after* the matched text node or link instead of
+- Buttons are inserted _after_ the matched text node or link instead of
   rewriting text nodes, so React-based explorers can re-render freely. The
   rescan MutationObserver ignores its own mutations via the
   `data-sorolens-ui` attribute.

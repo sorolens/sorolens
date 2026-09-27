@@ -300,6 +300,28 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		// envelope.
 		"POST /api/v1/contracts/{id}/verify":      true,
 		"GET /api/v1/contracts/{id}/verification": true,
+		// User-defined alert rules: the rule language surface (authoring,
+		// validation, preview, catalog). It stays v1-only until the v2
+		// envelope is defined for rule documents.
+		"GET /api/v1/rules":           true,
+		"GET /api/v1/rules/metrics":   true,
+		"GET /api/v1/rules/library":   true,
+		"POST /api/v1/rules":          true,
+		"POST /api/v1/rules/validate": true,
+		"POST /api/v1/rules/preview":  true,
+		"PATCH /api/v1/rules/{id}":    true,
+		"DELETE /api/v1/rules/{id}":   true,
+		// Contract groups (#405): a per-user portfolio surface that has not
+		// been given the v2 envelope yet.
+		"GET /api/v1/groups":                                true,
+		"POST /api/v1/groups":                               true,
+		"GET /api/v1/groups/{id}":                           true,
+		"PATCH /api/v1/groups/{id}":                         true,
+		"DELETE /api/v1/groups/{id}":                        true,
+		"GET /api/v1/groups/{id}/stats":                     true,
+		"POST /api/v1/groups/{id}/contracts":                true,
+		"DELETE /api/v1/groups/{id}/contracts":              true,
+		"DELETE /api/v1/groups/{id}/contracts/{contractId}": true,
 	}
 
 	var missing []string

@@ -110,7 +110,10 @@ function GroupDetailContent({ id }: { id: string }) {
     <div>
       <header className="mb-8">
         <div className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
-          <Link href="/groups" className="hover:text-[var(--color-text-primary)]">
+          <Link
+            href="/groups"
+            className="hover:text-[var(--color-text-primary)]"
+          >
             Groups
           </Link>{" "}
           /{" "}
@@ -168,7 +171,10 @@ function GroupDetailContent({ id }: { id: string }) {
           <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-12 text-center">
             <p className="text-sm text-[var(--color-text-secondary)]">
               No contracts in this group yet. Open a contract and use{" "}
-              <span className="text-[var(--color-text-primary)]">Add to group</span>.
+              <span className="text-[var(--color-text-primary)]">
+                Add to group
+              </span>
+              .
             </p>
           </div>
         ) : (

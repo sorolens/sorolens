@@ -39,6 +39,19 @@ type Store interface {
 	ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error)
 	SearchContracts(ctx context.Context, query string, limit int) ([]Contract, error)
 
+	// SearchEvents returns up to limit events whose transaction hash
+	// contains query (case-insensitive prefix/substring match), newest
+	// first. Results are deduplicated by tx_hash so a transaction that
+	// emitted many events contributes only one row. Part of the global
+	// search endpoint (issue #159).
+	SearchEvents(ctx context.Context, query string, limit int) ([]Event, error)
+
+	// SearchFunctions returns up to limit distinct contract function names
+	// containing query (case-insensitive prefix/substring match), each
+	// paired with its most recently recorded invocation. Part of the
+	// global search endpoint (issue #159).
+	SearchFunctions(ctx context.Context, query string, limit int) ([]FunctionMatch, error)
+
 	// BatchInsertEvents inserts events, ignoring duplicates by primary key.
 	// All rows are sent in a single network round-trip.
 	BatchInsertEvents(ctx context.Context, events []Event) error

@@ -15,9 +15,7 @@
       "metric": "invocations",
       "horizon": 30,
       "daily_count": 1,
-      "points": [
-        { "date": "2026-02-01", "value": 4, "lower": 2, "upper": 6 }
-      ]
+      "points": [{ "date": "2026-02-01", "value": 4, "lower": 2, "upper": 6 }]
     }
   ]
 }

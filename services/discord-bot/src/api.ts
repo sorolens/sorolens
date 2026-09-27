@@ -66,7 +66,11 @@ export interface ApiKeyGrant {
 }
 
 /** Scopes granted to each contributor's key. Read the surfaces the bot exposes. */
-export const USER_KEY_SCOPES = ["read:contracts", "read:watchdog", "write:contracts"];
+export const USER_KEY_SCOPES = [
+  "read:contracts",
+  "read:watchdog",
+  "write:contracts",
+];
 
 /** Contract ids are Stellar contract strkeys: 56 chars starting with `C`. */
 export function isValidContractId(id: string): boolean {
@@ -91,7 +95,10 @@ export class SorolensApi {
   }
 
   /** `GET /api/v1/contracts/{id}` — current status of one tracked contract. */
-  async getContractStatus(id: string, creds: ApiCredentials = {}): Promise<ContractStatus> {
+  async getContractStatus(
+    id: string,
+    creds: ApiCredentials = {}
+  ): Promise<ContractStatus> {
     const body = await this.request<{
       id: string;
       network?: string;
@@ -114,13 +121,13 @@ export class SorolensApi {
   async listAlerts(
     id: string,
     limit = 5,
-    creds: ApiCredentials = {},
+    creds: ApiCredentials = {}
   ): Promise<ContractAlert[]> {
     const capped = Math.min(Math.max(limit, 1), 10);
     const body = await this.request<{ alerts?: RawAlert[] }>(
       "GET",
       `/api/v1/watchdog/contracts/${encodeURIComponent(id)}/alerts?limit=${capped}`,
-      creds,
+      creds
     );
     return (body.alerts ?? []).slice(0, capped).map(normalizeAlert);
   }
@@ -130,7 +137,7 @@ export class SorolensApi {
     const body = await this.request<{ items?: { contract_id?: string }[] }>(
       "GET",
       "/api/v1/watchlist",
-      creds,
+      creds
     );
     return (body.items ?? [])
       .map((i) => i.contract_id)
@@ -138,22 +145,28 @@ export class SorolensApi {
   }
 
   /** `POST /api/v1/watchlist` — returns whether the contract is now watched. */
-  async addToWatchlist(id: string, creds: ApiCredentials = {}): Promise<boolean> {
+  async addToWatchlist(
+    id: string,
+    creds: ApiCredentials = {}
+  ): Promise<boolean> {
     const body = await this.request<{ in_watchlist?: boolean }>(
       "POST",
       "/api/v1/watchlist",
       creds,
-      { contract_id: id },
+      { contract_id: id }
     );
     return body.in_watchlist ?? true;
   }
 
   /** `DELETE /api/v1/watchlist/{id}` — returns whether it is still watched. */
-  async removeFromWatchlist(id: string, creds: ApiCredentials = {}): Promise<boolean> {
+  async removeFromWatchlist(
+    id: string,
+    creds: ApiCredentials = {}
+  ): Promise<boolean> {
     const body = await this.request<{ in_watchlist?: boolean }>(
       "DELETE",
       `/api/v1/watchlist/${encodeURIComponent(id)}`,
-      creds,
+      creds
     );
     return body.in_watchlist ?? false;
   }
@@ -164,22 +177,31 @@ export class SorolensApi {
    * returned exactly once and must be stored by the caller. Used at OAuth
    * link time to give each user their own identity.
    */
-  async provisionApiKey(name: string, scopes: string[] = USER_KEY_SCOPES): Promise<ApiKeyGrant> {
-    const body = await this.request<{ id: string; key?: string; key_prefix?: string }>(
-      "POST",
-      "/api/v1/api-keys",
-      {},
-      { name, scopes },
-    );
+  async provisionApiKey(
+    name: string,
+    scopes: string[] = USER_KEY_SCOPES
+  ): Promise<ApiKeyGrant> {
+    const body = await this.request<{
+      id: string;
+      key?: string;
+      key_prefix?: string;
+    }>("POST", "/api/v1/api-keys", {}, { name, scopes });
     if (!body.key) {
-      throw new ApiError(502, "API returned no key material for the new API key");
+      throw new ApiError(
+        502,
+        "API returned no key material for the new API key"
+      );
     }
     return { id: body.id, key: body.key, keyPrefix: body.key_prefix ?? "" };
   }
 
   /** `DELETE /api/v1/api-keys/{id}` — revoke a provisioned key (best effort). */
   async revokeApiKey(id: string): Promise<void> {
-    await this.request<void>("DELETE", `/api/v1/api-keys/${encodeURIComponent(id)}`, {});
+    await this.request<void>(
+      "DELETE",
+      `/api/v1/api-keys/${encodeURIComponent(id)}`,
+      {}
+    );
   }
 
   private headers(creds: ApiCredentials): Record<string, string> {
@@ -197,7 +219,7 @@ export class SorolensApi {
     method: string,
     path: string,
     creds: ApiCredentials,
-    body?: unknown,
+    body?: unknown
   ): Promise<T> {
     const headers = this.headers(creds);
     if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -213,7 +235,10 @@ export class SorolensApi {
         signal: controller.signal,
       });
     } catch (err) {
-      throw new ApiError(0, `could not reach Sorolens API: ${err instanceof Error ? err.message : String(err)}`);
+      throw new ApiError(
+        0,
+        `could not reach Sorolens API: ${err instanceof Error ? err.message : String(err)}`
+      );
     } finally {
       clearTimeout(timer);
     }
@@ -232,7 +257,11 @@ export class SorolensApi {
 
     if (!res.ok) {
       const obj = (parsed ?? {}) as { error?: string; code?: string };
-      throw new ApiError(res.status, obj.error ?? res.statusText ?? "request failed", obj.code);
+      throw new ApiError(
+        res.status,
+        obj.error ?? res.statusText ?? "request failed",
+        obj.code
+      );
     }
     return (parsed ?? {}) as T;
   }

@@ -29,10 +29,12 @@ const discordGuildId = required("DISCORD_GUILD_ID");
 const rest = new REST({ version: "10" }).setToken(discordToken);
 
 async function main() {
-  console.log(`Registering ${commandDefinitions.length} commands on guild ${discordGuildId}...`);
+  console.log(
+    `Registering ${commandDefinitions.length} commands on guild ${discordGuildId}...`
+  );
   await rest.put(
     Routes.applicationGuildCommands(discordClientId, discordGuildId),
-    { body: commandDefinitions },
+    { body: commandDefinitions }
   );
   console.log("Commands registered.");
 }

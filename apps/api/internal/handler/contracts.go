@@ -941,6 +941,8 @@ func (h *Handler) StreamEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"events": resp})
 }
 
+// SearchContracts handles GET /api/v1/search?q=. It searches contracts by ID
+// or label (issue #159).
 func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	limit := intQuery(r, "limit", 10)
@@ -952,13 +954,9 @@ func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if contracts == nil {
-		contracts = []store.Contract{}
-	}
-
-	var res []contractResponse
-	for _, c := range contracts {
-		res = append(res, contractResponse{
+	res := make([]contractResponse, len(contracts))
+	for i, c := range contracts {
+		res[i] = contractResponse{
 			ID:                 c.ID,
 			Network:            c.Network,
 			Label:              c.Label,
@@ -967,14 +965,8 @@ func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
 			BackfillCompleteAt: c.BackfillCompleteAt,
 			Status:             c.Status,
 			AddedAt:            c.AddedAt,
-		})
+		}
 	}
 
-	// API typically returns a list of results wrapped or just the array.
-	// We'll return an array directly for simplicity or wrapped in { results: ... } if preferred.
-	// Looking at other routes, List returns { items: [...] }. But a simple array is fine too.
-	// Wait, List returns { items: [...], next_cursor: ... }. Let's return { items: [...] } for consistency.
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"items": res,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"items": res})
 }

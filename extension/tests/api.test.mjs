@@ -29,12 +29,12 @@ test("buildUrl joins the base URL, path and query params", () => {
   const api = client();
   assert.equal(
     api.buildUrl("/api/v1/contracts", { limit: 10, network: "testnet" }),
-    `${API_BASE}/api/v1/contracts?limit=10&network=testnet`,
+    `${API_BASE}/api/v1/contracts?limit=10&network=testnet`
   );
   // Empty/undefined params are dropped.
   assert.equal(
     api.buildUrl("/api/v1/contracts", { cursor: "", network: undefined }),
-    `${API_BASE}/api/v1/contracts`,
+    `${API_BASE}/api/v1/contracts`
   );
 });
 
@@ -54,7 +54,9 @@ test("buildHeaders omits credentials that are not configured", () => {
 });
 
 test("getContract returns null on 404 instead of throwing", async () => {
-  const fetchStub = installFetch(() => jsonResponse(404, { error: "not found" }));
+  const fetchStub = installFetch(() =>
+    jsonResponse(404, { error: "not found" })
+  );
   try {
     assert.equal(await client().getContract(CONTRACT_ID), null);
   } finally {
@@ -105,7 +107,10 @@ test("getTrackingStatus reports partial failures without rejecting", async () =>
 test("track registers an untracked contract and adds it to the watchlist", async () => {
   const fetchStub = installFetch((request) => {
     const { method, url } = request;
-    if (method === "GET" && url.pathname === `/api/v1/contracts/${CONTRACT_ID}`) {
+    if (
+      method === "GET" &&
+      url.pathname === `/api/v1/contracts/${CONTRACT_ID}`
+    ) {
       return jsonResponse(404, { error: "not found" });
     }
     if (method === "POST" && url.pathname === "/api/v1/contracts") {
@@ -134,11 +139,17 @@ test("track registers an untracked contract and adds it to the watchlist", async
 test("track keeps the watchlist add when registration is forbidden", async () => {
   const fetchStub = installFetch((request) => {
     const { method, url } = request;
-    if (method === "GET" && url.pathname === `/api/v1/contracts/${CONTRACT_ID}`) {
+    if (
+      method === "GET" &&
+      url.pathname === `/api/v1/contracts/${CONTRACT_ID}`
+    ) {
       return jsonResponse(404, { error: "not found" });
     }
     if (method === "POST" && url.pathname === "/api/v1/contracts") {
-      return jsonResponse(403, { error: "missing scope", required: "write:contracts" });
+      return jsonResponse(403, {
+        error: "missing scope",
+        required: "write:contracts",
+      });
     }
     if (method === "POST" && url.pathname === "/api/v1/watchlist") {
       return jsonResponse(201, { in_watchlist: true });
@@ -158,7 +169,8 @@ test("track keeps the watchlist add when registration is forbidden", async () =>
 
 test("untrack calls DELETE and returns the new membership", async () => {
   const fetchStub = installFetch((request) => {
-    if (request.method !== "DELETE") return jsonResponse(500, { error: "bad method" });
+    if (request.method !== "DELETE")
+      return jsonResponse(500, { error: "bad method" });
     return jsonResponse(200, { in_watchlist: false });
   });
   try {
@@ -166,7 +178,7 @@ test("untrack calls DELETE and returns the new membership", async () => {
     assert.deepEqual(result, { contractId: CONTRACT_ID, inWatchlist: false });
     assert.equal(
       fetchStub.calls[0].url.pathname,
-      `/api/v1/watchlist/${CONTRACT_ID}`,
+      `/api/v1/watchlist/${CONTRACT_ID}`
     );
   } finally {
     fetchStub.restore();
@@ -187,7 +199,7 @@ test("request aborts and reports a timeout", async () => {
     const api = client({ timeoutMs: 5 });
     await assert.rejects(
       () => api.health(),
-      (error) => error instanceof SorolensApiError && error.code === "timeout",
+      (error) => error instanceof SorolensApiError && error.code === "timeout"
     );
   } finally {
     globalThis.fetch = previous;
@@ -198,7 +210,7 @@ test("listWatchlist maps items to contract ids", async () => {
   const fetchStub = installFetch(() =>
     jsonResponse(200, {
       items: [{ contract_id: CONTRACT_ID, added_at: "2026-01-01T00:00:00Z" }],
-    }),
+    })
   );
   try {
     assert.deepEqual(await client().listWatchlist(), [CONTRACT_ID]);
@@ -210,15 +222,15 @@ test("listWatchlist maps items to contract ids", async () => {
 test("describeError explains the common HTTP failures", () => {
   assert.equal(
     describeError(new SorolensApiError("nope", { status: 401 })),
-    "API key missing, invalid or revoked",
+    "API key missing, invalid or revoked"
   );
   assert.match(
     describeError(new SorolensApiError("missing scope", { status: 403 })),
-    /required scope or role not granted/,
+    /required scope or role not granted/
   );
   assert.equal(
     describeError(new SorolensApiError("slow down", { status: 429 })),
-    "Rate limited by the Sorolens API",
+    "Rate limited by the Sorolens API"
   );
   assert.equal(describeError(new Error("boom")), "boom");
   assert.equal(describeError("boom"), "boom");

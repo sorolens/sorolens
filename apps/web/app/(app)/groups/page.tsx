@@ -112,7 +112,10 @@ export default function GroupsPage() {
       {loading && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="rounded-lg border border-[var(--color-border)] p-4">
+            <div
+              key={i}
+              className="rounded-lg border border-[var(--color-border)] p-4"
+            >
               <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <CardSkeleton />
                 <CardSkeleton />
@@ -159,7 +162,9 @@ export default function GroupsPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-[var(--color-text-secondary)]">
                     {group.stats.contract_count}{" "}
-                    {group.stats.contract_count === 1 ? "contract" : "contracts"}
+                    {group.stats.contract_count === 1
+                      ? "contract"
+                      : "contracts"}
                   </span>
                   <button
                     type="button"

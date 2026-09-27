@@ -35,7 +35,9 @@ test("Chrome uses a module service worker, Firefox uses a module event page", ()
 
   const firefox = readManifest("manifest.firefox.json");
   assert.equal(firefox.background.type, "module");
-  assert.deepEqual(firefox.background.scripts, ["src/background/service-worker.js"]);
+  assert.deepEqual(firefox.background.scripts, [
+    "src/background/service-worker.js",
+  ]);
   assert.match(firefox.browser_specific_settings.gecko.id, /@/);
 });
 
@@ -43,7 +45,7 @@ test("content scripts run on the three explorer origins", () => {
   for (const name of ["manifest.json", "manifest.firefox.json"]) {
     const manifest = readManifest(name);
     const matches = new Set(
-      manifest.content_scripts.flatMap((script) => script.matches),
+      manifest.content_scripts.flatMap((script) => script.matches)
     );
     for (const origin of EXPLORER_MATCHES) {
       assert.ok(matches.has(origin), `${name} is missing ${origin}`);
@@ -61,7 +63,7 @@ test("host permissions cover the API and the explorer origins", () => {
     for (const origin of ["https://api.sorolens.xyz/*", ...EXPLORER_MATCHES]) {
       assert.ok(
         manifest.host_permissions.includes(origin),
-        `${name} is missing host permission ${origin}`,
+        `${name} is missing host permission ${origin}`
       );
     }
   }
@@ -83,7 +85,10 @@ test("every file referenced by the manifests exists", () => {
       ]),
     ].filter(Boolean);
     for (const file of referenced) {
-      assert.ok(existsSync(join(ROOT, file)), `${name} references missing ${file}`);
+      assert.ok(
+        existsSync(join(ROOT, file)),
+        `${name} references missing ${file}`
+      );
     }
   }
 });
@@ -92,19 +97,22 @@ test("web accessible resources cover the dynamic content-script imports", () => 
   for (const name of ["manifest.json", "manifest.firefox.json"]) {
     const manifest = readManifest(name);
     const blocked = new Set(
-      manifest.content_scripts.flatMap((script) => script.matches),
+      manifest.content_scripts.flatMap((script) => script.matches)
     );
     const sharedModules = readdirSync(join(ROOT, "src/shared")).filter((file) =>
-      file.endsWith(".js"),
+      file.endsWith(".js")
     );
     assert.ok(sharedModules.length > 0);
     for (const entry of manifest.web_accessible_resources) {
       for (const match of entry.matches) {
-        assert.ok(blocked.has(match), `${name}: ${match} is not a content-script origin`);
+        assert.ok(
+          blocked.has(match),
+          `${name}: ${match} is not a content-script origin`
+        );
       }
     }
     const patterns = manifest.web_accessible_resources.flatMap(
-      (entry) => entry.resources,
+      (entry) => entry.resources
     );
     assert.ok(patterns.includes("src/content/*.js"));
     assert.ok(patterns.includes("src/shared/*.js"));
@@ -128,12 +136,12 @@ test("the extension declares no remote code or eval", () => {
     assert.equal(
       /\bnew Function\s*\(/.test(source),
       false,
-      `${module} uses new Function()`,
+      `${module} uses new Function()`
     );
     assert.equal(
       /<script[^>]+src=["']https?:/.test(source),
       false,
-      `${module} loads remote script`,
+      `${module} loads remote script`
     );
   }
 });

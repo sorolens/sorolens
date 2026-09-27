@@ -35,18 +35,14 @@ const DATA: Item[] = [
 
 describe("DataTable", () => {
   it("renders column headers", () => {
-    render(
-      <DataTable columns={COLUMNS} data={DATA} rowKey={(i) => i.id} />,
-    );
+    render(<DataTable columns={COLUMNS} data={DATA} rowKey={(i) => i.id} />);
     expect(screen.getByText("ID")).toBeDefined();
     expect(screen.getByText("Name")).toBeDefined();
     expect(screen.getByText("Count")).toBeDefined();
   });
 
   it("renders all rows using accessors", () => {
-    render(
-      <DataTable columns={COLUMNS} data={DATA} rowKey={(i) => i.id} />,
-    );
+    render(<DataTable columns={COLUMNS} data={DATA} rowKey={(i) => i.id} />);
     // 'a', 'b', 'c' come from default string accessor for id column
     expect(screen.getByText("a")).toBeDefined();
     expect(screen.getByText("b")).toBeDefined();
@@ -62,7 +58,7 @@ describe("DataTable", () => {
         data={DATA}
         rowKey={(i) => i.id}
         loading={true}
-      />,
+      />
     );
     // Should not render table rows
     const tableEl = container.querySelector("table");
@@ -79,7 +75,7 @@ describe("DataTable", () => {
         data={[]}
         rowKey={(i) => i.id}
         emptyState={<p>Nothing here</p>}
-      />,
+      />
     );
     expect(screen.getByText("Nothing here")).toBeDefined();
   });
@@ -91,7 +87,7 @@ describe("DataTable", () => {
         data={DATA}
         rowKey={(i) => i.id}
         emptyState={<p>Nothing here</p>}
-      />,
+      />
     );
     expect(screen.queryByText("Nothing here")).toBeNull();
   });
@@ -106,7 +102,7 @@ describe("DataTable", () => {
         onSort={onSort}
         sortColumn="id"
         sortDirection="asc"
-      />,
+      />
     );
     fireEvent.click(screen.getByText("Name"));
     expect(onSort).toHaveBeenCalledWith("name");
@@ -120,7 +116,7 @@ describe("DataTable", () => {
         data={DATA}
         rowKey={(i) => i.id}
         onSort={onSort}
-      />,
+      />
     );
     fireEvent.click(screen.getByText("Count"));
     expect(onSort).not.toHaveBeenCalled();
@@ -134,7 +130,7 @@ describe("DataTable", () => {
         rowKey={(i) => i.id}
         sortColumn="id"
         sortDirection="asc"
-      />,
+      />
     );
     expect(screen.getByText("▲")).toBeDefined();
 
@@ -145,7 +141,7 @@ describe("DataTable", () => {
         rowKey={(i) => i.id}
         sortColumn="id"
         sortDirection="desc"
-      />,
+      />
     );
     expect(screen.getByText("▼")).toBeDefined();
   });
@@ -158,7 +154,7 @@ describe("DataTable", () => {
         data={DATA}
         rowKey={(i) => i.id}
         onRowClick={onRowClick}
-      />,
+      />
     );
     // Click row containing "Alpha"
     fireEvent.click(screen.getByText("Alpha"));
@@ -173,7 +169,7 @@ describe("DataTable", () => {
         data={DATA}
         rowKey={(i) => i.id}
         loading={true}
-      />,
+      />
     );
     expect(container.querySelector("tbody")).toBeNull();
     expect(screen.queryByText("Alpha")).toBeNull();

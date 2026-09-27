@@ -52,21 +52,32 @@ export function statusEmbed(status: ContractStatus): EmbedBuilder {
     .setColor(colorForStatus(status.status))
     .setTitle(`Contract ${contractTitle(status)}`)
     .addFields(
-      { name: "Status", value: `\`${status.status || "unknown"}\``, inline: true },
+      {
+        name: "Status",
+        value: `\`${status.status || "unknown"}\``,
+        inline: true,
+      },
       { name: "Network", value: status.network || "unknown", inline: true },
-      { name: "Contract", value: `\`${status.id}\`` },
+      { name: "Contract", value: `\`${status.id}\`` }
     )
     .setFooter({ text: "Sorolens • /status" })
     .setTimestamp(new Date());
 
   if (status.wasmHash) {
-    embed.addFields({ name: "Wasm hash", value: `\`${shortId(status.wasmHash)}\``, inline: true });
+    embed.addFields({
+      name: "Wasm hash",
+      value: `\`${shortId(status.wasmHash)}\``,
+      inline: true,
+    });
   }
   return embed;
 }
 
 /** Embed for `/alerts <contract> [limit]`. */
-export function alertsEmbed(contractId: string, alerts: ContractAlert[]): EmbedBuilder {
+export function alertsEmbed(
+  contractId: string,
+  alerts: ContractAlert[]
+): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setTitle(`Alerts for ${shortId(contractId)}`)
     .setFooter({ text: "Sorolens • /alerts" })
@@ -83,8 +94,11 @@ export function alertsEmbed(contractId: string, alerts: ContractAlert[]): EmbedB
     .setColor(colorForSeverity(top.severity))
     .setDescription(
       alerts
-        .map((a) => `**${a.severity}** — ${a.message}\n\u200b\u200bledger \`${a.ledger}\``)
-        .join("\n\n"),
+        .map(
+          (a) =>
+            `**${a.severity}** — ${a.message}\n\u200b\u200bledger \`${a.ledger}\``
+        )
+        .join("\n\n")
     );
   return embed;
 }
@@ -94,24 +108,34 @@ export function watchlistEmbed(
   contractId: string,
   watched: boolean,
   action: "watch" | "unwatch",
-  count?: number,
+  count?: number
 ): EmbedBuilder {
   const embed = new EmbedBuilder()
-    .setTitle(action === "watch" ? "Watchlist updated" : "Removed from watchlist")
+    .setTitle(
+      action === "watch" ? "Watchlist updated" : "Removed from watchlist"
+    )
     .setDescription(
       action === "watch"
         ? `\`${contractId}\` is now on your Sorolens watchlist. You will see it on the dashboard.`
-        : `\`${contractId}\` is no longer on your Sorolens watchlist.`,
+        : `\`${contractId}\` is no longer on your Sorolens watchlist.`
     )
     .setColor(watched ? 0x22c55e : 0x64748b)
     .setFooter({ text: "Sorolens • /watch" })
     .setTimestamp(new Date());
 
   if (typeof count === "number") {
-    embed.addFields({ name: "Watching", value: `${count} contract${count === 1 ? "" : "s"}`, inline: true });
+    embed.addFields({
+      name: "Watching",
+      value: `${count} contract${count === 1 ? "" : "s"}`,
+      inline: true,
+    });
   }
   // `watched` reflects the API's post-condition; surface it so the user can
   // tell a no-op apart from a change.
-  embed.addFields({ name: "In watchlist", value: watched ? "yes" : "no", inline: true });
+  embed.addFields({
+    name: "In watchlist",
+    value: watched ? "yes" : "no",
+    inline: true,
+  });
   return embed;
 }

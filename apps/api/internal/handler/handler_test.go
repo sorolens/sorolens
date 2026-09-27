@@ -392,7 +392,7 @@ func TestSearchContracts(t *testing.T) {
 	if items[0]["id"] != "C12345" {
 		t.Fatalf("want C12345, got %v", items[0]["id"])
 	}
-	
+
 	// test hitting search with a query matching multiple (or limit)
 	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=C", nil)
 	w2 := httptest.NewRecorder()
