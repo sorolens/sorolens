@@ -279,6 +279,10 @@ The short description must:
 - Use the imperative mood ("add", not "adds" or "added").
 - Not end with a period.
 
+> [!NOTE]
+> We use `commitlint` and Husky to enforce this format locally. A commit with a bad message will be rejected.
+
+
 ### Types and examples
 
 | Type       | When to use                                                        | Example                                                         |
