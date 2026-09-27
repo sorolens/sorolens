@@ -49,6 +49,14 @@ function cardSave(testId: string) {
   });
 }
 
+// The section is also named "Default network" via aria-labelledby, so scope to
+// the card before asking for the labelled control (mirrors settings.spec.ts).
+function networkSelect() {
+  return within(screen.getByTestId("settings-network")).getByLabelText(
+    "Default network"
+  );
+}
+
 describe("SettingsPage", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -90,9 +98,7 @@ describe("SettingsPage", () => {
 
     await renderPage();
 
-    expect(
-      (screen.getByLabelText("Default network") as HTMLSelectElement).value
-    ).toBe("mainnet");
+    expect((networkSelect() as HTMLSelectElement).value).toBe("mainnet");
     expect(
       (screen.getByLabelText("Email address") as HTMLInputElement).value
     ).toBe("dev@example.com");
@@ -110,7 +116,7 @@ describe("SettingsPage", () => {
   it("saves the default network and switches the header selector", async () => {
     await renderPage();
 
-    fireEvent.change(screen.getByLabelText("Default network"), {
+    fireEvent.change(networkSelect(), {
       target: { value: "futurenet" },
     });
     fireEvent.click(cardSave("settings-network"));

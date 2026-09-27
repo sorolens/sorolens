@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -33,11 +34,38 @@ type MockStore struct {
 	contractVersions   map[string][]ContractVersion
 	alertGroups        []AlertGroup
 	labels             []Label
+	contracts             map[string]Contract
+	events                []Event
+	invocations           []Invocation
+	storageEntries        []StorageEntry
+	syncStates            map[string]SyncState
+	globalStats           GlobalStats
+	monitored             map[string]MonitoredContract
+	healthChecks          []HealthCheck
+	alerts                []ContractAlert
+	apiKeys               []APIKey
+	contractUpgrades      []ContractUpgrade
+	contractTags          map[string]map[string]bool
+	watchlist             map[string]map[string]bool
+	alertSubscriptions    []AlertSubscription
+	users                 map[string]User
+	healthScores          map[string]ContractHealthScore
+	wasmBinaries          map[string]ContractWasm
+	contractSpecs         map[string]ContractSpec
+	failedEvents          map[int64]FailedEvent
+	failedEventSeq        int64
+	indexerCursors        map[string]uint32
+	contractVersions      map[string][]ContractVersion
+	contractVerifications map[string]ContractVerification
+	alertGroups           []AlertGroup
+	labels                []Label
 
 	// Error injection
 	UpsertContractErr           error
 	GetContractErr              error
 	ListContractsErr            error
+	DeleteContractsErr          error
+	SetContractLabelErr         error
 	GetGlobalStatsErr           error
 	ListEventsErr               error
 	ListInvocationsErr          error
@@ -54,6 +82,14 @@ type MockStore struct {
 	RecordContractVersionErr    error
 	ListContractVersionsErr     error
 	GetLatestContractVersionErr error
+
+	UpsertVerificationErr error
+	GetVerificationErr    error
+
+	UpsertContractSpecErr error
+	GetContractSpecErr    error
+	GetWasmErr            error
+
 	InsertFailedEventErr error
 	ListFailedEventsErr  error
 	GetFailedEventErr    error
@@ -62,7 +98,10 @@ type MockStore struct {
 
 func (m *MockStore) UpsertLabel(_ context.Context, label Label) error {
 	for i, existing := range m.labels {
-		if existing.Label == label.Label && (label.Public || existing.WorkspaceID == label.WorkspaceID) { m.labels[i] = label; return nil }
+		if existing.Label == label.Label && (label.Public || existing.WorkspaceID == label.WorkspaceID) {
+			m.labels[i] = label
+			return nil
+		}
 	}
 	m.labels = append(m.labels, label)
 	return nil
@@ -72,15 +111,27 @@ func (m *MockStore) ListLabels(_ context.Context, workspaceID, query string) ([]
 	query = strings.ToLower(query)
 	var out []Label
 	for _, label := range m.labels {
-		if !label.Public && label.WorkspaceID != workspaceID { continue }
-		if query == "" || strings.Contains(strings.ToLower(label.Label), query) || strings.Contains(strings.ToLower(label.Value), query) { out = append(out, label) }
+		if !label.Public && label.WorkspaceID != workspaceID {
+			continue
+		}
+		if query == "" || strings.Contains(strings.ToLower(label.Label), query) || strings.Contains(strings.ToLower(label.Value), query) {
+			out = append(out, label)
+		}
 	}
 	return out, nil
 }
 
 func (m *MockStore) ResolveLabel(_ context.Context, workspaceID, query string) (Label, error) {
-	for _, label := range m.labels { if label.Public && strings.EqualFold(label.Label, query) { return label, nil } }
-	for _, label := range m.labels { if !label.Public && label.WorkspaceID == workspaceID && strings.EqualFold(label.Label, query) { return label, nil } }
+	for _, label := range m.labels {
+		if label.Public && strings.EqualFold(label.Label, query) {
+			return label, nil
+		}
+	}
+	for _, label := range m.labels {
+		if !label.Public && label.WorkspaceID == workspaceID && strings.EqualFold(label.Label, query) {
+			return label, nil
+		}
+	}
 	return Label{}, ErrNotFound
 }
 
@@ -97,6 +148,21 @@ func NewMockStore() *MockStore {
 		indexerCursors:     make(map[string]uint32),
 		contractNotes:      make([]ContractNote, 0),
 		contractVersions:   make(map[string][]ContractVersion),
+		contracts:             make(map[string]Contract),
+		syncStates:            make(map[string]SyncState),
+		monitored:             make(map[string]MonitoredContract),
+		contractTags:          make(map[string]map[string]bool),
+		watchlist:             make(map[string]map[string]bool),
+		alerts:                make([]ContractAlert, 0),
+		alertSubscriptions:    make([]AlertSubscription, 0),
+		users:                 make(map[string]User),
+		wasmBinaries:          make(map[string]ContractWasm),
+		failedEvents:          make(map[int64]FailedEvent),
+		labels:                make([]Label, 0),
+		indexerCursors:        make(map[string]uint32),
+		contractSpecs:         make(map[string]ContractSpec),
+		contractVerifications: make(map[string]ContractVerification),
+		contractVersions:      make(map[string][]ContractVersion),
 	}
 }
 
@@ -121,6 +187,7 @@ func (m *MockStore) GetContract(_ context.Context, contractID string) (Contract,
 	if !ok {
 		return Contract{}, ErrNotFound
 	}
+	c.Tags = m.tagsFor(contractID)
 	return c, nil
 }
 
@@ -142,15 +209,115 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 		if f.Status != "" && c.Status != f.Status {
 			continue
 		}
+		if f.Tag != "" && !m.contractTags[c.ID][f.Tag] {
+			continue
+		}
+		c.Tags = m.tagsFor(c.ID)
 		out = append(out, c)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		var cmp int
+		switch f.Sort {
+		case "label":
+			cmp = strings.Compare(a.Label, b.Label)
+		case "network":
+			cmp = strings.Compare(a.Network, b.Network)
+		case "status":
+			cmp = strings.Compare(a.Status, b.Status)
+		case "added_at":
+			cmp = a.AddedAt.Compare(b.AddedAt)
+		default:
+			cmp = strings.Compare(a.ID, b.ID)
+		}
+		// The contract ID is the stable tie-breaker, mirroring the SQL.
+		if cmp == 0 {
+			cmp = strings.Compare(a.ID, b.ID)
+		}
+		if strings.EqualFold(f.SortDir, "desc") {
+			return cmp > 0
+		}
+		return cmp < 0
+	})
 	var nextCursor string
 	if len(out) > limit {
 		nextCursor = out[limit-1].ID
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+// tagsFor returns the sorted tags for a contract, always non-nil.
+func (m *MockStore) tagsFor(contractID string) []string {
+	set := m.contractTags[contractID]
+	out := make([]string, 0, len(set))
+	for tag := range set {
+		out = append(out, tag)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// filterOut returns items with every element for which drop returns true
+// removed, reusing the backing array.
+func filterOut[T any](items []T, drop func(T) bool) []T {
+	out := items[:0]
+	for _, item := range items {
+		if !drop(item) {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func (m *MockStore) DeleteContracts(_ context.Context, ids []string) (int64, error) {
+	if m.DeleteContractsErr != nil {
+		return 0, m.DeleteContractsErr
+	}
+	removed := make(map[string]bool, len(ids))
+	var deleted int64
+	for _, id := range ids {
+		if _, ok := m.contracts[id]; !ok {
+			continue
+		}
+		delete(m.contracts, id)
+		removed[id] = true
+		deleted++
+	}
+	if deleted == 0 {
+		return 0, nil
+	}
+	// Mirror the postgres transaction: drop every row that referenced the
+	// untracked contracts.
+	m.events = filterOut(m.events, func(e Event) bool { return removed[e.ContractID] })
+	m.invocations = filterOut(m.invocations, func(i Invocation) bool { return removed[i.ContractID] })
+	m.storageEntries = filterOut(m.storageEntries, func(se StorageEntry) bool { return removed[se.ContractID] })
+	m.contractUpgrades = filterOut(m.contractUpgrades, func(u ContractUpgrade) bool { return removed[u.ContractID] })
+	for id := range removed {
+		delete(m.syncStates, id)
+		delete(m.healthScores, id)
+		for _, items := range m.watchlist {
+			delete(items, id)
+		}
+	}
+	return deleted, nil
+}
+
+func (m *MockStore) SetContractLabel(_ context.Context, ids []string, label string) (int64, error) {
+	if m.SetContractLabelErr != nil {
+		return 0, m.SetContractLabelErr
+	}
+	var updated int64
+	for _, id := range ids {
+		c, ok := m.contracts[id]
+		if !ok {
+			continue
+		}
+		c.Label = label
+		m.contracts[id] = c
+		updated++
+	}
+	return updated, nil
 }
 
 func (m *MockStore) BatchInsertEvents(_ context.Context, events []Event) error {
@@ -210,7 +377,10 @@ func (m *MockStore) SetIndexerCursor(_ context.Context, network string, ledger u
 	if m.indexerCursors == nil {
 		m.indexerCursors = make(map[string]uint32)
 	}
-	m.indexerCursors[networkOrDefault(network)] = ledger
+	key := networkOrDefault(network)
+	if ledger > m.indexerCursors[key] {
+		m.indexerCursors[key] = ledger
+	}
 	return nil
 }
 
@@ -289,6 +459,38 @@ func jsonValueEqual(a, b any) bool {
 		return false
 	}
 	return string(ab) == string(bb)
+}
+
+func (m *MockStore) StreamEventsCSV(_ context.Context, contractID string, f EventFilters, w io.Writer) (err error) {
+	if m.ListEventsErr != nil {
+		return m.ListEventsErr
+	}
+	csvWriter, err := newEventsCSVWriter(w)
+	if err != nil {
+		return err
+	}
+	defer flushEventsCSV(csvWriter, &err)
+
+	// Copy before sorting: m.events is shared with every other reader, and the
+	// export order must match the Postgres query's ORDER BY rather than the
+	// order events happened to be inserted in.
+	matched := make([]Event, 0, len(m.events))
+	for _, e := range m.events {
+		if e.ContractID == contractID && matchesEventFilters(e, f) {
+			matched = append(matched, e)
+		}
+	}
+	sort.SliceStable(matched, func(i, j int) bool { return lessEventOrder(matched[i], matched[j]) })
+
+	var row []string
+	for _, e := range matched {
+		row = eventCSVRecord(e, eventJSON(e.TopicXDR), eventJSON(e.TopicDecoded), eventJSON(e.ValueDecoded))
+		if err := csvWriter.Write(row); err != nil {
+			return err
+		}
+	}
+	// flushEventsCSV reports any buffered or flush-time write failure.
+	return nil
 }
 
 func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string, limit int, f InvocationFilters) ([]Invocation, string, error) {
@@ -766,6 +968,27 @@ func (m *MockStore) ListAll(_ context.Context) ([]AlertSubscription, error) {
 	return out, nil
 }
 
+// ---- store.ContractTagStore -------------------------------------------------
+
+func (m *MockStore) AddContractTag(_ context.Context, contractID, tag string) error {
+	if m.contractTags[contractID] == nil {
+		m.contractTags[contractID] = make(map[string]bool)
+	}
+	m.contractTags[contractID][tag] = true
+	return nil
+}
+
+func (m *MockStore) RemoveContractTag(_ context.Context, contractID, tag string) error {
+	if m.contractTags[contractID] != nil {
+		delete(m.contractTags[contractID], tag)
+	}
+	return nil
+}
+
+func (m *MockStore) ListContractTags(_ context.Context, contractID string) ([]string, error) {
+	return m.tagsFor(contractID), nil
+}
+
 // ---- store.WatchlistStore ---------------------------------------------------
 
 func (m *MockStore) AddToWatchlist(_ context.Context, userID, contractID string) error {
@@ -933,7 +1156,6 @@ func (m *MockStore) GetLatestContractVersion(_ context.Context, contractID strin
 	}
 	return latest, nil
 }
-
 func (m *MockStore) SearchContracts(_ context.Context, query string, limit int) ([]Contract, error) {
 	if query == "" {
 		return []Contract{}, nil

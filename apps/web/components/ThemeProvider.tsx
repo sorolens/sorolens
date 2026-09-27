@@ -11,23 +11,36 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const THEME_KEY = "theme";
+
+/**
+ * Reads the stored theme. Called during the first client render, so the very
+ * first paint already matches the inline script in the root layout instead of
+ * starting from "system" and correcting itself a render later.
+ */
+function readStoredTheme(): Theme {
+  // Server render and any environment without storage fall back to "system".
+  if (typeof window === "undefined") return "system";
+  try {
+    const stored = window.localStorage.getItem(THEME_KEY);
+    if (stored === "light" || stored === "dark" || stored === "system") {
+      return stored;
+    }
+  } catch {
+    // Storage can be unavailable (private mode, blocked cookies).
+  }
+  return "system";
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("system");
-  // Guards the localStorage write below until the initial read (the effect
-  // right under this one) has run. Without it, the write fires on mount with
-  // the "system" default before the saved value has been read back into
-  // state, clobbering it - fine normally, since the effect re-runs once the
-  // read lands, but React Strict Mode's mount/unmount/remount in development
-  // can discard that pending update before it commits, so the remount reads
-  // back the clobbered value and the real preference never sticks.
+  const [theme, setTheme] = useState<Theme>(readStoredTheme);
+  // Guards the localStorage write below until mount has settled. The read
+  // happens during the first render, so nothing is pending at this point, but
+  // the write must still not fire on mount: it would turn a user who has
+  // never picked a theme into an explicit "system" preference.
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    // Read theme from localStorage on mount
-    const savedTheme = localStorage.getItem("theme") as Theme | null;
-    if (savedTheme) {
-      setTheme(savedTheme);
-    }
     setHydrated(true);
   }, []);
 
@@ -47,7 +60,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     applyTheme(theme);
     if (hydrated) {
-      localStorage.setItem("theme", theme);
+      try {
+        window.localStorage.setItem(THEME_KEY, theme);
+      } catch {
+        // A failed write only costs persistence; the theme still applies.
+      }
     }
 
     // Listen for system theme changes if set to system

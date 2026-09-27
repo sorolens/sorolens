@@ -55,6 +55,31 @@ services:
       retries: 5
       start_period: 5s
 
+  # MinIO provides an S3-compatible endpoint so the cold-storage tier
+  # (issue #146) can be exercised locally and in integration tests.
+  # Console: http://localhost:9001 (sorolens / sorolens123)
+  # Create the bucket once with:
+  #   docker compose exec minio mc mb --ignore-existing local/sorolens-archive
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: sorolens
+      MINIO_ROOT_PASSWORD: sorolens123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - sorolens_minio_data:/data
+    networks:
+      - sorolens_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # One-shot job that applies the SQL schema on first start, so a fresh clone is
   # usable right after `docker compose up -d`. It applies the migrations exactly
   # the way CI does (.github/workflows/ci.yml): every *.up.sql, in sorted order,
@@ -109,6 +134,7 @@ services:
 
 volumes:
   sorolens_postgres_data:
+  sorolens_minio_data:
   sorolens_redis_data:
 
 networks:

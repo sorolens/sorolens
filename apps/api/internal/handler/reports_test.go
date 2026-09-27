@@ -3,7 +3,9 @@ package handler
 import (
 	"bytes"
 	"encoding/csv"
+	"encoding/xml"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -101,11 +103,11 @@ func TestRenderReportCSVRoundTrips(t *testing.T) {
 		values[r[0]] = r[1]
 	}
 	for k, want := range map[string]string{
-		"month":          "2026-02",
-		"uptime_pct":     "99.9500",
-		"incidents":      "1",
-		"mttr_seconds":   "300.00",
-		"ongoing_outage": "false",
+		"month":           "2026-02",
+		"uptime_pct":      "99.9500",
+		"incidents":       "1",
+		"mttr_seconds":    "300.00",
+		"ongoing_outage":  "false",
 		"critical_alerts": "0",
 	} {
 		if values[k] != want {
@@ -265,15 +267,16 @@ func TestRenderSLABadgeColourThresholds(t *testing.T) {
 
 func TestRenderSLABadgeIsWellFormedXML(t *testing.T) {
 	svg := renderSLABadge(sampleReport())
-	// A cheap well-formedness check: tags are balanced for the elements used.
-	// Count "<tag>" and "<tag " as opens (the latter covers attributed tags like
-	// <svg xmlns=...>); self-closing elements such as <rect .../> use neither.
-	for _, tag := range []string{"svg", "g", "title"} {
-		open := strings.Count(svg, "<"+tag+">") + strings.Count(svg, "<"+tag+" ")
-		close := strings.Count(svg, "</"+tag+">")
-		if open != close {
-			t.Fatalf("unbalanced <%s>: %d open, %d close\n%s",
-				tag, open, close, svg)
+	// Parse it as real XML: the previous hand-rolled tag counter treated any
+	// opening tag carrying attributes as self-closing and so rejected a valid
+	// document.
+	dec := xml.NewDecoder(strings.NewReader(svg))
+	for {
+		if _, err := dec.Token(); err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatalf("badge is not well-formed XML: %v\n%s", err, svg)
 		}
 	}
 }

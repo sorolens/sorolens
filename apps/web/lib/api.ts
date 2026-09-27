@@ -1,25 +1,31 @@
 import type {
   AlertsResponse,
   AlertSubscription,
+  BatchContractsRequest,
+  BatchContractsResponse,
   ContractDetail,
   ContractNote,
   ContractNotesResponse,
   CompareResponse,
   ContractSnapshot,
   ContractSummary,
+  ContractTagsResponse,
   ContractsListResponse,
   EventsResponse,
   GlobalEventsResponse,
   GlobalStats,
   HealthChecksResponse,
   InvocationsResponse,
+  LiveActivityResponse,
   MonitoredContract,
+  RecentEventsResponse,
   MonitoredContractsResponse,
   ReportFormat,
   StatsResponse,
   StorageResponse,
   TimeWindow,
   TrackContractRequest,
+  ValidateContractResponse,
   SLAHistoryResponse,
   UptimeResponse,
   UptimeWindow,
@@ -30,6 +36,7 @@ import type {
   WatchlistResponse,
   WatchlistStatusResponse,
   HealthScoreResponse,
+  ContractVerification,
   LabelResolution,
 } from "./types";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
@@ -72,6 +79,30 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// fetchNoContent is the variant for endpoints that return 204 with no body.
+async function fetchNoContent(
+  url: string,
+  options?: RequestInit
+): Promise<void> {
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options?.headers,
+    },
+  });
+
+  if (!res.ok) {
+    let body: { error?: string; code?: string } = {};
+    try {
+      body = await res.json();
+    } catch {
+      // ignore parse error
+    }
+    throw new ApiError(res.status, body.error || res.statusText, body.code);
+  }
+}
+
 export function listContractsAll(): Promise<ContractsListResponse> {
   return fetchJson<ContractsListResponse>(
     `${API_URL}/api/v1/contracts?limit=1000`
@@ -83,12 +114,18 @@ export function listContracts(params?: {
   limit?: number;
   network?: string;
   status?: string;
+  tag?: string;
+  sort?: string;
+  dir?: "asc" | "desc";
 }): Promise<ContractsListResponse> {
   const search = new URLSearchParams();
   if (params?.cursor) search.set("cursor", params.cursor);
   if (params?.limit) search.set("limit", String(params.limit));
   if (params?.network) search.set("network", params.network);
   if (params?.status) search.set("status", params.status);
+  if (params?.tag) search.set("tag", params.tag);
+  if (params?.sort) search.set("sort", params.sort);
+  if (params?.dir) search.set("dir", params.dir);
   const qs = search.toString();
   return fetchJson<ContractsListResponse>(
     `${API_URL}/api/v1/contracts${qs ? "?" + qs : ""}`
@@ -110,8 +147,104 @@ export function trackContract(
   });
 }
 
+// batchContracts applies one bulk action (untrack | tag) to many contracts.
+// Like trackContract it forwards the browser identity so the API's RBAC layer
+// can require the contributor role.
+export function batchContracts(
+  req: BatchContractsRequest,
+  userId?: string
+): Promise<BatchContractsResponse> {
+  const headers: Record<string, string> = {};
+  if (userId) headers["X-User-ID"] = userId;
+  return fetchJson<BatchContractsResponse>(
+    `${API_URL}/api/v1/contracts/batch`,
+    {
+      method: "POST",
+      body: JSON.stringify(req),
+      headers,
+    }
+  );
+}
+
 export function getContract(id: string): Promise<ContractDetail> {
   return fetchJson<ContractDetail>(`${API_URL}/api/v1/contracts/${id}`);
+}
+
+// ---- contract tags (issue #459) ---------------------------------------------
+
+/**
+ * Adds a user-defined tag. Requires a contributor identity, so the browser
+ * identity is forwarded the same way the watchlist and registration calls do.
+ * Adding a tag the contract already carries is a no-op, and the response is
+ * the contract's full, sorted tag list.
+ */
+export function addContractTag(
+  id: string,
+  tag: string,
+  userId: string
+): Promise<ContractTagsResponse> {
+  return fetchJson<ContractTagsResponse>(
+    `${API_URL}/api/v1/contracts/${id}/tags`,
+    {
+      method: "POST",
+      body: JSON.stringify({ tag }),
+      headers: { "X-User-ID": userId },
+    }
+  );
+}
+
+/** Removes a tag. Removing one the contract does not carry is a no-op. */
+export function removeContractTag(
+  id: string,
+  tag: string,
+  userId: string
+): Promise<void> {
+  return fetchJson<void>(
+    `${API_URL}/api/v1/contracts/${id}/tags/${encodeURIComponent(tag)}`,
+    {
+      method: "DELETE",
+      headers: { "X-User-ID": userId },
+    }
+  );
+}
+
+/**
+ * Pre-flight check for the tracking wizard: validates the contract id's StrKey
+ * format (including its checksum) and reports whether it is already tracked.
+ * Read-only; it never registers the contract.
+ */
+export function validateContract(req: {
+  contract_id: string;
+  network: string;
+}): Promise<ValidateContractResponse> {
+  return fetchJson<ValidateContractResponse>(
+    `${API_URL}/api/v1/contracts/validate`,
+    { method: "POST", body: JSON.stringify(req) }
+  );
+}
+
+// ---- live dashboard (#139) -------------------------------------------------
+
+/**
+ * The newest events across every tracked contract, newest first. The /live
+ * ticker polls this and de-duplicates by event id; there is no cursor because
+ * the dashboard always wants the newest slice.
+ */
+export function getRecentEvents(limit = 50): Promise<RecentEventsResponse> {
+  return fetchJson<RecentEventsResponse>(
+    `${API_URL}/api/v1/events/recent?limit=${limit}`
+  );
+}
+
+/**
+ * Per-contract events-per-minute buckets over the last `minutes` minutes,
+ * ordered hottest first. Backs both the sparklines and the hot-contracts
+ * leaderboard in a single request.
+ */
+export function getLiveActivity(minutes = 30): Promise<LiveActivityResponse> {
+  return fetchJson<LiveActivityResponse>(
+    `${API_URL}/api/v1/stats/activity?minutes=${minutes}`
+  );
 }
 
 export function resolveLabel(query: string): Promise<LabelResolution> {
@@ -280,6 +413,20 @@ export function getContractHealthScore(
 ): Promise<HealthScoreResponse> {
   return fetchJson<HealthScoreResponse>(
     `${API_URL}/api/v1/contracts/${id}/health-score`
+  );
+}
+
+// ---- source verification ---------------------------------------------------
+
+/**
+ * Fetch the cached source-verification verdict for a contract. Returns a 404
+ * ApiError when the contract has never been submitted for verification.
+ */
+export function getContractVerification(
+  id: string
+): Promise<ContractVerification> {
+  return fetchJson<ContractVerification>(
+    `${API_URL}/api/v1/contracts/${id}/verification`
   );
 }
 

@@ -9,6 +9,7 @@ test("navigation links reach the /contracts and /watchdog routes", async ({
 
   // Scope to the header nav: the breadcrumb trail also renders a <nav>.
   const nav = page.locator("header nav");
+  await expect(nav).toContainText("Live");
   await expect(nav).toContainText("Contracts");
   await expect(nav).toContainText("Watchdog");
   await expect(nav).toContainText("Playground");

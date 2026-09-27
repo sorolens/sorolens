@@ -1,7 +1,10 @@
 import { expect, type Page, type Route } from "@playwright/test";
 
+// A well-formed Soroban contract id: exactly 56 characters, leading 'C',
+// A-Z0-9 only. The tracking wizard validates this client-side (issue #140), so
+// the fixture has to be the right length.
 export const CONTRACT_ID =
-  "CAVRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C33";
+  "CAVRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5";
 
 type Handler = (
   route: Route,
@@ -21,11 +24,47 @@ export function defaultHandlers(): Record<string, Handler> {
     }),
     "watchdog/alerts": () => ({ status: 200, body: { alerts: [] } }),
     "watchdog/stats": () => ({ status: 200, body: watchdogStats() }),
-    "contracts/": defaultContract,
-    contracts: () => ({
+    // Must precede "contracts/" so the wizard's pre-flight check is not answered
+    // by the contract-detail handler.
+    "contracts/validate": (route) => {
+      if (route.request().method() !== "POST") {
+        return { status: 404, body: { error: "not mocked" } };
+      }
+      return {
+        status: 200,
+        body: {
+          valid: true,
+          contract_id: CONTRACT_ID,
+          network: "testnet",
+          already_tracked: false,
+          label: null,
+          reason: null,
+        },
+      };
+    },
+    // Live dashboard feeds (#139).
+    "events/recent": () => ({
       status: 200,
-      body: { contracts: [contractSummary()], cursor: null, has_more: false },
+      body: { events: [contractEvent()] },
     }),
+    "stats/activity": () => ({
+      status: 200,
+      body: {
+        minutes: 30,
+        window_start: "2026-07-03T08:00:00Z",
+        contracts: [contractEventRate()],
+      },
+    }),
+    "contracts/": defaultContract,
+    contracts: (route) => {
+      if (route.request().method() === "POST") {
+        return { status: 201, body: contractSummary() };
+      }
+      return {
+        status: 200,
+        body: { contracts: [contractSummary()], cursor: null, has_more: false },
+      };
+    },
     "stats/global": () => ({
       status: 200,
       body: {
@@ -199,6 +238,8 @@ export function monitoredContract() {
 export function contractEvent() {
   return {
     id: "evt_1",
+    contract_id: CONTRACT_ID,
+    network: "testnet",
     ledger: 120_400,
     ledger_closed_at: "2026-07-03T08:00:00Z",
     tx_hash: "a1b2c3",
@@ -211,6 +252,28 @@ export function contractEvent() {
     value_decoded: { amount: 1000 },
     value_xdr: "AAAAAw==",
     in_successful_call: true,
+  };
+}
+
+/** A second, newer event, for ticker-update assertions. */
+export function newerContractEvent() {
+  return {
+    ...contractEvent(),
+    id: "evt_2",
+    ledger: 120_401,
+    ledger_closed_at: "2026-07-03T08:00:05Z",
+    tx_hash: "d4e5f6",
+  };
+}
+
+/** One contract's live activity row, with a full 30-bucket series. */
+export function contractEventRate() {
+  return {
+    contract_id: CONTRACT_ID,
+    label: "Escrow DEX",
+    network: "testnet",
+    total: 6,
+    per_minute: [...Array(29).fill(0), 6],
   };
 }
 
