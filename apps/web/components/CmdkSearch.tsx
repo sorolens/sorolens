@@ -157,7 +157,10 @@ export function CmdkSearch() {
                       <div className="font-medium">
                         {contract.label || "Unnamed Contract"}
                       </div>
-                      <div className="text-xs text-[var(--color-text-secondary)] font-mono truncate max-w-md">
+                      <div
+                        className="text-xs text-[var(--color-text-secondary)] font-mono truncate max-w-md"
+                        title={contract.id}
+                      >
                         {contract.id}
                       </div>
                     </div>
