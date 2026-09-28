@@ -15,6 +15,7 @@ type MockStore struct {
 	contracts             map[string]Contract
 	events                []Event
 	invocations           []Invocation
+	callEdges             []CallEdge
 	storageEntries        []StorageEntry
 	syncStates            map[string]SyncState
 	globalStats           GlobalStats
@@ -23,20 +24,23 @@ type MockStore struct {
 	alerts                []ContractAlert
 	apiKeys               []APIKey
 	contractUpgrades      []ContractUpgrade
-	contractTags          map[string]map[string]bool
 	watchlist             map[string]map[string]bool
 	alertSubscriptions    []AlertSubscription
 	users                 map[string]User
 	healthScores          map[string]ContractHealthScore
-	wasmBinaries          map[string]ContractWasm
-	contractSpecs         map[string]ContractSpec
 	failedEvents          map[int64]FailedEvent
 	failedEventSeq        int64
 	indexerCursors        map[string]uint32
+	groups                map[string]Group
+	groupContracts        map[string]map[string]bool
 	contractVersions      map[string][]ContractVersion
-	contractVerifications map[string]ContractVerification
 	alertGroups           []AlertGroup
 	labels                []Label
+	contractTags          map[string]map[string]bool
+	wasmBinaries          map[string]ContractWasm
+	contractSpecs         map[string]ContractSpec
+	contractVerifications map[string]ContractVerification
+	alertRules            []AlertRule
 
 	// Error injection
 	UpsertContractErr           error
@@ -47,6 +51,8 @@ type MockStore struct {
 	GetGlobalStatsErr           error
 	ListEventsErr               error
 	ListInvocationsErr          error
+	GetInvocationErr            error
+	GetCallEdgesErr             error
 	ListStorageErr              error
 	GetContractStatsErr         error
 	RecentEventsErr             error
@@ -72,6 +78,11 @@ type MockStore struct {
 	ListFailedEventsErr  error
 	GetFailedEventErr    error
 	DeleteFailedEventErr error
+
+	CreateAlertRuleErr       error
+	GetAlertRuleErr          error
+	ListAlertRulesErr        error
+	ContractMetricSamplesErr error
 }
 
 func (m *MockStore) UpsertLabel(_ context.Context, label Label) error {
@@ -119,18 +130,20 @@ func NewMockStore() *MockStore {
 		contracts:             make(map[string]Contract),
 		syncStates:            make(map[string]SyncState),
 		monitored:             make(map[string]MonitoredContract),
-		contractTags:          make(map[string]map[string]bool),
 		watchlist:             make(map[string]map[string]bool),
 		alerts:                make([]ContractAlert, 0),
 		alertSubscriptions:    make([]AlertSubscription, 0),
 		users:                 make(map[string]User),
-		wasmBinaries:          make(map[string]ContractWasm),
-		failedEvents:          make(map[int64]FailedEvent),
-		labels:                make([]Label, 0),
 		indexerCursors:        make(map[string]uint32),
+		groups:                make(map[string]Group),
+		groupContracts:        make(map[string]map[string]bool),
+		contractVersions:      make(map[string][]ContractVersion),
+		contractTags:          make(map[string]map[string]bool),
+		wasmBinaries:          make(map[string]ContractWasm),
 		contractSpecs:         make(map[string]ContractSpec),
 		contractVerifications: make(map[string]ContractVerification),
-		contractVersions:      make(map[string][]ContractVersion),
+		failedEvents:          make(map[int64]FailedEvent),
+		labels:                make([]Label, 0),
 	}
 }
 
@@ -298,6 +311,10 @@ func (m *MockStore) BatchInsertInvocations(_ context.Context, invocations []Invo
 	return nil
 }
 
+func (m *MockStore) BatchInsertCallEdges(_ context.Context, edges []CallEdge) error {
+	m.callEdges = append(m.callEdges, edges...)
+	return nil
+}
 func (m *MockStore) UpsertStorageEntries(_ context.Context, entries []StorageEntry) error {
 	m.storageEntries = append(m.storageEntries, entries...)
 	return nil
@@ -352,11 +369,14 @@ func (m *MockStore) SetIndexerCursor(_ context.Context, network string, ledger u
 	return nil
 }
 
-func (m *MockStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error {
+func (m *MockStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, callEdges []CallEdge, syncState SyncState) error {
 	if err := m.BatchInsertEvents(ctx, events); err != nil {
 		return err
 	}
 	if err := m.BatchInsertInvocations(ctx, invocations); err != nil {
+		return err
+	}
+	if err := m.BatchInsertCallEdges(ctx, callEdges); err != nil {
 		return err
 	}
 	if syncState.ContractID != "" {
@@ -493,6 +513,40 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+// GetInvocation returns the invocation row for a transaction hash.
+func (m *MockStore) GetInvocation(_ context.Context, txHash string) (Invocation, error) {
+	if m.GetInvocationErr != nil {
+		return Invocation{}, m.GetInvocationErr
+	}
+	for _, inv := range m.invocations {
+		if inv.TxHash == txHash {
+			return inv, nil
+		}
+	}
+	return Invocation{}, ErrNotFound
+}
+
+// GetCallEdges returns the call graph edges of a transaction, ordered by span id
+// so parents precede children.
+func (m *MockStore) GetCallEdges(_ context.Context, txHash string) ([]CallEdge, error) {
+	if m.GetCallEdgesErr != nil {
+		return nil, m.GetCallEdgesErr
+	}
+	var out []CallEdge
+	for _, e := range m.callEdges {
+		if e.TxHash == txHash {
+			out = append(out, e)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ChildSpanID < out[j].ChildSpanID })
+	return out, nil
+}
+
+// AddCallEdge is a test helper that seeds a call graph edge directly.
+func (m *MockStore) AddCallEdge(e CallEdge) {
+	m.callEdges = append(m.callEdges, e)
 }
 
 func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error) {
@@ -930,6 +984,27 @@ func (m *MockStore) Delete(_ context.Context, id string) error {
 	return nil
 }
 
+func (m *MockStore) GetSubscription(_ context.Context, id string) (AlertSubscription, error) {
+	for _, s := range m.alertSubscriptions {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return AlertSubscription{}, ErrNotFound
+}
+
+func (m *MockStore) RotateSigningSecret(_ context.Context, id, secret, hash string, rotatedAt time.Time) error {
+	for i := range m.alertSubscriptions {
+		if m.alertSubscriptions[i].ID == id {
+			m.alertSubscriptions[i].SigningSecret = secret
+			m.alertSubscriptions[i].SigningSecretHash = hash
+			m.alertSubscriptions[i].SigningSecretRotatedAt = &rotatedAt
+			m.alertSubscriptions[i].UpdatedAt = rotatedAt
+			return nil
+		}
+	}
+	return ErrNotFound
+}
 func (m *MockStore) ListAll(_ context.Context) ([]AlertSubscription, error) {
 	out := make([]AlertSubscription, len(m.alertSubscriptions))
 	copy(out, m.alertSubscriptions)
@@ -1141,4 +1216,75 @@ func (m *MockStore) SearchContracts(_ context.Context, query string, limit int) 
 	}
 
 	return results, nil
+}
+
+// SearchEvents implements store.Store.SearchEvents (issue #159), mirroring
+// the postgresStore semantics: matches are deduplicated to the newest event
+// per tx_hash, then sorted newest-first before the limit is applied.
+func (m *MockStore) SearchEvents(_ context.Context, query string, limit int) ([]Event, error) {
+	if query == "" {
+		return []Event{}, nil
+	}
+	searchPattern := strings.ToLower(query)
+
+	best := make(map[string]Event)
+	for _, e := range m.events {
+		if !strings.Contains(strings.ToLower(e.TxHash), searchPattern) {
+			continue
+		}
+		if cur, ok := best[e.TxHash]; !ok || e.LedgerClosedAt.After(cur.LedgerClosedAt) {
+			best[e.TxHash] = e
+		}
+	}
+
+	matched := make([]Event, 0, len(best))
+	for _, e := range best {
+		matched = append(matched, e)
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].LedgerClosedAt.After(matched[j].LedgerClosedAt)
+	})
+	if limit > 0 && len(matched) > limit {
+		matched = matched[:limit]
+	}
+	return matched, nil
+}
+
+// SearchFunctions implements store.Store.SearchFunctions (issue #159),
+// mirroring the postgresStore semantics: matches are deduplicated to the
+// most recent invocation per function name, then sorted newest-first
+// before the limit is applied.
+func (m *MockStore) SearchFunctions(_ context.Context, query string, limit int) ([]FunctionMatch, error) {
+	if query == "" {
+		return []FunctionMatch{}, nil
+	}
+	searchPattern := strings.ToLower(query)
+
+	best := make(map[string]Invocation)
+	for _, inv := range m.invocations {
+		if !strings.Contains(strings.ToLower(inv.FunctionName), searchPattern) {
+			continue
+		}
+		if cur, ok := best[inv.FunctionName]; !ok || inv.LedgerClosedAt.After(cur.LedgerClosedAt) {
+			best[inv.FunctionName] = inv
+		}
+	}
+
+	matched := make([]FunctionMatch, 0, len(best))
+	for name, inv := range best {
+		matched = append(matched, FunctionMatch{
+			Name:           name,
+			ContractID:     inv.ContractID,
+			Network:        inv.Network,
+			TxHash:         inv.TxHash,
+			LedgerClosedAt: inv.LedgerClosedAt,
+		})
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].LedgerClosedAt.After(matched[j].LedgerClosedAt)
+	})
+	if limit > 0 && len(matched) > limit {
+		matched = matched[:limit]
+	}
+	return matched, nil
 }

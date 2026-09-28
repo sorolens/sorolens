@@ -6,6 +6,16 @@ import { expect, type Page, type Route } from "@playwright/test";
 export const CONTRACT_ID =
   "CAVRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5";
 
+// Well-formed 64-hex transaction hashes for the cross-contract call-trace
+// fixture (issue #264). The dashboard validates this shape client-side, so the
+// fixture has to be the right length as well as valid hex.
+export const TRACE_TX_HASH =
+  "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
+
+// A second valid transaction hash, used by the newer live event.
+export const NEWER_TRACE_TX_HASH =
+  "b1c2d3e4f5061728394a5b6c7d8e9f01b1c2d3e4f5061728394a5b6c7d8e9f01";
+
 type Handler = (
   route: Route,
   page: Page
@@ -74,6 +84,8 @@ export function defaultHandlers(): Record<string, Handler> {
         total_storage_entries: 128,
       },
     }),
+    // Cross-contract call trace for a transaction (issue #264).
+    "invocations/": () => ({ status: 200, body: traceResponse() }),
   };
 }
 
@@ -242,7 +254,7 @@ export function contractEvent() {
     network: "testnet",
     ledger: 120_400,
     ledger_closed_at: "2026-07-03T08:00:00Z",
-    tx_hash: "a1b2c3",
+    tx_hash: TRACE_TX_HASH,
     type: "transfer",
     topic_decoded: [
       "transfer",
@@ -262,7 +274,46 @@ export function newerContractEvent() {
     id: "evt_2",
     ledger: 120_401,
     ledger_closed_at: "2026-07-03T08:00:05Z",
-    tx_hash: "d4e5f6",
+    tx_hash: NEWER_TRACE_TX_HASH,
+  };
+}
+
+/**
+ * A transaction's cross-contract call tree, as returned by
+ * `GET /api/v1/invocations/{tx_hash}/trace` (issue #264). The root is the
+ * transaction's own invocation; `transfer` is a cross-contract sub-invocation.
+ */
+export function traceResponse() {
+  return {
+    tx_hash: TRACE_TX_HASH,
+    status: "SUCCESS",
+    network: "testnet",
+    ledger: 120_400,
+    root: {
+      span_id: "0",
+      contract_id: CONTRACT_ID,
+      function_name: "swap",
+      cpu: 0,
+      mem: 0,
+      fee_share: 0,
+      depth: 0,
+      children: [
+        {
+          span_id: "0.0",
+          parent_span_id: "0",
+          contract_id: CONTRACT_ID,
+          function_name: "transfer",
+          cpu: 0,
+          mem: 0,
+          fee_share: 100,
+          depth: 1,
+          children: [],
+        },
+      ],
+    },
+    edge_count: 1,
+    has_edges: true,
+    truncated: false,
   };
 }
 

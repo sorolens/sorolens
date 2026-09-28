@@ -17,7 +17,12 @@ import {
   saveSettings,
   writeStatusCache,
 } from "../shared/storage.js";
-import { BADGE, CONTENT, DEFAULT_NETWORK, PRODUCT_NAME } from "../shared/constants.js";
+import {
+  BADGE,
+  CONTENT,
+  DEFAULT_NETWORK,
+  PRODUCT_NAME,
+} from "../shared/constants.js";
 import { normalizeContractId } from "../shared/contract-id.js";
 
 /**
@@ -87,7 +92,7 @@ async function resolveStatuses(contractIds, { force = false } = {}) {
   for (let i = 0; i < missing.length; i += CONCURRENCY) {
     const slice = missing.slice(i, i + CONCURRENCY);
     const settled = await Promise.all(
-      slice.map((contractId) => client.getTrackingStatus(contractId)),
+      slice.map((contractId) => client.getTrackingStatus(contractId))
     );
     results.push(...settled);
   }
@@ -302,7 +307,9 @@ export function bootstrap() {
     if (!isSorolensMessage(message)) return undefined;
     handleMessage(message, sender || {})
       .then(sendResponse)
-      .catch((error) => sendResponse({ ok: false, error: describeError(error) }));
+      .catch((error) =>
+        sendResponse({ ok: false, error: describeError(error) })
+      );
     // Keep the channel open for the async response (Chrome + Firefox).
     return true;
   });
@@ -329,7 +336,10 @@ export function bootstrap() {
 
 // A browser context always exposes `chrome` (Chrome) or `browser` (Firefox).
 // Node, which only imports this module for tests, exposes neither.
-if (typeof globalThis.browser !== "undefined" || typeof globalThis.chrome !== "undefined") {
+if (
+  typeof globalThis.browser !== "undefined" ||
+  typeof globalThis.chrome !== "undefined"
+) {
   bootstrap();
 }
 

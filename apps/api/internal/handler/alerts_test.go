@@ -14,7 +14,7 @@ import (
 
 var (
 	alertT0 = time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)
-	alertT1 = time.Date(2025, 6, 1, 12, 5, 0, 0, time.UTC) // +5 min
+	alertT1 = time.Date(2025, 6, 1, 12, 5, 0, 0, time.UTC)  // +5 min
 	alertT2 = time.Date(2025, 6, 1, 12, 10, 0, 0, time.UTC) // +10 min
 )
 

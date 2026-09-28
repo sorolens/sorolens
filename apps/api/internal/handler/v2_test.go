@@ -257,27 +257,32 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 	// envelope. Keeping the list explicit means a *new* v1 route without a v2
 	// twin still fails this test.
 	v2NotPorted := map[string]bool{
-		"GET /api/v1/health":                          true,
-		"GET /api/v1/events":                          true,
-		"GET /api/v1/invocations":                     true,
-		"GET /api/v1/search":                          true,
-		"GET /api/v1/compare":                         true,
-		"GET /api/v1/labels":                          true,
-		"POST /api/v1/labels":                         true,
-		"GET /api/v1/resolve":                         true,
-		"GET /api/v1/alerts":                          true,
-		"GET /api/v1/dlq":                             true,
-		"POST /api/v1/dlq/{id}/requeue":               true,
-		"GET /api/v1/contracts/{id}/summary":          true,
-		"GET /api/v1/contracts/{id}/snapshot.json":    true,
-		"GET /api/v1/stream/events":                   true,
-		"GET /api/v1/watchdog/subscriptions":          true,
-		"POST /api/v1/watchdog/subscriptions":         true,
-		"DELETE /api/v1/watchdog/subscriptions/{id}":  true,
-		"GET /api/v1/watchdog/contracts/{id}/uptime":  true,
-		"GET /api/v1/reports/{contract_id}":           true,
-		"GET /api/v1/reports/{contract_id}/history":   true,
-		"GET /api/v1/reports/{contract_id}/badge.svg": true,
+		"GET /api/v1/health":                       true,
+		"GET /api/v1/events":                       true,
+		"GET /api/v1/invocations":                  true,
+		"GET /api/v1/search":                       true,
+		"GET /api/v1/compare":                      true,
+		"GET /api/v1/labels":                       true,
+		"POST /api/v1/labels":                      true,
+		"GET /api/v1/resolve":                      true,
+		"GET /api/v1/alerts":                       true,
+		"GET /api/v1/dlq":                          true,
+		"POST /api/v1/dlq/{id}/requeue":            true,
+		"GET /api/v1/contracts/{id}/summary":       true,
+		"GET /api/v1/contracts/{id}/snapshot.json": true,
+		"GET /api/v1/stream/events":                true,
+		"GET /api/v1/watchdog/subscriptions":       true,
+		// Cross-contract call graph (our addition): no v2 twin yet.
+		"GET /api/v1/invocations/{tx_hash}/trace": true,
+		// Signing-secret reveal/rotate (our addition): no v2 twin yet.
+		"GET /api/v1/watchdog/subscriptions/{id}/signing-secret": true,
+		"POST /api/v1/watchdog/subscriptions/{id}/rotate":        true,
+		"POST /api/v1/watchdog/subscriptions":                    true,
+		"DELETE /api/v1/watchdog/subscriptions/{id}":             true,
+		"GET /api/v1/watchdog/contracts/{id}/uptime":             true,
+		"GET /api/v1/reports/{contract_id}":                      true,
+		"GET /api/v1/reports/{contract_id}/history":              true,
+		"GET /api/v1/reports/{contract_id}/badge.svg":            true,
 		// CSV export (#160): a bulk download over the same data as the v1
 		// event listing. v2 exposes the JSON listing; the flat file follows
 		// when the export is ported.
@@ -300,6 +305,28 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		// envelope.
 		"POST /api/v1/contracts/{id}/verify":      true,
 		"GET /api/v1/contracts/{id}/verification": true,
+		// User-defined alert rules: the rule language surface (authoring,
+		// validation, preview, catalog). It stays v1-only until the v2
+		// envelope is defined for rule documents.
+		"GET /api/v1/rules":           true,
+		"GET /api/v1/rules/metrics":   true,
+		"GET /api/v1/rules/library":   true,
+		"POST /api/v1/rules":          true,
+		"POST /api/v1/rules/validate": true,
+		"POST /api/v1/rules/preview":  true,
+		"PATCH /api/v1/rules/{id}":    true,
+		"DELETE /api/v1/rules/{id}":   true,
+		// Contract groups (#405): a per-user portfolio surface that has not
+		// been given the v2 envelope yet.
+		"GET /api/v1/groups":                                true,
+		"POST /api/v1/groups":                               true,
+		"GET /api/v1/groups/{id}":                           true,
+		"PATCH /api/v1/groups/{id}":                         true,
+		"DELETE /api/v1/groups/{id}":                        true,
+		"GET /api/v1/groups/{id}/stats":                     true,
+		"POST /api/v1/groups/{id}/contracts":                true,
+		"DELETE /api/v1/groups/{id}/contracts":              true,
+		"DELETE /api/v1/groups/{id}/contracts/{contractId}": true,
 	}
 
 	var missing []string

@@ -137,7 +137,8 @@ function setButtonState(button, state, detail) {
       button.disabled = false;
       if (label) label.textContent = "Track";
       button.title =
-        detail || `${short} is indexed on ${PRODUCT_NAME} — add it to your watchlist`;
+        detail ||
+        `${short} is indexed on ${PRODUCT_NAME} — add it to your watchlist`;
       break;
     case "error":
       button.disabled = false;
@@ -192,7 +193,11 @@ function scanPage() {
   let node = walker.nextNode();
   let visited = 0;
 
-  while (node && visited < MAX_TEXT_NODES && ids.size <= CONTENT.maxDecoratedIds) {
+  while (
+    node &&
+    visited < MAX_TEXT_NODES &&
+    ids.size <= CONTENT.maxDecoratedIds
+  ) {
     visited += 1;
     const parent = node.parentElement;
     const value = node.nodeValue || "";
@@ -247,7 +252,7 @@ async function refreshButtonStates(ids) {
   if (!response || !response.ok || !Array.isArray(response.statuses)) return;
   for (const status of response.statuses) {
     const buttons = document.querySelectorAll(
-      `${BUTTON_SELECTOR}[${CONTRACT_ATTRIBUTE}="${status.contractId}"]`,
+      `${BUTTON_SELECTOR}[${CONTRACT_ATTRIBUTE}="${status.contractId}"]`
     );
     for (const button of buttons) {
       if (button.getAttribute(STATE_ATTRIBUTE) === "pending") continue;
@@ -299,7 +304,7 @@ async function onClick(event) {
     setButtonState(
       button,
       "indexed",
-      warnings.join(" ") || "Registered for indexing — watchlist add failed",
+      warnings.join(" ") || "Registered for indexing — watchlist add failed"
     );
   }
 }

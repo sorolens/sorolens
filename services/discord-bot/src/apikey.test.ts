@@ -15,7 +15,12 @@ function memStore(): ApiKeyStore & { size(): number } {
   return {
     get: (discordId) => m.get(discordId) ?? null,
     set: (discordId, key, keyId) => {
-      const row: StoredApiKey = { discordId, key, keyId, createdAt: "2026-01-01 00:00:00" };
+      const row: StoredApiKey = {
+        discordId,
+        key,
+        keyId,
+        createdAt: "2026-01-01 00:00:00",
+      };
       m.set(discordId, row);
       return row;
     },
@@ -24,7 +29,10 @@ function memStore(): ApiKeyStore & { size(): number } {
   };
 }
 
-function recordingMinter(): ApiKeyMinter & { provisioned: string[]; revoked: string[] } {
+function recordingMinter(): ApiKeyMinter & {
+  provisioned: string[];
+  revoked: string[];
+} {
   const provisioned: string[] = [];
   const revoked: string[] = [];
   return {
@@ -32,7 +40,10 @@ function recordingMinter(): ApiKeyMinter & { provisioned: string[]; revoked: str
     revoked,
     async provisionApiKey(name) {
       provisioned.push(name);
-      return { id: `key_${provisioned.length}`, key: `sl_${provisioned.length}` };
+      return {
+        id: `key_${provisioned.length}`,
+        key: `sl_${provisioned.length}`,
+      };
     },
     async revokeApiKey(id) {
       revoked.push(id);
@@ -91,7 +102,9 @@ describe("ensureUserApiKey", () => {
       async revokeApiKey() {},
     };
 
-    await expect(ensureUserApiKey(store, minter, "42", "alice")).resolves.toBeNull();
+    await expect(
+      ensureUserApiKey(store, minter, "42", "alice")
+    ).resolves.toBeNull();
     expect(getUserApiKey(store, "42")).toBeNull();
   });
 });

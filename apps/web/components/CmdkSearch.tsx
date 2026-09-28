@@ -4,6 +4,7 @@ import * as React from "react";
 import { Command } from "cmdk";
 import { useDebounce } from "use-debounce";
 import { useRouter } from "next/navigation";
+import { useTheme } from "./ThemeProvider";
 import { ContractSummary } from "@/lib/types";
 
 // Need to match the generic Next.js standard API url
@@ -16,6 +17,7 @@ export function CmdkSearch() {
   const [loading, setLoading] = React.useState(false);
   const [results, setResults] = React.useState<ContractSummary[]>([]);
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
 
   // Toggle the menu when ⌘K is pressed
   React.useEffect(() => {
@@ -109,32 +111,66 @@ export function CmdkSearch() {
 
           <Command.List className="max-h-[60vh] overflow-y-auto p-2">
             <Command.Empty className="p-6 text-center text-sm text-[var(--color-text-secondary)]">
-              {loading ? "Searching..." : "No contracts found."}
+              {loading ? "Searching..." : "No results found."}
             </Command.Empty>
 
-            {results.map((contract) => (
+            <Command.Group
+              heading="Commands"
+              className="text-xs font-semibold text-[var(--color-text-secondary)] mb-2 px-2 mt-4 first:mt-0"
+            >
               <Command.Item
-                key={contract.id}
-                value={contract.id}
                 onSelect={() => {
-                  router.push(`/contracts/${contract.id}`);
+                  router.push("/contracts/new");
                   setOpen(false);
                 }}
                 className="flex items-center gap-3 px-3 py-3 text-sm text-[var(--color-text-primary)] rounded-md cursor-pointer data-[selected=true]:bg-[var(--color-bg-hover)] data-[selected=true]:text-[var(--color-text-primary)]"
               >
-                <div>
-                  <div className="font-medium">
-                    {contract.label || "Unnamed Contract"}
-                  </div>
-                  <div className="text-xs text-[var(--color-text-secondary)] font-mono truncate max-w-md">
-                    {contract.id}
-                  </div>
-                </div>
-                <div className="ml-auto text-xs px-2 py-1 rounded-full bg-[var(--color-bg)] border border-[var(--color-border)] capitalize text-[var(--color-text-secondary)]">
-                  {contract.network}
-                </div>
+                Track contract
               </Command.Item>
-            ))}
+              <Command.Item
+                onSelect={() => {
+                  setTheme(theme === "dark" ? "light" : "dark");
+                  setOpen(false);
+                }}
+                className="flex items-center gap-3 px-3 py-3 text-sm text-[var(--color-text-primary)] rounded-md cursor-pointer data-[selected=true]:bg-[var(--color-bg-hover)] data-[selected=true]:text-[var(--color-text-primary)]"
+              >
+                Toggle theme
+              </Command.Item>
+            </Command.Group>
+
+            {results.length > 0 && (
+              <Command.Group
+                heading="Contracts"
+                className="text-xs font-semibold text-[var(--color-text-secondary)] px-2 mt-4"
+              >
+                {results.map((contract) => (
+                  <Command.Item
+                    key={contract.id}
+                    value={contract.id}
+                    onSelect={() => {
+                      router.push(`/contracts/${contract.id}`);
+                      setOpen(false);
+                    }}
+                    className="flex items-center gap-3 px-3 py-3 text-sm text-[var(--color-text-primary)] rounded-md cursor-pointer data-[selected=true]:bg-[var(--color-bg-hover)] data-[selected=true]:text-[var(--color-text-primary)]"
+                  >
+                    <div>
+                      <div className="font-medium">
+                        {contract.label || "Unnamed Contract"}
+                      </div>
+                      <div
+                        className="text-xs text-[var(--color-text-secondary)] font-mono truncate max-w-md"
+                        title={contract.id}
+                      >
+                        {contract.id}
+                      </div>
+                    </div>
+                    <div className="ml-auto text-xs px-2 py-1 rounded-full bg-[var(--color-bg)] border border-[var(--color-border)] capitalize text-[var(--color-text-secondary)]">
+                      {contract.network}
+                    </div>
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
           </Command.List>
         </div>
       </Command.Dialog>

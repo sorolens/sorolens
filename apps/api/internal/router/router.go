@@ -3,6 +3,8 @@ package router
 import (
 	"net/http"
 	"net/http/pprof"
+	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -14,6 +16,69 @@ import (
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 )
 
+// corsMiddleware returns an http.Handler middleware that sets CORS headers.
+//
+// When CORS_ALLOWED_ORIGINS is unset or contains "*" all origins are allowed
+// (Access-Control-Allow-Origin: *). When it is a comma-separated list of
+// origins, only requests whose Origin header is in the list receive an echoed
+// origin back; all others receive the first entry in the list (the browser
+// will still block the mismatch). This lets a self-hosted API restrict
+// cross-origin access to the Vercel dashboard domain without any code change.
+func corsMiddleware() func(http.Handler) http.Handler {
+	raw := os.Getenv("CORS_ALLOWED_ORIGINS")
+
+	// Build the allow-set. nil means wildcard (*).
+	var allowed map[string]struct{}
+	if raw != "" {
+		allowed = make(map[string]struct{})
+		for _, o := range strings.Split(raw, ",") {
+			o = strings.TrimSpace(o)
+			if o == "" {
+				continue
+			}
+			if o == "*" {
+				allowed = nil // wildcard overrides any explicit list
+				break
+			}
+			allowed[o] = struct{}{}
+		}
+		if len(allowed) == 0 {
+			allowed = nil
+		}
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			var allowOrigin string
+			if allowed == nil {
+				allowOrigin = "*"
+			} else if _, ok := allowed[origin]; ok {
+				allowOrigin = origin
+			} else {
+				// Fall back to the first configured origin; the browser will
+				// reject the mismatch, but the response header is always set.
+				for o := range allowed {
+					allowOrigin = o
+					break
+				}
+			}
+
+			w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, Authorization, X-API-Key")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			if allowOrigin != "*" {
+				w.Header().Set("Vary", "Origin")
+			}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // New builds and returns the HTTP router with all middleware and routes wired.
 // maxBodyBytes caps the request body size in bytes; values of zero or less
 // disable the limit. Callers normally pass config.MaxBodyBytesFromEnv().
@@ -24,7 +89,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(OTelMiddleware)
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.CORS)
+	r.Use(corsMiddleware())
 	// Sentry must run before Recoverer: it reports a panic and re-panics so
 	// Recoverer still produces the standard 500 response.
 	r.Use(middleware.Sentry)
@@ -38,6 +103,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// matches with an empty 304, short-circuiting the body before it
 	// crosses the wire (issue #152).
 	r.Use(middleware.ETag)
+
+	// Compress responses (gzip/br) for clients that ask for it. Must run
+	// before the rate limiter so compressed and uncompressed variants of a
+	// route share one rate-limit bucket (responses are buffered until the
+	// compression decision, so limiter headers written later are unaffected).
+	r.Use(middleware.Compression)
 
 	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
 
@@ -134,6 +205,18 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// GET /api/v1/alerts          — grouped view (default)
 		// GET /api/v1/alerts?flat=true — raw ContractAlert feed
 		get("/alerts", h.ListAlerts)
+		// User-defined alert rules (rule language). Reads are public like the
+		// rest of the v0.1 surface; authoring mutates shared state, so it needs
+		// the contributor role like contract registration.
+		get("/rules", h.ListRules)
+		get("/rules/metrics", h.ListRuleMetrics)
+		get("/rules/library", h.ListRuleLibrary)
+		r.With(scope).Post("/rules/validate", h.ValidateRule)
+		r.With(scope).Post("/rules/preview", h.PreviewRule)
+		r.With(scope, contributor).Post("/rules", h.CreateRule)
+		r.With(scope, contributor).Patch("/rules/{id}", h.SetRuleEnabled)
+		r.With(scope, contributor).Delete("/rules/{id}", h.DeleteRule)
+
 		// Search contracts (issue #181)
 		get("/search", h.SearchContracts)
 
@@ -171,6 +254,10 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/invocations", h.ListInvocations)
 		// Global invocation explorer: resource usage across every contract.
 		get("/invocations", h.ListAllInvocations)
+
+		// Cross-contract call graph. Rooted at the invocations row for the
+		// transaction, so a trace is reachable straight from an invocation.
+		get("/invocations/{tx_hash}/trace", h.GetInvocationTrace)
 		get("/contracts/{id}/storage", h.ListStorageEntries)
 		get("/contracts/{id}/stats", h.ContractStats)
 		get("/contracts/{id}/forecast", h.ContractForecast)
@@ -220,6 +307,22 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 			r.Get("/{contractId}/status", h.WatchlistStatus)
 		})
 
+		// Groups (contract portfolios). Ownership is per-user via the same
+		// X-User-ID contract as the watchlist, so the routes are unscoped.
+		r.Route("/groups", func(r chi.Router) {
+			r.Post("/", h.CreateGroup)
+			r.Get("/", h.ListGroups)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", h.GetGroup)
+				r.Patch("/", h.UpdateGroup)
+				r.Delete("/", h.DeleteGroup)
+				r.Get("/stats", h.GroupStats)
+				r.Post("/contracts", h.AddGroupContract)
+				r.Delete("/contracts", h.RemoveGroupContract)
+				r.Delete("/contracts/{contractId}", h.RemoveGroupContract)
+			})
+		})
+
 		// Watchdog: data from the on-chain sorolens-watchdog contract.
 		// Watchdog stats are written by the indexer, not the API, so they
 		// rely on the TTL rather than write invalidation.
@@ -244,6 +347,10 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Post("/watchdog/subscriptions", h.CreateSubscription)
 		r.With(scope, contributor).Get("/watchdog/subscriptions", h.ListSubscriptions)
 		r.With(scope, contributor).Delete("/watchdog/subscriptions/{id}", h.DeleteSubscription)
+		// Signing-secret reveal/rotate touch signing key material, so they are
+		// admin-gated on top of the scope check.
+		r.With(scope, admin).Get("/watchdog/subscriptions/{id}/signing-secret", h.GetSubscriptionSigningSecret)
+		r.With(scope, admin).Post("/watchdog/subscriptions/{id}/rotate", h.RotateSubscriptionSigningSecret)
 	})
 
 	// API v2 (issue #144). A parallel namespace carrying the same resources

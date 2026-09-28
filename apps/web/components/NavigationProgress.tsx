@@ -34,7 +34,7 @@ export function NavigationProgress() {
   // back-to-back navigations.
   const completeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const routeKey = `${pathname}?${searchParams.toString()}`;
+  const routeKey = `${pathname}?${searchParams?.toString() ?? ""}`;
 
   useEffect(() => {
     // On the very first render there is no "previous" route — skip.

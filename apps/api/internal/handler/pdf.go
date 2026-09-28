@@ -24,9 +24,9 @@ const (
 // less to audit. Only the features used below are implemented (one Helvetica
 // font, text-only pages, an Info dictionary).
 type pdfDoc struct {
-	title      string
-	keywords   string
-	pages      [][]string
+	title    string
+	keywords string
+	pages    [][]string
 }
 
 func newPDFDoc(title string) *pdfDoc {

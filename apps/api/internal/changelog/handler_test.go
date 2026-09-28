@@ -49,6 +49,10 @@ func (f *fakeStore) BatchInsertInvocations(_ context.Context, _ []store.Invocati
 	return nil
 }
 
+func (f *fakeStore) BatchInsertCallEdges(_ context.Context, _ []store.CallEdge) error {
+	return nil
+}
+
 func (f *fakeStore) UpsertStorageEntries(_ context.Context, _ []store.StorageEntry) error {
 	return nil
 }
@@ -77,7 +81,7 @@ func (f *fakeStore) SetIndexerCursor(_ context.Context, _ string, _ uint32) erro
 	return nil
 }
 
-func (f *fakeStore) BatchInsertWithCursor(_ context.Context, _ string, _ uint32, _ []store.Event, _ []store.Invocation, _ store.SyncState) error {
+func (f *fakeStore) BatchInsertWithCursor(_ context.Context, _ string, _ uint32, _ []store.Event, _ []store.Invocation, _ []store.CallEdge, _ store.SyncState) error {
 	return nil
 }
 
@@ -284,7 +288,14 @@ func TestGetBadge_unknownHashShowsUnknown(t *testing.T) {
 	}
 }
 
-
 func (f *fakeStore) SearchContracts(_ context.Context, query string, limit int) ([]store.Contract, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) SearchEvents(_ context.Context, query string, limit int) ([]store.Event, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) SearchFunctions(_ context.Context, query string, limit int) ([]store.FunctionMatch, error) {
 	return nil, nil
 }

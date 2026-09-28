@@ -31,11 +31,13 @@ type FullStore interface {
 	WatchlistStore
 	UserStore
 	PerformanceStore
+	GroupStore
 	ContractWasmStore
 	GlobalEventStore
 	ContractVerificationStore
 	LabelStore
 	FailedEventStore
+	AlertRuleStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
@@ -116,6 +118,15 @@ type DailyAggregate struct {
 type QueryStore interface {
 	ListEvents(ctx context.Context, contractID, cursor string, limit int, f EventFilters) ([]Event, string, error)
 	ListInvocations(ctx context.Context, contractID, cursor string, limit int, f InvocationFilters) ([]Invocation, string, error)
+
+	// GetInvocation returns the single invocation row identified by its tx
+	// hash (the table's primary key), or ErrNotFound. It is the root row of a
+	// transaction's call graph.
+	GetInvocation(ctx context.Context, txHash string) (Invocation, error)
+	// GetCallEdges returns every cross-contract call edge recorded for a
+	// transaction, parent before child (which is the order of the
+	// deterministic span ids).
+	GetCallEdges(ctx context.Context, txHash string) ([]CallEdge, error)
 	// ListAllInvocations lists invocations across every tracked contract,
 	// newest first (ledger DESC, tx_hash DESC). cursorLedger/cursorTxHash carry
 	// the keyset position from a previous page; a zero ledger starts at the
@@ -438,6 +449,87 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+// ---- GetInvocation ----------------------------------------------------------
+
+func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invocation, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
+		       function_name, args_decoded, result_decoded, result_xdr,
+		       resource_fee_charged, cpu_insn, mem_byte,
+		       ledger_read_byte, ledger_write_byte, application_order, inserted_at
+		FROM invocations
+		WHERE tx_hash = $1`, txHash)
+
+	var inv Invocation
+	var argsDec, resultDec []byte
+	err := row.Scan(
+		&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
+		&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
+		&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
+		&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Invocation{}, ErrNotFound
+	}
+	if err != nil {
+		return Invocation{}, fmt.Errorf("get invocation: %w", err)
+	}
+	_ = json.Unmarshal(argsDec, &inv.ArgsDecoded)
+	_ = json.Unmarshal(resultDec, &inv.ResultDecoded)
+	return inv, nil
+}
+
+// ---- GetCallEdges -----------------------------------------------------------
+
+// maxCallEdges caps a single trace read. The indexer caps a transaction's tree
+// at 1024 edges, so this bound only ever trips on pathological data.
+const maxCallEdges = 5000
+
+func (s *postgresStore) GetCallEdges(ctx context.Context, txHash string) ([]CallEdge, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT tx_hash, parent_span_id, child_span_id, callee_contract_id, function_name,
+		       cpu, mem, fee_share, depth, network, ledger, ledger_closed_at, inserted_at
+		FROM call_edges
+		WHERE tx_hash = $1
+		ORDER BY child_span_id ASC
+		LIMIT $2`, txHash, maxCallEdges)
+	if err != nil {
+		return nil, fmt.Errorf("get call edges: %w", err)
+	}
+	defer rows.Close()
+
+	var out []CallEdge
+	for rows.Next() {
+		var e CallEdge
+		// callee_contract_id, function_name, ledger and ledger_closed_at are
+		// nullable: a host frame may have no callee contract, and the backfill
+		// path may not know the ledger.
+		var callee, fn *string
+		var ledger *int64
+		var closedAt *time.Time
+		if err := rows.Scan(
+			&e.TxHash, &e.ParentSpanID, &e.ChildSpanID, &callee, &fn,
+			&e.CPU, &e.Mem, &e.FeeShare, &e.Depth, &e.Network, &ledger, &closedAt, &e.InsertedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan call edge: %w", err)
+		}
+		if callee != nil {
+			e.CalleeContractID = *callee
+		}
+		if fn != nil {
+			e.FunctionName = *fn
+		}
+		if ledger != nil {
+			e.Ledger = uint32(*ledger)
+		}
+		if closedAt != nil {
+			e.LedgerClosedAt = *closedAt
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 // ---- ListAllInvocations -----------------------------------------------------

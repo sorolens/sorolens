@@ -153,7 +153,10 @@ export function OfflineAlertPanel({
                   >
                     {alert.severity}
                   </span>
-                  <span className="truncate font-mono text-xs text-[var(--color-text-secondary)]">
+                  <span
+                    className="truncate font-mono text-xs text-[var(--color-text-secondary)]"
+                    title={alert.contractId}
+                  >
                     {alert.contractId}
                   </span>
                 </div>

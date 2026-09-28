@@ -1,4 +1,5 @@
 # RESEARCH.md
+
 ## Sorolens Pre-Build Research
 
 All URLs accessed on 2026-07-26.
@@ -33,14 +34,14 @@ Fetches a filtered list of events emitted within a ledger range. RPC retains eve
 
 **Request params:**
 
-| Field | Type | Notes |
-|---|---|---|
-| `startLedger` | number | Inclusive start ledger. Omit when using cursor. |
-| `endLedger` | number | Exclusive end ledger. Omit when using cursor. |
-| `filters` | array (max 5) | Each filter has `type`, `contractIds` (max 5), and `topics` (max 5 per filter). |
-| `pagination.cursor` | string | Opaque paging token. When present, `startLedger`/`endLedger` must be omitted. |
-| `pagination.limit` | number | 1-10000, default 100. |
-| `xdrFormat` | string | `"base64"` (default) or `"json"`. |
+| Field               | Type          | Notes                                                                           |
+| ------------------- | ------------- | ------------------------------------------------------------------------------- |
+| `startLedger`       | number        | Inclusive start ledger. Omit when using cursor.                                 |
+| `endLedger`         | number        | Exclusive end ledger. Omit when using cursor.                                   |
+| `filters`           | array (max 5) | Each filter has `type`, `contractIds` (max 5), and `topics` (max 5 per filter). |
+| `pagination.cursor` | string        | Opaque paging token. When present, `startLedger`/`endLedger` must be omitted.   |
+| `pagination.limit`  | number        | 1-10000, default 100.                                                           |
+| `xdrFormat`         | string        | `"base64"` (default) or `"json"`.                                               |
 
 Filter `type` values: `"contract"` or `"system"`.  
 Topic segments are base64-encoded XDR `ScVal` strings. `"*"` matches any single segment; `"**"` matches any remaining segments.
@@ -75,6 +76,7 @@ Topic segments are base64-encoded XDR `ScVal` strings. `"*"` matches any single 
 ```
 
 Key notes:
+
 - `id` is a TOID-based string: 19-character TOID plus a 10-character zero-padded event index, separated by `-`.
 - `inSuccessfulContractCall` is deprecated as of recent protocol versions; events in failed transactions are now excluded at the protocol level.
 - Events emitted in a failed invocation are discarded and never appear in `getEvents` results.
@@ -90,8 +92,8 @@ Returns current on-chain state for one or more ledger entries given their XDR-en
 
 **Request params:**
 
-| Field | Type | Notes |
-|---|---|---|
+| Field  | Type             | Notes                                   |
+| ------ | ---------------- | --------------------------------------- |
 | `keys` | array of strings | Base64-encoded XDR `LedgerKey` structs. |
 
 **Response:**
@@ -115,6 +117,7 @@ Returns current on-chain state for one or more ledger entries given their XDR-en
 ```
 
 Key notes:
+
 - `liveUntilLedgerSeq` is present for `ContractData` and `ContractCode` entries only.
 - If an entry is archived (expired), it will not appear in `entries`. The response will contain the key with an empty result.
 - Ledgers until expiry: `liveUntilLedgerSeq - latestLedger` (use `latestLedger` from the same response as the baseline for consistency).
@@ -156,39 +159,40 @@ Notes: `closeTime` is a Unix timestamp string. `protocolVersion` was 27 on testn
 
 **Request params:**
 
-| Field | Type | Notes |
-|---|---|---|
-| `hash` | string (required) | 64-character hex transaction hash. |
-| `xdrFormat` | string | `"base64"` (default) or `"json"`. |
+| Field       | Type              | Notes                              |
+| ----------- | ----------------- | ---------------------------------- |
+| `hash`      | string (required) | 64-character hex transaction hash. |
+| `xdrFormat` | string            | `"base64"` (default) or `"json"`.  |
 
 **Response fields (always present):**
 
-| Field | Type | Notes |
-|---|---|---|
-| `status` | string | `"SUCCESS"`, `"FAILED"`, or `"NOT_FOUND"`. |
-| `latestLedger` | number | Latest ledger known at request time. |
-| `latestLedgerCloseTime` | number | Unix timestamp. |
-| `oldestLedger` | number | Oldest ledger retained in RPC. |
-| `oldestLedgerCloseTime` | number | Unix timestamp. |
+| Field                   | Type   | Notes                                      |
+| ----------------------- | ------ | ------------------------------------------ |
+| `status`                | string | `"SUCCESS"`, `"FAILED"`, or `"NOT_FOUND"`. |
+| `latestLedger`          | number | Latest ledger known at request time.       |
+| `latestLedgerCloseTime` | number | Unix timestamp.                            |
+| `oldestLedger`          | number | Oldest ledger retained in RPC.             |
+| `oldestLedgerCloseTime` | number | Unix timestamp.                            |
 
 **Response fields (present when `status` is `SUCCESS` or `FAILED`):**
 
-| Field | Type | Notes |
-|---|---|---|
-| `ledger` | number | Ledger where transaction was included. |
-| `createdAt` | number | Unix timestamp of inclusion. |
-| `applicationOrder` | number | Index among all transactions in the ledger. |
-| `feeBump` | boolean | Whether this was a fee-bump transaction. |
-| `envelopeXdr` | string | Base64 `TransactionEnvelope`. |
-| `resultXdr` | string | Base64 `TransactionResult`. |
-| `resultMetaXdr` | string | Base64 `TransactionMeta`. |
-| `diagnosticEventsXdr` | array of strings | Base64 `DiagnosticEvent`s; only present when `ENABLE_SOROBAN_DIAGNOSTIC_EVENTS` is enabled on the RPC node. |
-| `events.transactionEventsXdr` | array of strings | Base64 `TransactionEvent`s (fees charged/refunded). |
-| `events.contractEventsXdr` | array of arrays | Nested arrays of base64 `ContractEvent`s per operation. |
+| Field                         | Type             | Notes                                                                                                       |
+| ----------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| `ledger`                      | number           | Ledger where transaction was included.                                                                      |
+| `createdAt`                   | number           | Unix timestamp of inclusion.                                                                                |
+| `applicationOrder`            | number           | Index among all transactions in the ledger.                                                                 |
+| `feeBump`                     | boolean          | Whether this was a fee-bump transaction.                                                                    |
+| `envelopeXdr`                 | string           | Base64 `TransactionEnvelope`.                                                                               |
+| `resultXdr`                   | string           | Base64 `TransactionResult`.                                                                                 |
+| `resultMetaXdr`               | string           | Base64 `TransactionMeta`.                                                                                   |
+| `diagnosticEventsXdr`         | array of strings | Base64 `DiagnosticEvent`s; only present when `ENABLE_SOROBAN_DIAGNOSTIC_EVENTS` is enabled on the RPC node. |
+| `events.transactionEventsXdr` | array of strings | Base64 `TransactionEvent`s (fees charged/refunded).                                                         |
+| `events.contractEventsXdr`    | array of arrays  | Nested arrays of base64 `ContractEvent`s per operation.                                                     |
 
 **How to distinguish success from failure:**
 
 The `status` field is the primary discriminator:
+
 - `"SUCCESS"`: invocation ran to completion and state changes were committed.
 - `"FAILED"`: the transaction was included in a ledger but the invocation failed (e.g. trap, budget exhaustion, auth failure, contract error). State changes are NOT committed, but the transaction fee IS charged.
 - `"NOT_FOUND"`: the transaction is not in the RPC retention window (default: last 24 hours, max 7 days).
@@ -229,29 +233,29 @@ Notes: `friendbotUrl` is optional and only present on Testnet/Futurenet. `passph
 
 ### SDF-operated public free endpoints
 
-| Network | URL |
-|---|---|
-| Futurenet | `https://rpc-futurenet.stellar.org` |
-| Testnet | `https://soroban-testnet.stellar.org` |
+| Network   | URL                                   |
+| --------- | ------------------------------------- |
+| Futurenet | `https://rpc-futurenet.stellar.org`   |
+| Testnet   | `https://soroban-testnet.stellar.org` |
 
 SDF does not operate a public free mainnet RPC endpoint. Mainnet requires a commercial provider or self-hosted node.
 
 ### Public free endpoints from third parties (as listed in official docs, July 2026)
 
-| Provider | Network | URL |
-|---|---|---|
-| Liquify | Futurenet | `https://stellar.liquify.com/api=41EEWAH79Y5OCGI7/futurenet` |
-| Liquify | Testnet | `https://stellar.liquify.com/api=41EEWAH79Y5OCGI7/testnet` |
-| Liquify | Mainnet | `https://stellar-mainnet.liquify.com/api=41EEWAH79Y5OCGI7/mainnet` |
-| Gateway | Testnet | `https://soroban-rpc.testnet.stellar.gateway.fm` |
-| Gateway | Mainnet | `https://soroban-rpc.mainnet.stellar.gateway.fm` |
-| sorobanrpc.com | Mainnet | `https://mainnet.sorobanrpc.com` |
-| Nodies | Testnet | `https://stellar-soroban-testnet-public.nodies.app` |
-| Nodies | Mainnet | `https://stellar-soroban-public.nodies.app` |
-| OnFinality | Mainnet | `https://stellar.api.onfinality.io/public` |
-| Lightsail/Quasar | Mainnet | `https://rpc.lightsail.network/` |
-| Lightsail/Quasar | Mainnet (archive) | `https://archive-rpc.lightsail.network/` |
-| Ankr | Mainnet (archive) | `https://rpc.ankr.com/stellar_soroban` |
+| Provider         | Network           | URL                                                                |
+| ---------------- | ----------------- | ------------------------------------------------------------------ |
+| Liquify          | Futurenet         | `https://stellar.liquify.com/api=41EEWAH79Y5OCGI7/futurenet`       |
+| Liquify          | Testnet           | `https://stellar.liquify.com/api=41EEWAH79Y5OCGI7/testnet`         |
+| Liquify          | Mainnet           | `https://stellar-mainnet.liquify.com/api=41EEWAH79Y5OCGI7/mainnet` |
+| Gateway          | Testnet           | `https://soroban-rpc.testnet.stellar.gateway.fm`                   |
+| Gateway          | Mainnet           | `https://soroban-rpc.mainnet.stellar.gateway.fm`                   |
+| sorobanrpc.com   | Mainnet           | `https://mainnet.sorobanrpc.com`                                   |
+| Nodies           | Testnet           | `https://stellar-soroban-testnet-public.nodies.app`                |
+| Nodies           | Mainnet           | `https://stellar-soroban-public.nodies.app`                        |
+| OnFinality       | Mainnet           | `https://stellar.api.onfinality.io/public`                         |
+| Lightsail/Quasar | Mainnet           | `https://rpc.lightsail.network/`                                   |
+| Lightsail/Quasar | Mainnet (archive) | `https://archive-rpc.lightsail.network/`                           |
+| Ankr             | Mainnet (archive) | `https://rpc.ankr.com/stellar_soroban`                             |
 
 ### Rate limits
 
@@ -268,11 +272,11 @@ The official docs do not publish specific numeric rate limits for the SDF testne
 
 ### Three storage types
 
-| Type | Access in contract | Expiry behavior | Key space | Size limit |
-|---|---|---|---|---|
-| `Temporary` | `env.storage().temporary()` | Permanently deleted when TTL reaches 0. Cannot be restored. | Separate per-contract key space | Unlimited |
-| `Persistent` | `env.storage().persistent()` | Archived (not deleted) when TTL reaches 0. Can be restored. | Separate per-contract key space | Unlimited |
-| `Instance` | `env.storage().instance()` | Archived when TTL reaches 0. Shares the same TTL as the contract instance itself. | Stored inside the single contract instance `LedgerEntry` | ~100 KB serialized |
+| Type         | Access in contract           | Expiry behavior                                                                   | Key space                                                | Size limit         |
+| ------------ | ---------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------ |
+| `Temporary`  | `env.storage().temporary()`  | Permanently deleted when TTL reaches 0. Cannot be restored.                       | Separate per-contract key space                          | Unlimited          |
+| `Persistent` | `env.storage().persistent()` | Archived (not deleted) when TTL reaches 0. Can be restored.                       | Separate per-contract key space                          | Unlimited          |
+| `Instance`   | `env.storage().instance()`   | Archived when TTL reaches 0. Shares the same TTL as the contract instance itself. | Stored inside the single contract instance `LedgerEntry` | ~100 KB serialized |
 
 ### `liveUntilLedger` / TTL semantics
 
@@ -289,6 +293,7 @@ Always use `latestLedger` from the same `getLedgerEntries` response, not a separ
 If `ledgers_until_expiry <= 0`, the entry is expired (archived for Persistent/Instance, deleted for Temporary).
 
 A Stellar ledger closes approximately every 5-6 seconds. At 6 seconds per ledger:
+
 - 17,280 ledgers ~= 1 day
 - 120,960 ledgers ~= 7 days
 
@@ -352,6 +357,7 @@ This section is the most important part of this document. The question is whethe
 ### 5.1 Stellar Expert (`stellar.expert`)
 
 **What it does well:**
+
 - Transaction history for any contract address, with ledger-close timestamps, operation counts, and fee summaries.
 - Contract page at `stellar.expert/explorer/public/contract/<ID>` shows: creation date, WASM hash, contract code validation status (via SEP-based GitHub attestation), network of deployment.
 - Protocol history page tracks network-wide Soroban parameter upgrades over time.
@@ -359,6 +365,7 @@ This section is the most important part of this document. The question is whethe
 - The explorer itself noted state inconsistencies following the emergency protocol 24 upgrade in late 2025, with recovery ETA given as December 2025. This history illustrates that Stellar Expert's Soroban support is secondary to its core mission.
 
 **What it does NOT do for Soroban specifically:**
+
 - Does not expose decoded contract storage entries (no TTL dashboard, no storage key/value viewer).
 - Does not expose resource consumption metrics per invocation (no CPU, memory, or ledger byte breakdowns).
 - Does not expose invocation-level decoded arguments or return values (all contract call data is presented as raw XDR blobs).
@@ -376,6 +383,7 @@ This section is the most important part of this document. The question is whethe
 **Accessed:** 2026-07-26
 
 **What it does well:**
+
 - Shows all current storage entries for a contract in decoded (human-readable) form, sortable and filterable by key, value, durability, TTL, and last-modified ledger.
 - Displays contract spec (ABI equivalent), environment metadata, and version history (WASM upgrades).
 - Allows invoke-by-form: select a function, fill in typed parameters, simulate or submit.
@@ -384,6 +392,7 @@ This section is the most important part of this document. The question is whethe
 - Exports storage entries in XDR or JSON.
 
 **What it does NOT do for Soroban specifically:**
+
 - This is a single-contract, point-in-time inspection tool only. It has no time-series or historical view.
 - No event history: you cannot see what events a contract emitted over a range of ledgers.
 - No invocation history: you cannot see the last N calls to a contract, their arguments, results, or resource consumption.
@@ -406,6 +415,7 @@ An open-source project that provides a stateless read-only API (NestJS backend) 
 **What it does:** Decoded storage entries (key, value, durability, lastModifiedLedger), decoded events, decoded function invocations (function name, args, result).
 
 **Limitations:**
+
 - Stateless: no database, no persistence, no time-series. Every request re-fetches from the RPC.
 - No TTL tracking, no expiry alerting.
 - No resource fee breakdowns.
@@ -466,17 +476,17 @@ The CLI is also a real gap: there is no `stellar-rpc`-level equivalent of `cast 
 
 ## 6. Sources
 
-| URL | Purpose | Accessed |
-|---|---|---|
-| https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getEvents | getEvents method reference | 2026-07-26 |
-| https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getTransaction | getTransaction method reference | 2026-07-26 |
-| https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getLatestLedger | getLatestLedger method reference | 2026-07-26 |
-| https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getNetwork | getNetwork method reference | 2026-07-26 |
-| https://developers.stellar.org/network/soroban-rpc/api-reference/methods/getLedgerEntries | getLedgerEntries with example response | 2026-07-26 |
+| URL                                                                                                | Purpose                                            | Accessed   |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ---------- |
+| https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getEvents                  | getEvents method reference                         | 2026-07-26 |
+| https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getTransaction             | getTransaction method reference                    | 2026-07-26 |
+| https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getLatestLedger            | getLatestLedger method reference                   | 2026-07-26 |
+| https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getNetwork                 | getNetwork method reference                        | 2026-07-26 |
+| https://developers.stellar.org/network/soroban-rpc/api-reference/methods/getLedgerEntries          | getLedgerEntries with example response             | 2026-07-26 |
 | https://developers.stellar.org/docs/learn/fundamentals/contract-development/storage/state-archival | State archival, TTL, Persistent/Temporary/Instance | 2026-07-26 |
-| https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering | Resource fees and metering | 2026-07-26 |
-| https://developers.stellar.org/docs/data/apis/rpc/providers | Public RPC endpoints and providers | 2026-07-26 |
-| https://developers.stellar.org/docs/tools/lab/smart-contracts/contract-explorer | Stellar Lab Contract Explorer features | 2026-07-26 |
-| https://stellar.org/blog/foundation-news/state-archival-issue-post-mortem | State archival post-mortem (Oct 2025 incident) | 2026-07-26 |
-| https://github.com/Sunday-Explorer/Stellar-Soroban-Contract-Explorer | Third-party explorer project | 2026-07-26 |
-| https://github.com/freespek/solarkraft | Solarkraft runtime monitoring | 2026-07-26 |
+| https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering               | Resource fees and metering                         | 2026-07-26 |
+| https://developers.stellar.org/docs/data/apis/rpc/providers                                        | Public RPC endpoints and providers                 | 2026-07-26 |
+| https://developers.stellar.org/docs/tools/lab/smart-contracts/contract-explorer                    | Stellar Lab Contract Explorer features             | 2026-07-26 |
+| https://stellar.org/blog/foundation-news/state-archival-issue-post-mortem                          | State archival post-mortem (Oct 2025 incident)     | 2026-07-26 |
+| https://github.com/Sunday-Explorer/Stellar-Soroban-Contract-Explorer                               | Third-party explorer project                       | 2026-07-26 |
+| https://github.com/freespek/solarkraft                                                             | Solarkraft runtime monitoring                      | 2026-07-26 |

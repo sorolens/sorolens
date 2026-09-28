@@ -67,8 +67,11 @@ func TestCreateSubscriptionPerChannel(t *testing.T) {
 			if w.Code != http.StatusCreated {
 				t.Fatalf("want 201, got %d (%s)", w.Code, w.Body.String())
 			}
-			if strings.Contains(w.Body.String(), "secret") || strings.Contains(w.Body.String(), "R0UT1NG") {
-				t.Fatalf("response leaks a secret: %s", w.Body.String())
+			// The create response intentionally carries the one-time signing
+			// secret, but it must never echo the routing key or the raw webhook
+			// token.
+			if strings.Contains(w.Body.String(), "R0UT1NG") {
+				t.Fatalf("response leaks routing key: %s", w.Body.String())
 			}
 			var got subscriptionBody
 			if err := json.NewDecoder(w.Body).Decode(&got); err != nil {

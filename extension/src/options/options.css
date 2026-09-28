@@ -35,7 +35,11 @@ body {
   margin: 0;
   background: var(--bg-page);
   color: var(--text-primary);
-  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font:
+    14px/1.55 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
 }
 
 .page {

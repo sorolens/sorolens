@@ -74,7 +74,11 @@ export function ContractChangelog({
       <header className="changelog-header">
         <h2 className="changelog-title">Wasm hash changelog</h2>
         <div className="changelog-meta">
-          <a href={feedHref} className="changelog-feed-link" aria-label="Atom feed">
+          <a
+            href={feedHref}
+            className="changelog-feed-link"
+            aria-label="Atom feed"
+          >
             ⚛ Atom feed
           </a>
           <span className="changelog-badge-hint" title={badgeMd}>

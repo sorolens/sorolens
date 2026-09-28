@@ -32,7 +32,11 @@ async function copyText(value: string): Promise<void> {
   }
 }
 
-function truncateValue(value: string, headChars: number, tailChars: number): string {
+function truncateValue(
+  value: string,
+  headChars: number,
+  tailChars: number
+): string {
   if (value.length <= headChars + tailChars + 3) {
     return value;
   }
@@ -54,7 +58,7 @@ export function MonoId({ value, headChars = 6, tailChars = 4 }: MonoIdProps) {
 
   const displayValue = useMemo(
     () => truncateValue(value, headChars, tailChars),
-    [value, headChars, tailChars],
+    [value, headChars, tailChars]
   );
 
   async function handleClick() {
@@ -75,7 +79,8 @@ export function MonoId({ value, headChars = 6, tailChars = 4 }: MonoIdProps) {
         color: "inherit",
         cursor: "copy",
         display: "inline-flex",
-        fontFamily: '"JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
+        fontFamily:
+          '"JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
         fontSize: "inherit",
         gap: "0.5rem",
         lineHeight: 1.2,

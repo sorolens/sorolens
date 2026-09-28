@@ -11,7 +11,7 @@
       "topic_xdr": ["AAAAAQ=="],
       "value_xdr": "AAAAAg==",
       "topic_decoded": ["counter"],
-      "value_decoded": {"value": 7},
+      "value_decoded": { "value": 7 },
       "in_successful_call": true
     }
   ],

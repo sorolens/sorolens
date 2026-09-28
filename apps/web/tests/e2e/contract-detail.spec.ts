@@ -48,3 +48,20 @@ test("contract detail links back to the contracts list", async ({ page }) => {
   await expect(page).toHaveURL(/\/contracts$/);
   await expectHeading(page, "Contracts");
 });
+
+test("contract detail renders the cross-contract call trace", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.goto(`/contracts/${CONTRACT_ID}`);
+
+  await expect(page.getByRole("heading", { name: "Call trace" })).toBeVisible();
+
+  // The newest event's transaction hash is preloaded, so the flame graph
+  // renders without the user typing one.
+  const flame = page.getByTestId("trace-flamegraph");
+  await expect(flame).toBeVisible();
+  await expect(flame.getByText("swap")).toBeVisible();
+  await expect(flame.getByText("transfer")).toBeVisible();
+  await expect(page.getByText("1 cross-contract call")).toBeVisible();
+});

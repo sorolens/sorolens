@@ -449,6 +449,54 @@ export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
 }
 
+// ---- groups (contract portfolios) ------------------------------------------
+
+export interface Group {
+  id: string;
+  owner_id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface GroupStats {
+  group_id: string;
+  contract_count: number;
+  event_count: number;
+  invocation_count: number;
+  storage_entry_count: number;
+  average_health_score: number;
+}
+
+export interface GroupSummary extends Group {
+  stats: GroupStats;
+}
+
+export interface GroupContract {
+  contract_id: string;
+  network: string;
+  label: string;
+  status: string;
+  health_score: number | null;
+  last_activity_at: string | null;
+}
+
+export interface GroupDetail extends Group {
+  contracts: GroupContract[];
+}
+
+export interface GroupsListResponse {
+  groups: GroupSummary[];
+}
+
+export interface GroupMembershipResponse {
+  group_id: string;
+  contract_id: string;
+}
+
+export interface GroupDeletedResponse {
+  deleted: boolean;
+}
+
 // ---- source verification ---------------------------------------------------
 
 export interface VerificationDiagnostic {
@@ -479,4 +527,137 @@ export interface ContractVerification {
   submitted_at: string;
   verified_at?: string;
   updated_at: string;
+}
+
+/** Aggregated per-contract statistics shown side by side in the compare view. */
+export interface CompareStats {
+  event_count_24h: number;
+  event_count_7d: number;
+  invocation_count: number;
+  avg_cpu: number;
+  avg_fee: number;
+  last_activity: string | null;
+}
+
+/**
+ * One frame of a transaction's cross-contract call tree, as returned by
+ * `GET /api/v1/invocations/{tx_hash}/trace`. `span_id` is a deterministic
+ * call-path string ("0", "0.0", "0.1", "0.0.0"); the root always has "0" and
+ * is backed by the invocations row, every other node by a call_edges row.
+ */
+export interface TraceNode {
+  span_id: string;
+  parent_span_id?: string;
+  contract_id?: string;
+  function_name?: string;
+  cpu: number;
+  mem: number;
+  fee_share: number;
+  depth: number;
+  children: TraceNode[];
+}
+
+export interface TraceResponse {
+  tx_hash: string;
+  status?: string;
+  network?: string;
+  ledger: number;
+  root: TraceNode;
+  edge_count: number;
+  /** False when the transaction recorded no cross-contract calls. */
+  has_edges: boolean;
+  /** True when the indexer's caps dropped frames from the tree. */
+  truncated: boolean;
+}
+
+// ---- alert rules (rule language) -------------------------------------------
+
+export type RuleSeverity = "Info" | "Warning" | "Critical";
+
+/** A positioned validation problem, rendered next to the editor line. */
+export interface RuleDiagnostic {
+  message: string;
+  hint?: string;
+  line: number;
+  column: number;
+}
+
+/** Response of POST /api/v1/rules/validate and /rules/preview. */
+export interface RuleValidation {
+  valid: boolean;
+  normalized?: string;
+  metrics?: string[];
+  window?: string;
+  errors?: RuleDiagnostic[];
+}
+
+/** A stored alert rule. */
+export interface AlertRule {
+  id: number;
+  name: string;
+  source: string;
+  severity: RuleSeverity;
+  contract_id?: string;
+  network?: string;
+  window?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RulesResponse {
+  rules: AlertRule[];
+}
+
+export interface CreateRuleRequest {
+  name: string;
+  source: string;
+  severity?: RuleSeverity;
+  contract_id?: string;
+  network?: string;
+}
+
+/** One entry of the server-side metric catalog. */
+export interface RuleMetric {
+  name: string;
+  unit: string;
+  description: string;
+}
+
+export interface RuleCatalogResponse {
+  metrics: RuleMetric[];
+  aggregations: string[];
+  networks: string[];
+}
+
+/** A curated sample rule from the server-side library. */
+export interface RuleLibraryEntry {
+  name: string;
+  description: string;
+  severity: string;
+  source: string;
+}
+
+export interface RuleLibraryResponse {
+  rules: RuleLibraryEntry[];
+}
+
+export interface RulePreviewPoint {
+  at: string;
+  value: number | null;
+  fired: boolean;
+}
+
+/** Response of POST /api/v1/rules/preview. */
+export interface RulePreview {
+  valid: boolean;
+  fired: boolean;
+  op?: string;
+  value: number | null;
+  threshold: number | null;
+  reason?: string;
+  window?: string;
+  evaluated_at: string;
+  points?: RulePreviewPoint[];
+  errors?: RuleDiagnostic[];
 }

@@ -11,6 +11,7 @@ const (
 	CodeNotFound         = "NOT_FOUND"
 	CodeInvalidInput     = "INVALID_INPUT"
 	CodeInternal         = "INTERNAL"
+	CodeForbidden        = "FORBIDDEN"
 	CodeRateLimited      = "RATE_LIMITED"
 	CodeUnsupportedMedia = "UNSUPPORTED_MEDIA_TYPE"
 	CodeUnauthorized     = "UNAUTHORIZED"

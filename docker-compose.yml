@@ -24,7 +24,16 @@ services:
     # CI installs scripts/aws-mock.sh as `aws` inside this container so the
     # archive_command below succeeds there; locally it only logs a failure and
     # Postgres keeps serving.
-    command: ["postgres", "-c", "wal_level=replica", "-c", "archive_mode=on", "-c", "archive_command=aws s3 cp %p s3://sorolens-backups/wal/%f"]
+    command:
+      [
+        "postgres",
+        "-c",
+        "wal_level=replica",
+        "-c",
+        "archive_mode=on",
+        "-c",
+        "archive_command=aws s3 cp %p s3://sorolens-backups/wal/%f",
+      ]
     ports:
       - "5432:5432"
     volumes:

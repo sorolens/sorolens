@@ -22,13 +22,17 @@ const POLL_INTERVAL_MS = 5_000;
 
 export function useOfflineAlertQueue() {
   const [pending, setPending] = useState<QueuedAlert[]>([]);
-  const [isOffline, setIsOffline] = useState<boolean>(
-    typeof navigator !== "undefined" ? !navigator.onLine : false
-  );
+  // Always start "online" so the first client render matches the server-rendered
+  // HTML. Reading `navigator.onLine` during render is not safe: on the server
+  // `navigator.onLine` is undefined (so `!navigator.onLine` is true) while in the
+  // browser it is false, which makes the server and client disagree and triggers
+  // a hydration mismatch. The real state is synced after mount below.
+  const [isOffline, setIsOffline] = useState<boolean>(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Keep isOffline in sync with the browser's network state
+  // Sync isOffline with the browser's network state, on mount and on change.
   useEffect(() => {
+    setIsOffline(!navigator.onLine);
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
     window.addEventListener("online", handleOnline);

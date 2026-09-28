@@ -65,7 +65,9 @@ export function DataTable<T>({
                   <th
                     key={col.key}
                     className={`px-4 py-3 ${
-                      col.sortable ? "cursor-pointer select-none hover:text-[var(--color-text-primary)]" : ""
+                      col.sortable
+                        ? "cursor-pointer select-none hover:text-[var(--color-text-primary)]"
+                        : ""
                     }`}
                     onClick={() => {
                       if (col.sortable && onSort) {
@@ -77,7 +79,11 @@ export function DataTable<T>({
                       <span>{col.header}</span>
                       {col.sortable && (
                         <span className="text-xs opacity-60">
-                          {isSorted ? (sortDirection === "asc" ? "▲" : "▼") : "↕"}
+                          {isSorted
+                            ? sortDirection === "asc"
+                              ? "▲"
+                              : "▼"
+                            : "↕"}
                         </span>
                       )}
                     </div>
@@ -99,7 +105,9 @@ export function DataTable<T>({
                   <td key={col.key} className="px-4 py-3 text-sm">
                     {col.accessor
                       ? col.accessor(item)
-                      : String((item as Record<string, unknown>)[col.key] ?? "-")}
+                      : String(
+                          (item as Record<string, unknown>)[col.key] ?? "-"
+                        )}
                   </td>
                 ))}
               </tr>

@@ -18,10 +18,10 @@ Sorolens takes the security of its API, indexer, dashboard, CLI, and on-chain co
 
 Only the latest release receives security fixes. If you are running an older version, please upgrade before reporting.
 
-| Version | Supported |
-| --- | --- |
-| Latest release | Yes |
-| Older releases | No |
+| Version        | Supported |
+| -------------- | --------- |
+| Latest release | Yes       |
+| Older releases | No        |
 
 ## Reporting a vulnerability
 
@@ -42,11 +42,11 @@ Email is currently the only confidential reporting channel: GitHub private vulne
 
 ## Response timeline (SLA)
 
-| Timeline | What we do |
-| --- | --- |
-| 48 hours | Acknowledge receipt of your report by email. |
-| 7 days | Provide an initial assessment: whether we can reproduce the issue and a preliminary severity rating. |
-| 90 days | Publish a fix and disclose the vulnerability publicly (CVE if applicable). |
+| Timeline | What we do                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| 48 hours | Acknowledge receipt of your report by email.                                                         |
+| 7 days   | Provide an initial assessment: whether we can reproduce the issue and a preliminary severity rating. |
+| 90 days  | Publish a fix and disclose the vulnerability publicly (CVE if applicable).                           |
 
 If a fix requires more time, we will communicate that before the 90-day mark and agree on an extended timeline with you.
 

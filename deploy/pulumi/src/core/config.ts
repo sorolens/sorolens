@@ -73,55 +73,87 @@ export class SorolensConfigError extends Error {
  * @param publicUrl origin the dashboard and API are served from (may be an
  *   Output, e.g. the load balancer DNS name).
  */
-export function buildAppConfig(args: AppConfigArgs, publicUrl: pulumi.Input<string>): AppConfig {
+export function buildAppConfig(
+  args: AppConfigArgs,
+  publicUrl: pulumi.Input<string>
+): AppConfig {
   const name = args.name ?? "sorolens";
   if (!NAME_RE.test(name) || name.endsWith("-")) {
-    throw new SorolensConfigError(`name must match ${NAME_RE} and must not end with a hyphen (got "${name}")`);
+    throw new SorolensConfigError(
+      `name must match ${NAME_RE} and must not end with a hyphen (got "${name}")`
+    );
   }
 
   const network = args.stellarNetwork ?? "testnet";
   if (!STELLAR_NETWORKS.includes(network)) {
-    throw new SorolensConfigError(`stellarNetwork must be one of ${STELLAR_NETWORKS.join(", ")} (got "${network}")`);
+    throw new SorolensConfigError(
+      `stellarNetwork must be one of ${STELLAR_NETWORKS.join(", ")} (got "${network}")`
+    );
   }
 
   const given = args.sorobanRpcUrls ?? {};
   for (const [net, url] of Object.entries(given)) {
     if (!STELLAR_NETWORKS.includes(net as StellarNetwork)) {
-      throw new SorolensConfigError(`sorobanRpcUrls keys must be ${STELLAR_NETWORKS.join(", ")} (got "${net}")`);
+      throw new SorolensConfigError(
+        `sorobanRpcUrls keys must be ${STELLAR_NETWORKS.join(", ")} (got "${net}")`
+      );
     }
     if (typeof url !== "string" || !url.startsWith("https://")) {
-      throw new SorolensConfigError(`sorobanRpcUrls.${net} must be an https:// URL`);
+      throw new SorolensConfigError(
+        `sorobanRpcUrls.${net} must be an https:// URL`
+      );
     }
   }
   if (network === "mainnet" && !given.mainnet) {
-    throw new SorolensConfigError("stellarNetwork is mainnet, so sorobanRpcUrls.mainnet is required (there is no public default)");
+    throw new SorolensConfigError(
+      "stellarNetwork is mainnet, so sorobanRpcUrls.mainnet is required (there is no public default)"
+    );
   }
 
-  if (args.watchdogContractId !== undefined && !CONTRACT_ID_RE.test(args.watchdogContractId)) {
-    throw new SorolensConfigError("watchdogContractId must be a 56-character contract strkey starting with C");
+  if (
+    args.watchdogContractId !== undefined &&
+    !CONTRACT_ID_RE.test(args.watchdogContractId)
+  ) {
+    throw new SorolensConfigError(
+      "watchdogContractId must be a 56-character contract strkey starting with C"
+    );
   }
 
   const logLevel = args.logLevel ?? "info";
   if (!LOG_LEVELS.includes(logLevel)) {
-    throw new SorolensConfigError(`logLevel must be one of ${LOG_LEVELS.join(", ")}`);
+    throw new SorolensConfigError(
+      `logLevel must be one of ${LOG_LEVELS.join(", ")}`
+    );
   }
 
   const origins = args.allowedOrigins ?? [];
   for (const o of origins) {
     if (!ORIGIN_RE.test(o)) {
-      throw new SorolensConfigError(`allowedOrigins entries must be origins without a path (got "${o}")`);
+      throw new SorolensConfigError(
+        `allowedOrigins entries must be origins without a path (got "${o}")`
+      );
     }
   }
 
   const pollInterval = args.indexerPollInterval ?? "5m";
   if (!GO_DURATION_RE.test(pollInterval)) {
-    throw new SorolensConfigError(`indexerPollInterval must be a Go duration such as 30s or 5m (got "${pollInterval}")`);
+    throw new SorolensConfigError(
+      `indexerPollInterval must be a Go duration such as 30s or 5m (got "${pollInterval}")`
+    );
   }
 
   const rpcUrls = { ...DEFAULT_RPC_URLS, ...given };
-  const indexedNetworks = [...new Set<StellarNetwork>([network, ...(Object.keys(given) as StellarNetwork[]).sort()])];
+  const indexedNetworks = [
+    ...new Set<StellarNetwork>([
+      network,
+      ...(Object.keys(given) as StellarNetwork[]).sort(),
+    ]),
+  ];
   const perNetworkRpcEnv: Env = Object.fromEntries(
-    indexedNetworks.map((n) => [`SOROBAN_RPC_URL_${n.toUpperCase()}`, rpcUrls[n] as string]),
+    indexedNetworks.map((n) => [
+      `SOROBAN_RPC_URL_${n.toUpperCase()}`,
+      rpcUrls[n] as string,
+    ])
   );
 
   const apiEnvironment: Env = {
@@ -140,7 +172,9 @@ export function buildAppConfig(args: AppConfigArgs, publicUrl: pulumi.Input<stri
     INDEXER_ROLE: "all",
     INDEXER_METRICS_ADDR: `:${INDEXER_METRICS_PORT}`,
     WATCHDOG_ENABLED: args.watchdogContractId ? "true" : "false",
-    ...(args.watchdogContractId ? { WATCHDOG_CONTRACT_ID: args.watchdogContractId } : {}),
+    ...(args.watchdogContractId
+      ? { WATCHDOG_CONTRACT_ID: args.watchdogContractId }
+      : {}),
   };
 
   const dashboardEnvironment: Env = {

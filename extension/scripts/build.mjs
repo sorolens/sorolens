@@ -7,7 +7,13 @@
 //
 // Usage: node scripts/build.mjs <chrome|firefox>
 
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,7 +28,9 @@ const TARGETS = {
 
 const target = process.argv[2];
 if (!target || !(target in TARGETS)) {
-  console.error(`Usage: node scripts/build.mjs <${Object.keys(TARGETS).join("|")}>`);
+  console.error(
+    `Usage: node scripts/build.mjs <${Object.keys(TARGETS).join("|")}>`
+  );
   process.exit(1);
 }
 
@@ -41,7 +49,7 @@ mkdirSync(outDir, { recursive: true });
 cpSync(join(ROOT, "src"), join(outDir, "src"), { recursive: true });
 writeFileSync(
   join(outDir, "manifest.json"),
-  `${JSON.stringify(manifest, null, 2)}\n`,
+  `${JSON.stringify(manifest, null, 2)}\n`
 );
 
 console.log(`built ${target} -> ${outDir}`);

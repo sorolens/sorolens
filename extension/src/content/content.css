@@ -26,7 +26,9 @@ button[data-sorolens-ui="button"].sorolens-track-btn {
   white-space: nowrap;
   vertical-align: baseline;
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease,
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
     color 120ms ease;
 }
 
@@ -46,8 +48,7 @@ button[data-sorolens-ui="button"].sorolens-track-btn:disabled {
   opacity: 0.7;
 }
 
-button[data-sorolens-ui="button"].sorolens-track-btn
-  .sorolens-track-btn__icon {
+button[data-sorolens-ui="button"].sorolens-track-btn .sorolens-track-btn__icon {
   font-size: 12px;
   line-height: 1;
 }

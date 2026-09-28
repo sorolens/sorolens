@@ -21,7 +21,6 @@ BUILT_AT  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 API_BUILDINFO := github.com/sorolens/sorolens/apps/api/internal/buildinfo
 API_LDFLAGS   := -ldflags "-X $(API_BUILDINFO).Version=$(VERSION) -X $(API_BUILDINFO).GitSHA=$(GIT_SHA) -X $(API_BUILDINFO).BuiltAt=$(BUILT_AT)"
 
-.PHONY: up down logs psql migrate-up migrate-down migrate-new test lint dev build client-go openapi lint-openapi
 .PHONY: up down logs psql migrate-up migrate-down migrate-new test lint dev api build client-go openapi lint-openapi
 
 ## up: start all Docker services in the background

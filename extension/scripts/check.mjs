@@ -39,7 +39,7 @@ for (const file of allFiles.filter((f) => /\.(js|mjs)$/.test(f))) {
     execFileSync(process.execPath, ["--check", file], { stdio: "pipe" });
   } catch (error) {
     failures.push(
-      `${relative(ROOT, file)}: node --check failed\n${error.stderr?.toString() || error.message}`,
+      `${relative(ROOT, file)}: node --check failed\n${error.stderr?.toString() || error.message}`
     );
   }
 }
@@ -59,7 +59,7 @@ function matchesResource(pattern) {
   const base = slash === -1 ? "" : prefix.slice(slash + 1);
   if (!existsSync(dir)) return 0;
   return readdirSync(dir).filter(
-    (name) => name.startsWith(base) && name.endsWith(suffix),
+    (name) => name.startsWith(base) && name.endsWith(suffix)
   ).length;
 }
 
@@ -112,14 +112,18 @@ for (const name of MANIFESTS) {
   }
 
   const contentScripts = manifest.content_scripts || [];
-  const matches = new Set(contentScripts.flatMap((script) => script.matches || []));
+  const matches = new Set(
+    contentScripts.flatMap((script) => script.matches || [])
+  );
   for (const origin of [
     "https://stellar.expert/*",
     "https://lab.stellar.org/*",
     "https://stellar.org/*",
   ]) {
     if (!matches.has(origin)) {
-      failures.push(`${name}: content_scripts is missing a match for ${origin}`);
+      failures.push(
+        `${name}: content_scripts is missing a match for ${origin}`
+      );
     }
   }
   if (contentScripts.length === 0) {
@@ -146,14 +150,16 @@ for (const name of MANIFESTS) {
   }
 
   const resources = (manifest.web_accessible_resources || []).flatMap(
-    (entry) => entry.resources || [],
+    (entry) => entry.resources || []
   );
   if (resources.length === 0) {
     failures.push(`${name}: web_accessible_resources is empty`);
   }
   for (const pattern of resources) {
     if (matchesResource(pattern) === 0) {
-      failures.push(`${name}: web_accessible_resources matches nothing: ${pattern}`);
+      failures.push(
+        `${name}: web_accessible_resources matches nothing: ${pattern}`
+      );
     }
   }
 }

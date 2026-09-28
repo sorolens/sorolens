@@ -1,7 +1,10 @@
 // Popup: shows the tracking status of the contracts on the active tab and
 // offers a one-click add (plus a manual paste box for anywhere else).
 
-import { normalizeContractId, shortenContractId } from "../shared/contract-id.js";
+import {
+  normalizeContractId,
+  shortenContractId,
+} from "../shared/contract-id.js";
 import {
   getActiveTab,
   openOptionsPage,
@@ -133,7 +136,9 @@ async function collectDetected() {
     return [];
   }
   try {
-    const response = await sendTabMessage(tab.id, { type: MESSAGE.getDetected });
+    const response = await sendTabMessage(tab.id, {
+      type: MESSAGE.getDetected,
+    });
     if (response && Array.isArray(response.contractIds)) {
       return response.contractIds;
     }
@@ -161,15 +166,19 @@ async function loadStatuses(contractIds, force) {
   if (!response || !response.ok) {
     setConnection("error");
     setNotice(
-      (response && response.error) || "Could not reach the Sorolens API",
+      (response && response.error) || "Could not reach the Sorolens API"
     );
     return;
   }
-  rows = new Map(response.statuses.map((status) => [status.contractId, status]));
+  rows = new Map(
+    response.statuses.map((status) => [status.contractId, status])
+  );
   const firstError = response.statuses.find((status) => status.error);
   if (firstError) {
     setConnection("error");
-    setNotice(`${shortenContractId(firstError.contractId)}: ${firstError.error}`);
+    setNotice(
+      `${shortenContractId(firstError.contractId)}: ${firstError.error}`
+    );
   } else {
     setConnection("ok");
     setNotice("");
@@ -180,7 +189,10 @@ async function loadStatuses(contractIds, force) {
 async function track(contractId) {
   busy = true;
   render();
-  const response = await sendRuntimeMessage({ type: MESSAGE.track, contractId });
+  const response = await sendRuntimeMessage({
+    type: MESSAGE.track,
+    contractId,
+  });
   busy = false;
   if (!response || !response.ok) {
     setNotice((response && response.error) || "Tracking failed");
@@ -232,7 +244,7 @@ async function refresh({ force = false } = {}) {
     if (!settings || !settings.apiKey) {
       setNotice(
         "Add your Sorolens API key in Settings to register untracked contracts.",
-        "info",
+        "info"
       );
     }
     return;

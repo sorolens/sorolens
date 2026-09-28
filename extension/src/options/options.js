@@ -78,8 +78,10 @@ async function rescanSupportedTabs() {
       tabs
         .filter((tab) => typeof tab.id === "number")
         .map((tab) =>
-          sendTabMessage(tab.id, { type: MESSAGE.rescan }).catch(() => undefined),
-        ),
+          sendTabMessage(tab.id, { type: MESSAGE.rescan }).catch(
+            () => undefined
+          )
+        )
     );
   } catch {
     // Tabs that are not running the content script simply do not answer.
@@ -134,13 +136,18 @@ async function onTest() {
   const response = await sendRuntimeMessage({ type: MESSAGE.testConnection });
   el.testButton.disabled = false;
   if (!response || !response.ok) {
-    setNotice((response && response.error) || "Connection test failed.", "error");
+    setNotice(
+      (response && response.error) || "Connection test failed.",
+      "error"
+    );
     return;
   }
-  const keyState = response.hasApiKey ? "with an API key" : "without an API key";
+  const keyState = response.hasApiKey
+    ? "with an API key"
+    : "without an API key";
   setNotice(
     `Connected to ${response.apiBaseUrl} in ${response.latencyMs} ms ${keyState}.`,
-    "ok",
+    "ok"
   );
 }
 

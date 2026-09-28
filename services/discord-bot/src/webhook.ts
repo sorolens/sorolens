@@ -10,7 +10,11 @@
  * simply do not get an auto-role until they do.
  */
 
-import express, { type Application, type Request, type Response } from "express";
+import express, {
+  type Application,
+  type Request,
+  type Response,
+} from "express";
 import { Webhooks } from "@octokit/webhooks";
 import type { Client } from "discord.js";
 import { getByGithub } from "./db.js";
@@ -75,9 +79,12 @@ export function mountWebhookRoutes(app: Application, deps: Deps): void {
         });
         res.status(202).json({ ok: true });
       } catch (err) {
-        console.warn("webhook rejected:", err instanceof Error ? err.message : err);
+        console.warn(
+          "webhook rejected:",
+          err instanceof Error ? err.message : err
+        );
         res.status(400).json({ error: "invalid signature or payload" });
       }
-    },
+    }
   );
 }

@@ -408,7 +408,10 @@ export default function ImportContractsCsv({
                       <td className="px-3 py-2 text-[var(--color-text-secondary)]">
                         {row.line}
                       </td>
-                      <td className="px-3 py-2 font-mono text-[var(--color-text-primary)]">
+                      <td
+                        className="px-3 py-2 font-mono text-[var(--color-text-primary)]"
+                        title={row.contractId || undefined}
+                      >
                         {row.contractId
                           ? `${row.contractId.slice(0, 12)}…`
                           : "--"}

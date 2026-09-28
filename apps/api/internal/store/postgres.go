@@ -30,12 +30,16 @@ func (s *postgresStore) UpsertLabel(ctx context.Context, label Label) error {
 
 func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error) {
 	rows, err := s.pool.Query(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public FROM labels_workspace WHERE workspace_id = $1) labels WHERE label ILIKE '%' || $2 || '%' OR value ILIKE '%' || $2 || '%' ORDER BY label LIMIT 100`, workspaceID, query)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var labels []Label
 	for rows.Next() {
 		var label Label
-		if err := rows.Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public); err != nil { return nil, err }
+		if err := rows.Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public); err != nil {
+			return nil, err
+		}
 		labels = append(labels, label)
 	}
 	return labels, rows.Err()
@@ -44,7 +48,9 @@ func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query strin
 func (s *postgresStore) ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error) {
 	var label Label
 	err := s.pool.QueryRow(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public, 2 AS priority FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public, 1 AS priority FROM labels_workspace WHERE workspace_id = $1) labels WHERE lower(label) = lower($2) ORDER BY priority LIMIT 1`, workspaceID, query).Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public)
-	if errors.Is(err, pgx.ErrNoRows) { return Label{}, ErrNotFound }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Label{}, ErrNotFound
+	}
 	return label, err
 }
 
@@ -317,6 +323,53 @@ func (s *postgresStore) BatchInsertInvocations(ctx context.Context, invocations 
 	return nil
 }
 
+// ---- cross-contract call graph ---------------------------------------------
+
+// queueCallEdges appends the INSERT for each edge to a batch. Duplicates are
+// ignored by primary key (tx_hash, child_span_id), which is what makes both a
+// re-index of the same ledger and a backfill run idempotent.
+func queueCallEdges(batch *pgx.Batch, edges []CallEdge) {
+	for _, e := range edges {
+		batch.Queue(`
+			INSERT INTO call_edges
+				(tx_hash, parent_span_id, child_span_id, callee_contract_id, function_name,
+				 cpu, mem, fee_share, depth, network, ledger, ledger_closed_at, inserted_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			ON CONFLICT (tx_hash, child_span_id) DO NOTHING`,
+			e.TxHash, e.ParentSpanID, e.ChildSpanID, nullIfEmpty(e.CalleeContractID), nullIfEmpty(e.FunctionName),
+			e.CPU, e.Mem, e.FeeShare, e.Depth, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, time.Now(),
+		)
+	}
+}
+
+// nullIfEmpty stores an empty string as SQL NULL, so "no callee contract" and
+// "unknown function" are distinguishable from an empty identifier.
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// BatchInsertCallEdges inserts cross-contract call graph edges, ignoring
+// duplicates by primary key.
+func (s *postgresStore) BatchInsertCallEdges(ctx context.Context, edges []CallEdge) error {
+	if len(edges) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	queueCallEdges(batch, edges)
+
+	br := s.pool.SendBatch(ctx, batch)
+	defer br.Close()
+	for range edges {
+		if _, err := br.Exec(); err != nil {
+			return fmt.Errorf("batch insert call edges: %w", err)
+		}
+	}
+	return nil
+}
+
 // ---- storage entries ------------------------------------------------------
 
 // UpsertStorageEntries inserts or updates multiple storage entries in a single batch operation. It uses the contract_id and key_xdr as the unique constraint for upserting.
@@ -440,7 +493,7 @@ func (s *postgresStore) SetIndexerCursor(ctx context.Context, network string, le
 
 // BatchInsertWithCursor atomically writes events, invocations, contract sync state,
 // and advances the network indexer cursor within a single database transaction.
-func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error {
+func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, callEdges []CallEdge, syncState SyncState) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -489,6 +542,8 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 		)
 	}
 
+	queueCallEdges(batch, callEdges)
+
 	if syncState.ContractID != "" {
 		batch.Queue(`
 			INSERT INTO sync_state (contract_id, last_ledger, last_run_at, error_message, updated_at)
@@ -512,7 +567,7 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 	)
 
 	br := tx.SendBatch(ctx, batch)
-	totalQueued := len(events) + len(invocations)
+	totalQueued := len(events) + len(invocations) + len(callEdges)
 	if syncState.ContractID != "" {
 		totalQueued++
 	}
@@ -760,4 +815,108 @@ func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit
 	}
 
 	return contracts, nil
+}
+
+// SearchEvents implements store.Store.SearchEvents (issue #159). The inner
+// DISTINCT ON picks the newest event per matching tx_hash before the outer
+// query re-sorts by recency and applies the caller's limit, so a single
+// transaction that emitted many events doesn't crowd out other matches.
+func (s *postgresStore) SearchEvents(ctx context.Context, query string, limit int) ([]Event, error) {
+	if query == "" {
+		return []Event{}, nil
+	}
+
+	q := `
+		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+		       topic_xdr, value_xdr, topic_decoded, value_decoded,
+		       in_successful_call, inserted_at
+		FROM (
+			SELECT DISTINCT ON (tx_hash)
+			       id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+			       topic_xdr, value_xdr, topic_decoded, value_decoded,
+			       in_successful_call, inserted_at
+			FROM events
+			WHERE tx_hash ILIKE $1
+			ORDER BY tx_hash, ledger_closed_at DESC
+		) matched
+		ORDER BY ledger_closed_at DESC
+		LIMIT $2
+	`
+
+	searchPattern := "%" + query + "%"
+
+	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []Event
+	for rows.Next() {
+		var e Event
+		var topicXDR, topicDec, valDec []byte
+		if err := rows.Scan(
+			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
+			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
+			&e.InSuccessfulCall, &e.InsertedAt,
+		); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(topicXDR, &e.TopicXDR)
+		_ = json.Unmarshal(topicDec, &e.TopicDecoded)
+		_ = json.Unmarshal(valDec, &e.ValueDecoded)
+		events = append(events, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}
+
+// SearchFunctions implements store.Store.SearchFunctions (issue #159). It
+// mirrors SearchEvents: an inner DISTINCT ON collapses each matching
+// function name to its most recent invocation, and the outer query re-sorts
+// by recency before applying the limit.
+func (s *postgresStore) SearchFunctions(ctx context.Context, query string, limit int) ([]FunctionMatch, error) {
+	if query == "" {
+		return []FunctionMatch{}, nil
+	}
+
+	q := `
+		SELECT function_name, contract_id, network, tx_hash, ledger_closed_at
+		FROM (
+			SELECT DISTINCT ON (function_name)
+			       function_name, contract_id, network, tx_hash, ledger_closed_at
+			FROM invocations
+			WHERE function_name ILIKE $1
+			ORDER BY function_name, ledger_closed_at DESC
+		) matched
+		ORDER BY ledger_closed_at DESC
+		LIMIT $2
+	`
+
+	searchPattern := "%" + query + "%"
+
+	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var matches []FunctionMatch
+	for rows.Next() {
+		var f FunctionMatch
+		if err := rows.Scan(&f.Name, &f.ContractID, &f.Network, &f.TxHash, &f.LedgerClosedAt); err != nil {
+			return nil, err
+		}
+		matches = append(matches, f)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return matches, nil
 }

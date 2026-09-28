@@ -126,7 +126,7 @@ func TestComputeMonthlySLAOngoingOutageExcludedFromMTTR(t *testing.T) {
 	checks := []HealthCheck{
 		check("Healthy", at("2026-02", 1, 0)),
 		check("Degraded", at("2026-02", 1, 1)),
-		check("Healthy", at("2026-02", 1, 2)), // recovered after 1h
+		check("Healthy", at("2026-02", 1, 2)),  // recovered after 1h
 		check("Degraded", at("2026-02", 1, 5)), // second incident, never recovers
 	}
 	m := ComputeMonthlySLA("CTEST", "2026-02", checks, nil)

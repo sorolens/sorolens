@@ -4,11 +4,11 @@ Official, typed Python client for the [Sorolens](https://github.com/sorolens/sor
 Soroban indexing API. It mirrors the REST surface described in
 [`docs/openapi.yaml`](../../docs/openapi.yaml) and ships:
 
-* a **generated** low-level client (`sorolens._generated`) produced from the OpenAPI
+- a **generated** low-level client (`sorolens._generated`) produced from the OpenAPI
   spec with [`openapi-python-client`](https://github.com/openapi-generators/openapi-python-client);
-* a **hand-written** high-level facade (`sorolens.Client` / `sorolens.AsyncClient`) with
+- a **hand-written** high-level facade (`sorolens.Client` / `sorolens.AsyncClient`) with
   namespaced resources and a small exception hierarchy;
-* **sync and async** transports, both built on [`httpx`](https://www.python-httpx.org/).
+- **sync and async** transports, both built on [`httpx`](https://www.python-httpx.org/).
 
 > **Publishing status:** the package metadata, build config, tests, docs and the
 > tag-triggered release workflow all live in this repository. The first upload to PyPI
@@ -90,14 +90,14 @@ client.watchlist.add(user_id="user_123", contract_id=contract_id)
 
 Every non-2xx response raises a subclass of `sorolens.SorolensError`:
 
-| Exception | Status | Meaning |
-| --- | --- | --- |
-| `AuthenticationError` | 401 | Missing or invalid credential/identity |
-| `ForbiddenError` | 403 | Missing scope or role |
-| `NotFoundError` | 404 | Resource does not exist |
-| `ValidationError` | 422 | Invalid query or body |
-| `RateLimitError` | 429 | Rate limit exceeded |
-| `APIError` | any other | Base class for API errors |
+| Exception             | Status    | Meaning                                |
+| --------------------- | --------- | -------------------------------------- |
+| `AuthenticationError` | 401       | Missing or invalid credential/identity |
+| `ForbiddenError`      | 403       | Missing scope or role                  |
+| `NotFoundError`       | 404       | Resource does not exist                |
+| `ValidationError`     | 422       | Invalid query or body                  |
+| `RateLimitError`      | 429       | Rate limit exceeded                    |
+| `APIError`            | any other | Base class for API errors              |
 
 ```python
 from sorolens import Client, NotFoundError
@@ -111,19 +111,19 @@ with Client(api_key="sk_live_...") as client:
 
 ## Available resources
 
-| Resource | Methods |
-| --- | --- |
-| `client.health` | `health()`, `readyz()` |
-| `client.stats` | `global_stats()`, `contract(contract_id, window=...)` |
-| `client.contracts` | `list(...)`, `get(contract_id)`, `register(contract_id, network, label=...)` |
-| `client.events` | `list(contract_id, ...)`, `stream(contract_id)` |
-| `client.invocations` | `list(contract_id, ...)` |
-| `client.storage` | `list(contract_id, ...)` |
-| `client.forecast` | `get(contract_id, horizon=...)` |
-| `client.snapshots` | `get(contract_id, ledger=...)` |
-| `client.api_keys` | `list()`, `create()`, `revoke()`, `list_admin()`, `create_admin()`, `revoke_admin()` |
-| `client.watchlist` | `list(user_id)`, `add(...)`, `remove(...)`, `status(...)` |
-| `client.watchdog` | `stats()`, `alerts(...)`, `contracts(...)`, `contract()`, `health()`, `alerts_for()` |
+| Resource             | Methods                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| `client.health`      | `health()`, `readyz()`                                                               |
+| `client.stats`       | `global_stats()`, `contract(contract_id, window=...)`                                |
+| `client.contracts`   | `list(...)`, `get(contract_id)`, `register(contract_id, network, label=...)`         |
+| `client.events`      | `list(contract_id, ...)`, `stream(contract_id)`                                      |
+| `client.invocations` | `list(contract_id, ...)`                                                             |
+| `client.storage`     | `list(contract_id, ...)`                                                             |
+| `client.forecast`    | `get(contract_id, horizon=...)`                                                      |
+| `client.snapshots`   | `get(contract_id, ledger=...)`                                                       |
+| `client.api_keys`    | `list()`, `create()`, `revoke()`, `list_admin()`, `create_admin()`, `revoke_admin()` |
+| `client.watchlist`   | `list(user_id)`, `add(...)`, `remove(...)`, `status(...)`                            |
+| `client.watchdog`    | `stats()`, `alerts(...)`, `contracts(...)`, `contract()`, `health()`, `alerts_for()` |
 
 `AsyncClient` exposes the same names as coroutines.
 

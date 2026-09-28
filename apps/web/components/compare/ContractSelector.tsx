@@ -60,7 +60,10 @@ export function ContractSelector({
               }`}
               data-testid={id ? "compare-slot-filled" : "compare-slot-empty"}
             >
-              <span className="min-w-0 truncate text-[var(--color-text-secondary)]">
+              <span
+                className="min-w-0 truncate text-[var(--color-text-secondary)]"
+                title={id ?? undefined}
+              >
                 {id ? (contract?.label ?? shortId(id)) : `Slot ${i + 1}`}
               </span>
               {id && (

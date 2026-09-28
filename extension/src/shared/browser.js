@@ -21,7 +21,7 @@ export function getBrowserApi() {
   const api = globalThis.browser || globalThis.chrome;
   if (!api) {
     throw new Error(
-      "No WebExtension API found. The Sorolens extension must run inside Chrome or Firefox.",
+      "No WebExtension API found. The Sorolens extension must run inside Chrome or Firefox."
     );
   }
   return api;
@@ -92,9 +92,9 @@ function storageArea(area) {
  * @returns {Promise<Record<string, unknown>>}
  */
 export function storageGet(area, defaults) {
-  return promisify((callback) => storageArea(area).get(defaults, callback)).then(
-    (items) => items || {},
-  );
+  return promisify((callback) =>
+    storageArea(area).get(defaults, callback)
+  ).then((items) => items || {});
 }
 
 /**
@@ -104,7 +104,7 @@ export function storageGet(area, defaults) {
  */
 export function storageSet(area, values) {
   return promisify((callback) => storageArea(area).set(values, callback)).then(
-    () => undefined,
+    () => undefined
   );
 }
 
@@ -115,28 +115,28 @@ export function storageSet(area, values) {
  */
 export function storageRemove(area, keys) {
   return promisify((callback) => storageArea(area).remove(keys, callback)).then(
-    () => undefined,
+    () => undefined
   );
 }
 
 /** Sends a message to the service worker. */
 export function sendRuntimeMessage(message) {
   return promisify((callback) =>
-    getBrowserApi().runtime.sendMessage(message, callback),
+    getBrowserApi().runtime.sendMessage(message, callback)
   );
 }
 
 /** Sends a message to a content script running in `tabId`. */
 export function sendTabMessage(tabId, message) {
   return promisify((callback) =>
-    getBrowserApi().tabs.sendMessage(tabId, message, callback),
+    getBrowserApi().tabs.sendMessage(tabId, message, callback)
   );
 }
 
 /** @returns {Promise<*>} the active tab in the current window. */
 export async function getActiveTab() {
   const tabs = await promisify((callback) =>
-    getBrowserApi().tabs.query({ active: true, currentWindow: true }, callback),
+    getBrowserApi().tabs.query({ active: true, currentWindow: true }, callback)
   );
   return Array.isArray(tabs) ? tabs[0] : undefined;
 }
@@ -149,7 +149,7 @@ export async function getActiveTab() {
  */
 export async function queryTabs(query) {
   const tabs = await promisify((callback) =>
-    getBrowserApi().tabs.query(query, callback),
+    getBrowserApi().tabs.query(query, callback)
   );
   return Array.isArray(tabs) ? tabs : [];
 }
@@ -161,7 +161,9 @@ export function openOptionsPage() {
     if (api.runtime.openOptionsPage) {
       return api.runtime.openOptionsPage(() => callback(undefined));
     }
-    return api.tabs.create({ url: api.runtime.getURL("src/options/options.html") });
+    return api.tabs.create({
+      url: api.runtime.getURL("src/options/options.html"),
+    });
   });
 }
 
@@ -182,14 +184,14 @@ export async function requestHostPermission(origin) {
     return false;
   }
   const contains = await promisify((callback) =>
-    permissions.contains({ origins: [origin] }, callback),
+    permissions.contains({ origins: [origin] }, callback)
   );
   if (contains) {
     return true;
   }
   return Boolean(
     await promisify((callback) =>
-      permissions.request({ origins: [origin] }, callback),
-    ),
+      permissions.request({ origins: [origin] }, callback)
+    )
   );
 }

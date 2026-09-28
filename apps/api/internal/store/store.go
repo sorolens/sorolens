@@ -18,6 +18,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -37,7 +38,21 @@ type Store interface {
 	// page. Returns the next cursor (empty string when there are no more
 	// pages) as the second return value.
 	ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error)
+
 	SearchContracts(ctx context.Context, query string, limit int) ([]Contract, error)
+
+	// SearchEvents returns up to limit events whose transaction hash
+	// contains query (case-insensitive prefix/substring match), newest
+	// first. Results are deduplicated by tx_hash so a transaction that
+	// emitted many events contributes only one row. Part of the global
+	// search endpoint (issue #159).
+	SearchEvents(ctx context.Context, query string, limit int) ([]Event, error)
+
+	// SearchFunctions returns up to limit distinct contract function names
+	// containing query (case-insensitive prefix/substring match), each
+	// paired with its most recently recorded invocation. Part of the
+	// global search endpoint (issue #159).
+	SearchFunctions(ctx context.Context, query string, limit int) ([]FunctionMatch, error)
 
 	// BatchInsertEvents inserts events, ignoring duplicates by primary key.
 	// All rows are sent in a single network round-trip.
@@ -45,6 +60,10 @@ type Store interface {
 
 	// BatchInsertInvocations inserts invocations, ignoring duplicates.
 	BatchInsertInvocations(ctx context.Context, invocations []Invocation) error
+
+	// BatchInsertCallEdges inserts cross-contract call graph edges, ignoring
+	// duplicates by (tx_hash, child_span_id) so re-indexing is idempotent.
+	BatchInsertCallEdges(ctx context.Context, edges []CallEdge) error
 
 	// UpsertStorageEntries inserts or updates storage entries for a contract.
 	UpsertStorageEntries(ctx context.Context, entries []StorageEntry) error
@@ -73,11 +92,13 @@ type Store interface {
 	// SetIndexerCursor updates the cursor for a network.
 	SetIndexerCursor(ctx context.Context, network string, ledger uint32) error
 
-	// BatchInsertWithCursor inserts events, invocations, upserts contract sync state,
-	// and advances the network indexer cursor within a single database transaction.
-	// If any operation fails or the process crashes mid-poll before commit,
-	// the entire batch is rolled back atomically.
-	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error
+	// BatchInsertWithCursor inserts events, invocations, cross-contract call
+	// graph edges, upserts contract sync state, and advances the network indexer
+	// cursor within a single database transaction. If any operation fails or the
+	// process crashes mid-poll before commit, the entire batch is rolled back
+	// atomically - which is what keeps a committed cursor from ever pointing
+	// past a half-materialised call graph.
+	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, callEdges []CallEdge, syncState SyncState) error
 
 	// RecordContractVersion appends a new entry to the contract_versions table
 	// if the given wasm_hash has not been seen before for this contract.
@@ -100,6 +121,11 @@ type AlertSubscriptionStore interface {
 	ListByContract(ctx context.Context, contractID string) ([]AlertSubscription, error)
 	Delete(ctx context.Context, id string) error
 	ListAll(ctx context.Context) ([]AlertSubscription, error)
+	// GetSubscription returns one subscription by id, or ErrNotFound.
+	GetSubscription(ctx context.Context, id string) (AlertSubscription, error)
+	// RotateSigningSecret replaces a subscription's signing secret and stamps
+	// the rotation time. Returns ErrNotFound if the id is unknown.
+	RotateSigningSecret(ctx context.Context, id, secret, hash string, rotatedAt time.Time) error
 }
 
 // ContractTagStore is the read/write surface for user-defined contract tags.

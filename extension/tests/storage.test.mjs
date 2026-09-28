@@ -14,19 +14,35 @@ import {
   saveSettings,
   writeStatusCache,
 } from "../src/shared/storage.js";
-import { DEFAULT_API_BASE_URL, LOCAL_KEYS, STATUS_CACHE_MAX_ENTRIES } from "../src/shared/constants.js";
+import {
+  DEFAULT_API_BASE_URL,
+  LOCAL_KEYS,
+  STATUS_CACHE_MAX_ENTRIES,
+} from "../src/shared/constants.js";
 import { CONTRACT_ID, installFakeBrowser } from "./fixtures.mjs";
 
 test("normalizeBaseUrl trims whitespace and trailing slashes", () => {
-  assert.equal(normalizeBaseUrl(" https://api.sorolens.xyz/ "), "https://api.sorolens.xyz");
-  assert.equal(normalizeBaseUrl("https://api.sorolens.xyz///"), "https://api.sorolens.xyz");
+  assert.equal(
+    normalizeBaseUrl(" https://api.sorolens.xyz/ "),
+    "https://api.sorolens.xyz"
+  );
+  assert.equal(
+    normalizeBaseUrl("https://api.sorolens.xyz///"),
+    "https://api.sorolens.xyz"
+  );
   assert.equal(normalizeBaseUrl("   "), "");
   assert.equal(normalizeBaseUrl(undefined), "");
 });
 
 test("baseUrlToOriginPattern only accepts http(s) origins", () => {
-  assert.equal(baseUrlToOriginPattern("https://api.sorolens.xyz"), "https://api.sorolens.xyz/*");
-  assert.equal(baseUrlToOriginPattern("http://localhost:8080/"), "http://localhost:8080/*");
+  assert.equal(
+    baseUrlToOriginPattern("https://api.sorolens.xyz"),
+    "https://api.sorolens.xyz/*"
+  );
+  assert.equal(
+    baseUrlToOriginPattern("http://localhost:8080/"),
+    "http://localhost:8080/*"
+  );
   assert.equal(baseUrlToOriginPattern("ftp://example.com"), "");
   assert.equal(baseUrlToOriginPattern("not a url"), "");
 });
@@ -129,17 +145,22 @@ test("writeStatusCache merges entries and trims the oldest beyond the cap", asyn
 
     const filled = await writeStatusCache(
       cache,
-      Array.from({ length: STATUS_CACHE_MAX_ENTRIES + 10 }, (_value, index) => ({
-        contractId: `C${String(index).padStart(55, "0")}`,
-        tracked: false,
-        inWatchlist: false,
-        checkedAt: index,
-      })),
+      Array.from(
+        { length: STATUS_CACHE_MAX_ENTRIES + 10 },
+        (_value, index) => ({
+          contractId: `C${String(index).padStart(55, "0")}`,
+          tracked: false,
+          inWatchlist: false,
+          checkedAt: index,
+        })
+      )
     );
     assert.equal(Object.keys(filled).length, STATUS_CACHE_MAX_ENTRIES);
     // The ten oldest (lowest checkedAt) are the ones dropped.
     assert.equal(filled["C" + String(0).padStart(55, "0")], undefined);
-    assert.ok(filled["C" + String(STATUS_CACHE_MAX_ENTRIES + 9).padStart(55, "0")]);
+    assert.ok(
+      filled["C" + String(STATUS_CACHE_MAX_ENTRIES + 9).padStart(55, "0")]
+    );
   } finally {
     browser.restore();
   }
