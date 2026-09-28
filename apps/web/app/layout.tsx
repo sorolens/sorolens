@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import "./globals.css";
 import { NavigationProgress } from "@/components/NavigationProgress";
+import { PlausibleAnalytics } from "@/components/PlausibleAnalytics";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
@@ -79,6 +80,7 @@ export default function RootLayout({
             `,
           }}
         />
+        <PlausibleAnalytics />
       </head>
       <body className="min-h-screen antialiased">
         <ThemeProvider>
