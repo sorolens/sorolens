@@ -35,7 +35,12 @@ export function CallTracePanel({ initialTxHash = "" }: CallTracePanelProps) {
     if (!autoLoaded.current && initialTxHash) {
       autoLoaded.current = true;
       setInput(initialTxHash);
-      void loadTrace(initialTxHash);
+      // Only auto-load a well-formed hash. A placeholder or partial value (for
+      // example an id from a fixture) just prefills the field, instead of
+      // flashing a validation error before the user has typed anything.
+      if (TX_HASH_RE.test(initialTxHash.trim())) {
+        void loadTrace(initialTxHash);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTxHash]);
