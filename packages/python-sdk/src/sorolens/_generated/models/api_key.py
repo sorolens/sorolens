@@ -8,6 +8,8 @@ from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
 T = TypeVar("T", bound="APIKey")
 
 
@@ -22,7 +24,7 @@ class APIKey:
         created_at (datetime.datetime):
         last_used_at (datetime.datetime | None):
         revoked_at (datetime.datetime | None):
-        rotated_at (datetime.datetime | None): When the key's secret was last rotated in place.
+        rotated_at (datetime.datetime | None | Unset): When the key's secret was last rotated in place.
     """
 
     id: str
@@ -32,7 +34,7 @@ class APIKey:
     created_at: datetime.datetime
     last_used_at: datetime.datetime | None
     revoked_at: datetime.datetime | None
-    rotated_at: datetime.datetime | None
+    rotated_at: datetime.datetime | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -58,8 +60,10 @@ class APIKey:
         else:
             revoked_at = self.revoked_at
 
-        rotated_at: None | str
-        if isinstance(self.rotated_at, datetime.datetime):
+        rotated_at: None | str | Unset
+        if isinstance(self.rotated_at, Unset):
+            rotated_at = UNSET
+        elif isinstance(self.rotated_at, datetime.datetime):
             rotated_at = self.rotated_at.isoformat()
         else:
             rotated_at = self.rotated_at
@@ -75,9 +79,10 @@ class APIKey:
                 "created_at": created_at,
                 "last_used_at": last_used_at,
                 "revoked_at": revoked_at,
-                "rotated_at": rotated_at,
             }
         )
+        if rotated_at is not UNSET:
+            field_dict["rotated_at"] = rotated_at
 
         return field_dict
 
@@ -124,8 +129,10 @@ class APIKey:
 
         revoked_at = _parse_revoked_at(d.pop("revoked_at"))
 
-        def _parse_rotated_at(data: object) -> datetime.datetime | None:
+        def _parse_rotated_at(data: object) -> datetime.datetime | None | Unset:
             if data is None:
+                return data
+            if isinstance(data, Unset):
                 return data
             try:
                 if not isinstance(data, str):
@@ -135,9 +142,9 @@ class APIKey:
                 return rotated_at_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
-            return cast(datetime.datetime | None, data)
+            return cast(datetime.datetime | None | Unset, data)
 
-        rotated_at = _parse_rotated_at(d.pop("rotated_at"))
+        rotated_at = _parse_rotated_at(d.pop("rotated_at", UNSET))
 
         api_key = cls(
             id=id,

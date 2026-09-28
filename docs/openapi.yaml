@@ -5109,7 +5109,7 @@ components:
 
     APIKey:
       type: object
-      required: [id, name, key_prefix, scopes, created_at, last_used_at, revoked_at, rotated_at]
+      required: [id, name, key_prefix, scopes, created_at, last_used_at, revoked_at]
       properties:
         id:
           type: string
