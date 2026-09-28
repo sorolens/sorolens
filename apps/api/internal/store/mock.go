@@ -24,6 +24,7 @@ type MockStore struct {
 	healthChecks          []HealthCheck
 	alerts                []ContractAlert
 	apiKeys               []APIKey
+	reportSubs            []ReportSubscription
 	contractUpgrades      []ContractUpgrade
 	watchlist             map[string]map[string]bool
 	alertSubscriptions    []AlertSubscription
@@ -984,6 +985,61 @@ func (m *MockStore) TouchAPIKey(_ context.Context, id string) error {
 		}
 	}
 	return nil
+}
+
+// ---- store.ReportSubscriptionStore ------------------------------------------
+
+// AddReportSubscription is a test helper that seeds a subscription directly.
+func (m *MockStore) AddReportSubscription(s ReportSubscription) {
+	m.reportSubs = append(m.reportSubs, s)
+}
+
+func (m *MockStore) CreateReportSubscription(_ context.Context, s ReportSubscription) error {
+	m.reportSubs = append(m.reportSubs, s)
+	return nil
+}
+
+func (m *MockStore) ListReportSubscriptions(_ context.Context, email string) ([]ReportSubscription, error) {
+	var out []ReportSubscription
+	for _, s := range m.reportSubs {
+		if s.Email == email && s.Active() {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+func (m *MockStore) GetReportSubscription(_ context.Context, id string) (ReportSubscription, error) {
+	for _, s := range m.reportSubs {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return ReportSubscription{}, ErrNotFound
+}
+
+func (m *MockStore) DeleteReportSubscription(_ context.Context, id string) error {
+	for i := range m.reportSubs {
+		if m.reportSubs[i].ID == id && m.reportSubs[i].Active() {
+			now := time.Now().UTC()
+			m.reportSubs[i].UnsubscribedAt = &now
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (m *MockStore) ListDueReportSubscriptions(_ context.Context, frequency string, weekday int) ([]ReportSubscription, error) {
+	var out []ReportSubscription
+	for _, s := range m.reportSubs {
+		if !s.Active() || s.Frequency != frequency {
+			continue
+		}
+		if frequency == ReportDaily || s.DayOfWeek == weekday {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
 // ---- store.AlertSubscriptionStore -------------------------------------------

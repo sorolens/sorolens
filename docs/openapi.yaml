@@ -3967,6 +3967,112 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/reports/subscriptions:
+    post:
+      tags: [Reports]
+      summary: Subscribe to an email digest
+      operationId: createReportSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, frequency]
+              properties:
+                email:
+                  type: string
+                  format: email
+                frequency:
+                  type: string
+                  enum: [daily, weekly]
+                day_of_week:
+                  type: integer
+                  minimum: 0
+                  maximum: 6
+                  description: 0=Sunday..6=Saturday; weekly digests only.
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportSubscription"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    get:
+      tags: [Reports]
+      summary: List a subscriber's digest subscriptions
+      operationId: listReportSubscriptions
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        "200":
+          description: Active subscriptions for the email
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscriptions]
+                properties:
+                  subscriptions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReportSubscription"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/reports/subscriptions/{id}:
+    delete:
+      tags: [Reports]
+      summary: Delete a digest subscription
+      operationId: deleteReportSubscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Subscription removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/reports/unsubscribe:
+    get:
+      tags: [Reports]
+      summary: One-click unsubscribe from digest emails
+      operationId: unsubscribeReport
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Unsubscribed
+          content:
+            text/plain:
+              schema:
+                type: string
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/reports/{contract_id}:
     get:
       tags: [Reports]
@@ -5031,6 +5137,24 @@ components:
           format: date-time
           nullable: true
           description: When the key's secret was last rotated in place.
+
+    ReportSubscription:
+      type: object
+      required: [id, email, frequency, day_of_week, created_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        frequency:
+          type: string
+          enum: [daily, weekly]
+        day_of_week:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
 
     Watchlist:
       type: object

@@ -372,6 +372,14 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/reports/{contract_id}/history", h.GetContractReportHistory)
 		get("/reports/{contract_id}/badge.svg", h.GetContractSLABadge)
 
+		// Email digest subscriptions (issue #330). Self-service by email with
+		// no login: the one-click unsubscribe link must work straight from an
+		// inbox, so these are public like the rest of the read/write surface.
+		r.With(scope).Post("/reports/subscriptions", h.CreateReportSubscription)
+		get("/reports/subscriptions", h.ListReportSubscriptions)
+		r.With(scope).Delete("/reports/subscriptions/{id}", h.DeleteReportSubscription)
+		get("/reports/unsubscribe", h.UnsubscribeReport)
+
 		// Alert notification subscriptions (issue #127). They hold
 		// integration secrets, so reading them also needs contributor.
 		r.With(scope, contributor).Post("/watchdog/subscriptions", h.CreateSubscription)
