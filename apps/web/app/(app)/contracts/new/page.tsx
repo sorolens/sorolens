@@ -14,7 +14,7 @@
  * Creation reuses `POST /api/v1/contracts` and redirects to /contracts/[id].
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError, trackContract, validateContract } from "@/lib/api";
@@ -51,6 +51,17 @@ export default function NewContractPage() {
   const [validation, setValidation] = useState<Validation>({ status: "idle" });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Prefill from ?id= (paste-to-add, #178). Read from window.location instead
+  // of useSearchParams so the page needs no Suspense boundary; runs once on
+  // mount, client-side only.
+  useEffect(() => {
+    const prefill = new URLSearchParams(window.location.search).get("id");
+    if (prefill) {
+      const up = prefill.trim().toUpperCase();
+      if (CONTRACT_ID_RE.test(up)) setContractId(up);
+    }
+  }, []);
 
   const trimmedId = contractId.trim().toUpperCase();
 

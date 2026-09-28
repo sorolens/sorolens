@@ -676,4 +676,39 @@ describe("ContractsPage", () => {
     // Visiting /contracts without sort params keeps the URL untouched.
     expect(nav.replace).not.toHaveBeenCalled();
   });
+
+  // ── Paste-to-add contract (#178) ────────────────────────────────────────────
+
+  function firePaste(text: string) {
+    const evt = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(evt, "clipboardData", {
+      value: { getData: () => text },
+    });
+    document.dispatchEvent(evt);
+  }
+
+  it("surfaces a track confirmation toast when a valid contract id is pasted", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    firePaste("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC");
+
+    const toast = await screen.findByRole("alert");
+    expect(toast.textContent).toMatch(/track this contract/i);
+
+    fireEvent.click(screen.getByTestId("paste-track-confirm"));
+    expect(nav.push).toHaveBeenCalledWith(
+      "/contracts/new?id=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+    );
+  });
+
+  it("NEGATIVE: ignores pasted text that is not a contract id", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    firePaste("just some notes, not an id");
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(nav.push).not.toHaveBeenCalled();
+  });
 });
