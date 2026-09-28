@@ -60,13 +60,13 @@ describe("apple-touch-icon (#220)", () => {
 
     for (const size of requiredSizes) {
       const icon = manifest.icons.find(
-        (entry: { sizes: string }) => entry.sizes === size,
+        (entry: { sizes: string }) => entry.sizes === size
       );
       if (!icon) throw new Error(`manifest icon for ${size} is missing`);
       expect(icon.type).toBe("image/png");
 
       const png = readFileSync(
-        path.join(publicPath, icon.src.replace(/^\//, "")),
+        path.join(publicPath, icon.src.replace(/^\//, ""))
       );
       expect(png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
       expect(png.readUInt32BE(16)).toBe(Number(size.split("x")[0]));
