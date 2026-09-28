@@ -67,6 +67,10 @@ from .create_api_key_body import CreateApiKeyBody
 from .create_api_key_body_scopes_item import CreateApiKeyBodyScopesItem
 from .create_api_key_response_201 import CreateApiKeyResponse201
 from .create_group_body import CreateGroupBody
+from .create_report_subscription_body import CreateReportSubscriptionBody
+from .create_report_subscription_body_frequency import (
+    CreateReportSubscriptionBodyFrequency,
+)
 from .error import Error
 from .error_error_type_0 import ErrorErrorType0
 from .error_error_type_0_code import ErrorErrorType0Code
@@ -146,6 +150,7 @@ from .list_contracts_sort import ListContractsSort
 from .list_failed_events_response_200 import ListFailedEventsResponse200
 from .list_monitored_contracts_network import ListMonitoredContractsNetwork
 from .list_monitored_contracts_response_200 import ListMonitoredContractsResponse200
+from .list_report_subscriptions_response_200 import ListReportSubscriptionsResponse200
 from .list_rule_library_response_200 import ListRuleLibraryResponse200
 from .list_rule_library_response_200_rules_item import (
     ListRuleLibraryResponse200RulesItem,
@@ -175,8 +180,12 @@ from .recent_events_response_200 import RecentEventsResponse200
 from .register_contract_body import RegisterContractBody
 from .register_contract_body_network import RegisterContractBodyNetwork
 from .remove_group_contract_body import RemoveGroupContractBody
+from .report_subscription import ReportSubscription
+from .report_subscription_frequency import ReportSubscriptionFrequency
 from .requeue_failed_event_response_200 import RequeueFailedEventResponse200
 from .role_error import RoleError
+from .rotate_api_key_admin_response_200 import RotateApiKeyAdminResponse200
+from .rotate_api_key_response_200 import RotateApiKeyResponse200
 from .rule_diagnostic import RuleDiagnostic
 from .scope_error import ScopeError
 from .set_alert_rule_enabled_body import SetAlertRuleEnabledBody
@@ -194,6 +203,7 @@ from .v2_add_to_watchlist_body import V2AddToWatchlistBody
 from .v2_admin_create_key_body import V2AdminCreateKeyBody
 from .v2_admin_create_key_response_201 import V2AdminCreateKeyResponse201
 from .v2_admin_list_keys_response_200 import V2AdminListKeysResponse200
+from .v2_admin_rotate_key_response_200 import V2AdminRotateKeyResponse200
 from .v2_alert import V2Alert
 from .v2_alert_list import V2AlertList
 from .v2_alert_severity import V2AlertSeverity
@@ -234,6 +244,7 @@ from .v2_monitored_contract import V2MonitoredContract
 from .v2_monitored_list import V2MonitoredList
 from .v2_pagination import V2Pagination
 from .v2_register_contract_body import V2RegisterContractBody
+from .v2_rotate_api_key_response_200 import V2RotateApiKeyResponse200
 from .v2_storage_entry import V2StorageEntry
 from .v2_storage_entry_durability import V2StorageEntryDurability
 from .v2_storage_entry_status import V2StorageEntryStatus
@@ -327,6 +338,8 @@ __all__ = (
     "CreateApiKeyBodyScopesItem",
     "CreateApiKeyResponse201",
     "CreateGroupBody",
+    "CreateReportSubscriptionBody",
+    "CreateReportSubscriptionBodyFrequency",
     "Error",
     "ErrorErrorType0",
     "ErrorErrorType0Code",
@@ -402,6 +415,7 @@ __all__ = (
     "ListFailedEventsResponse200",
     "ListMonitoredContractsNetwork",
     "ListMonitoredContractsResponse200",
+    "ListReportSubscriptionsResponse200",
     "ListRuleLibraryResponse200",
     "ListRuleLibraryResponse200RulesItem",
     "ListRuleMetricsResponse200",
@@ -425,8 +439,12 @@ __all__ = (
     "RegisterContractBody",
     "RegisterContractBodyNetwork",
     "RemoveGroupContractBody",
+    "ReportSubscription",
+    "ReportSubscriptionFrequency",
     "RequeueFailedEventResponse200",
     "RoleError",
+    "RotateApiKeyAdminResponse200",
+    "RotateApiKeyResponse200",
     "RuleDiagnostic",
     "ScopeError",
     "SetAlertRuleEnabledBody",
@@ -444,6 +462,7 @@ __all__ = (
     "V2AdminCreateKeyBody",
     "V2AdminCreateKeyResponse201",
     "V2AdminListKeysResponse200",
+    "V2AdminRotateKeyResponse200",
     "V2Alert",
     "V2AlertList",
     "V2AlertSeverity",
@@ -484,6 +503,7 @@ __all__ = (
     "V2MonitoredList",
     "V2Pagination",
     "V2RegisterContractBody",
+    "V2RotateApiKeyResponse200",
     "V2StorageEntry",
     "V2StorageEntryDurability",
     "V2StorageEntryStatus",

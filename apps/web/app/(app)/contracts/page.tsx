@@ -435,7 +435,7 @@ function ContractsPageInner() {
   const [trackPending, setTrackPending] = useState(false);
   const [toast, setToast] = useState<{
     id: number;
-    message: string;
+    message: ReactNode;
     variant: "info" | "success" | "error";
   } | null>(null);
   const toastSeq = useRef(0);

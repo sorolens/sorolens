@@ -15,6 +15,10 @@ export function PlausibleAnalytics() {
     return null;
   }
   return (
-    <script defer data-domain={domain} src="https://plausible.io/js/script.js" />
+    <script
+      defer
+      data-domain={domain}
+      src="https://plausible.io/js/script.js"
+    />
   );
 }

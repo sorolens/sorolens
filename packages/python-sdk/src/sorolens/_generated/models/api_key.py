@@ -22,6 +22,7 @@ class APIKey:
         created_at (datetime.datetime):
         last_used_at (datetime.datetime | None):
         revoked_at (datetime.datetime | None):
+        rotated_at (datetime.datetime | None): When the key's secret was last rotated in place.
     """
 
     id: str
@@ -31,6 +32,7 @@ class APIKey:
     created_at: datetime.datetime
     last_used_at: datetime.datetime | None
     revoked_at: datetime.datetime | None
+    rotated_at: datetime.datetime | None
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -56,6 +58,12 @@ class APIKey:
         else:
             revoked_at = self.revoked_at
 
+        rotated_at: None | str
+        if isinstance(self.rotated_at, datetime.datetime):
+            rotated_at = self.rotated_at.isoformat()
+        else:
+            rotated_at = self.rotated_at
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -67,6 +75,7 @@ class APIKey:
                 "created_at": created_at,
                 "last_used_at": last_used_at,
                 "revoked_at": revoked_at,
+                "rotated_at": rotated_at,
             }
         )
 
@@ -115,6 +124,21 @@ class APIKey:
 
         revoked_at = _parse_revoked_at(d.pop("revoked_at"))
 
+        def _parse_rotated_at(data: object) -> datetime.datetime | None:
+            if data is None:
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                rotated_at_type_0 = datetime.datetime.fromisoformat(data)
+
+                return rotated_at_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(datetime.datetime | None, data)
+
+        rotated_at = _parse_rotated_at(d.pop("rotated_at"))
+
         api_key = cls(
             id=id,
             name=name,
@@ -123,6 +147,7 @@ class APIKey:
             created_at=created_at,
             last_used_at=last_used_at,
             revoked_at=revoked_at,
+            rotated_at=rotated_at,
         )
 
         api_key.additional_properties = d

@@ -8,11 +8,11 @@ from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-T = TypeVar("T", bound="CreateApiKeyAdminResponse201")
+T = TypeVar("T", bound="RotateApiKeyResponse200")
 
 
 @_attrs_define
-class CreateApiKeyAdminResponse201:
+class RotateApiKeyResponse200:
     """
     Attributes:
         id (str):
@@ -23,7 +23,7 @@ class CreateApiKeyAdminResponse201:
         last_used_at (datetime.datetime | None):
         revoked_at (datetime.datetime | None):
         rotated_at (datetime.datetime | None): When the key's secret was last rotated in place.
-        key (str):
+        key (str): New plaintext token, shown once.
     """
 
     id: str
@@ -146,7 +146,7 @@ class CreateApiKeyAdminResponse201:
 
         key = d.pop("key")
 
-        create_api_key_admin_response_201 = cls(
+        rotate_api_key_response_200 = cls(
             id=id,
             name=name,
             key_prefix=key_prefix,
@@ -158,8 +158,8 @@ class CreateApiKeyAdminResponse201:
             key=key,
         )
 
-        create_api_key_admin_response_201.additional_properties = d
-        return create_api_key_admin_response_201
+        rotate_api_key_response_200.additional_properties = d
+        return rotate_api_key_response_200
 
     @property
     def additional_keys(self) -> list[str]:

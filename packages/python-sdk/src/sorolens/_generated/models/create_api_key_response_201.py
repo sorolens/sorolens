@@ -22,6 +22,7 @@ class CreateApiKeyResponse201:
         created_at (datetime.datetime):
         last_used_at (datetime.datetime | None):
         revoked_at (datetime.datetime | None):
+        rotated_at (datetime.datetime | None): When the key's secret was last rotated in place.
         key (str): Plaintext token, shown once.
     """
 
@@ -32,6 +33,7 @@ class CreateApiKeyResponse201:
     created_at: datetime.datetime
     last_used_at: datetime.datetime | None
     revoked_at: datetime.datetime | None
+    rotated_at: datetime.datetime | None
     key: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -58,6 +60,12 @@ class CreateApiKeyResponse201:
         else:
             revoked_at = self.revoked_at
 
+        rotated_at: None | str
+        if isinstance(self.rotated_at, datetime.datetime):
+            rotated_at = self.rotated_at.isoformat()
+        else:
+            rotated_at = self.rotated_at
+
         key = self.key
 
         field_dict: dict[str, Any] = {}
@@ -71,6 +79,7 @@ class CreateApiKeyResponse201:
                 "created_at": created_at,
                 "last_used_at": last_used_at,
                 "revoked_at": revoked_at,
+                "rotated_at": rotated_at,
                 "key": key,
             }
         )
@@ -120,6 +129,21 @@ class CreateApiKeyResponse201:
 
         revoked_at = _parse_revoked_at(d.pop("revoked_at"))
 
+        def _parse_rotated_at(data: object) -> datetime.datetime | None:
+            if data is None:
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                rotated_at_type_0 = datetime.datetime.fromisoformat(data)
+
+                return rotated_at_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(datetime.datetime | None, data)
+
+        rotated_at = _parse_rotated_at(d.pop("rotated_at"))
+
         key = d.pop("key")
 
         create_api_key_response_201 = cls(
@@ -130,6 +154,7 @@ class CreateApiKeyResponse201:
             created_at=created_at,
             last_used_at=last_used_at,
             revoked_at=revoked_at,
+            rotated_at=rotated_at,
             key=key,
         )
 

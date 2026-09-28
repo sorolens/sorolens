@@ -335,6 +335,12 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		// Audit trail (issue #122): admin-only introspection of request logs,
 		// not part of the public v2 data surface.
 		"GET /api/v1/admin/audit": true,
+		// Email digest subscriptions (issue #330): a self-service email surface
+		// with no v2 envelope yet.
+		"POST /api/v1/reports/subscriptions":        true,
+		"GET /api/v1/reports/subscriptions":         true,
+		"DELETE /api/v1/reports/subscriptions/{id}": true,
+		"GET /api/v1/reports/unsubscribe":           true,
 	}
 
 	var missing []string
