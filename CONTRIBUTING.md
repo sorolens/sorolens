@@ -265,6 +265,8 @@ Use lowercase and hyphens only. No slashes inside the description segment.
 ## Commit format
 
 Sorolens follows [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+Commits are checked locally using `commitlint` via a Husky git hook to ensure format compliance before you push.
+
 Format:
 
 ```

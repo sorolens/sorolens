@@ -41,6 +41,28 @@ matches.
 5. Send `X-Sorolens-Timestamp: <timestamp>` and
    `X-Sorolens-Signature: t=<timestamp>,v1=<signature>`.
 
+## Worked example (test vector)
+
+Pin your implementation against this vector before rolling it out. It is
+reproduced by `services/indexer/internal/webhooksig` in
+`TestSign_PublishedVector`, so the published algorithm and the reference
+implementation cannot drift apart.
+
+| Input | Value |
+|---|---|
+| signing secret | `whsec_example_0123456789abcdef0123456789abcdef` |
+| timestamp | `1700000000` |
+| raw body | `{"event":"watchdog.alert","severity":"Critical"}` |
+| signed payload | `1700000000.{"event":"watchdog.alert","severity":"Critical"}` |
+| expected `v1` signature | `97dc0f80c8e0c9be056f34e48e360411160395a1b3e3a7978092d869315c4615` |
+
+A conforming delivery therefore carries:
+
+```
+X-Sorolens-Timestamp: 1700000000
+X-Sorolens-Signature: t=1700000000,v1=97dc0f80c8e0c9be056f34e48e360411160395a1b3e3a7978092d869315c4615
+```
+
 ## Verification (pseudocode)
 
 ```

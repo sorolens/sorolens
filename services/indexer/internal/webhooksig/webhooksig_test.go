@@ -63,6 +63,32 @@ func TestSign_UsesTimestampDotBody(t *testing.T) {
 	}
 }
 
+// TestSign_PublishedVector pins the worked example in docs/webhooks.md. A
+// receiver that reproduces this vector has implemented the published
+// algorithm, so a change to Sign here would silently break every conforming
+// integration.
+func TestSign_PublishedVector(t *testing.T) {
+	// Frozen on purpose: these inputs are copied verbatim from
+	// docs/webhooks.md, so change the docs and this test together.
+	const (
+		secret    = "whsec_example_0123456789abcdef0123456789abcdef"
+		timestamp = int64(1700000000)
+		signature = "97dc0f80c8e0c9be056f34e48e360411160395a1b3e3a7978092d869315c4615"
+	)
+	body := []byte(`{"event":"watchdog.alert","severity":"Critical"}`)
+
+	if got := Sign(secret, timestamp, body); got != signature {
+		t.Errorf("Sign = %q, want the published vector %q", got, signature)
+	}
+
+	// The exact header documented in docs/webhooks.md must verify at the
+	// signed timestamp: generation and verification agree with the docs.
+	header := SignatureHeaderValue(timestamp, signature)
+	if err := Verify(secret, header, "1700000000", body, time.Unix(timestamp, 0), 0); err != nil {
+		t.Errorf("published vector failed to verify: %v", err)
+	}
+}
+
 func TestVerify_RoundTrip(t *testing.T) {
 	secret, _ := GenerateSecret()
 	body := []byte(`{"contract_id":"CABC","severity":"Critical"}`)
