@@ -25,16 +25,49 @@ func (s *postgresStore) CreateAPIKey(ctx context.Context, k APIKey) error {
 
 func (s *postgresStore) GetAPIKeyByHash(ctx context.Context, hash string) (APIKey, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at
+		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at, rotated_at
 		FROM api_keys
 		WHERE key_hash = $1 AND revoked_at IS NULL`, hash)
 	var k APIKey
 	err := row.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.KeyHash, &k.Scopes,
-		&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt)
+		&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt, &k.RotatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return APIKey{}, ErrNotFound
 	}
 	return k, err
+}
+
+func (s *postgresStore) GetAPIKey(ctx context.Context, id string) (APIKey, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at, rotated_at
+		FROM api_keys
+		WHERE id = $1`, id)
+	var k APIKey
+	err := row.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.KeyHash, &k.Scopes,
+		&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt, &k.RotatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return APIKey{}, ErrNotFound
+	}
+	return k, err
+}
+
+// RotateAPIKey swaps in a new secret in a single UPDATE. The WHERE clause
+// excludes revoked keys, so a revoked key cannot be silently reactivated by a
+// rotation. Replacing key_hash atomically invalidates the previous secret:
+// GetAPIKeyByHash only matches the current hash.
+func (s *postgresStore) RotateAPIKey(ctx context.Context, id, newHash, newPrefix string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE api_keys
+		SET key_hash = $2, key_prefix = $3, rotated_at = $4
+		WHERE id = $1 AND revoked_at IS NULL`,
+		id, newHash, newPrefix, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *postgresStore) ListAPIKeys(ctx context.Context, cursor string, limit int) ([]APIKey, string, error) {
@@ -42,7 +75,7 @@ func (s *postgresStore) ListAPIKeys(ctx context.Context, cursor string, limit in
 		limit = 50
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at
+		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at, rotated_at
 		FROM api_keys
 		WHERE ($1 = '' OR id > $1)
 		ORDER BY id ASC
@@ -56,7 +89,7 @@ func (s *postgresStore) ListAPIKeys(ctx context.Context, cursor string, limit in
 	for rows.Next() {
 		var k APIKey
 		if err := rows.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.KeyHash, &k.Scopes,
-			&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt); err != nil {
+			&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt, &k.RotatedAt); err != nil {
 			return nil, "", err
 		}
 		out = append(out, k)

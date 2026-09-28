@@ -919,6 +919,31 @@ func (m *MockStore) GetAPIKeyByHash(_ context.Context, hash string) (APIKey, err
 	return APIKey{}, ErrNotFound
 }
 
+func (m *MockStore) GetAPIKey(_ context.Context, id string) (APIKey, error) {
+	if m.GetAPIKeyErr != nil {
+		return APIKey{}, m.GetAPIKeyErr
+	}
+	for _, k := range m.apiKeys {
+		if k.ID == id {
+			return k, nil
+		}
+	}
+	return APIKey{}, ErrNotFound
+}
+
+func (m *MockStore) RotateAPIKey(_ context.Context, id, newHash, newPrefix string) error {
+	for i := range m.apiKeys {
+		if m.apiKeys[i].ID == id && !m.apiKeys[i].Revoked() {
+			now := time.Now().UTC()
+			m.apiKeys[i].KeyHash = newHash
+			m.apiKeys[i].KeyPrefix = newPrefix
+			m.apiKeys[i].RotatedAt = &now
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
 func (m *MockStore) ListAPIKeys(_ context.Context, cursor string, limit int) ([]APIKey, string, error) {
 	if limit <= 0 {
 		limit = 50

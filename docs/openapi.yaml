@@ -1177,6 +1177,35 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /api/v1/api-keys/{id}:
+    get:
+      tags: [API Keys]
+      summary: Get an API key
+      operationId: getApiKey
+      security:
+        - ApiKeyAuth: [admin:*]
+        - RoleAuth: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: API key ID.
+      responses:
+        "200":
+          description: API key metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
     delete:
       tags: [API Keys]
       summary: Revoke an API key
@@ -1194,6 +1223,44 @@ paths:
       responses:
         "204":
           description: Key revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/api-keys/{id}/rotate:
+    post:
+      tags: [API Keys]
+      summary: Rotate an API key
+      operationId: rotateApiKey
+      security:
+        - ApiKeyAuth: [admin:*]
+        - RoleAuth: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: API key ID.
+      responses:
+        "200":
+          description: Key rotated; the new plaintext key is returned once.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIKey"
+                  - type: object
+                    required: [key]
+                    properties:
+                      key:
+                        type: string
+                        description: New plaintext token, shown once.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1278,6 +1345,33 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /api/v1/admin/keys/{id}:
+    get:
+      tags: [API Keys]
+      summary: Get an API key (admin role only)
+      operationId: getApiKeyAdmin
+      security:
+        - RoleAuth: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: API key metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
     delete:
       tags: [API Keys]
       summary: Revoke an API key (admin role only)
@@ -1293,6 +1387,41 @@ paths:
       responses:
         "204":
           description: Key revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/admin/keys/{id}/rotate:
+    post:
+      tags: [API Keys]
+      summary: Rotate an API key (admin role only)
+      operationId: rotateApiKeyAdmin
+      security:
+        - RoleAuth: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Key rotated; the new plaintext key is returned once.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIKey"
+                  - type: object
+                    required: [key]
+                    properties:
+                      key:
+                        type: string
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2759,6 +2888,30 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /api/v2/api-keys/{id}:
+    get:
+      tags: [API v2]
+      summary: Get an API key (admin)
+      operationId: v2GetAPIKey
+      security:
+        - ApiKeyAuth: []
+        - RoleAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: API key metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKey"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
     delete:
       tags: [API v2]
       summary: Revoke an API key (admin)
@@ -2775,6 +2928,38 @@ paths:
       responses:
         "204":
           description: Revoked
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/api-keys/{id}/rotate:
+    post:
+      tags: [API v2]
+      summary: Rotate an API key (admin)
+      operationId: v2RotateAPIKey
+      security:
+        - ApiKeyAuth: []
+        - RoleAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Key rotated; the new plaintext key is returned once.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIKey"
+                  - type: object
+                    required: [key]
+                    properties:
+                      key:
+                        type: string
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -2823,6 +3008,29 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /api/v2/admin/keys/{id}:
+    get:
+      tags: [API v2]
+      summary: Get an API key (admin role, v1 shape)
+      operationId: v2AdminGetKey
+      security:
+        - RoleAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: API key metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKey"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
     delete:
       tags: [API v2]
       summary: Revoke an API key (admin role, v1 shape)
@@ -2843,6 +3051,37 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+
+  /api/v2/admin/keys/{id}/rotate:
+    post:
+      tags: [API v2]
+      summary: Rotate an API key (admin role, v1 shape)
+      operationId: v2AdminRotateKey
+      security:
+        - RoleAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Key rotated; the new plaintext key is returned once.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIKey"
+                  - type: object
+                    required: [key]
+                    properties:
+                      key:
+                        type: string
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/dlq:
     get:
@@ -4764,7 +5003,7 @@ components:
 
     APIKey:
       type: object
-      required: [id, name, key_prefix, scopes, created_at, last_used_at, revoked_at]
+      required: [id, name, key_prefix, scopes, created_at, last_used_at, revoked_at, rotated_at]
       properties:
         id:
           type: string
@@ -4787,6 +5026,11 @@ components:
           type: string
           format: date-time
           nullable: true
+        rotated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the key's secret was last rotated in place.
 
     Watchlist:
       type: object

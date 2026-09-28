@@ -37,6 +37,9 @@ type APIKey struct {
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 	RevokedAt  *time.Time
+	// RotatedAt is when the key's secret was last regenerated in place,
+	// or nil if it has never been rotated.
+	RotatedAt *time.Time
 }
 
 // Revoked reports whether the key has been revoked.
@@ -77,6 +80,15 @@ type APIKeyStore interface {
 	CreateAPIKey(ctx context.Context, k APIKey) error
 	// GetAPIKeyByHash returns the key matching hash, or ErrNotFound.
 	GetAPIKeyByHash(ctx context.Context, hash string) (APIKey, error)
+	// GetAPIKey returns the key with the given id, or ErrNotFound. Unlike
+	// GetAPIKeyByHash it also returns revoked keys, so callers can inspect a
+	// key's metadata (including rotated_at) after it has been rotated.
+	GetAPIKey(ctx context.Context, id string) (APIKey, error)
+	// RotateAPIKey atomically replaces the key's secret: it stores newHash
+	// and newPrefix, stamps rotated_at, and invalidates the previous hash in
+	// a single statement. The old secret stops authenticating immediately.
+	// Returns ErrNotFound if the key is absent or already revoked.
+	RotateAPIKey(ctx context.Context, id, newHash, newPrefix string) error
 	// ListAPIKeys returns a cursor-paginated list, newest first.
 	ListAPIKeys(ctx context.Context, cursor string, limit int) ([]APIKey, string, error)
 	// RevokeAPIKey marks a key as revoked. Returns ErrNotFound if absent.
