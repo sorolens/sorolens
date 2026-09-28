@@ -112,6 +112,12 @@ type Config struct {
 	// SlackSigningSecret verifies Slack slash command requests
 	// (SLACK_SIGNING_SECRET). Empty disables the Slack command endpoint.
 	SlackSigningSecret string
+	// GraphQLComplexityLimit caps the estimated cost of one /graphql request
+	// (GRAPHQL_COMPLEXITY_LIMIT, default 5000).
+	GraphQLComplexityLimit int
+	// GraphQLPersistedOnly restricts /graphql to the embedded persisted
+	// queries (GRAPHQL_PERSISTED_ONLY).
+	GraphQLPersistedOnly bool
 }
 
 // Load reads configuration from environment variables and returns an error
@@ -153,6 +159,21 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("INDEXER_MAX_DURATION: invalid duration %q: %w", maxDurStr, err)
 	}
 	cfg.IndexerMaxDuration = maxDur
+
+	if v := os.Getenv("GRAPHQL_COMPLEXITY_LIMIT"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return nil, fmt.Errorf("GRAPHQL_COMPLEXITY_LIMIT: invalid positive integer %q", v)
+		}
+		cfg.GraphQLComplexityLimit = n
+	}
+	if v := os.Getenv("GRAPHQL_PERSISTED_ONLY"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, fmt.Errorf("GRAPHQL_PERSISTED_ONLY: invalid boolean %q: %w", v, err)
+		}
+		cfg.GraphQLPersistedOnly = b
+	}
 
 	cfg.VerifyBuildCommand = strings.Fields(getEnvDefault("VERIFY_BUILD_COMMAND", "stellar contract build"))
 	if len(cfg.VerifyBuildCommand) == 0 {

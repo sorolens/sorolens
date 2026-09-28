@@ -7,6 +7,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,7 @@ type MockStore struct {
 	healthChecks          []HealthCheck
 	alerts                []ContractAlert
 	apiKeys               []APIKey
+	reportSubs            []ReportSubscription
 	contractUpgrades      []ContractUpgrade
 	watchlist             map[string]map[string]bool
 	alertSubscriptions    []AlertSubscription
@@ -41,6 +43,11 @@ type MockStore struct {
 	contractSpecs         map[string]ContractSpec
 	contractVerifications map[string]ContractVerification
 	alertRules            []AlertRule
+	watchedAccounts       map[string]WatchedAccount
+
+	// auditMu guards auditEvents: the audit middleware writes asynchronously.
+	auditMu     sync.Mutex
+	auditEvents []AuditEvent
 
 	// Error injection
 	UpsertContractErr           error
@@ -83,6 +90,8 @@ type MockStore struct {
 	GetAlertRuleErr          error
 	ListAlertRulesErr        error
 	ContractMetricSamplesErr error
+
+	InsertAuditErr error
 }
 
 func (m *MockStore) UpsertLabel(_ context.Context, label Label) error {
@@ -144,6 +153,7 @@ func NewMockStore() *MockStore {
 		contractVerifications: make(map[string]ContractVerification),
 		failedEvents:          make(map[int64]FailedEvent),
 		labels:                make([]Label, 0),
+		watchedAccounts:       make(map[string]WatchedAccount),
 	}
 }
 
@@ -910,6 +920,31 @@ func (m *MockStore) GetAPIKeyByHash(_ context.Context, hash string) (APIKey, err
 	return APIKey{}, ErrNotFound
 }
 
+func (m *MockStore) GetAPIKey(_ context.Context, id string) (APIKey, error) {
+	if m.GetAPIKeyErr != nil {
+		return APIKey{}, m.GetAPIKeyErr
+	}
+	for _, k := range m.apiKeys {
+		if k.ID == id {
+			return k, nil
+		}
+	}
+	return APIKey{}, ErrNotFound
+}
+
+func (m *MockStore) RotateAPIKey(_ context.Context, id, newHash, newPrefix string) error {
+	for i := range m.apiKeys {
+		if m.apiKeys[i].ID == id && !m.apiKeys[i].Revoked() {
+			now := time.Now().UTC()
+			m.apiKeys[i].KeyHash = newHash
+			m.apiKeys[i].KeyPrefix = newPrefix
+			m.apiKeys[i].RotatedAt = &now
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
 func (m *MockStore) ListAPIKeys(_ context.Context, cursor string, limit int) ([]APIKey, string, error) {
 	if limit <= 0 {
 		limit = 50
@@ -950,6 +985,61 @@ func (m *MockStore) TouchAPIKey(_ context.Context, id string) error {
 		}
 	}
 	return nil
+}
+
+// ---- store.ReportSubscriptionStore ------------------------------------------
+
+// AddReportSubscription is a test helper that seeds a subscription directly.
+func (m *MockStore) AddReportSubscription(s ReportSubscription) {
+	m.reportSubs = append(m.reportSubs, s)
+}
+
+func (m *MockStore) CreateReportSubscription(_ context.Context, s ReportSubscription) error {
+	m.reportSubs = append(m.reportSubs, s)
+	return nil
+}
+
+func (m *MockStore) ListReportSubscriptions(_ context.Context, email string) ([]ReportSubscription, error) {
+	var out []ReportSubscription
+	for _, s := range m.reportSubs {
+		if s.Email == email && s.Active() {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+func (m *MockStore) GetReportSubscription(_ context.Context, id string) (ReportSubscription, error) {
+	for _, s := range m.reportSubs {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return ReportSubscription{}, ErrNotFound
+}
+
+func (m *MockStore) DeleteReportSubscription(_ context.Context, id string) error {
+	for i := range m.reportSubs {
+		if m.reportSubs[i].ID == id && m.reportSubs[i].Active() {
+			now := time.Now().UTC()
+			m.reportSubs[i].UnsubscribedAt = &now
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (m *MockStore) ListDueReportSubscriptions(_ context.Context, frequency string, weekday int) ([]ReportSubscription, error) {
+	var out []ReportSubscription
+	for _, s := range m.reportSubs {
+		if !s.Active() || s.Frequency != frequency {
+			continue
+		}
+		if frequency == ReportDaily || s.DayOfWeek == weekday {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
 // ---- store.AlertSubscriptionStore -------------------------------------------

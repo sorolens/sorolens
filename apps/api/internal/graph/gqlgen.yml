@@ -1,0 +1,85 @@
+# gqlgen config for the Sorolens GraphQL layer (issue #125).
+# Regenerate with: go generate ./internal/graph
+
+schema:
+  - schema.graphqls
+
+exec:
+  package: graph
+  layout: single-file
+  filename: generated.go
+
+model:
+  package: graph
+  filename: models_gen.go
+
+resolver:
+  package: graph
+  layout: follow-schema
+  dir: .
+  filename: resolver.go
+  filename_template: "{name}.resolvers.go"
+  type: Resolver
+
+omit_slice_element_pointers: true
+skip_mod_tidy: true
+
+models:
+  # Store types are bound directly so resolvers need no conversion layer.
+  Contract:
+    model: github.com/sorolens/sorolens/apps/api/internal/store.Contract
+    fields:
+      events: { resolver: true }
+      invocations: { resolver: true }
+      storage: { resolver: true }
+      stats: { resolver: true }
+      monitor: { resolver: true }
+      alerts: { resolver: true }
+  Event:
+    model: github.com/sorolens/sorolens/apps/api/internal/store.Event
+    fields:
+      topicXdr: { fieldName: TopicXDR }
+      valueXdr: { fieldName: ValueXDR }
+      contract: { resolver: true }
+  Invocation:
+    model: github.com/sorolens/sorolens/apps/api/internal/store.Invocation
+    fields:
+      resultXdr: { fieldName: ResultXDR }
+      contract: { resolver: true }
+  StorageEntry:
+    model: github.com/sorolens/sorolens/apps/api/internal/store.StorageEntry
+    fields:
+      keyXdr: { fieldName: KeyXDR }
+      valueXdr: { fieldName: ValueXDR }
+  ContractStats:
+    model: github.com/sorolens/sorolens/apps/api/internal/store.ContractStats
+  WatchdogStats:
+    model: github.com/sorolens/sorolens/apps/api/internal/store.WatchdogStats
+  MonitoredContract:
+    model: github.com/sorolens/sorolens/apps/api/internal/store.MonitoredContract
+    fields:
+      healthChecks: { resolver: true }
+      alerts: { resolver: true }
+      contract: { resolver: true }
+  HealthCheck:
+    model: github.com/sorolens/sorolens/apps/api/internal/store.HealthCheck
+  Alert:
+    model: github.com/sorolens/sorolens/apps/api/internal/store.ContractAlert
+    fields:
+      contract: { resolver: true }
+      monitor: { resolver: true }
+  Watchdog:
+    model: github.com/sorolens/sorolens/apps/api/internal/graph.Watchdog
+    fields:
+      stats: { resolver: true }
+      alerts: { resolver: true }
+      contracts: { resolver: true }
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+  Int:
+    model:
+      - github.com/99designs/gqlgen/graphql.Int
+      - github.com/99designs/gqlgen/graphql.Int32
+      - github.com/99designs/gqlgen/graphql.Int64
+      - github.com/99designs/gqlgen/graphql.Uint32

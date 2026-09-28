@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sorolens/sorolens/apps/api/internal/graph"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/metrics"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
@@ -96,6 +98,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(middleware.Recoverer(h.Logger))
 	r.Use(middleware.BodyLimit(maxBodyBytes))
 	r.Use(middleware.Logger(h.Logger))
+	// Audit trail for every mutating /api/ request (issue #122). It sits
+	// outside rate limiting, content-type and auth checks so their
+	// rejections are audited too, and inside Recoverer so a panic is
+	// recorded as 500 before being recovered.
+	r.Use(middleware.Audit(h.Store, h.Logger, "/api/"))
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(middleware.Metrics)
 
@@ -158,6 +165,17 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.With(adminOnly).HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	r.With(adminOnly).HandleFunc("/debug/pprof/trace", pprof.Trace)
 	r.With(adminOnly).HandleFunc("/debug/pprof/{name}", pprof.Index)
+
+	// GraphQL (issue #125): read-only, POST only. Same credential rules as
+	// the REST read routes: anonymous is allowed, an API key needs
+	// read:contracts.
+	gql, err := graph.NewHandler(h.Store, h.GraphQL)
+	if err != nil {
+		// Only fails if the embedded persisted queries are unreadable,
+		// which is a build defect.
+		panic(fmt.Sprintf("graphql handler: %v", err))
+	}
+	r.With(middleware.RequireScopes(h.Store, h.Logger)).Post("/graphql", gql.ServeHTTP)
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
@@ -289,15 +307,27 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
 		r.With(scope, admin).Post("/api-keys", h.CreateAPIKey)
+		r.With(scope, admin).Get("/api-keys/{id}", h.GetAPIKey)
 		r.With(scope, admin).Delete("/api-keys/{id}", h.RevokeAPIKey)
+		r.With(scope, admin).Post("/api-keys/{id}/rotate", h.RotateAPIKey)
 
 		// Admin surface. Wrapped by role admin so contributors cannot reach
 		// these endpoints even when the API key carries admin scope.
 		r.With(admin).Route("/admin", func(r chi.Router) {
 			r.Get("/keys", h.ListAPIKeys)
 			r.Post("/keys", h.CreateAPIKey)
+			r.Get("/keys/{id}", h.GetAPIKey)
 			r.Delete("/keys/{id}", h.RevokeAPIKey)
+			r.Post("/keys/{id}/rotate", h.RotateAPIKey)
+			r.Get("/audit", h.ListAuditEvents)
 		})
+
+		// Watched accounts: contracts deployed by these accounts are tracked
+		// automatically by the indexer (issue #123). Same role rules as
+		// contract registration.
+		r.With(scope, contributor).Post("/watched-accounts", h.AddWatchedAccount)
+		get("/watched-accounts", h.ListWatchedAccounts)
+		r.With(scope, contributor).Delete("/watched-accounts/{id}", h.DeleteWatchedAccount)
 
 		// Watchlist
 		r.Route("/watchlist", func(r chi.Router) {
@@ -341,6 +371,14 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/reports/{contract_id}", h.GetContractReport)
 		get("/reports/{contract_id}/history", h.GetContractReportHistory)
 		get("/reports/{contract_id}/badge.svg", h.GetContractSLABadge)
+
+		// Email digest subscriptions (issue #330). Self-service by email with
+		// no login: the one-click unsubscribe link must work straight from an
+		// inbox, so these are public like the rest of the read/write surface.
+		r.With(scope).Post("/reports/subscriptions", h.CreateReportSubscription)
+		get("/reports/subscriptions", h.ListReportSubscriptions)
+		r.With(scope).Delete("/reports/subscriptions/{id}", h.DeleteReportSubscription)
+		get("/reports/unsubscribe", h.UnsubscribeReport)
 
 		// Alert notification subscriptions (issue #127). They hold
 		// integration secrets, so reading them also needs contributor.
@@ -396,13 +434,17 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// are declared passthrough in docs/api-v2.md.
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
 		r.With(scope, admin).Post("/api-keys", h.CreateAPIKey)
+		r.With(scope, admin).Get("/api-keys/{id}", h.GetAPIKey)
 		r.With(scope, admin).Delete("/api-keys/{id}", h.RevokeAPIKey)
+		r.With(scope, admin).Post("/api-keys/{id}/rotate", h.RotateAPIKey)
 
 		// Admin surface, mirroring v1 so v2 has a 1:1 route map.
 		r.With(admin).Route("/admin", func(r chi.Router) {
 			r.Get("/keys", h.ListAPIKeys)
 			r.Post("/keys", h.CreateAPIKey)
+			r.Get("/keys/{id}", h.GetAPIKey)
 			r.Delete("/keys/{id}", h.RevokeAPIKey)
+			r.Post("/keys/{id}/rotate", h.RotateAPIKey)
 		})
 
 		// Watchlist

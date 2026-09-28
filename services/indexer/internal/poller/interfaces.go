@@ -25,6 +25,11 @@ type Store interface {
 	CreateNextMonthPartition(ctx context.Context) error
 	CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error
 
+	// GetIndexerCursor returns the last committed ledger for a network, or 0 if none.
+	GetIndexerCursor(ctx context.Context, network string) (uint32, error)
+	// SetIndexerCursor updates the last committed ledger for a network.
+	SetIndexerCursor(ctx context.Context, network string, ledger uint32) error
+
 	// RecentHourlyActivity returns per-hour activity buckets for the most
 	// recent `hours` hours (oldest first), aggregated across events and
 	// invocations. Used by the anomaly detector to build a rolling baseline.
@@ -229,6 +234,35 @@ type HealthInputs struct {
 	Activity          []HourlyActivity
 	TotalStorage      int64
 	ExpiringStorage   int64
+}
+
+// LedgerTransaction is one entry of a getTransactions page.
+type LedgerTransaction struct {
+	Status      string // SUCCESS | FAILED
+	Ledger      uint32
+	TxHash      string
+	EnvelopeXDR string // base64 TransactionEnvelope
+}
+
+// GetTransactionsResult mirrors a getTransactions response page.
+type GetTransactionsResult struct {
+	Transactions []LedgerTransaction
+	LatestLedger uint32
+	// Cursor continues pagination after the last returned transaction.
+	Cursor string
+}
+
+// WatchedAccount mirrors store.WatchedAccount (fields discovery needs).
+type WatchedAccount struct {
+	AccountID string
+}
+
+// DiscoveredContract mirrors store.DiscoveredContract.
+type DiscoveredContract struct {
+	ContractID string
+	Network    string
+	AccountID  string
+	Ledger     int64
 }
 
 // ContractHealthScore mirrors store.ContractHealthScore.

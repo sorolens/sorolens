@@ -2,6 +2,7 @@
 
 from .add_group_contract_body import AddGroupContractBody
 from .add_to_watchlist_body import AddToWatchlistBody
+from .add_watched_account_body import AddWatchedAccountBody
 from .alert_group import AlertGroup
 from .alert_group_severity import AlertGroupSeverity
 from .alert_rule import AlertRule
@@ -13,6 +14,7 @@ from .api_health_response_200 import ApiHealthResponse200
 from .api_health_response_200_db import ApiHealthResponse200Db
 from .api_health_response_200_redis import ApiHealthResponse200Redis
 from .api_key import APIKey
+from .audit_event import AuditEvent
 from .batch_contracts_request import BatchContractsRequest
 from .batch_contracts_request_action import BatchContractsRequestAction
 from .batch_contracts_request_args import BatchContractsRequestArgs
@@ -65,6 +67,10 @@ from .create_api_key_body import CreateApiKeyBody
 from .create_api_key_body_scopes_item import CreateApiKeyBodyScopesItem
 from .create_api_key_response_201 import CreateApiKeyResponse201
 from .create_group_body import CreateGroupBody
+from .create_report_subscription_body import CreateReportSubscriptionBody
+from .create_report_subscription_body_frequency import (
+    CreateReportSubscriptionBodyFrequency,
+)
 from .error import Error
 from .error_error_type_0 import ErrorErrorType0
 from .error_error_type_0_code import ErrorErrorType0Code
@@ -85,6 +91,13 @@ from .get_contract_report_history_response_200 import (
 from .get_contract_uptime_window import GetContractUptimeWindow
 from .get_global_stats_response_200 import GetGlobalStatsResponse200
 from .get_watchdog_stats_network import GetWatchdogStatsNetwork
+from .graphql_body import GraphqlBody
+from .graphql_body_variables import GraphqlBodyVariables
+from .graphql_response_200 import GraphqlResponse200
+from .graphql_response_200_data import GraphqlResponse200Data
+from .graphql_response_200_errors_item import GraphqlResponse200ErrorsItem
+from .graphql_response_400 import GraphqlResponse400
+from .graphql_response_400_errors_item import GraphqlResponse400ErrorsItem
 from .group import Group
 from .group_contract import GroupContract
 from .group_deleted import GroupDeleted
@@ -113,6 +126,7 @@ from .list_all_invocations_response_200 import ListAllInvocationsResponse200
 from .list_all_invocations_status import ListAllInvocationsStatus
 from .list_api_keys_admin_response_200 import ListApiKeysAdminResponse200
 from .list_api_keys_response_200 import ListApiKeysResponse200
+from .list_audit_events_response_200 import ListAuditEventsResponse200
 from .list_contract_alerts_network import ListContractAlertsNetwork
 from .list_contract_alerts_response_200 import ListContractAlertsResponse200
 from .list_contract_alerts_severity import ListContractAlertsSeverity
@@ -136,6 +150,7 @@ from .list_contracts_sort import ListContractsSort
 from .list_failed_events_response_200 import ListFailedEventsResponse200
 from .list_monitored_contracts_network import ListMonitoredContractsNetwork
 from .list_monitored_contracts_response_200 import ListMonitoredContractsResponse200
+from .list_report_subscriptions_response_200 import ListReportSubscriptionsResponse200
 from .list_rule_library_response_200 import ListRuleLibraryResponse200
 from .list_rule_library_response_200_rules_item import (
     ListRuleLibraryResponse200RulesItem,
@@ -147,6 +162,7 @@ from .list_rule_metrics_response_200_metrics_item import (
 from .list_watchdog_alerts_network import ListWatchdogAlertsNetwork
 from .list_watchdog_alerts_response_200 import ListWatchdogAlertsResponse200
 from .list_watchdog_alerts_severity import ListWatchdogAlertsSeverity
+from .list_watched_accounts_response_200 import ListWatchedAccountsResponse200
 from .live_activity_response_200 import LiveActivityResponse200
 from .monitored_contract import MonitoredContract
 from .monthly_sla import MonthlySLA
@@ -164,8 +180,12 @@ from .recent_events_response_200 import RecentEventsResponse200
 from .register_contract_body import RegisterContractBody
 from .register_contract_body_network import RegisterContractBodyNetwork
 from .remove_group_contract_body import RemoveGroupContractBody
+from .report_subscription import ReportSubscription
+from .report_subscription_frequency import ReportSubscriptionFrequency
 from .requeue_failed_event_response_200 import RequeueFailedEventResponse200
 from .role_error import RoleError
+from .rotate_api_key_admin_response_200 import RotateApiKeyAdminResponse200
+from .rotate_api_key_response_200 import RotateApiKeyResponse200
 from .rule_diagnostic import RuleDiagnostic
 from .scope_error import ScopeError
 from .set_alert_rule_enabled_body import SetAlertRuleEnabledBody
@@ -183,6 +203,7 @@ from .v2_add_to_watchlist_body import V2AddToWatchlistBody
 from .v2_admin_create_key_body import V2AdminCreateKeyBody
 from .v2_admin_create_key_response_201 import V2AdminCreateKeyResponse201
 from .v2_admin_list_keys_response_200 import V2AdminListKeysResponse200
+from .v2_admin_rotate_key_response_200 import V2AdminRotateKeyResponse200
 from .v2_alert import V2Alert
 from .v2_alert_list import V2AlertList
 from .v2_alert_severity import V2AlertSeverity
@@ -223,6 +244,7 @@ from .v2_monitored_contract import V2MonitoredContract
 from .v2_monitored_list import V2MonitoredList
 from .v2_pagination import V2Pagination
 from .v2_register_contract_body import V2RegisterContractBody
+from .v2_rotate_api_key_response_200 import V2RotateApiKeyResponse200
 from .v2_storage_entry import V2StorageEntry
 from .v2_storage_entry_durability import V2StorageEntryDurability
 from .v2_storage_entry_status import V2StorageEntryStatus
@@ -248,6 +270,7 @@ from .verification_source_input_kind import VerificationSourceInputKind
 from .verification_source_kind import VerificationSourceKind
 from .verification_toolchain import VerificationToolchain
 from .watchdog_stats import WatchdogStats
+from .watched_account import WatchedAccount
 from .watchlist import Watchlist
 from .watchlist_item import WatchlistItem
 
@@ -255,6 +278,7 @@ __all__ = (
     "APIKey",
     "AddGroupContractBody",
     "AddToWatchlistBody",
+    "AddWatchedAccountBody",
     "AlertGroup",
     "AlertGroupSeverity",
     "AlertRule",
@@ -265,6 +289,7 @@ __all__ = (
     "ApiHealthResponse200",
     "ApiHealthResponse200Db",
     "ApiHealthResponse200Redis",
+    "AuditEvent",
     "BatchContractsRequest",
     "BatchContractsRequestAction",
     "BatchContractsRequestArgs",
@@ -313,6 +338,8 @@ __all__ = (
     "CreateApiKeyBodyScopesItem",
     "CreateApiKeyResponse201",
     "CreateGroupBody",
+    "CreateReportSubscriptionBody",
+    "CreateReportSubscriptionBodyFrequency",
     "Error",
     "ErrorErrorType0",
     "ErrorErrorType0Code",
@@ -331,6 +358,13 @@ __all__ = (
     "GetContractUptimeWindow",
     "GetGlobalStatsResponse200",
     "GetWatchdogStatsNetwork",
+    "GraphqlBody",
+    "GraphqlBodyVariables",
+    "GraphqlResponse200",
+    "GraphqlResponse200Data",
+    "GraphqlResponse200ErrorsItem",
+    "GraphqlResponse400",
+    "GraphqlResponse400ErrorsItem",
     "Group",
     "GroupContract",
     "GroupDeleted",
@@ -359,6 +393,7 @@ __all__ = (
     "ListAllInvocationsStatus",
     "ListApiKeysAdminResponse200",
     "ListApiKeysResponse200",
+    "ListAuditEventsResponse200",
     "ListContractAlertsNetwork",
     "ListContractAlertsResponse200",
     "ListContractAlertsSeverity",
@@ -380,6 +415,7 @@ __all__ = (
     "ListFailedEventsResponse200",
     "ListMonitoredContractsNetwork",
     "ListMonitoredContractsResponse200",
+    "ListReportSubscriptionsResponse200",
     "ListRuleLibraryResponse200",
     "ListRuleLibraryResponse200RulesItem",
     "ListRuleMetricsResponse200",
@@ -387,6 +423,7 @@ __all__ = (
     "ListWatchdogAlertsNetwork",
     "ListWatchdogAlertsResponse200",
     "ListWatchdogAlertsSeverity",
+    "ListWatchedAccountsResponse200",
     "LiveActivityResponse200",
     "MonitoredContract",
     "MonthlySLA",
@@ -402,8 +439,12 @@ __all__ = (
     "RegisterContractBody",
     "RegisterContractBodyNetwork",
     "RemoveGroupContractBody",
+    "ReportSubscription",
+    "ReportSubscriptionFrequency",
     "RequeueFailedEventResponse200",
     "RoleError",
+    "RotateApiKeyAdminResponse200",
+    "RotateApiKeyResponse200",
     "RuleDiagnostic",
     "ScopeError",
     "SetAlertRuleEnabledBody",
@@ -421,6 +462,7 @@ __all__ = (
     "V2AdminCreateKeyBody",
     "V2AdminCreateKeyResponse201",
     "V2AdminListKeysResponse200",
+    "V2AdminRotateKeyResponse200",
     "V2Alert",
     "V2AlertList",
     "V2AlertSeverity",
@@ -461,6 +503,7 @@ __all__ = (
     "V2MonitoredList",
     "V2Pagination",
     "V2RegisterContractBody",
+    "V2RotateApiKeyResponse200",
     "V2StorageEntry",
     "V2StorageEntryDurability",
     "V2StorageEntryStatus",
@@ -486,6 +529,7 @@ __all__ = (
     "VerificationSourceKind",
     "VerificationToolchain",
     "WatchdogStats",
+    "WatchedAccount",
     "Watchlist",
     "WatchlistItem",
 )

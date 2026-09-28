@@ -38,6 +38,10 @@ const DIR_PARAM = "dir";
 const DEFAULT_SORT_COLUMN = "added_at";
 const DEFAULT_SORT_DIRECTION = "desc" as const;
 
+// Paste-to-add (#178): a Soroban contract id is 56 chars, starts with 'C', and
+// uses the base32 alphabet. Mirrors the tracking wizard's client-side check.
+const PASTE_CONTRACT_ID_RE = /^C[A-Z0-9]{55}$/;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -431,11 +435,53 @@ function ContractsPageInner() {
   const [trackPending, setTrackPending] = useState(false);
   const [toast, setToast] = useState<{
     id: number;
-    message: string;
+    message: ReactNode;
     variant: "info" | "success" | "error";
   } | null>(null);
   const toastSeq = useRef(0);
   const dismissToast = useCallback(() => setToast(null), []);
+
+  // Paste-to-add contract (#178). Pasting a valid Soroban contract id anywhere
+  // on the page surfaces a "Track this contract?" toast whose Confirm routes to
+  // the tracking wizard with the id prefilled (so the network step still runs).
+  // Anything that is not a valid id is ignored silently.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData("text")?.trim().toUpperCase();
+      if (!text || !PASTE_CONTRACT_ID_RE.test(text)) return;
+      setToast({
+        id: ++toastSeq.current,
+        variant: "info",
+        message: (
+          <span>
+            Track this contract?{" "}
+            <button
+              type="button"
+              data-testid="paste-track-confirm"
+              onClick={() => {
+                setToast(null);
+                router.push(`/contracts/new?id=${encodeURIComponent(text)}`);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "inherit",
+                cursor: "pointer",
+                font: "inherit",
+                fontWeight: 600,
+                padding: 0,
+                textDecoration: "underline",
+              }}
+            >
+              Confirm
+            </button>
+          </span>
+        ),
+      });
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [router]);
 
   // ---------------------------------------------------------------------------
   // Data fetching (SWR)

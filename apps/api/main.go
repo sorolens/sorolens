@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sorolens/sorolens/apps/api/internal/config"
+	"github.com/sorolens/sorolens/apps/api/internal/graph"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/metrics"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
@@ -88,6 +89,10 @@ func main() {
 		SlackSigningSecret: cfg.SlackSigningSecret,
 		RequestTimeout:     cfg.RequestTimeout,
 		StreamTimeout:      cfg.StreamTimeout,
+		GraphQL: graph.Options{
+			ComplexityLimit: cfg.GraphQLComplexityLimit,
+			PersistedOnly:   cfg.GraphQLPersistedOnly,
+		},
 	}
 
 	if err := seedInitialAdmin(context.Background(), h.Store, cfg.InitialAdminGitHubID, logger); err != nil {

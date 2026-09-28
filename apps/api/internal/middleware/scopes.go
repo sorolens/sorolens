@@ -30,6 +30,8 @@ const (
 // present to hit that route. Routes absent from this table are unscoped
 // (e.g. /health, /readyz) and are reachable by any authenticated key.
 var routeScopes = map[string]string{
+	"POST /graphql": ScopeReadContracts,
+
 	"GET /api/v1/stats/global":   ScopeReadContracts,
 	"GET /api/v1/stats/activity": ScopeReadContracts,
 	"GET /api/v1/events/recent":  ScopeReadContracts,
@@ -74,6 +76,10 @@ var routeScopes = map[string]string{
 	"GET /api/v1/dlq":               ScopeReadContracts,
 	"POST /api/v1/dlq/{id}/requeue": ScopeWriteContracts,
 
+	"POST /api/v1/watched-accounts":        ScopeWriteContracts,
+	"GET /api/v1/watched-accounts":         ScopeReadContracts,
+	"DELETE /api/v1/watched-accounts/{id}": ScopeWriteContracts,
+
 	"GET /api/v1/watchdog/stats":                 ScopeReadWatchdog,
 	"GET /api/v1/watchdog/alerts":                ScopeReadWatchdog,
 	"GET /api/v1/watchdog/contracts":             ScopeReadWatchdog,
@@ -90,9 +96,11 @@ var routeScopes = map[string]string{
 	"GET /api/v1/watchdog/subscriptions/{id}/signing-secret": ScopeAdmin,
 	"POST /api/v1/watchdog/subscriptions/{id}/rotate":        ScopeAdmin,
 
-	"GET /api/v1/api-keys":         ScopeAdmin,
-	"POST /api/v1/api-keys":        ScopeAdmin,
-	"DELETE /api/v1/api-keys/{id}": ScopeAdmin,
+	"GET /api/v1/api-keys":              ScopeAdmin,
+	"POST /api/v1/api-keys":             ScopeAdmin,
+	"GET /api/v1/api-keys/{id}":         ScopeAdmin,
+	"DELETE /api/v1/api-keys/{id}":      ScopeAdmin,
+	"POST /api/v1/api-keys/{id}/rotate": ScopeAdmin,
 
 	// v2 (issue #144): the same scope vocabulary applies, keyed by the v2
 	// route pattern.
@@ -119,9 +127,11 @@ var routeScopes = map[string]string{
 	"GET /api/v2/watchdog/contracts/{id}/health": ScopeReadWatchdog,
 	"GET /api/v2/watchdog/contracts/{id}/alerts": ScopeReadWatchdog,
 
-	"GET /api/v2/api-keys":         ScopeAdmin,
-	"POST /api/v2/api-keys":        ScopeAdmin,
-	"DELETE /api/v2/api-keys/{id}": ScopeAdmin,
+	"GET /api/v2/api-keys":              ScopeAdmin,
+	"POST /api/v2/api-keys":             ScopeAdmin,
+	"GET /api/v2/api-keys/{id}":         ScopeAdmin,
+	"DELETE /api/v2/api-keys/{id}":      ScopeAdmin,
+	"POST /api/v2/api-keys/{id}/rotate": ScopeAdmin,
 }
 
 // RequiredScope returns the scope required for a method + route pattern.

@@ -552,6 +552,30 @@ impl WatchdogContract {
             .unwrap_or_else(|| Vec::new(&env))
     }
 
+    /// Returns only the alerts for `contract_id` whose timestamp is strictly
+    /// greater than `since_timestamp`, oldest first. Passing `0` returns the
+    /// full history (same as `get_alerts`). The indexer passes the timestamp
+    /// of the last alert it processed so each poll only reads new alerts.
+    ///
+    /// Alerts are appended in ledger-timestamp order, so the scan walks back
+    /// from the newest alert and stops at the first one that is not newer.
+    pub fn get_alerts_since(env: Env, contract_id: Address, since_timestamp: u64) -> Vec<Alert> {
+        let alerts: Vec<Alert> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Alerts(contract_id))
+            .unwrap_or_else(|| Vec::new(&env));
+
+        let mut first_new = alerts.len();
+        while first_new > 0 {
+            match alerts.get(first_new - 1) {
+                Some(alert) if alert.timestamp > since_timestamp => first_new -= 1,
+                _ => break,
+            }
+        }
+        alerts.slice(first_new..)
+    }
+
     pub fn get_monitored_count(env: Env) -> u32 {
         let registry: Vec<Address> = env
             .storage()
@@ -931,6 +955,72 @@ mod test {
         assert_eq!(alerts.len(), 2);
         assert_eq!(alerts.get(0).unwrap().severity, AlertSeverity::Warning);
         assert_eq!(alerts.get(1).unwrap().severity, AlertSeverity::Info);
+    }
+
+    /// Registers a contract and reports three alerts at t=100, t=200, t=300.
+    fn setup_alert_history(env: &Env) -> (WatchdogContractClient<'_>, Address) {
+        let (_admin, client) = setup(env);
+        let owner = Address::generate(env);
+        let monitored = Address::generate(env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        for (ts, msg) in [(100u64, "first"), (200, "second"), (300, "third")] {
+            set_timestamp(env, ts);
+            client.report_alert(
+                &owner,
+                &monitored,
+                &AlertSeverity::Warning,
+                &SString::from_str(env, msg),
+            );
+        }
+        (client, monitored)
+    }
+
+    #[test]
+    fn get_alerts_since_zero_returns_all_alerts() {
+        let env = Env::default();
+        let (client, monitored) = setup_alert_history(&env);
+
+        let since = client.get_alerts_since(&monitored, &0u64);
+        assert_eq!(since.len(), 3);
+        assert_eq!(since, client.get_alerts(&monitored));
+    }
+
+    #[test]
+    fn get_alerts_since_returns_only_newer_alerts() {
+        let env = Env::default();
+        let (client, monitored) = setup_alert_history(&env);
+
+        // Strictly greater than: the alert at exactly t=200 is excluded.
+        let since = client.get_alerts_since(&monitored, &200u64);
+        assert_eq!(since.len(), 1);
+        assert_eq!(since.get(0).unwrap().timestamp, 300);
+        assert_eq!(
+            since.get(0).unwrap().message,
+            SString::from_str(&env, "third")
+        );
+
+        let since = client.get_alerts_since(&monitored, &150u64);
+        assert_eq!(since.len(), 2);
+        assert_eq!(since.get(0).unwrap().timestamp, 200);
+        assert_eq!(since.get(1).unwrap().timestamp, 300);
+    }
+
+    #[test]
+    fn get_alerts_since_returns_empty_when_no_new_alerts() {
+        let env = Env::default();
+        let (client, monitored) = setup_alert_history(&env);
+
+        assert_eq!(client.get_alerts_since(&monitored, &300u64).len(), 0);
+        assert_eq!(client.get_alerts_since(&monitored, &u64::MAX).len(), 0);
+    }
+
+    #[test]
+    fn get_alerts_since_unknown_contract_returns_empty() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let unknown = Address::generate(&env);
+
+        assert_eq!(client.get_alerts_since(&unknown, &0u64).len(), 0);
     }
 
     #[test]
