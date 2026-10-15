@@ -90,6 +90,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// Global middleware
 	r.Use(OTelMiddleware)
 
+	r.Use(middleware.SecurityHeaders)
 	r.Use(middleware.RequestID)
 	r.Use(corsMiddleware())
 	// Sentry must run before Recoverer: it reports a panic and re-panics so

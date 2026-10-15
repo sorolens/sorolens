@@ -66,6 +66,45 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestSecurityHeaders(t *testing.T) {
+	srv := newTestHandler(store.NewMockStore(), true, true)
+
+	for _, tc := range []struct {
+		name        string
+		path        string
+		wantStatus  int
+		wantNoStore bool
+	}{
+		{name: "public response", path: "/health", wantStatus: http.StatusOK},
+		{name: "admin response", path: "/api/v1/admin/keys", wantStatus: http.StatusUnauthorized, wantNoStore: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("want status %d, got %d", tc.wantStatus, w.Code)
+			}
+			for header, want := range map[string]string{
+				"X-Content-Type-Options":    "nosniff",
+				"Content-Security-Policy":   "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+				"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+				"Referrer-Policy":           "strict-origin-when-cross-origin",
+			} {
+				if got := w.Header().Get(header); got != want {
+					t.Errorf("%s = %q, want %q", header, got, want)
+				}
+			}
+			if got := w.Header().Get("Cache-Control"); tc.wantNoStore && got != "no-store" {
+				t.Errorf("Cache-Control = %q, want no-store", got)
+			} else if !tc.wantNoStore && got != "" {
+				t.Errorf("Cache-Control = %q, want empty", got)
+			}
+		})
+	}
+}
+
 func TestReadyzHealthy(t *testing.T) {
 	srv := newTestHandler(store.NewMockStore(), true, true)
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
