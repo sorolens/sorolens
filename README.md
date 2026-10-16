@@ -66,6 +66,10 @@ The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
 The indexer processes contracts concurrently. Set `INDEXER_WORKERS` to tune
 the worker count; it defaults to `GOMAXPROCS`. Each contract is handled by one
 worker at a time, preserving that contract's processing order.
+
+The indexer needs `DATABASE_URL` and a Soroban RPC endpoint (`SOROBAN_RPC_URL`, or
+`SOROBAN_RPC_URL_<NETWORK>` per network). See
+[`docs/indexer.md`](docs/indexer.md) for every setting.
 ---
 
 ## How to contribute
@@ -167,6 +171,7 @@ Admin: `GAZ3HN2QNDKWLOI2OQEG65KBJEAUP4PROR3FJNXNDY34UH547MN4CJUI`
 > ⏳ **Coming soon.** Mainnet is on the roadmap. The row above is a placeholder: the mainnet contract ID and explorer link will be published here once the deployment is live.
 
 ---
+
 ## Deploying the API as a standalone Docker service
 
 The Go API ships with a multi-stage `apps/api/Dockerfile` that produces a
@@ -197,13 +202,13 @@ docker compose -f docker-compose.prod.yml up -d
 
 Required environment variables:
 
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | Pooled Postgres connection string |
-| `REDIS_URL` | Redis connection string |
-| `STELLAR_NETWORK` | `testnet`, `mainnet`, or `futurenet` |
-| `SOROBAN_RPC_URL` | Soroban JSON-RPC endpoint |
-| `WATCHDOG_CONTRACT_ID` | Deployed watchdog contract address |
+| Variable               | Description                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`         | Pooled Postgres connection string                                                                              |
+| `REDIS_URL`            | Redis connection string                                                                                        |
+| `STELLAR_NETWORK`      | `testnet`, `mainnet`, or `futurenet`                                                                           |
+| `SOROBAN_RPC_URL`      | Soroban JSON-RPC endpoint                                                                                      |
+| `WATCHDOG_CONTRACT_ID` | Deployed watchdog contract address                                                                             |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins (e.g. `https://sorolens-web-iota.vercel.app`); omit or set to `*` to allow all |
 
 The API is healthy once `GET /health` returns `{"status":"ok"}`. `GET /readyz`
@@ -218,6 +223,7 @@ Set the required environment variables in the Variables panel before the first
 deploy.
 
 ---
+
 ## Tech stack
 
 | Layer             | Technology                                                                                                                         |

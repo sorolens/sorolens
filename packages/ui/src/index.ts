@@ -9,3 +9,8 @@ export type { Column, DataTableProps } from "./DataTable";
 
 export { Toast } from "./Toast";
 export type { ToastProps, ToastVariant } from "./Toast";
+export { ContractChangelog } from "./ContractChangelog";
+export type {
+  ContractChangelogProps,
+  ContractVersionEntry,
+} from "./ContractChangelog";

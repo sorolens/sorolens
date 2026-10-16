@@ -43,6 +43,7 @@ import { HealthScoreCard } from "@/components/HealthScoreCard";
 import { AddToGroup } from "@/components/AddToGroup";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { CallTracePanel } from "@/components/CallTracePanel";
+import { ContractChangelogPanel } from "@/components/ContractChangelogPanel";
 import { useEventStream } from "@/hooks/useEventStream";
 
 interface Props {
@@ -504,6 +505,11 @@ function ContractDetailContent({ id }: { id: string }) {
             hasMore={storageHasMore}
           />
         )}
+      </section>
+
+      <section className="mb-8" id="changelog">
+        <h2 className="mb-4 text-xl font-semibold">Changelog</h2>
+        <ContractChangelogPanel contractId={id} />
       </section>
 
       <section className="mb-8">

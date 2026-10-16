@@ -167,13 +167,13 @@ export default function HomePage() {
               Monorepo
             </a>
             <a
-              href="https://github.com/sorolens/sorolens-cli"
+              href="https://github.com/sorolens/sorolens/tree/main/cli"
               rel="noopener noreferrer"
             >
               CLI
             </a>
             <a
-              href="https://github.com/sorolens/sorolens-sdk"
+              href="https://github.com/sorolens/sorolens/tree/main/packages"
               rel="noopener noreferrer"
             >
               SDK

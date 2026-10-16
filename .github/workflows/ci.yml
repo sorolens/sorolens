@@ -68,7 +68,8 @@ jobs:
           # TCP address, so 127.0.0.1 only answers once the final server is up.
           until docker exec "$DB_CONTAINER" pg_isready -h 127.0.0.1 -p 5432 -U sorolens -d sorolens; do sleep 1; done
       - name: Run DB migrations
-        if: matrix.module == 'apps/api'
+        # services/indexer's pgstore tests write to the same schema the API reads.
+        if: matrix.module == 'apps/api' || matrix.module == 'services/indexer'
         env:
           PGPASSWORD: sorolens
         run: |

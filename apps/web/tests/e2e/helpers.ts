@@ -73,6 +73,9 @@ export function defaultHandlers(): Record<string, Handler> {
         contracts: [contractEventRate()],
       },
     }),
+    // Must precede "contracts/": the contract page's changelog panel (#601)
+    // expects an array, not the contract-detail body.
+    "/changelog": () => ({ status: 200, body: [] }),
     "contracts/": defaultContract,
     contracts: (route) => {
       if (route.request().method() === "POST") {

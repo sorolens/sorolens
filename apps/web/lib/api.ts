@@ -54,6 +54,7 @@ import type {
   RuleCatalogResponse,
   RuleLibraryResponse,
 } from "./types";
+import type { ContractVersionEntry } from "@sorolens/ui";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -443,6 +444,35 @@ export function getContractVerification(
   return fetchJson<ContractVerification>(
     `${API_URL}/api/v1/contracts/${id}/verification`
   );
+}
+
+// ---- Wasm changelog (issue #601) -------------------------------------------
+
+/**
+ * Full Wasm hash history for a contract, oldest first. Served by the
+ * changelog handler in apps/api/internal/changelog.
+ */
+export function getContractChangelog(
+  id: string
+): Promise<ContractVersionEntry[]> {
+  return fetchJson<ContractVersionEntry[]>(
+    `${API_URL}/api/v1/contracts/${id}/changelog`
+  );
+}
+
+/** Base URL the ContractChangelog component builds feed/badge links from. */
+export function changelogApiBase(): string {
+  return `${API_URL}/api/v1`;
+}
+
+/** URL of the Atom feed of a contract's Wasm upgrades. */
+export function contractChangelogFeedUrl(id: string): string {
+  return `${changelogApiBase()}/contracts/${id}/changelog/feed`;
+}
+
+/** URL of the embeddable SVG badge showing a contract's current Wasm hash. */
+export function contractChangelogBadgeUrl(id: string): string {
+  return `${changelogApiBase()}/contracts/${id}/changelog/badge`;
 }
 
 // ---- watchdog --------------------------------------------------------------
