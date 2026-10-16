@@ -93,6 +93,9 @@ export function formatClockTime(timestamp: number, locales?: string): string {
 
 const RESOURCE_LABELS: Array<[RegExp, string]> = [
   [/\/api\/v1\/watchdog/, "watchdog"],
+  // The grouped alert feed lives at the un-scoped /api/v1/alerts but still
+  // belongs to the watchdog view.
+  [/\/api\/v1\/alerts/, "watchdog"],
   [/\/api\/v1\/watchlist/, "watchlist"],
   [/\/api\/v1\/stats\/global/, "global stats"],
   [/\/api\/v1\/contracts\/[^/?]+\/events/, "events"],

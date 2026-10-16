@@ -33,6 +33,14 @@ export function defaultHandlers(): Record<string, Handler> {
       body: { contracts: [monitoredContract()], next_cursor: "" },
     }),
     "watchdog/alerts": () => ({ status: 200, body: { alerts: [] } }),
+    // Grouped, deduplicated alert feed (GET /api/v1/alerts, issue #269).
+    // Keyed on "api/v1/alerts" so it never shadows "watchdog/alerts": handler
+    // lookup is by pathname substring and /api/v1/watchdog/alerts does not
+    // contain "api/v1/alerts".
+    "api/v1/alerts": () => ({
+      status: 200,
+      body: { groups: [], next_cursor: "" },
+    }),
     "watchdog/stats": () => ({ status: 200, body: watchdogStats() }),
     // Must precede "contracts/" so the wizard's pre-flight check is not answered
     // by the contract-detail handler.
@@ -178,6 +186,43 @@ export function emptyWatchdogHandlers(): Record<string, Handler> {
   return {
     "watchdog/contracts": emptyWatchdogContracts,
     "watchdog/alerts": emptyWatchdogAlerts,
+    "api/v1/alerts": () => ({
+      status: 200,
+      body: { groups: [], next_cursor: "" },
+    }),
+  };
+}
+
+/**
+ * One deduplicated row from the grouped alert feed (GET /api/v1/alerts):
+ * count plus first/last seen bounds for a (contract, severity, rule) group.
+ */
+export function alertGroup(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    group_key: `${CONTRACT_ID}|Critical|`,
+    contract_id: CONTRACT_ID,
+    severity: "Critical",
+    rule: "",
+    count: 3,
+    dedupe_window_secs: 300,
+    first_seen: "2026-07-03T08:00:00Z",
+    last_seen: "2026-07-03T08:10:00Z",
+    last_message: "storage entry expiring",
+    backfill_eligible: false,
+    ...overrides,
+  };
+}
+
+/** A raw ContractAlert, as returned by the flat watchdog feed. */
+export function contractAlert(message: string) {
+  return {
+    contract_id: CONTRACT_ID,
+    severity: "Critical",
+    message,
+    ledger: 120_400,
+    tx_hash: TRACE_TX_HASH,
+    timestamp: "2026-07-03T08:10:00Z",
   };
 }
 

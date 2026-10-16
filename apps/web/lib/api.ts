@@ -1,4 +1,5 @@
 import type {
+  AlertGroupsResponse,
   AlertsResponse,
   AlertSubscription,
   BatchContractsRequest,
@@ -550,6 +551,32 @@ export function listAlerts(
     ? `/api/v1/watchdog/contracts/${contractId}/alerts`
     : `/api/v1/watchdog/alerts`;
   return fetchJson<AlertsResponse>(`${API_URL}${path}${qs ? "?" + qs : ""}`);
+}
+
+/**
+ * Wrapper around the grouped alert feed (GET /api/v1/alerts, issue #269).
+ *
+ * Unlike listAlerts — the flat per-event watchdog feed — this returns one row
+ * per deduplicated group with its aggregate count plus first/last seen bounds.
+ * Filters mirror the flat feed: contract_id, severity and network.
+ */
+export function listAlertGroups(params?: {
+  contractId?: string;
+  severity?: string;
+  network?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<AlertGroupsResponse> {
+  const search = new URLSearchParams();
+  if (params?.contractId) search.set("contract_id", params.contractId);
+  if (params?.severity) search.set("severity", params.severity);
+  if (params?.network) search.set("network", params.network);
+  if (params?.cursor) search.set("cursor", params.cursor);
+  if (params?.limit) search.set("limit", String(params.limit));
+  const qs = search.toString();
+  return fetchJson<AlertGroupsResponse>(
+    `${API_URL}/api/v1/alerts${qs ? "?" + qs : ""}`
+  );
 }
 
 // ---- events explorer ------------------------------------------------------

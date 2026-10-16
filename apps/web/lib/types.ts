@@ -295,6 +295,33 @@ export interface AlertsResponse {
   next_cursor: string;
 }
 
+/**
+ * One deduplicated alert group from GET /api/v1/alerts: every raw
+ * ContractAlert sharing the (contract, severity, rule) tuple collapses into a
+ * single row carrying the aggregate count and the first/last seen bounds.
+ */
+export interface AlertGroup {
+  id: number;
+  /** Opaque grouping key: "contractID|severity|rule". */
+  group_key: string;
+  contract_id: string;
+  severity: AlertSeverity;
+  /** Optional rule tag; empty when the producer set none. */
+  rule: string;
+  count: number;
+  dedupe_window_secs: number;
+  first_seen: string;
+  last_seen: string;
+  last_message: string;
+  backfill_eligible: boolean;
+}
+
+export interface AlertGroupsResponse {
+  groups: AlertGroup[];
+  /** Cursor for the next page; empty when the feed is exhausted. */
+  next_cursor: string;
+}
+
 export interface WatchdogStats {
   total_monitored: number;
   healthy: number;

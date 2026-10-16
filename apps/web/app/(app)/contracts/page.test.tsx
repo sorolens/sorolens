@@ -61,9 +61,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 // ── Mock @sorolens/ui so we don't need the built dist ───────────────────────
+// Toast mirrors the real component's a11y contract (packages/ui/src/Toast.tsx):
+// errors announce as role="alert", everything else politely as role="status".
 vi.mock("@sorolens/ui", () => ({
-  Toast: ({ message }: { message: string }) => (
-    <div role="alert">{message}</div>
+  Toast: ({ message, variant }: { message: string; variant?: string }) => (
+    <div role={variant === "error" ? "alert" : "status"}>{message}</div>
   ),
   DataTable: <T,>({
     data,
@@ -691,15 +693,17 @@ describe("ContractsPage", () => {
     await renderPage();
     await waitFor(() => screen.getByTestId("data-table"));
 
-    firePaste("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC");
+    // Soroban contract ids are 56 chars: "C" + 55 base32 chars (see
+    // PASTE_CONTRACT_ID_RE). The confirmation is an info toast, which
+    // announces politely as role="status"; only errors use role="alert".
+    const validId = "C".repeat(56);
+    firePaste(validId);
 
-    const toast = await screen.findByRole("alert");
+    const toast = await screen.findByRole("status");
     expect(toast.textContent).toMatch(/track this contract/i);
 
     fireEvent.click(screen.getByTestId("paste-track-confirm"));
-    expect(nav.push).toHaveBeenCalledWith(
-      "/contracts/new?id=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
-    );
+    expect(nav.push).toHaveBeenCalledWith(`/contracts/new?id=${validId}`);
   });
 
   it("NEGATIVE: ignores pasted text that is not a contract id", async () => {
@@ -708,6 +712,7 @@ describe("ContractsPage", () => {
 
     firePaste("just some notes, not an id");
 
+    expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(nav.push).not.toHaveBeenCalled();
   });

@@ -118,6 +118,7 @@ describe("resourceFromUrl", () => {
     ["http://localhost:8080/api/v1/contracts/CABC/events", "events"],
     ["http://localhost:8080/api/v1/watchdog/stats", "watchdog"],
     ["http://localhost:8080/api/v1/watchdog/alerts?limit=20", "watchdog"],
+    ["http://localhost:8080/api/v1/alerts?limit=20", "watchdog"],
     ["http://localhost:8080/api/v1/watchlist", "watchlist"],
     ["http://localhost:8080/api/v1/stats/global", "global stats"],
     ["http://localhost:8080/api/v1/unknown", "dashboard"],
