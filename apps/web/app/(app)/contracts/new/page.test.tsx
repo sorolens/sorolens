@@ -332,3 +332,74 @@ describe("Wizard step 3 (configure)", () => {
     ).toBe(true);
   });
 });
+
+// ── ImportContractsCsv: batching, progress, per-row errors ──────────────────
+
+describe("ImportContractsCsv", () => {
+  it("imports rows with bounded parallelism and reports progress", async () => {
+    const rows = Array.from({ length: 500 }, (_, i) => ({
+      id: VALID_ID,
+      label: `row-${i}`,
+      network: "testnet",
+    }));
+
+    let inFlight = 0;
+    let peak = 0;
+    mockTrackContract.mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 0));
+      inFlight -= 1;
+      return {
+        id: VALID_ID,
+        network: "testnet",
+        label: null,
+        status: "pending",
+        wasm_hash: null,
+        added_at: "2026-07-02T10:15:00Z",
+      };
+    });
+
+    const { importContractsCsv } = await import("./import-contracts-csv");
+    const onProgress = vi.fn();
+    await importContractsCsv(rows, { concurrency: 8, onProgress });
+
+    expect(mockTrackContract).toHaveBeenCalledTimes(500);
+    expect(peak).toBeLessThanOrEqual(8);
+    expect(onProgress).toHaveBeenCalled();
+    const last = onProgress.mock.calls.at(-1)?.[0];
+    expect(last).toMatchObject({ done: 500, total: 500, failed: 0 });
+  });
+
+  it("reports per-row errors and retries failed rows", async () => {
+    const rows = [
+      { id: VALID_ID, label: "ok", network: "testnet" },
+      { id: VALID_ID, label: "bad", network: "testnet" },
+    ];
+
+    let attempt = 0;
+    mockTrackContract.mockImplementation(async () => {
+      attempt += 1;
+      if (attempt === 2) throw new ApiError(500, "boom");
+      return {
+        id: VALID_ID,
+        network: "testnet",
+        label: null,
+        status: "pending",
+        wasm_hash: null,
+        added_at: "2026-07-02T10:15:00Z",
+      };
+    });
+
+    const { importContractsCsv } = await import("./import-contracts-csv");
+    const onProgress = vi.fn();
+    const result = await importContractsCsv(rows, {
+      concurrency: 2,
+      onProgress,
+      retries: 1,
+    });
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.report).toBeDefined();
+  });
+});
