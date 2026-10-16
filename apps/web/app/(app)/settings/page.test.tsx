@@ -38,9 +38,9 @@ async function renderPage() {
   const { default: SettingsPage } = await import("@/app/(app)/settings/page");
   render(<SettingsPage />);
   // The page reads stored preferences in an effect after mount.
-  await waitFor(() =>
-    expect(screen.getByTestId("settings-theme")).toBeTruthy()
-  );
+  await waitFor(() => {
+    expect(screen.getByTestId("settings-theme")).toBeTruthy();
+  });
 }
 
 function cardSave(testId: string) {
@@ -185,7 +185,7 @@ describe("SettingsPage", () => {
       expect(screen.getByTestId("settings-api-key-status")).toBeTruthy()
     );
     expect(
-      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).apiKey
+      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).key
     ).toBe(generated);
 
     fireEvent.click(
@@ -211,5 +211,16 @@ describe("SettingsPage", () => {
 
     fireEvent.click(cardSave("settings-theme"));
     expect(screen.getByTestId("settings-theme-status")).toBeTruthy();
+  });
+
+  it("shows the user ID with a copy button and deep link", async () => {
+    localStorage.setItem("sorolens_user_id", "user_123");
+    await renderPage();
+
+    expect(screen.getByTestId("settings-extension-user-id").textContent).toBe(
+      "user_123"
+    );
+    expect(screen.getByText("Copy")).toBeTruthy();
+    expect(screen.getByText("Open in extension")).toBeTruthy();
   });
 });

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiKeySection } from "@/components/settings/ApiKeySection";
+import { ExtensionSection } from "@/components/settings/ExtensionSection";
 import { NetworkSection } from "@/components/settings/NetworkSection";
 import { NotificationsSection } from "@/components/settings/NotificationsSection";
 import type { SaveState } from "@/components/settings/SettingsCard";
@@ -14,8 +15,9 @@ import {
   saveSettings,
   type UserSettings,
 } from "@/lib/settings";
+import { getUserId } from "@/lib/user";
 
-type SectionId = "theme" | "network" | "notifications" | "apiKey";
+type SectionId = "theme" | "network" | "notifications" | "apiKey" | "extension";
 
 /**
  * `/settings` — one place to configure theme, default network, notification
@@ -31,6 +33,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [draft, setDraft] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const [status, setStatus] = useState<Partial<Record<SectionId, SaveState>>>(
     {}
   );
@@ -42,6 +45,7 @@ export default function SettingsPage() {
     const stored = loadSettings();
     setSaved(stored);
     setDraft(stored);
+    setUserId(getUserId());
     setLoaded(true);
   }, []);
 
@@ -67,7 +71,7 @@ export default function SettingsPage() {
     draft.apiKeyCreatedAt !== saved.apiKeyCreatedAt;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3l">
       <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">
         Settings
       </h1>
@@ -129,6 +133,8 @@ export default function SettingsPage() {
               }
               onSave={() => commit(draft, "apiKey")}
             />
+
+            <ExtensionSection status={status.extension ?? "idle"} userId={userId} />
           </>
         ) : (
           // Placeholder while stored preferences load; never a flash of the
