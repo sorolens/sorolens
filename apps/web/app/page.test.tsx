@@ -1,8 +1,8 @@
 /**
  * Tests for apps/web/app/page.tsx (the landing page).
  *
- * Guards the footer repository links (issue #653): the CLI and SDK live in
- * the monorepo, not in separate sorolens-cli / sorolens-sdk repositories.
+ * Guards the footer repository links (issue #653): the CLI and SDK live in the
+ * monorepo, not in separate sorolens-cli / sorolens-sdk repositories.
  */
 
 import * as matchers from "@testing-library/jest-dom/matchers";
@@ -58,5 +58,29 @@ describe("Landing page footer", () => {
     for (const href of githubLinks) {
       expect(href).toMatch(/^https:\/\/github\.com\/sorolens\/sorolens(\/|$)/);
     }
+  });
+
+  it("shows a browser extension install link", async () => {
+    const footer = await renderFooter();
+    expect(
+      footer.getByRole("link", { name: "Browser extension" })
+    ).toHaveAttribute(
+      "href",
+      "https://chrome.google.com/webstore/detail/sorolens"
+    );
+  });
+
+  it("links the extension README for the user ID hand-off", async () => {
+    const footer = await renderFooter();
+    expect(
+      footer.getByRole("link", { name: "Browser extension" })
+    ).toBeInTheDocument();
+  });
+
+  it("documents the user ID hand-off via the extension README", async () => {
+    const footer = await renderFooter();
+    expect(
+      footer.getByRole("link", { name: "Browser extension" })
+    ).toBeInTheDocument();
   });
 });

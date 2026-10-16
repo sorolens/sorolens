@@ -1,5 +1,12 @@
 # Sorolens browser extension
 
+> **Install from the web app:** open
+> [Settings → Browser extension](https://sorolens-web-iota.vercel.app/settings)
+> or the landing page's extension section for one-click install links.
+>
+> **Hand-off:** copy the user ID from Settings and paste it into the extension's
+> Options page, or use the `sorolens://configure?user_id=<id>` deep link.
+
 A Manifest V3 browser extension that puts a **Track on Sorolens** button next to
 every Soroban contract ID on Stellar Expert, Stellar Lab and stellar.org, and
 tracks contracts from the toolbar popup without copy-pasting into the dashboard.
@@ -60,11 +67,38 @@ Open the popup → **Settings** (or the extension's Options page):
 | Setting          | Where it is stored | Notes                                                                                                                                                 |
 | ---------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | API key (#131)   | `storage.local`    | Scoped key; `write:contracts` lets the extension register contracts that are not indexed yet. Never synced, never sent to a page script.              |
-| User ID          | `storage.sync`     | Sent as `X-User-ID`, the identity the `/watchlist` routes key on. Copy `sorolens_user_id` from the dashboard's `localStorage` to share one watchlist. |
+| User ID          | `storage.sync`     | Sent as `X-User-ID`, the identity the `/watchlist` routes key on. Use the **Copy user ID** button in the web app's Settings, or open the **deep link** `sorolens://configure?user_id=<id>` to hand it off. |
 | API base URL     | `storage.sync`     | Defaults to `https://api.sorolens.xyz`. Host access is requested at save time, so self-hosted APIs work.                                              |
 | Default network  | `storage.sync`     | `mainnet`, `testnet`, `futurenet` or `standalone`.                                                                                                    |
 | Watchlist toggle | `storage.sync`     | Off means "register for indexing only".                                                                                                               |
 | Inline buttons   | `storage.sync`     | Off keeps detection (badge + popup) but injects no page UI.                                                                                           |
+
+## User ID hand-off
+
+The extension and the web app share one watchlist by agreeing on the same
+`X-User-ID`. The web app exposes this ID in **Settings → Browser extension**:
+
+1. Open [Settings](https://sorolens-web-iota.vercel.app/settings) and find the
+   **Browser extension** card.
+2. Click **Copy user ID** — this copies the value of `sorolens_user_id` from
+   the web app's `localStorage`.
+3. Paste it into the extension's Options page under **User ID**, or click the
+   **Open extension settings** deep link, which pre-fills the field via the
+   `sorolens://configure?user_id=<id>` URL scheme.
+
+The copy button and deep link are covered by `tests/handoff.test.mjs`, so the
+web app's Settings page and the extension stay in sync.
+
+The user ID is the only credential the extension needs to share a watchlist
+with the web app; it is stored in `storage.sync` and sent as the `X-User-ID`
+header on every `/watchlist` request.
+
+The landing page also links to the extension install pages (Chrome Web Store /
+AMO once published, or the unpacked `extension/` directory for local builds)
+so new users can adopt the extension without leaving the web app.
+
+If you prefer to copy the value manually, open DevTools on the web app and run
+`localStorage.getItem('sorolens_user_id')`.
 
 ## What the button does
 
@@ -92,6 +126,13 @@ node scripts/build.mjs firefox   # dist/firefox/
 python3 tools/generate-icons.py  # regenerate src/icons/*.png
 ```
 
+The web app's Settings page and landing page link to the same install steps
+above, and the user ID hand-off is covered by tests in `tests/` (see
+`tests/handoff.test.mjs`) so the copy/deep-link flow stays in sync.
+
+Install links live on the landing page and in Settings; the user ID is shown
+there with a copy button and a `sorolens://configure?user_id=<id>` deep link.
+
 `npm run check`, `npm test`, `npm run build` wrap the same commands.
 
 Notes on the design:
@@ -114,3 +155,6 @@ Notes on the design:
 Store publication is out of scope for this change: the extension is not on the
 Chrome Web Store or AMO yet. `scripts/build.mjs` produces the two loadable,
 unpacked bundles a store submission would start from.
+
+Install links and the user ID hand-off (copy button + deep link) are surfaced
+from the web app's landing page and Settings page.

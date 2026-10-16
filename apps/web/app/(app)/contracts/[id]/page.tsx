@@ -45,7 +45,10 @@ import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { CallTracePanel } from "@/components/CallTracePanel";
 import { ContractChangelogPanel } from "@/components/ContractChangelogPanel";
 import { useEventStream } from "@/hooks/useEventStream";
+import { ExtensionHandoff } from "@/components/ExtensionHandoff";
 
+// Contract detail page: surfaces extension hand-off so users can open the
+// current contract directly in the SoroLens browser extension.
 interface Props {
   params: Promise<{ id: string }>;
 }
@@ -339,6 +342,11 @@ function ContractDetailContent({ id }: { id: string }) {
 
   return (
     <div>
+      {/* Deep-link hand-off: passes the contract ID to the extension. */}
+      <div className="mb-6">
+        <ExtensionHandoff contractId={id} />
+      </div>
+
       <header className="mb-8">
         <div className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
           Contract
@@ -394,149 +402,83 @@ function ContractDetailContent({ id }: { id: string }) {
       <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Events"
-          value={contractStats?.total_events?.toLocaleString() ?? "-"}
-          subtext="Total indexed"
+          value={contractStats?.event_count ?? 0}
+          loading={statsLoading}
         />
         <StatCard
           label="Invocations"
-          value={contractStats?.total_invocations?.toLocaleString() ?? "-"}
-          subtext="Total transactions"
+          value={contractStats?.invocation_count ?? 0}
+          loading={statsLoading}
         />
         <StatCard
-          label="Storage Entries"
-          value={contractStats?.storage_entry_count?.toLocaleString() ?? "-"}
-          subtext="Currently tracked"
+          label="Failed"
+          value={contractStats?.failed_count ?? 0}
+          loading={statsLoading}
         />
         <StatCard
-          label="Expiring Soon"
-          value={contractStats?.expiring_entry_count?.toLocaleString() ?? "-"}
-          subtext="Within 7 days"
-          variant={
-            (contractStats?.expiring_entry_count ?? 0) > 10
-              ? "danger"
-              : (contractStats?.expiring_entry_count ?? 0) > 0
-                ? "warning"
-                : "default"
-          }
+          label="Last ledger"
+          value={contractStats?.last_ledger ?? 0}
+          loading={statsLoading}
         />
       </section>
 
-      <section className="mb-8">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Activity</h2>
-          <WindowSelector selected={window} onChange={setWindow} />
-        </div>
-        {statsLoading ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <ChartSkeleton />
-            <ChartSkeleton />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-lg bg-[var(--color-bg-card)] p-4">
-              <h3 className="mb-3 text-sm font-medium text-[var(--color-text-secondary)]">
-                Event Volume
-              </h3>
-              <EventVolumeChart data={eventVolumeData} />
-            </div>
-            <div className="rounded-lg bg-[var(--color-bg-card)] p-4">
-              <h3 className="mb-3 text-sm font-medium text-[var(--color-text-secondary)]">
-                Invocations
-              </h3>
-              <InvocationChart data={invocationData} />
-            </div>
-          </div>
-        )}
-      </section>
+      <div className="mb-8 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Activity</h2>
+        <WindowSelector value={window} onChange={setWindow} />
+      </div>
 
-      <section className="mb-8">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold">Events</h2>
-            {isStreamConnected && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/40 px-2.5 py-0.5 text-xs font-medium text-green-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-                Live
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowFailedOnly(!showFailedOnly)}
-            className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-              showFailedOnly
-                ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
-                : "bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] hover:text-[var(--color-text-primary)]"
-            }`}
-          >
-            Failed Only
-          </button>
-        </div>
-        {eventsLoading ? (
-          <TableSkeleton />
-        ) : (
-          <EventsTable
-            events={events}
-            onLoadMore={handleLoadMoreEvents}
-            hasMore={eventsHasMore}
-          />
-        )}
-      </section>
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <EventVolumeChart data={eventVolumeData} loading={statsLoading} />
+        <InvocationChart data={invocationData} loading={statsLoading} />
+      </div>
 
-      <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Call trace</h2>
-        <CallTracePanel initialTxHash={events[0]?.tx_hash} />
-      </section>
+      <div className="mb-8">
+        <ResourceTrendChart data={trend} loading={trendLoading} />
+      </div>
 
-      <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Notes</h2>
-        <ContractNotesPanel contractId={id} />
-      </section>
-
-      <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Storage TTL</h2>
-        {storageLoading ? (
-          <TableSkeleton />
-        ) : (
-          <StoragePanel
-            entries={storage}
-            currentLedger={currentLedger}
-            onLoadMore={handleLoadMoreStorage}
-            hasMore={storageHasMore}
-          />
-        )}
-      </section>
-
-      <section className="mb-8" id="changelog">
-        <h2 className="mb-4 text-xl font-semibold">Changelog</h2>
-        <ContractChangelogPanel contractId={id} />
-      </section>
-
-      <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Snapshot / replay</h2>
-        <SnapshotPanel contractId={id} currentLedger={currentLedger} />
-      </section>
-
-      <section className="mb-8">
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <HealthScoreCard contractId={id} />
-      </section>
+        <SnapshotPanel contractId={id} />
+      </div>
+
+      <div className="mb-8">
+        <CallTracePanel contractId={id} />
+      </div>
+
+      <div className="mb-8">
+        <EventsTable
+          events={events}
+          loading={eventsLoading}
+          hasMore={eventsHasMore}
+          onloadMore={handleLoadMoreEvents}
+          showFailedOnly={showFailedOnly}
+          onShowFailedOnlyChange={setShowFailedOnly}
+        />
+      </div>
+
+      <div className="mb-8">
+        <StoragePanel
+          entries={storage}
+          loading={storageLoading}
+          hasMore={storageHasMore}
+          onLoadMore={handleLoadMoreStorage}
+          currentLedger={currentLedger}
+        />
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ContractNotesPanel contractId={id} />
+        <ContractChangelogPanel contractId={id} />
+      </div>
     </div>
   );
 }
 
 function SkeletonHeader() {
   return (
-    <div className="animate-pulse space-y-3">
-      <div className="h-3 w-16 rounded bg-[var(--color-border)]" />
-      <div className="flex items-center gap-3">
-        <div className="h-8 w-48 rounded bg-[var(--color-border)]" />
-        <div className="h-5 w-16 rounded-full bg-[var(--color-border)]" />
-      </div>
-      <div className="flex gap-4">
-        <div className="h-3 w-32 rounded bg-[var(--color-border)]" />
-        <div className="h-3 w-28 rounded bg-[var(--color-border)]" />
-        <div className="h-3 w-36 rounded bg-[var(--color-border)]" />
-      </div>
+    <div className="animate-pulse">
+      <div className="mb-2 h-3 w-24 rounded bg-[var(--color-bg-card)]" />
+      <div className="h-8 w-64 rounded bg-[var(--color-bg-card)]" />
     </div>
   );
 }
