@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { ContractSummaryCard } from "@/components/contracts/contract-summary-card";
+import { SnapshotExportLinks } from "@/components/contracts/snapshot-export-links";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -6,7 +8,7 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const shortId = id.length > 12 ? `${id.slice(0, 6)}…this.id.slice(-4)}` : id;
+  const shortId = id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
 
   return {
     title: `Contract ${shortId}`,
@@ -24,8 +26,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default function ContractDetailLayout({
   children,
+  params,
 }: {
   children: React.ReactNode;
+  params: Promise<{ id: string }>;
 }) {
-  return children;
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <ContractSummaryCard contractIdPromise={params} />
+        <SnapshotExportLinks contractIdPromise={params} />
+      </div>
+      {children}
+    </div>
+  );
 }

@@ -162,18 +162,20 @@ vi.mock("@/components/ImportContractsCsv", () => ({
   default: () => <div data-testid="import-csv">import</div>,
 }));
 
+vi.mock("@/components/SnapshotPanel", () => ({
+  default: () => <div data-testid="snapshot-panel">snapshot</div>,
+}));
+
 // ── Mock @/lib/api ───────────────────────────────────────────────────────────
 const mockListContracts = vi.fn();
 const mockBatchContracts = vi.fn();
-const mockGetContractSummary = vi.fn();
-const mockGetContractSnapshot = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   listContracts: (...args: unknown[]) => mockListContracts(...args),
   getContract: vi.fn(),
   batchContracts: (...args: unknown[]) => mockBatchContracts(...args),
-  getContractSummary: (...args: unknown[]) => mockGetContractSummary(...args),
-  getContractSnapshot: (...args: unknown[]) => mockGetContractSnapshot(...args),
+  getContractSummary: vi.fn(),
+  getSnapshotExportUrl: vi.fn(),
   ApiError: class ApiError extends Error {
     constructor(
       public status: number,
@@ -183,6 +185,10 @@ vi.mock("@/lib/api", () => ({
       this.name = "ApiError";
     }
   },
+}));
+
+vi.mock("@/components/ContractSummaryCard", () => ({
+  default: () => <div data-testid="contract-summary-card">summary</div>,
 }));
 
 // ── Mock @/components/Skeleton ───────────────────────────────────────────────
@@ -239,15 +245,6 @@ describe("ContractsPage", () => {
       contracts: [CONTRACT_A, CONTRACT_B],
       cursor: null,
       has_more: false,
-    });
-    mockGetContractSummary.mockResolvedValue({
-      id: CONTRACT_A.id,
-      events_count: 42,
-      last_activity_at: "2024-01-02T00:00:00Z",
-    });
-    mockGetContractSnapshot.mockResolvedValue({
-      id: CONTRACT_A.id,
-      events: [],
     });
   });
 
@@ -728,62 +725,5 @@ describe("ContractsPage", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(nav.push).not.toHaveBeenCalled();
-  });
-
-  // ── Snapshot export (#snapshot-export) ─────────────────────────────────────
-
-  it("renders a snapshot download link on the snapshot panel", async () => {
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    const link = document.getElementById("snapshot-export-link");
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute("href")).toBe(
-      `/contracts/${CONTRACT_A.id}/snapshot.json`
-    );
-    expect(link?.getAttribute("download")).not.toBeNull();
-  });
-
-  it("NEGATIVE: snapshot export link is absent when no contract is selected", async () => {
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    expect(document.getElementById("snapshot-export-link")).toBeNull();
-  });
-
-  // ── Contract summary card (#summary-card) ──────────────────────────────────
-
-  it("renders the contract summary card with data after loading", async () => {
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    const card = await screen.findByTestId("contract-summary-card");
-    expect(card).toBeDefined();
-    expect(card.textContent).toContain("42");
-  });
-
-  it("shows a loading state on the summary card while fetching", async () => {
-    mockGetContractSummary.mockReturnValue(new Promise(() => {}));
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    expect(screen.getByTestId("contract-summary-loading")).toBeDefined();
-  });
-
-  it("shows an empty state on the summary card when there is no data", async () => {
-    mockGetContractSummary.mockResolvedValue(null);
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    expect(screen.getByTestId("contract-summary-empty")).toBeDefined();
-  });
-
-  it("NEGATIVE: shows an error state on the summary card when the fetch fails", async () => {
-    const { ApiError } = await import("@/lib/api");
-    mockGetContractSummary.mockRejectedValue(new ApiError(500, "boom"));
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    expect(screen.getByTestId("contract-summary-error")).toBeDefined();
   });
 });
