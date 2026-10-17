@@ -127,6 +127,27 @@ with Client(api_key="sk_live_...") as client:
 
 `AsyncClient` exposes the same names as coroutines.
 
+## Examples
+
+Four runnable examples live in [`examples/`](examples). Each one runs offline
+out of the box (canned responses through `httpx.MockTransport`) and against a
+live API when `SOROLENS_API_URL` is set:
+
+| Example                          | Shows                                                                            |
+| -------------------------------- | -------------------------------------------------------------------------------- |
+| [`pagination.py`](examples/pagination.py) | Walking every page of `client.contracts.list` via `next_cursor`.          |
+| [`errors.py`](examples/errors.py)         | `NotFoundError`, `ValidationError` and `RateLimitError` from real responses. |
+| [`sse.py`](examples/sse.py)               | Streaming `GET /api/v1/stream/events` incrementally with `httpx`.          |
+| [`webhooks.py`](examples/webhooks.py)     | Verifying `X-Sorolens-Signature` HMAC-SHA256 webhook deliveries.           |
+
+```bash
+cd packages/python-sdk
+python examples/pagination.py
+SOROLENS_API_URL=https://api.sorolens.xyz python examples/errors.py
+```
+
+CI runs every example, so they are always executable.
+
 ## Development
 
 ```bash

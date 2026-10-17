@@ -185,6 +185,24 @@ export interface ContractsListResponse {
   has_more: boolean;
 }
 
+/** One contract as returned by GET /api/v1/search (OpenAPI `Contract`, issue #619). */
+export interface SearchContract {
+  id: string;
+  network: string;
+  label: string | null;
+  status: string;
+  wasm_hash: string | null;
+  created_at_ledger: number;
+  backfill_complete_at: string | null;
+  added_at: string;
+  tags: string[] | null;
+}
+
+/** Response of GET /api/v1/search: `{ "items": [...] }` per docs/openapi.yaml. */
+export interface SearchResponse {
+  items: SearchContract[];
+}
+
 /** Body of POST /api/v1/contracts/:id/tags — the contract's full tag list. */
 export interface ContractTagsResponse {
   contract_id: string;

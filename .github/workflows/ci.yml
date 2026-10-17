@@ -41,6 +41,14 @@ jobs:
       - name: go vet
         working-directory: ${{ matrix.module }}
         run: go vet ./...
+      - name: Run go-client examples (offline)
+        if: matrix.module == 'packages/go-client'
+        working-directory: ${{ matrix.module }}
+        run: |
+          for example in pagination errors sse webhooks; do
+            echo "==> examples/$example"
+            go run "./examples/$example"
+          done
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         continue-on-error: true

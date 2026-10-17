@@ -58,6 +58,7 @@ import type {
   RulePreview,
   RuleCatalogResponse,
   RuleLibraryResponse,
+  SearchResponse,
 } from "./types";
 import type { ContractVersionEntry } from "@sorolens/ui";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
@@ -147,6 +148,23 @@ export function getIndexerStatus(): Promise<IndexerStatusResponse> {
 export function listContractsAll(): Promise<ContractsListResponse> {
   return fetchJson<ContractsListResponse>(
     `${API_URL}/api/v1/contracts?limit=1000`
+  );
+}
+
+/**
+ * Search contracts by ID or label (`GET /api/v1/search`, issue #619).
+ * The response shape is `{ items: Contract[] }` exactly as declared in
+ * `docs/openapi.yaml`.
+ */
+export function searchContracts(
+  query: string,
+  params?: { limit?: number; network?: string }
+): Promise<SearchResponse> {
+  const search = new URLSearchParams({ q: query });
+  if (params?.limit) search.set("limit", String(params.limit));
+  if (params?.network) search.set("network", params.network);
+  return fetchJson<SearchResponse>(
+    `${API_URL}/api/v1/search?${search.toString()}`
   );
 }
 

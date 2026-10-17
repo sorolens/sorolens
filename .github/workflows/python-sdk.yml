@@ -39,6 +39,12 @@ jobs:
         run: ruff check src tests
       - name: Pytest
         run: pytest
+      - name: Run examples (offline)
+        run: |
+          for example in examples/*.py; do
+            echo "==> $example"
+            python "$example"
+          done
 
   generated-client:
     name: Generated client up-to-date
