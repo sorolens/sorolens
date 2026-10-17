@@ -7,12 +7,14 @@ import "@testing-library/jest-dom/vitest";
 import {
   cleanup,
   fireEvent,
-  render,
+  render as renderWithoutLocale,
   screen,
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GlobalEvent, GlobalEventsResponse } from "@/lib/types";
+import { LocaleProvider } from "@/lib/i18n";
+import type { ReactNode } from "react";
 
 vi.mock("next/link", () => ({
   default: ({
@@ -36,6 +38,10 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import EventsExplorerPage from "./page";
+
+function render(ui: ReactNode) {
+  return renderWithoutLocale(<LocaleProvider>{ui}</LocaleProvider>);
+}
 
 function event(n: number, overrides: Partial<GlobalEvent> = {}): GlobalEvent {
   return {

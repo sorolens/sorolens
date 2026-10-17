@@ -211,6 +211,9 @@ jobs:
             pnpm-node22-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify web OpenAPI playground catalog
+        working-directory: apps/web
+        run: pnpm openapi:check
       - name: Type-check dashboard
         working-directory: apps/web
         run: pnpm exec tsc --noEmit

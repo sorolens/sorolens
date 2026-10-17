@@ -17,6 +17,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventsTable } from "./EventsTable";
+import { LocaleProvider } from "@/lib/i18n";
 import type { ContractEvent } from "@/lib/types";
 
 const EVENT: ContractEvent = {
@@ -37,6 +38,14 @@ const EVENT: ContractEvent = {
   in_successful_call: true,
 };
 
+function renderEventsTable(events: ContractEvent[]) {
+  return render(
+    <LocaleProvider>
+      <EventsTable events={events} />
+    </LocaleProvider>
+  );
+}
+
 describe("EventsTable copy JSON button", () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
 
@@ -54,7 +63,7 @@ describe("EventsTable copy JSON button", () => {
   });
 
   it("copies the fully-decoded event as pretty-printed JSON", async () => {
-    render(<EventsTable events={[EVENT]} />);
+    renderEventsTable([EVENT]);
 
     const button = screen.getByRole("button", {
       name: `Copy JSON for event ${EVENT.id}`,
@@ -68,15 +77,33 @@ describe("EventsTable copy JSON button", () => {
   });
 
   it("renders one copy button per event row", () => {
-    render(<EventsTable events={[EVENT, { ...EVENT, id: "evt_2" }]} />);
+    renderEventsTable([EVENT, { ...EVENT, id: "evt_2" }]);
 
     expect(
       screen.getAllByRole("button", { name: /^Copy JSON for event / })
     ).toHaveLength(2);
   });
 
+  it("virtualizes a 10k-event result set", () => {
+    const events = Array.from({ length: 10_000 }, (_, index) => ({
+      ...EVENT,
+      id: `evt_${index}`,
+      ledger: index,
+    }));
+    const { container } = renderEventsTable(events);
+
+    expect(
+      container.querySelectorAll('tbody tr:not([aria-hidden="true"])').length
+    ).toBeLessThan(100);
+    expect(
+      screen.queryByRole("button", {
+        name: "Copy JSON for event evt_9999",
+      })
+    ).toBeNull();
+  });
+
   it("does not expand the row when the copy button is clicked", async () => {
-    render(<EventsTable events={[EVENT]} />);
+    renderEventsTable([EVENT]);
 
     fireEvent.click(
       screen.getByRole("button", { name: `Copy JSON for event ${EVENT.id}` })
@@ -88,7 +115,7 @@ describe("EventsTable copy JSON button", () => {
   });
 
   it("still expands the row when the row itself is clicked", () => {
-    render(<EventsTable events={[EVENT]} />);
+    renderEventsTable([EVENT]);
 
     // The ledger cell is unique and has no click handler of its own, so a
     // click on it bubbles up to the row toggle. ("transfer" appears in both

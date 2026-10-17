@@ -19,10 +19,13 @@ import { LastUpdated } from "@/components/LastUpdated";
 import { OfflineBanner } from "@/components/OfflineAlert";
 import { PushSubscribeButton } from "@/components/PushSubscribeButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { LocalePreferences } from "@/components/LocalePreferences";
+import { LocaleProvider, useLocale } from "@/lib/i18n";
 import { useOfflineAlertQueue } from "@/hooks/useOfflineAlertQueue";
 
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const { pending, isOffline } = useOfflineAlertQueue();
+  const { t } = useLocale();
 
   return (
     <>
@@ -42,25 +45,25 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 href="/live"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                Live
+                {t("nav.live")}
               </Link>
               <Link
                 href="/contracts"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                Contracts
+                {t("nav.contracts")}
               </Link>
               <Link
                 href="/events"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                Events
+                {t("nav.events")}
               </Link>
               <Link
                 href="/watchdog"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                Watchdog
+                {t("nav.watchdog")}
               </Link>
               <Link
                 href="/watchdog/reports"
@@ -72,27 +75,28 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 href="/groups"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                Groups
+                {t("nav.groups")}
               </Link>
               <Link
                 href="/rules"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                Rules
+                {t("nav.rules")}
               </Link>
               <Link
                 href="/playground"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                Playground
+                {t("nav.playground")}
               </Link>
               <Link
                 href="/settings"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
-                Settings
+                {t("nav.settings")}
               </Link>
             </nav>
+            <LocalePreferences />
             <NetworkSelector />
             <PushSubscribeButton />
             <ThemeToggle />
@@ -117,10 +121,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <SWRConfig value={swrConfig}>
-      <NetworkProvider>
-        <AppLayoutInner>{children}</AppLayoutInner>
-      </NetworkProvider>
-    </SWRConfig>
+    <LocaleProvider>
+      <SWRConfig value={swrConfig}>
+        <NetworkProvider>
+          <AppLayoutInner>{children}</AppLayoutInner>
+        </NetworkProvider>
+      </SWRConfig>
+    </LocaleProvider>
   );
 }

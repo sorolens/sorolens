@@ -15,6 +15,9 @@ export const CONTRACT_ID_TAIL_CHARS = 8;
 
 const ELLIPSIS = "...";
 
+export type FormatLocale = "en" | "es";
+export type TimeZonePreference = "UTC" | "local";
+
 /**
  * Collapse the middle of `value`, keeping `head` leading and `tail` trailing
  * characters separated by a single ellipsis.
@@ -38,4 +41,29 @@ export function truncateMiddle(
   }
 
   return `${value.slice(0, head)}${ELLIPSIS}${value.slice(-tail)}`;
+}
+
+export function formatNumber(
+  value: number,
+  locale: FormatLocale = "en",
+  options?: Intl.NumberFormatOptions
+): string {
+  return new Intl.NumberFormat(locale, options).format(value);
+}
+
+export function formatDateTime(
+  value: string | number | Date,
+  locale: FormatLocale = "en",
+  timeZone: TimeZonePreference = "UTC",
+  options: Intl.DateTimeFormatOptions = {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }
+): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat(locale, {
+    ...options,
+    timeZone: timeZone === "UTC" ? "UTC" : undefined,
+  }).format(date);
 }

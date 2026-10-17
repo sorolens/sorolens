@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { LiveStats } from "@/components/LiveStats";
 
+export const revalidate = 60;
+
 const features = [
   {
     title: "Contract Event Indexing",

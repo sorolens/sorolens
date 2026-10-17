@@ -4,8 +4,8 @@
  * The layout wraps every dashboard page, so asserting on it covers them all.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
   default: ({
@@ -26,8 +26,11 @@ vi.mock("@/components/ThemeToggle", () => ({
 }));
 
 describe("AppLayout", () => {
+  beforeEach(() => localStorage.clear());
+
   afterEach(() => {
     cleanup();
+    localStorage.clear();
   });
 
   async function renderLayout() {
@@ -64,5 +67,20 @@ describe("AppLayout", () => {
     expect(
       content.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  it("changes the shell language and saves the timezone preference", async () => {
+    await renderLayout();
+
+    fireEvent.change(screen.getByLabelText("Language"), {
+      target: { value: "es" },
+    });
+    expect(screen.getByRole("link", { name: "Contratos" })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Zona horaria"), {
+      target: { value: "local" },
+    });
+    expect(localStorage.getItem("sorolens_locale")).toBe("es");
+    expect(localStorage.getItem("sorolens_timezone")).toBe("local");
   });
 });
