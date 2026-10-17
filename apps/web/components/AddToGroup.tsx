@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { addContractToGroup, listGroups } from "@/lib/api";
 import type { GroupSummary } from "@/lib/types";
-import { getUserId } from "@/lib/user";
+import { useSessionUserId } from "@/lib/useSession";
 
 /**
  * "Add to group" action for the contract detail page. Opens a picker of the
@@ -12,7 +12,7 @@ import { getUserId } from "@/lib/user";
  * many-to-many, so a contract can belong to several portfolios at once.
  */
 export function AddToGroup({ contractId }: { contractId: string }) {
-  const [userId] = useState<string>(getUserId);
+  const userId = useSessionUserId();
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [loading, setLoading] = useState(false);

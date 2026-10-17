@@ -27,6 +27,16 @@ type Handler = (
 /** Overridable per-endpoint handlers, matched by pathname substring. */
 export function defaultHandlers(): Record<string, Handler> {
   return {
+    // Workspace session mint (issue #518). The dashboard sends the returned
+    // token as a bearer credential on identity-scoped calls.
+    "api/v1/auth/session": () => ({
+      status: 201,
+      body: {
+        user_id: "user_e2e",
+        token: "sls_e2e_test_token",
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    }),
     "watchdog/contracts/": defaultContract,
     "watchdog/contracts": () => ({
       status: 200,
@@ -106,18 +116,19 @@ function defaultContract(route: Route): { status: number; body: unknown } {
   if (path.endsWith("/events")) {
     return {
       status: 200,
-      body: { events: [contractEvent()], cursor: null, has_more: false },
+      body: { events: [contractEvent()], next_cursor: "" },
+    };
+  }
+  if (path.endsWith("/invocations")) {
+    return {
+      status: 200,
+      body: { invocations: [contractInvocation()], next_cursor: "" },
     };
   }
   if (path.endsWith("/storage")) {
     return {
       status: 200,
-      body: {
-        current_ledger: 42,
-        entries: [storageEntry()],
-        cursor: null,
-        has_more: false,
-      },
+      body: { storage: [storageEntry()], next_cursor: "" },
     };
   }
   if (path.endsWith("/stats")) {
@@ -274,10 +285,8 @@ export function contractSummary() {
 export function contractDetail() {
   return {
     ...contractSummary(),
+    created_at_ledger: 119_000,
     backfill_complete_at: null,
-    sync: { last_ledger: 120_400, last_run_at: "2026-07-03T08:00:00Z" },
-    storage_entry_count: 128,
-    expiring_entry_count: 3,
   };
 }
 
@@ -295,13 +304,18 @@ export function monitoredContract() {
   };
 }
 
+/** A recent timestamp so activity windows always include the fixture. */
+function recentTimestamp(minutesAgo = 1): string {
+  return new Date(Date.now() - minutesAgo * 60 * 1000).toISOString();
+}
+
 export function contractEvent() {
   return {
     id: "evt_1",
     contract_id: CONTRACT_ID,
     network: "testnet",
     ledger: 120_400,
-    ledger_closed_at: "2026-07-03T08:00:00Z",
+    ledger_closed_at: recentTimestamp(2),
     tx_hash: TRACE_TX_HASH,
     type: "transfer",
     topic_decoded: [
@@ -321,8 +335,28 @@ export function newerContractEvent() {
     ...contractEvent(),
     id: "evt_2",
     ledger: 120_401,
-    ledger_closed_at: "2026-07-03T08:00:05Z",
+    ledger_closed_at: recentTimestamp(1),
     tx_hash: NEWER_TRACE_TX_HASH,
+  };
+}
+
+/** One invocation, used by the contract detail's invocation chart. */
+export function contractInvocation() {
+  return {
+    tx_hash: TRACE_TX_HASH,
+    contract_id: CONTRACT_ID,
+    network: "testnet",
+    ledger: 120_400,
+    ledger_closed_at: recentTimestamp(3),
+    status: "SUCCESS",
+    function_name: "swap",
+    args_decoded: null,
+    result_decoded: null,
+    resource_fee_charged: 1200,
+    cpu_insn: 140_000,
+    mem_byte: 64_000,
+    ledger_read_byte: 2048,
+    ledger_write_byte: 512,
   };
 }
 
@@ -392,14 +426,13 @@ export function storageEntry() {
 
 export function statsResponse() {
   return {
-    event_volume: [{ date: "2026-07-03", ledger: 120_400, count: 12 }],
-    invocation_count: [{ date: "2026-07-03", ledger: 120_400, count: 4 }],
-    stats: {
-      total_events: 5041,
-      total_invocations: 390,
-      storage_entry_count: 128,
-      expiring_entry_count: 3,
-    },
+    event_count: 5041,
+    invocation_count: 390,
+    storage_count: 128,
+    last_synced_ledger: 120_400,
+    window_event_count: 1200,
+    window_invocation_count: 90,
+    window_duration: "7d",
   };
 }
 

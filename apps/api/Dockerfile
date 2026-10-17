@@ -15,7 +15,7 @@
 # Stage 1 – builder
 # Builds a statically-linked binary from the Go source.
 # ---------------------------------------------------------------------------
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates tzdata
 
@@ -33,7 +33,10 @@ ARG VERSION=dev
 ARG GIT_SHA=unknown
 ARG BUILT_AT=unknown
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+# Build for the container's own platform: the binary runs in the image built in
+# this same platform, so no GOARCH override is needed (and hardcoding amd64
+# breaks arm64 hosts).
+RUN CGO_ENABLED=0 \
     go build \
       -ldflags="-s -w \
         -X github.com/sorolens/sorolens/apps/api/internal/buildinfo.Version=${VERSION} \

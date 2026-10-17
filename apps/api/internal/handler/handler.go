@@ -87,6 +87,13 @@ type Handler struct {
 	// SlackSigningSecret verifies Slack slash command requests (issue #127).
 	// Empty disables the Slack command endpoint.
 	SlackSigningSecret string
+	// SessionSigner mints and verifies HMAC workspace session tokens
+	// (issue #518). Nil or keyless disables POST /api/v1/auth/session and
+	// session authentication.
+	SessionSigner *middleware.SessionSigner
+	// TrustedProxySecret enables identity headers signed by a reverse proxy.
+	// Empty disables that identity source.
+	TrustedProxySecret string
 	// RequestTimeout caps handling of every /api/v1 route except the SSE
 	// stream (issue #154). Zero means middleware.DefaultRequestTimeout.
 	RequestTimeout time.Duration

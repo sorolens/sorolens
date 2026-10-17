@@ -66,6 +66,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 {t("nav.watchdog")}
               </Link>
               <Link
+                href="/watchdog/reports"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                Reports
+              </Link>
+              <Link
                 href="/groups"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
@@ -100,6 +106,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
         <main>{children}</main>
         <footer className="mt-12 border-t border-[var(--color-border)] pt-6 text-sm text-[var(--color-text-secondary)]">
           {t("shell.community")}
+          <Link
+            href="/status"
+            className="ml-3 hover:text-[var(--color-text-primary)]"
+          >
+            System status
+          </Link>
           <LastUpdated />
         </footer>
       </div>

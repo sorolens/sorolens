@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createGroup, deleteGroup, listGroups } from "@/lib/api";
 import type { GroupSummary } from "@/lib/types";
-import { getUserId } from "@/lib/user";
+import { useSessionUserId } from "@/lib/useSession";
 import { StatCard } from "@/components/StatCard";
 import { CardSkeleton } from "@/components/Skeleton";
 
@@ -23,7 +23,7 @@ function formatHealth(score: number): string {
  * across its contracts, so the whole portfolio fits on one screen.
  */
 export default function GroupsPage() {
-  const [userId] = useState<string>(getUserId);
+  const userId = useSessionUserId();
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
@@ -31,6 +31,10 @@ export default function GroupsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await listGroups(userId);

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -53,9 +53,7 @@ class GraphqlResponse200:
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.graphql_response_200_data import (
-            GraphqlResponse200Data,
-        )
+        from ..models.graphql_response_200_data import GraphqlResponse200Data
         from ..models.graphql_response_200_errors_item import (
             GraphqlResponse200ErrorsItem,
         )

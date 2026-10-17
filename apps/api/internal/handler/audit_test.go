@@ -96,7 +96,7 @@ func TestAuditRecordsContentTypeRejection(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts", strings.NewReader(validContractBody))
 	req.Header.Set("Content-Type", "text/plain")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusUnsupportedMediaType {

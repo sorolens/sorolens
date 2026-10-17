@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
 from ..models.create_api_key_body_scopes_item import CreateApiKeyBodyScopesItem
+from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="CreateApiKeyBody")
 
@@ -18,10 +19,12 @@ class CreateApiKeyBody:
     Attributes:
         name (str): Human-friendly key name.
         scopes (list[CreateApiKeyBodyScopesItem]): Scopes granted to the key.
+        user_id (str | Unset): Optional user the key acts as. The user must exist. Omit for a scope-only key.
     """
 
     name: str
     scopes: list[CreateApiKeyBodyScopesItem]
+    user_id: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -32,6 +35,8 @@ class CreateApiKeyBody:
             scopes_item = scopes_item_data.value
             scopes.append(scopes_item)
 
+        user_id = self.user_id
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -40,6 +45,8 @@ class CreateApiKeyBody:
                 "scopes": scopes,
             }
         )
+        if user_id is not UNSET:
+            field_dict["user_id"] = user_id
 
         return field_dict
 
@@ -55,9 +62,12 @@ class CreateApiKeyBody:
 
             scopes.append(scopes_item)
 
+        user_id = d.pop("user_id", UNSET)
+
         create_api_key_body = cls(
             name=name,
             scopes=scopes,
+            user_id=user_id,
         )
 
         create_api_key_body.additional_properties = d

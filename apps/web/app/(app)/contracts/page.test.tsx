@@ -170,6 +170,10 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
+vi.mock("@/lib/useSession", () => ({
+  useSessionUserId: () => "user_1",
+}));
+
 // ── Mock @/components/Skeleton ───────────────────────────────────────────────
 vi.mock("@/components/Skeleton", () => ({
   TableSkeleton: ({ rows }: { rows?: number }) => (
@@ -448,7 +452,7 @@ describe("ContractsPage", () => {
     await waitFor(() => expect(mockBatchContracts).toHaveBeenCalledTimes(1));
     expect(mockBatchContracts).toHaveBeenCalledWith(
       { ids: [CONTRACT_A.id], action: "untrack", args: undefined },
-      ""
+      "user_1"
     );
 
     // Modal closes, selection clears and the list refetches without A.
@@ -496,7 +500,7 @@ describe("ContractsPage", () => {
 
     await waitFor(() => expect(mockBatchContracts).toHaveBeenCalledTimes(1));
     const [req, userId] = mockBatchContracts.mock.calls[0];
-    expect(userId).toBe("");
+    expect(userId).toBe("user_1");
     expect(req.action).toBe("tag");
     expect(req.args).toEqual({ label: "payments" });
     expect([...req.ids].sort()).toEqual([CONTRACT_A.id, CONTRACT_B.id].sort());

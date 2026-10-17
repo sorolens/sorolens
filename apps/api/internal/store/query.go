@@ -368,9 +368,17 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
-		       function_name, args_decoded, result_decoded, result_xdr,
-		       resource_fee_charged, cpu_insn, mem_byte,
-		       ledger_read_byte, ledger_write_byte, application_order, inserted_at
+		       COALESCE(function_name, ''),
+		       COALESCE(args_decoded, '{}'::jsonb),
+		       COALESCE(result_decoded, 'null'::jsonb),
+		       COALESCE(result_xdr, ''),
+		       COALESCE(resource_fee_charged, 0),
+		       COALESCE(cpu_insn, 0),
+		       COALESCE(mem_byte, 0),
+		       COALESCE(ledger_read_byte, 0),
+		       COALESCE(ledger_write_byte, 0),
+		       COALESCE(application_order, 0),
+		       inserted_at
 		FROM invocations
 		WHERE contract_id = $1
 		ORDER BY ledger DESC, tx_hash DESC
@@ -407,9 +415,17 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
-		       function_name, args_decoded, result_decoded, result_xdr,
-		       resource_fee_charged, cpu_insn, mem_byte,
-		       ledger_read_byte, ledger_write_byte, application_order, inserted_at
+		       COALESCE(function_name, ''),
+		       COALESCE(args_decoded, '{}'::jsonb),
+		       COALESCE(result_decoded, 'null'::jsonb),
+		       COALESCE(result_xdr, ''),
+		       COALESCE(resource_fee_charged, 0),
+		       COALESCE(cpu_insn, 0),
+		       COALESCE(mem_byte, 0),
+		       COALESCE(ledger_read_byte, 0),
+		       COALESCE(ledger_write_byte, 0),
+		       COALESCE(application_order, 0),
+		       inserted_at
 		FROM invocations
 		WHERE contract_id = $1
 		  AND ($2 = '' OR tx_hash > $2)
@@ -460,9 +476,17 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invocation, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
-		       function_name, args_decoded, result_decoded, result_xdr,
-		       resource_fee_charged, cpu_insn, mem_byte,
-		       ledger_read_byte, ledger_write_byte, application_order, inserted_at
+		       COALESCE(function_name, ''),
+		       COALESCE(args_decoded, '{}'::jsonb),
+		       COALESCE(result_decoded, 'null'::jsonb),
+		       COALESCE(result_xdr, ''),
+		       COALESCE(resource_fee_charged, 0),
+		       COALESCE(cpu_insn, 0),
+		       COALESCE(mem_byte, 0),
+		       COALESCE(ledger_read_byte, 0),
+		       COALESCE(ledger_write_byte, 0),
+		       COALESCE(application_order, 0),
+		       inserted_at
 		FROM invocations
 		WHERE tx_hash = $1`, txHash)
 
@@ -547,9 +571,17 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
-		       function_name, args_decoded, result_decoded, result_xdr,
-		       resource_fee_charged, cpu_insn, mem_byte,
-		       ledger_read_byte, ledger_write_byte, application_order, inserted_at
+		       COALESCE(function_name, ''),
+		       COALESCE(args_decoded, '{}'::jsonb),
+		       COALESCE(result_decoded, 'null'::jsonb),
+		       COALESCE(result_xdr, ''),
+		       COALESCE(resource_fee_charged, 0),
+		       COALESCE(cpu_insn, 0),
+		       COALESCE(mem_byte, 0),
+		       COALESCE(ledger_read_byte, 0),
+		       COALESCE(ledger_write_byte, 0),
+		       COALESCE(application_order, 0),
+		       inserted_at
 		FROM invocations
 		WHERE ($1 = '' OR contract_id = $1)
 		  AND ($2 = '' OR network = $2)

@@ -50,6 +50,16 @@ describe("AppLayout", () => {
     );
   });
 
+  it("links to reports and public system status", async () => {
+    await renderLayout();
+    expect(
+      screen.getByRole("link", { name: "Reports" }).getAttribute("href")
+    ).toBe("/watchdog/reports");
+    expect(
+      screen.getByRole("link", { name: "System status" }).getAttribute("href")
+    ).toBe("/status");
+  });
+
   it("renders the footer after the page content", async () => {
     await renderLayout();
     const content = screen.getByText("page content");

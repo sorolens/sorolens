@@ -2076,6 +2076,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         parameters: [],
       },
     },
+    "/api/v1/auth/session": {
+      post: {
+        operationId: "createSession",
+        summary: "Mint a workspace session token",
+        tags: ["Auth"],
+        parameters: [],
+      },
+    },
     "/api/version": {
       get: {
         operationId: "getVersion",

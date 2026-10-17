@@ -119,7 +119,7 @@ func (h *Handler) CreateContractNote(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	author := getUserID(r)
 	if author == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, "authentication required: present a session token or user-bound API key")
 		return
 	}
 	var req struct {
@@ -154,7 +154,7 @@ func (h *Handler) UpdateContractNote(w http.ResponseWriter, r *http.Request) {
 	noteID := chi.URLParam(r, "noteID")
 	caller := getUserID(r)
 	if caller == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, "authentication required: present a session token or user-bound API key")
 		return
 	}
 	if !validNoteID(noteID) {
@@ -207,7 +207,7 @@ func (h *Handler) DeleteContractNote(w http.ResponseWriter, r *http.Request) {
 	noteID := chi.URLParam(r, "noteID")
 	caller := getUserID(r)
 	if caller == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, "authentication required: present a session token or user-bound API key")
 		return
 	}
 	if !validNoteID(noteID) {

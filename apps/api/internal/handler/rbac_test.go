@@ -39,7 +39,7 @@ func TestRBACRoleEndpointMatrix(t *testing.T) {
 		{"viewer denied api-keys", http.MethodGet, "/api/v1/api-keys", viewerUser, adminToken, "", http.StatusForbidden},
 		{"contributor denied api-keys", http.MethodGet, "/api/v1/api-keys", contributorUser, adminToken, "", http.StatusForbidden},
 		{"admin grants api-keys", http.MethodGet, "/api/v1/api-keys", adminUser, adminToken, "", http.StatusOK},
-		{"anonymous denied api-keys", http.MethodGet, "/api/v1/api-keys", "", adminToken, "", http.StatusUnauthorized},
+		{"anonymous denied api-keys", http.MethodGet, "/api/v1/api-keys", "", "", "", http.StatusUnauthorized},
 
 		// ---- /api/v1/admin/* (admin role; no API key needed to reach the
 		// role gate) ---------------------------------------------------------

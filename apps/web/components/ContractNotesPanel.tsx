@@ -9,7 +9,7 @@ import {
   updateContractNote,
 } from "@/lib/api";
 import type { ContractNote } from "@/lib/types";
-import { getUserId } from "@/lib/user";
+import { useSessionUserId } from "@/lib/useSession";
 import { ContractNotes } from "./ContractNotes";
 
 interface ContractNotesPanelProps {
@@ -27,14 +27,9 @@ export function ContractNotesPanel({ contractId }: ContractNotesPanelProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [userId, setUserId] = useState("");
-
-  // localStorage does not exist during the server render, so the identity is
-  // read after mount rather than during the first render. Reading it inline
-  // would make the hydrated markup disagree with the server's.
-  useEffect(() => {
-    setUserId(getUserId());
-  }, []);
+  // A note's author must be the verified session user, both for creation and
+  // for edits/deletes.
+  const userId = useSessionUserId();
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +60,7 @@ export function ContractNotesPanel({ contractId }: ContractNotesPanelProps) {
       setSaving(true);
       setError(null);
       try {
-        const note = await createContractNote(contractId, body, getUserId());
+        const note = await createContractNote(contractId, body, userId);
         // The API returns notes newest first, so the new note goes on top
         // without a refetch.
         setNotes((prev) => [note, ...prev]);
@@ -75,7 +70,7 @@ export function ContractNotesPanel({ contractId }: ContractNotesPanelProps) {
         setSaving(false);
       }
     },
-    [contractId]
+    [contractId, userId]
   );
 
   const handleUpdate = useCallback(
@@ -87,7 +82,7 @@ export function ContractNotesPanel({ contractId }: ContractNotesPanelProps) {
           contractId,
           noteId,
           body,
-          getUserId()
+          userId
         );
         setNotes((prev) => prev.map((n) => (n.id === noteId ? updated : n)));
       } catch (err) {
@@ -96,7 +91,7 @@ export function ContractNotesPanel({ contractId }: ContractNotesPanelProps) {
         setSaving(false);
       }
     },
-    [contractId]
+    [contractId, userId]
   );
 
   const handleDelete = useCallback(
@@ -104,7 +99,7 @@ export function ContractNotesPanel({ contractId }: ContractNotesPanelProps) {
       setSaving(true);
       setError(null);
       try {
-        await deleteContractNote(contractId, noteId, getUserId());
+        await deleteContractNote(contractId, noteId, userId);
         setNotes((prev) => prev.filter((n) => n.id !== noteId));
       } catch (err) {
         setError(noteErrorMessage(err, "Failed to delete the note."));
@@ -112,7 +107,7 @@ export function ContractNotesPanel({ contractId }: ContractNotesPanelProps) {
         setSaving(false);
       }
     },
-    [contractId]
+    [contractId, userId]
   );
 
   return (
