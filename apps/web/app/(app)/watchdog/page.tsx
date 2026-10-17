@@ -282,6 +282,12 @@ export default function WatchdogPage() {
         >
           Notification channels (Slack, Discord, PagerDuty) →
         </Link>
+        <Link
+          href="/watchdog/reports"
+          className="ml-4 inline-block text-sm text-[var(--color-accent)] hover:underline"
+        >
+          SLA reports →
+        </Link>
       </div>
 
       {/* Summary cards: always render values, defaulting to 0 when the

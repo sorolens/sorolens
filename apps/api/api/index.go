@@ -65,6 +65,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			Cache:              &middleware.RedisCache{Client: redisClient},
 			CacheTTL:           30 * time.Second,
 			SlackSigningSecret: os.Getenv("SLACK_SIGNING_SECRET"),
+			SessionSigner:      middleware.NewSessionSigner(os.Getenv("IDENTITY_SIGNING_KEY"), 0),
+			TrustedProxySecret: os.Getenv("TRUSTED_IDENTITY_PROXY_SECRET"),
 		}
 		maxBodyBytes := apiconfig.DefaultRequestMaxBodyBytes
 		if n, err := apiconfig.MaxBodyBytesFromEnv(); err != nil {

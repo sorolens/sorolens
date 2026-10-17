@@ -157,20 +157,18 @@ func resourceID(r *http.Request) string {
 }
 
 // Actor names the caller of a request for attribution (audit rows, the
-// added_by of watched accounts). It prefers explicit user identity headers
-// and falls back to a non-reversible API key fingerprint, then "anonymous".
+// added_by of watched accounts). It uses the identity verified by the
+// Identity middleware, then falls back to a non-reversible API key
+// fingerprint, then "anonymous". Raw identity headers are never trusted
+// (issue #518), so an unauthenticated caller cannot choose its audit name.
 func Actor(r *http.Request) string {
-	if v := strings.TrimSpace(r.Header.Get("X-User-ID")); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(r.Header.Get("X-GitHub-Login")); v != "" {
-		return "github:" + v
-	}
-	if v := strings.TrimSpace(r.Header.Get("X-GitHub-ID")); v != "" {
-		return "github:" + v
-	}
-	if v := strings.TrimSpace(r.Header.Get("X-User-Sub")); v != "" {
-		return v
+	if id, ok := IdentityFromRequest(r); ok {
+		if id.UserID != "" {
+			return id.UserID
+		}
+		if id.APIKey != nil {
+			return "apikey:" + id.APIKey.KeyPrefix
+		}
 	}
 	if token := extractAPIKey(r); token != "" {
 		return "apikey:" + store.HashKey(token)[:12]

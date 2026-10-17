@@ -338,9 +338,28 @@ Cursor pagination uses an opaque `cursor` token (base64 of `{ledger}:{id}`) rath
 Every list endpoint accepts an optional `?network=testnet|mainnet|futurenet`
 filter (omitted or `all` means every network).
 
-Requests may carry a scoped API key via `Authorization: Bearer <token>` or
-`X-API-Key: <token>`. Scope enforcement is driven by a route metadata table
-keyed by the chi route pattern (`internal/middleware/scopes.go`):
+Requests authenticate with a credential the server can verify. The `Identity`
+middleware (`internal/middleware/identity.go`) resolves it once, before scope
+and role checks, and attaches a `VerifiedIdentity` to the request context:
+
+- **Workspace session token.** `POST /api/v1/auth/session` creates a workspace
+  user with the contributor role and returns an HMAC-SHA256 token
+  (`Authorization: Bearer sls_...`). The token is stateless and valid until the
+  returned `expires_at`.
+- **Scoped API key.** `Authorization: Bearer <key>` or `X-API-Key: <key>`. A
+  key may be bound to a user (`api_keys.user_id`); requests then act as that
+  user and inherit its role. Unbound keys authenticate scopes only.
+- **Trusted proxy identity.** When `TRUSTED_IDENTITY_PROXY_SECRET` is set, a
+  reverse proxy may sign `X-Identity-User-ID`, `X-Identity-Timestamp` and
+  `X-Identity-Signature` (HMAC-SHA256 over method, request URI, user ID and
+  timestamp; 5-minute skew).
+
+Raw `X-User-ID`, `X-GitHub-Login`, `X-User-Sub` and `X-GitHub-ID` headers are
+ignored (issue #518). Without `IDENTITY_SIGNING_KEY` the API generates a random
+ephemeral key at boot, so minted sessions do not survive a restart.
+
+Scope enforcement is driven by a route metadata table keyed by the chi route
+pattern (`internal/middleware/scopes.go`):
 
 | Scope             | Grants                                                                          |
 | ----------------- | ------------------------------------------------------------------------------- |
@@ -353,6 +372,13 @@ A presented key that lacks the required scope receives `403` with
 `{"error":"missing scope","required":"<scope>"}`. Unknown or revoked keys
 receive `401`. Requests that present no credential keep the public v0.1 read
 surface open; API key management always requires a credential.
+
+Role checks (`RequireRole`, `RequireRoleOrForbidden`) run after scopes and use
+the verified identity: an unverified caller gets `401`, a verified caller with
+an insufficient role gets `403`. An `admin:*` key satisfies admin role checks
+without a user binding so operators can bootstrap and rotate keys. Per-user
+resources (watchlist, groups, notes, labels) key on the verified user ID and
+return `401` when no user identity is present.
 
 #### Profiling: `/debug/pprof/*`
 
@@ -836,20 +862,29 @@ client sends `Accept-Encoding: gzip` the body is gzip-compressed.
 ### 4.6 API keys
 
 Scoped credentials are managed under `/api/v1/api-keys` and require the
-`admin:*` scope.
+`admin:*` scope plus the admin role.
 
 #### `POST /api/v1/api-keys`
 
-Create a key. Body: `{ "name": string, "scopes": string[] }`. Returns `201`
-with the plaintext `key` exactly once; only its SHA-256 hash is persisted.
+Create a key. Body: `{ "name": string, "scopes": string[], "user_id"?: string }`.
+When `user_id` is set the key acts as that user (role checks use the user's
+role); otherwise it only authenticates scopes. Returns `201` with the plaintext
+`key` exactly once; only its SHA-256 hash is persisted.
 
 #### `GET /api/v1/api-keys`
 
-List key metadata (never the token).
+List key metadata (never the token), including the optional `user_id` binding.
 
 #### `DELETE /api/v1/api-keys/:id`
 
 Revoke a key. Returns `204`.
+
+#### `POST /api/v1/auth/session`
+
+Mint a workspace session without a pre-existing account. Returns `201` with
+`user_id`, an HMAC-signed `token` (`sls_...`) and `expires_at`; the user is
+created with the contributor role. Returns `503` when session signing is not
+configured.
 
 ---
 

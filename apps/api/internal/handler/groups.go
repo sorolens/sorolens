@@ -94,7 +94,7 @@ func groupContractFromStore(c store.GroupContract) groupContractResponse {
 func requireGroupUser(w http.ResponseWriter, r *http.Request) (string, bool) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "authentication required: present a session token or user-bound API key")
 		return "", false
 	}
 	return userID, true

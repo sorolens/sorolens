@@ -37,6 +37,9 @@ type APIKey struct {
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 	RevokedAt  *time.Time
+	// UserID binds the key to a user when non-nil. The key then carries that
+	// user's identity (issue #518). Unbound keys authenticate scopes only.
+	UserID *string
 	// RotatedAt is when the key's secret was last regenerated in place,
 	// or nil if it has never been rotated.
 	RotatedAt *time.Time

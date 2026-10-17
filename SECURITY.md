@@ -5,6 +5,7 @@ Sorolens takes the security of its API, indexer, dashboard, CLI, and on-chain co
 ## Table of contents
 
 - [Supported versions](#supported-versions)
+- [Authentication trust model](#authentication-trust-model)
 - [Reporting a vulnerability](#reporting-a-vulnerability)
 - [What to include in your report](#what-to-include-in-your-report)
 - [Response timeline (SLA)](#response-timeline-sla)
@@ -23,7 +24,32 @@ Only the latest release receives security fixes. If you are running an older ver
 | Latest release | Yes       |
 | Older releases | No        |
 
-## Reporting a vulnerability
+## Authentication trust model
+
+Caller identity is derived only from a credential the API can verify:
+
+- **Session tokens.** `POST /api/v1/auth/session` mints an HMAC-SHA256-signed
+  bearer token (`sls_...`) bound to a server-created user. Tokens are
+  stateless and expire at the returned `expires_at`. Set `IDENTITY_SIGNING_KEY`
+  to a stable secret in production; otherwise the API generates an ephemeral
+  key at boot and sessions are invalidated by a restart.
+- **API keys.** Keys are stored as SHA-256 hashes and carry scopes. A key may
+  be bound to a user (`user_id`); a bound key acts as that user and inherits
+  their role. Unbound keys authenticate scopes only. An `admin:*` key satisfies
+  admin role checks so an operator can bootstrap and rotate keys.
+- **Trusted reverse proxy.** Only when `TRUSTED_IDENTITY_PROXY_SECRET` is set,
+  the API accepts `X-Identity-User-ID`, `X-Identity-Timestamp` and
+  `X-Identity-Signature` (HMAC-SHA256 over method, request URI, user ID and
+  timestamp). Signatures older than five minutes are rejected. Never expose
+  these headers to untrusted clients; terminate them at the proxy.
+
+The API ignores bare `X-User-ID`, `X-GitHub-Login`, `X-User-Sub` and
+`X-GitHub-ID` headers. They confer no identity, role or scope, and forwarding
+them cannot escalate privileges (issue #518). Routes that require a user (for
+example watchlists, groups and notes) return `401` without a verified session
+or user-bound key.
+
+
 
 If you believe you have found a security vulnerability in Sorolens, please report it by email:
 

@@ -4,13 +4,8 @@ export interface Contract {
   label: string | null;
   status: string;
   wasm_hash: string | null;
+  created_at_ledger: number;
   backfill_complete_at: string | null;
-  sync: {
-    last_ledger: number;
-    last_run_at: string;
-  } | null;
-  storage_entry_count: number;
-  expiring_entry_count: number;
   tags: string[];
 }
 
@@ -50,8 +45,8 @@ export type EventType = "contract" | "system" | "diagnostic";
 
 export interface EventsResponse {
   events: ContractEvent[];
-  cursor: string | null;
-  has_more: boolean;
+  /** Opaque cursor for the next (older) page; empty on the last page. */
+  next_cursor: string;
 }
 
 export interface Invocation {
@@ -90,17 +85,20 @@ export interface StorageEntry {
 }
 
 export interface StorageResponse {
-  current_ledger: number;
-  entries: StorageEntry[];
-  cursor: string | null;
-  has_more: boolean;
+  storage: StorageEntry[];
+  /** Opaque cursor for the next page; empty on the last page. */
+  next_cursor: string;
 }
 
+/** Documented shape of GET /api/v1/contracts/{id}/stats. */
 export interface ContractStats {
-  total_events: number;
-  total_invocations: number;
-  storage_entry_count: number;
-  expiring_entry_count: number;
+  event_count: number;
+  invocation_count: number;
+  storage_count: number;
+  last_synced_ledger: number;
+  window_event_count: number;
+  window_invocation_count: number;
+  window_duration: string;
 }
 
 export interface VolumePoint {
@@ -115,11 +113,7 @@ export interface InvocationFrequencyPoint {
   count: number;
 }
 
-export interface StatsResponse {
-  event_volume: VolumePoint[];
-  invocation_count: VolumePoint[];
-  stats: ContractStats;
-}
+export type StatsResponse = ContractStats;
 
 /** One day of averaged per-invocation resource usage (issue #184). */
 export interface ResourceTrendPoint {
@@ -128,6 +122,49 @@ export interface ResourceTrendPoint {
   avg_mem_byte: number;
   avg_fee: number;
   count: number;
+}
+
+export interface ContractForecastPoint {
+  date: string;
+  value: number;
+  lower: number;
+  upper: number;
+}
+
+export interface ContractForecastSeries {
+  metric: "fees" | "invocations" | "events" | string;
+  horizon: number;
+  daily_count: number;
+  points: ContractForecastPoint[];
+}
+
+export interface ContractForecastResponse {
+  contract_id: string;
+  lookback_days: number;
+  series: ContractForecastSeries[];
+}
+
+export interface APIHealthResponse {
+  status: string;
+  db: string;
+  redis: string;
+  timestamp: string;
+}
+
+export interface APIVersionResponse {
+  version: string;
+  git_sha: string;
+  built_at: string;
+}
+
+export interface IndexerNetworkStatus {
+  network: string;
+  last_indexed_ledger: number | null;
+  lag_ledgers: number | null;
+}
+
+export interface IndexerStatusResponse {
+  networks: IndexerNetworkStatus[];
 }
 
 export interface ContractSummary {

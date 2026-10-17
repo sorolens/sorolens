@@ -43,6 +43,16 @@ vi.mock("next/link", () => ({
 
 const mockValidateContract = vi.fn();
 const mockTrackContract = vi.fn();
+const mockEnsureSession = vi.fn();
+
+vi.mock("@/lib/user", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/user")>("@/lib/user");
+  return {
+    ...actual,
+    ensureSession: (...args: unknown[]) => mockEnsureSession(...args),
+  };
+});
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -88,6 +98,12 @@ beforeEach(() => {
   push.mockReset();
   mockValidateContract.mockReset();
   mockTrackContract.mockReset();
+  mockEnsureSession.mockReset();
+  mockEnsureSession.mockResolvedValue({
+    user_id: "user_1",
+    token: "sls_test",
+    expires_at: "2099-01-01T00:00:00Z",
+  });
   mockValidateContract.mockResolvedValue(validResponse());
   mockTrackContract.mockResolvedValue({
     id: VALID_ID,
@@ -268,7 +284,7 @@ describe("Wizard step 3 (configure)", () => {
     await waitFor(() =>
       expect(mockTrackContract).toHaveBeenCalledWith(
         { id: VALID_ID, label: "Escrow DEX", network: "testnet" },
-        ""
+        "user_1"
       )
     );
     await waitFor(() =>
@@ -284,7 +300,7 @@ describe("Wizard step 3 (configure)", () => {
     await waitFor(() =>
       expect(mockTrackContract).toHaveBeenCalledWith(
         { id: VALID_ID, label: undefined, network: "testnet" },
-        ""
+        "user_1"
       )
     );
   });

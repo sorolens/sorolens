@@ -23,7 +23,7 @@ func groupRequest(t *testing.T, srv http.Handler, method, path, body string) *ht
 	}
 	req := httptest.NewRequest(method, path, reader)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", groupUser)
+	req = withTestIdentity(req, groupUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	return w
@@ -250,7 +250,7 @@ func TestGroupRoutesScopedToOwner(t *testing.T) {
 	groupID := createGroup(t, srv, "Mine")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/groups/"+groupID, nil)
-	req.Header.Set("X-User-ID", "someone_else")
+	req = withTestIdentity(req, "someone_else")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -260,7 +260,7 @@ func TestGroupRoutesScopedToOwner(t *testing.T) {
 
 	// A malformed group ID is also a clean 404.
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/groups/not-a-uuid", nil)
-	req.Header.Set("X-User-ID", groupUser)
+	req = withTestIdentity(req, groupUser)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {

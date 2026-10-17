@@ -95,7 +95,7 @@ func TestVerifyContractSuccessPersistsRecord(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts/"+verifyContractID+"/verify", verifyRequestBody(t))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -161,7 +161,7 @@ func TestVerifyContractFailureReturnsActionableDiagnostics(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts/"+verifyContractID+"/verify", verifyRequestBody(t))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -195,7 +195,7 @@ func TestVerifyContractUnknownContract(t *testing.T) {
 	srv := newVerifyHandler(seedRoleStore(t), &stubVerifier{})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts/CUNKNOWN/verify", verifyRequestBody(t))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -214,7 +214,7 @@ func TestVerifyContractMissingSource(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts/"+verifyContractID+"/verify", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -229,7 +229,7 @@ func TestVerifyContractUnconfiguredSandbox(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts/"+verifyContractID+"/verify", verifyRequestBody(t))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 

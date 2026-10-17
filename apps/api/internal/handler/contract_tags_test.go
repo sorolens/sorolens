@@ -32,7 +32,8 @@ func seedTagStore(t *testing.T) *store.MockStore {
 	return ms
 }
 
-// doTagRequest issues a request with a JSON body and optional X-User-ID.
+// doTagRequest issues a request with a JSON body and an optional verified
+// caller identity.
 func doTagRequest(srv http.Handler, method, path string, body any, user string) *httptest.ResponseRecorder {
 	var buf bytes.Buffer
 	if body != nil {
@@ -41,9 +42,7 @@ func doTagRequest(srv http.Handler, method, path string, body any, user string) 
 	}
 	req := httptest.NewRequest(method, path, &buf)
 	req.Header.Set("Content-Type", "application/json")
-	if user != "" {
-		req.Header.Set("X-User-ID", user)
-	}
+	req = withTestIdentity(req, user)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	return w

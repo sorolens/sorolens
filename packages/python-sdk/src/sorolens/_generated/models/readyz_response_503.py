@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -47,9 +47,7 @@ class ReadyzResponse503:
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.readyz_response_503_checks import (
-            ReadyzResponse503Checks,
-        )
+        from ..models.readyz_response_503_checks import ReadyzResponse503Checks
 
         d = dict(src_dict)
         status = d.pop("status", UNSET)

@@ -104,7 +104,7 @@ func TestRegisterContractInvalidBody(t *testing.T) {
 	srv := newTestHandler(seedRoleStore(t), true, true)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts", bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -123,7 +123,7 @@ func TestRegisterContractInvalidID(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{"id": "short", "network": "testnet"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -144,7 +144,7 @@ func TestRegisterContractSuccess(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contracts", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 

@@ -21,6 +21,7 @@ type apiKeyResponse struct {
 	Name       string     `json:"name"`
 	KeyPrefix  string     `json:"key_prefix"`
 	Scopes     []string   `json:"scopes"`
+	UserID     *string    `json:"user_id"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastUsedAt *time.Time `json:"last_used_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
@@ -36,6 +37,10 @@ type createAPIKeyResponse struct {
 type createAPIKeyRequest struct {
 	Name   string   `json:"name"`
 	Scopes []string `json:"scopes"`
+	// UserID optionally binds the key to an existing user (issue #518).
+	// A bound key carries that user's identity; an unbound key only
+	// authenticates scopes.
+	UserID *string `json:"user_id,omitempty"`
 }
 
 func apiKeyFromStore(k store.APIKey) apiKeyResponse {
@@ -48,6 +53,7 @@ func apiKeyFromStore(k store.APIKey) apiKeyResponse {
 		Name:       k.Name,
 		KeyPrefix:  k.KeyPrefix,
 		Scopes:     scopes,
+		UserID:     k.UserID,
 		CreatedAt:  k.CreatedAt,
 		LastUsedAt: k.LastUsedAt,
 		RevokedAt:  k.RevokedAt,
@@ -85,6 +91,19 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var boundUser *string
+	if req.UserID != nil {
+		userID := strings.TrimSpace(*req.UserID)
+		if userID != "" {
+			if _, err := h.Store.GetUserByID(r.Context(), userID); err != nil {
+				writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput,
+					"user_id does not match an existing user")
+				return
+			}
+			boundUser = &userID
+		}
+	}
+
 	token, err := newAPIToken()
 	if err != nil {
 		h.Logger.Error("generate api key", "err", err)
@@ -98,6 +117,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		KeyHash:   store.HashKey(token),
 		Scopes:    req.Scopes,
 		CreatedAt: time.Now().UTC(),
+		UserID:    boundUser,
 	}
 	if err := h.Store.CreateAPIKey(r.Context(), key); err != nil {
 		if errors.Is(err, store.ErrInvalidScope) {

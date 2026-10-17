@@ -152,7 +152,7 @@ func TestBatchContractsRequiresContributorRole(t *testing.T) {
 // A read-only API key must not reach a write route even for anonymous callers.
 func TestBatchContractsDeniesReadOnlyScope(t *testing.T) {
 	srv := newTestHandler(seedBatchStore(t), true, true)
-	w := doRequestAsUser(srv, http.MethodPost, "/api/v1/contracts/batch", readContractsKey, contributorUser,
+	w := doRequestAsUser(srv, http.MethodPost, "/api/v1/contracts/batch", readContractsKey, "",
 		batchBody(t, []string{batchIDOne}, "tag", map[string]any{"label": "x"}))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("want 403, got %d (%s)", w.Code, w.Body.String())

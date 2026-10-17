@@ -337,6 +337,9 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		"POST /api/v1/groups/{id}/contracts":                true,
 		"DELETE /api/v1/groups/{id}/contracts":              true,
 		"DELETE /api/v1/groups/{id}/contracts/{contractId}": true,
+		// Workspace sessions (issue #518): the session mint endpoint has no v2
+		// envelope; v2 clients use the same bearer token returned by v1.
+		"POST /api/v1/auth/session": true,
 		// Watched accounts (issue #123): contract-discovery administration
 		// with no v2 envelope yet.
 		"POST /api/v1/watched-accounts":        true,

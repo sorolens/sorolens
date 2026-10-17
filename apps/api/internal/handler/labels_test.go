@@ -18,7 +18,7 @@ func TestWorkspaceLabelResolutionIsPrivate(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{"label": "treasury", "value": labelAccount, "scope": "workspace"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/labels", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusCreated {
@@ -27,7 +27,7 @@ func TestWorkspaceLabelResolutionIsPrivate(t *testing.T) {
 
 	for _, tc := range []struct{ user, want string }{{contributorUser, labelAccount}, {adminUser, ""}} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/resolve?query=treasury", nil)
-		req.Header.Set("X-User-ID", tc.user)
+		req = withTestIdentity(req, tc.user)
 		w = httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		if tc.want == "" {

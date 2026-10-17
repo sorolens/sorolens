@@ -92,9 +92,21 @@ type Config struct {
 	ColdStorageAccessKeyID     string
 	ColdStorageSecretAccessKey string
 	// InitialAdminGitHubID, when set, seeds a user with the admin role on
-	// startup. The user is keyed by this value as both its ID and GitHub ID so
-	// requests authenticated with X-User-ID or X-GitHub-ID resolve to it.
+	// startup. The user is keyed by this value as both its ID and GitHub ID;
+	// an API key bound to that user ID (or an admin:* key) authenticates it.
 	InitialAdminGitHubID string
+	// IdentitySigningKey is the HMAC key for workspace session tokens
+	// (IDENTITY_SIGNING_KEY). Empty makes the server generate an ephemeral
+	// key at startup; sessions then do not survive a restart and are not
+	// shared between replicas, so production deployments should set it.
+	IdentitySigningKey string
+	// IdentitySessionTTL is how long a session token stays valid
+	// (IDENTITY_SESSION_TTL, default 720h).
+	IdentitySessionTTL time.Duration
+	// TrustedIdentityProxySecret enables identity headers signed by a
+	// reverse proxy (TRUSTED_IDENTITY_PROXY_SECRET). Empty disables that
+	// identity source; raw identity headers are never trusted.
+	TrustedIdentityProxySecret string
 	// SentryDSN is the Sentry project DSN. Error reporting is disabled
 	// entirely when this is empty.
 	SentryDSN string
@@ -134,10 +146,20 @@ func Load() (*Config, error) {
 		LogLevel:             getEnvDefault("LOG_LEVEL", "info"),
 		MetricsPort:          os.Getenv("METRICS_PORT"),
 		InitialAdminGitHubID: os.Getenv("INITIAL_ADMIN_GITHUB_ID"),
-		SentryDSN:            os.Getenv("SENTRY_DSN"),
-		SentryEnvironment:    getEnvDefault("SENTRY_ENVIRONMENT", "production"),
-		SlackSigningSecret:   os.Getenv("SLACK_SIGNING_SECRET"),
+		IdentitySigningKey:   os.Getenv("IDENTITY_SIGNING_KEY"),
+
+		TrustedIdentityProxySecret: os.Getenv("TRUSTED_IDENTITY_PROXY_SECRET"),
+		SentryDSN:                  os.Getenv("SENTRY_DSN"),
+		SentryEnvironment:          getEnvDefault("SENTRY_ENVIRONMENT", "production"),
+		SlackSigningSecret:         os.Getenv("SLACK_SIGNING_SECRET"),
 	}
+
+	sessionTTLStr := getEnvDefault("IDENTITY_SESSION_TTL", "720h")
+	sessionTTL, err := time.ParseDuration(sessionTTLStr)
+	if err != nil || sessionTTL <= 0 {
+		return nil, fmt.Errorf("IDENTITY_SESSION_TTL: invalid duration %q (must be > 0)", sessionTTLStr)
+	}
+	cfg.IdentitySessionTTL = sessionTTL
 
 	pollStr := getEnvDefault("INDEXER_POLL_INTERVAL", "5m")
 	poll, err := time.ParseDuration(pollStr)

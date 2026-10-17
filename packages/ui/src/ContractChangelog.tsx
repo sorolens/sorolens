@@ -137,6 +137,13 @@ export function ContractChangelog({
                   <>
                     <dt>Verified source</dt>
                     <dd>
+                      <span
+                        role="status"
+                        aria-label="Source verified"
+                        className="mr-2 inline-flex rounded-sm bg-green-900/40 px-1.5 py-0.5 text-xs font-medium text-green-400"
+                      >
+                        Verified
+                      </span>
                       <a
                         href={entry.verified_source_ref}
                         target="_blank"

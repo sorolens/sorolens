@@ -5,25 +5,18 @@ import Link from "next/link";
 import { listWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/api";
 import type { WatchlistItem } from "@/lib/types";
 import { StarButton } from "@/components/StarButton";
-
-const STORAGE_KEY = "sorolens_user_id";
-
-function getUserId(): string {
-  if (typeof window === "undefined") return "";
-  let id = localStorage.getItem(STORAGE_KEY);
-  if (!id) {
-    id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    localStorage.setItem(STORAGE_KEY, id);
-  }
-  return id;
-}
+import { useSessionUserId } from "@/lib/useSession";
 
 export default function WatchlistPage() {
-  const [userId] = useState<string>(getUserId);
+  const userId = useSessionUserId();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await listWatchlist(userId);
