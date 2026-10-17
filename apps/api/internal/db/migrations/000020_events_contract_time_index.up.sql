@@ -1,5 +1,5 @@
 -- ============================================================
--- 000009_events_contract_time_index
+-- 000020_events_contract_time_index
 --
 -- Composite index backing the common "events for contract X inside
 -- time range Y" dashboard/stat query, e.g. the windowed contract stat
@@ -16,7 +16,7 @@
 -- with a single bounded index range scan per contract.
 --
 -- The events table is partitioned by RANGE (ledger_closed_at) once
--- 000003_partition_events applies; creating the index on the parent
+-- 000005_partition_events applies; creating the index on the parent
 -- creates a partitioned index that propagates to every partition. The
 -- same statement is valid while the table is unpartitioned, so it is
 -- safe regardless of which of the two states a given database is in.

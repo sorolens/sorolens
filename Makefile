@@ -21,7 +21,7 @@ BUILT_AT  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 API_BUILDINFO := github.com/sorolens/sorolens/apps/api/internal/buildinfo
 API_LDFLAGS   := -ldflags "-X $(API_BUILDINFO).Version=$(VERSION) -X $(API_BUILDINFO).GitSHA=$(GIT_SHA) -X $(API_BUILDINFO).BuiltAt=$(BUILT_AT)"
 
-.PHONY: up down logs psql migrate-up migrate-down migrate-new test lint dev api build client-go openapi lint-openapi
+.PHONY: up down logs psql migrate-up migrate-down migrate-version migrate-force migrate-new migrate-check test lint dev api build client-go openapi lint-openapi
 
 ## up: start all Docker services in the background
 up:
@@ -59,15 +59,59 @@ migrate-down:
 		-database "$(DB_URL_DOCKER)" \
 		down 1
 
-## migrate-new NAME=<name>: create a new up/down migration pair
+## migrate-version: print the version the target database is at
+migrate-version:
+	MSYS_NO_PATHCONV=1 docker run --rm \
+		--network sorolens_net \
+		-v "$(CURDIR)/$(MIGRATIONS_DIR):/migrations" \
+		$(MIGRATE_IMAGE) \
+		-path /migrations \
+		-database "$(DB_URL_DOCKER)" \
+		version
+
+## migrate-force VERSION=<n>: record <n> as applied without running anything.
+## A database whose schema was built by the psql loops (every deployment path
+## in this repo does that, and docker-compose skips it once `contracts` exists)
+## has no schema_migrations row, so golang-migrate believes it is at version 0
+## and would replay 000001 onto a populated schema. Baseline such a database
+## once, at the highest version it already has applied, before using
+## migrate-up on it:
+##
+##   make migrate-force VERSION=$$(ls $(MIGRATIONS_DIR)/*.up.sql | wc -l)
+migrate-force:
+	@test -n "$(VERSION)" || (echo "Usage: make migrate-force VERSION=36" && exit 1)
+	MSYS_NO_PATHCONV=1 docker run --rm \
+		--network sorolens_net \
+		-v "$(CURDIR)/$(MIGRATIONS_DIR):/migrations" \
+		$(MIGRATE_IMAGE) \
+		-path /migrations \
+		-database "$(DB_URL_DOCKER)" \
+		force $(VERSION)
+
+## migrate-new NAME=<name>: create a new up/down migration pair.
+## The next version is the highest one present plus one — not the file count,
+## which disagreed with it whenever two migrations shared a version and handed
+## out a number that was already taken (issue #516). Any existing file at that
+## version is refused, whatever its name: golang-migrate keys on the number, so
+## two files at one version break the whole directory.
 migrate-new:
 	@test -n "$(NAME)" || (echo "Usage: make migrate-new NAME=add_some_table" && exit 1)
-	@next=$$(ls $(MIGRATIONS_DIR)/*.up.sql 2>/dev/null | wc -l); \
-	next=$$((next + 1)); \
+	@next=$$(for f in $(MIGRATIONS_DIR)/*.up.sql; do basename "$$f" | cut -d_ -f1; done 2>/dev/null | sort -n | tail -1 | sed 's/^0*//'); \
+	next=$$(( $${next:-0} + 1 )); \
 	seq=$$(printf "%06d" $$next); \
+	taken=$$(ls $(MIGRATIONS_DIR)/$${seq}_*.sql 2>/dev/null); \
+	if [ -n "$$taken" ]; then \
+		echo "version $${seq} is already taken by: $$taken" >&2; exit 1; \
+	fi; \
 	touch "$(MIGRATIONS_DIR)/$${seq}_$(NAME).up.sql" \
 	      "$(MIGRATIONS_DIR)/$${seq}_$(NAME).down.sql"; \
 	echo "Created $(MIGRATIONS_DIR)/$${seq}_$(NAME).{up,down}.sql"
+
+## migrate-check: fail if the migrations directory is not a single valid
+## sequence. Same assertion the Go guard makes in
+## apps/api/internal/db/migrations_test.go, without needing a database.
+migrate-check:
+	cd apps/api && go test -count=1 -run TestMigration ./internal/db
 
 ## test: run all Go and TypeScript tests
 test:

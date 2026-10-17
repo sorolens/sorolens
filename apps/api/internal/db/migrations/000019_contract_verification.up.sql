@@ -1,5 +1,5 @@
 -- ============================================================
--- 000009_contract_verification
+-- 000019_contract_verification
 --
 -- Persists the outcome of contract source verification (issue
 -- #263): the submitted source reference, the toolchain versions

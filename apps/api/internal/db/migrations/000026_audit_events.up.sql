@@ -1,5 +1,5 @@
 -- ============================================================
--- 000010_audit_events
+-- 000026_audit_events
 --
 -- Structured audit trail for state-changing API calls (issue #122).
 -- The router middleware writes one row per non-GET request after the

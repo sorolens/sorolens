@@ -1,5 +1,5 @@
 -- ============================================================
--- 000009_watched_accounts
+-- 000024_watched_accounts
 --
 -- Contract discovery (issue #123). A watched account is a Stellar
 -- G-address whose contract deployments are tracked automatically:

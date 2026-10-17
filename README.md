@@ -293,7 +293,7 @@ and release process.
 | On-chain contract | `contracts/watchdog/src/lib.rs` (`register_contract`, `report_status`, `report_alert`, `get_all_monitored`, ...)     |
 | Deploy script     | `contracts/watchdog/scripts/deploy-testnet.sh`                                                                       |
 | Event classifier  | `services/indexer/internal/watchdog/classifier.go`                                                                   |
-| Postgres schema   | `apps/api/internal/db/migrations/000002_watchdog.up.sql` (`monitored_contracts`, `health_checks`, `contract_alerts`) |
+| Postgres schema   | `apps/api/internal/db/migrations/000003_watchdog.up.sql` (`monitored_contracts`, `health_checks`, `contract_alerts`) |
 | Store methods     | `apps/api/internal/store/watchdog.go`                                                                                |
 | REST endpoints    | `GET /api/v1/watchdog/{stats,contracts,alerts,contracts/{id}/{health,alerts}}`                                       |
 | Dashboard pages   | `apps/web/app/(app)/watchdog/*`                                                                                      |

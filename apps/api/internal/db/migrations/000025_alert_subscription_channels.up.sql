@@ -1,5 +1,5 @@
 -- ============================================================
--- 000010_alert_subscription_channels
+-- 000025_alert_subscription_channels
 --
 -- Pluggable notification channels (issue #127). Each alert
 -- subscription picks a channel that decides the payload format:

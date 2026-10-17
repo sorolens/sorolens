@@ -1,5 +1,5 @@
 -- ============================================================
--- 000009_groups
+-- 000022_groups
 --
 -- User-owned contract groups (portfolios). A group is a named
 -- set of tracked contracts; a contract may belong to any number

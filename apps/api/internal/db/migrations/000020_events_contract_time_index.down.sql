@@ -1,5 +1,5 @@
 -- ============================================================
--- 000009_events_contract_time_index (down)
+-- 000020_events_contract_time_index (down)
 --
 -- Drops the composite index added in the matching .up.sql. On a
 -- partitioned events table this drops the partitioned parent index and

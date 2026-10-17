@@ -1,5 +1,5 @@
 -- ============================================================
--- 000015_contract_notes
+-- 000034_contract_notes
 --
 -- Markdown notes attached to a tracked contract (issue #164).
 -- A note is the institutional knowledge that does not belong in

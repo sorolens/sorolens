@@ -1,5 +1,5 @@
 -- ============================================================
--- 000008_failed_events
+-- 000015_failed_events
 --
 -- Dead-letter queue (DLQ) for events that fail processing after
 -- retries (issue #202). One bad event must not block the indexer

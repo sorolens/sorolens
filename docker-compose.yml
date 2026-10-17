@@ -92,12 +92,14 @@ services:
   # One-shot job that applies the SQL schema on first start, so a fresh clone is
   # usable right after `docker compose up -d`. It applies the migrations exactly
   # the way CI does (.github/workflows/ci.yml): every *.up.sql, in sorted order,
-  # via psql. golang-migrate (`make migrate-up`) cannot read this directory until
-  # the duplicate migration versions (e.g. 000002_contract_versions and
-  # 000002_watchdog) are renumbered, so psql is used here instead.
+  # via psql. The directory is now a single contiguous sequence (issue #516), so
+  # golang-migrate (`make migrate-up`) can also read it; psql is kept here
+  # because databases created by this path have no schema_migrations bookkeeping
+  # (baseline one once with `make migrate-force` before switching it to
+  # golang-migrate).
   #
   # Like CI, psql is run without ON_ERROR_STOP so that one failing statement does
-  # not stop the remaining migrations; 000003_partition_events logs a pre-existing
+  # not stop the remaining migrations; 000005_partition_events logs a pre-existing
   # "idx_events_contract_ledger already exists" error that CI's migration step
   # logs as well and that does not affect the resulting schema.
   #

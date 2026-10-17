@@ -1,5 +1,5 @@
 -- ============================================================
--- 000003_multi_network
+-- 000004_multi_network
 --
 -- Makes the schema network-aware. The indexer and API can track and
 -- query contracts on testnet, mainnet, and futurenet simultaneously.

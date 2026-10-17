@@ -1,5 +1,5 @@
 -- ============================================================
--- 000010_webhook_signing_secrets
+-- 000027_webhook_signing_secrets
 --
 -- Backs the HMAC-SHA256 webhook signature feature. Every outgoing watchdog
 -- delivery is signed with the subscription's secret so a receiver can prove the

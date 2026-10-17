@@ -1,5 +1,5 @@
 -- ============================================================
--- 000009_call_edges
+-- 000017_call_edges
 --
 -- Cross-contract call graph (issue: "cross-contract call graph
 -- tracing in the indexer").

@@ -178,7 +178,7 @@ docker push $REGISTRY/sorolens-migrations:0.1.0
 
 Then in `terraform.tfvars` (mirrors the compose service, including its
 "skip if the schema already exists" guard; like compose and CI, psql does not
-stop on the one known harmless error in `000003_partition_events`):
+stop on the one known harmless error in `000005_partition_events`):
 
 ```hcl
 migrations_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/sorolens-migrations:0.1.0"

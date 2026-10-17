@@ -1,5 +1,5 @@
 -- ============================================================
--- 000015_api_key_rotated_at
+-- 000033_api_key_rotated_at
 --
 -- Support atomic API key rotation (issue #328). Rotating a key
 -- regenerates its secret in place: the key_hash is replaced with

@@ -1,5 +1,5 @@
 -- ============================================================
--- 000008_contract_wasm
+-- 000014_contract_wasm
 --
 -- Content-addressed cache of Soroban contract Wasm binaries
 -- (issue #162). Keyed by wasm hash so identical code shared

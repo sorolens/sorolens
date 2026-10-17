@@ -1,5 +1,5 @@
 -- ============================================================
--- 000013_contract_tags
+-- 000031_contract_tags
 --
 -- User-defined multi-tags per contract (issue #163). A tag is a
 -- free-form label such as "prod", "defi", or "staging" that lets an

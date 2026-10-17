@@ -451,7 +451,7 @@ func envDuration(key string, def time.Duration) time.Duration {
 // NOT safe for replicas: each process would hold its own table and believe it
 // owned every shard. Real horizontal scaling needs a coordinator.Store backed
 // by Postgres; the schema it must write is
-// apps/api/internal/db/migrations/000011_indexer_shards.up.sql. It fails fast
+// apps/api/internal/db/migrations/000030_indexer_shards.up.sql. It fails fast
 // rather than silently degrading to per-process ownership.
 func buildShardStore(kind string) (coordinator.Store, error) {
 	switch kind {

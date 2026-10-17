@@ -1,5 +1,5 @@
 -- ============================================================
--- 000009_topic_decoded_gin_index
+-- 000023_topic_decoded_gin_index
 --
 -- Adds a GIN index on events.topic_decoded so filtering by a
 -- decoded topic value (the API's ?topic= query parameter) uses an
@@ -16,7 +16,7 @@
 -- containment than the default jsonb_ops class (which is only
 -- required for key-existence `?`, `?|` and `?&` queries).
 --
--- events is partitioned by month (see 000003_partition_events), so
+-- events is partitioned by month (see 000005_partition_events), so
 -- a plain CREATE INDEX on the parent builds a partitioned index
 -- that is applied to every existing partition and to partitions
 -- created later. CREATE INDEX CONCURRENTLY is deliberately not

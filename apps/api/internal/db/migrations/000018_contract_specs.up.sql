@@ -1,5 +1,5 @@
 -- ============================================================
--- 000009_contract_specs
+-- 000018_contract_specs
 --
 -- Caches the parsed SEP-48 interface spec for each tracked contract. The
 -- indexer extracts the "contractspecv0" custom section from the contract's

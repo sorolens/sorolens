@@ -1,5 +1,5 @@
 -- ============================================================
--- 000014_alert_rules
+-- 000032_alert_rules
 --
 -- User-defined alert rules expressed in the Sorolens rule
 -- language (apps/api/rulelang). A rule is stored as its source

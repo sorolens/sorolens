@@ -1,5 +1,5 @@
 -- ============================================================
--- 000016_report_subscriptions
+-- 000035_report_subscriptions
 --
 -- Email digest subscriptions (issue #330). A subscriber receives a
 -- daily or weekly summary of activity across tracked contracts.
