@@ -10,9 +10,9 @@ import {
   getContractStorage,
   getContractStats,
   getContractSnapshot,
+  getContractSummary,
   addContractTag,
   removeContractTag,
-  getContractSummary,
   ApiError,
 } from "@/lib/api";
 import type {
@@ -43,8 +43,8 @@ import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { ContractNotesPanel } from "@/components/ContractNotesPanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
-import { ContractSummaryCard } from "@/components/ContractSummaryCard";
 import { HealthScoreCard } from "@/components/HealthScoreCard";
+import { ContractSummaryCard } from "@/components/ContractSummaryCard";
 import { AddToGroup } from "@/components/AddToGroup";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { CallTracePanel } from "@/components/CallTracePanel";
@@ -65,6 +65,10 @@ function ContractDetailContent({ id }: { id: string }) {
   const [contract, setContract] = useState<ContractDetail | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
   const [contractLoading, setContractLoading] = useState(true);
+
+  const [summary, setSummary] = useState<ContractSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   // User-defined tags are edited inline on this page.
   const [tags, setTags] = useState<string[]>([]);
@@ -91,10 +95,6 @@ function ContractDetailContent({ id }: { id: string }) {
   const [storageCursor, setStorageCursor] = useState<string | null>(null);
   const [storageHasMore, setStorageHasMore] = useState(false);
 
-  const [summary, setSummary] = useState<ContractSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(true);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
-
   const { isConnected: isStreamConnected } = useEventStream({
     contractId: id,
     onEvent: (newEvent) => {
@@ -104,6 +104,34 @@ function ContractDetailContent({ id }: { id: string }) {
       });
     },
   });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSummary() {
+      setSummaryLoading(true);
+      setSummaryError(null);
+      try {
+        const data = await getContractSummary(id);
+        if (!cancelled) setSummary(data);
+      } catch (err) {
+        if (!cancelled) {
+          setSummaryError(
+            err instanceof ApiError && err.status === 404
+              ? "No summary available for this contract yet."
+              : "Failed to load contract summary."
+          );
+        }
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
+      }
+    }
+
+    loadSummary();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,28 +280,6 @@ function ContractDetailContent({ id }: { id: string }) {
     }
 
     loadStorage();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadSummary() {
-      setSummaryLoading(true);
-      setSummaryError(null);
-      try {
-        const data = await getContractSummary(id);
-        if (!cancelled) setSummary(data);
-      } catch {
-        if (!cancelled) setSummaryError("Failed to load summary.");
-      } finally {
-        if (!cancelled) setSummaryLoading(false);
-      }
-    }
-
-    loadSummary();
     return () => {
       cancelled = true;
     };
@@ -579,25 +585,10 @@ function ContractDetailContent({ id }: { id: string }) {
 
       <section className="mb-8">
         <h2 className="mb-4 text-xl font-semibold">Snapshot / replay</h2>
-        <div className="mb-3 flex flex-wrap gap-3 text-sm">
-          <a
-            href={`/api/contracts/${id}/snapshot.json`}
-            download={`contract-${id}-snapshot.json`}
-            className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
-          >
-            Download snapshot.json
-          </a>
-          <a
-            href={`/api/contracts/${id}/summary`}
-            download={`contract-${id}-summary.json`}
-            className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
-          >
-            Download summary
-          </a>
-        </div>
         <SnapshotPanel
           contractId={id}
           currentLedger={stats?.last_synced_ledger ?? 0}
+          exportBasePath={`/contracts/${id}`}
         />
       </section>
 
