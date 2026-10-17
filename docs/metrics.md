@@ -15,6 +15,7 @@ how to scrape them.
 - [Scrape configuration](#scrape-configuration)
 - [Alerting](#alerting)
 - [Grafana dashboard](#grafana-dashboard)
+- [Validating the artifacts](#validating-the-artifacts)
 - [Adding a metric](#adding-a-metric)
 
 ---
@@ -269,42 +270,59 @@ to a persistent worker.
 
 ## Alerting
 
-A minimal alert fires when the indexer falls behind the chain and stays there:
+Ready-to-load Prometheus rules are checked in at
+[`docs/alerts.yml`](alerts.yml). They cover API availability, 5xx error ratio,
+p95 latency, Postgres pool saturation, rate-limit rejections, and indexer lag.
+Every rule carries `severity` and `runbook_url` labels/annotations.
 
-```yaml
-groups:
-  - name: sorolens-indexer
-    rules:
-      - alert: SorolensIndexerLagging
-        expr: sorolens_indexer_lag_ledgers > 1000
-        for: 15m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Indexer is >{{ $value }} ledgers behind on {{ $labels.network }}"
+| Alert | Expression summary | For | Severity |
+| ----- | ------------------ | --- | -------- |
+| `SorolensAPIDown` | `up{job="sorolens-api"} == 0` | 5m | critical |
+| `SorolensAPIHighErrorRate` | 5xx share > 5% | 10m | warning |
+| `SorolensAPIHighLatency` | p95 latency > 1s | 10m | warning |
+| `SorolensAPIDatabasePoolSaturated` | pool > 90% acquired | 10m | warning |
+| `SorolensAPIRateLimitRejections` | limited share > 10% | 15m | info |
+| `SorolensIndexerLagging` | lag > 100 ledgers | 10m | warning |
+| `SorolensIndexerFarBehind` | lag > 1000 ledgers | 15m | critical |
+| `SorolensIndexerNotReporting` | lag metric absent | 15m | warning |
+
+Install and validate:
+
+```bash
+# 1. Check the file before deploying it.
+promtool check rules docs/alerts.yml
+
+# 2. Add the path to the rule_files list in prometheus.yml (merge it into an
+#    existing rule_files section if there is one).
+#      rule_files:
+#        - /etc/prometheus/alerts.yml
+cp docs/alerts.yml /etc/prometheus/alerts.yml
+
+# 3. Reload Prometheus (or send SIGHUP).
+curl -X POST http://localhost:9090/-/reload
 ```
 
-Pick the threshold from your network's ledger time. On Stellar a ledger closes
-roughly every 5 seconds, so 1000 ledgers is about 83 minutes of lag.
+Confirm the groups loaded:
 
-The request metrics give the API something to alert on too:
-
-```yaml
-groups:
-  - name: sorolens-api
-    rules:
-      - alert: SorolensAPIHighErrorRate
-        expr: |
-          sum by (route) (rate(sorolens_http_requests_total{status=~"5.."}[5m]))
-            /
-          sum by (route) (rate(sorolens_http_requests_total[5m]))
-            > 0.05
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "{{ $value | humanizePercentage }} of requests to {{ $labels.route }} are 5xx"
+```bash
+curl -s http://localhost:9090/api/v1/rules | jq '.data.groups[].name'
+# "sorolens-api"
+# "sorolens-indexer"
 ```
+
+The `job` label in `SorolensAPIDown` must match your scrape job. The checked-in
+file assumes the `sorolens-api` and `sorolens-indexer` job names from the
+[scrape configuration](#scrape-configuration) above; rename them together if
+your deployment differs.
+
+Pick lag thresholds from your network's ledger time. On Stellar a ledger closes
+roughly every 5 seconds, so 100 ledgers is about 8 minutes of lag and 1000
+ledgers is about 83 minutes. The API thresholds (1s p95, 5% 5xx) are starting
+points; tighten them once you have a week of production data.
+
+`SorolensIndexerNotReporting` is intended for continuous-mode deployments. In
+the default cron deployment the indexer exposes metrics only while a pass is
+running, so the rule will fire between runs; drop it if you run on cron.
 
 ---
 
@@ -313,10 +331,60 @@ groups:
 A ready-to-import dashboard is checked in at
 [`docs/dashboards/sorolens-overview.json`](dashboards/sorolens-overview.json).
 
+![Sorolens Overview dashboard in Grafana](screenshots/grafana-sorolens-overview.png)
+
 Import it via **Dashboards → New → Import → Upload JSON file**, then pick the
-Prometheus datasource when prompted. The dashboard covers request rate, latency
-percentiles, error ratio, in-flight requests, indexer lag, indexing throughput,
-indexer pass duration, goroutines, and RSS.
+Prometheus datasource when prompted (the dashboard input is `DS_PROMETHEUS`).
+The dashboard covers request rate, latency percentiles, error ratio, in-flight
+requests, indexer lag, indexing throughput, indexer pass duration, goroutines,
+and RSS.
+
+For a GitOps setup, provision the file instead of importing it by hand:
+
+```yaml
+# /etc/grafana/provisioning/dashboards/sorolens.yaml
+apiVersion: 1
+providers:
+  - name: sorolens
+    folder: Sorolens
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
+```
+
+Copy `docs/dashboards/sorolens-overview.json` into that path and set
+`DS_PROMETHEUS` to your datasource UID (or keep the import prompt). The panels
+and the Prometheus rule thresholds use the same metric names, so the dashboard
+and the alerts stay in sync.
+
+![Prometheus rule groups loaded from docs/alerts.yml](screenshots/prometheus-sorolens-alerts.png)
+
+---
+
+## Validating the artifacts
+
+Both checked-in observability artifacts are plain files that can be validated in
+CI or locally:
+
+```bash
+# Alert rules (requires promtool; also available in the prom/prometheus image).
+promtool check rules docs/alerts.yml
+
+# Dashboard JSON: parse and sanity-check required keys.
+jq -e '.title and .panels and .__inputs' docs/dashboards/sorolens-overview.json
+
+# Optional: validate the dashboard against a running Grafana.
+curl -s -u admin:admin http://localhost:3000/api/dashboards/uid/sorolens-overview \
+  | jq -e '.dashboard.title == "Sorolens Overview"'
+```
+
+If promtool is not installed locally, use the published image from the repo
+root:
+
+```bash
+docker run --rm --entrypoint promtool \
+  -v "$PWD/docs:/docs:ro" prom/prometheus:latest check rules /docs/alerts.yml
+```
 
 ---
 

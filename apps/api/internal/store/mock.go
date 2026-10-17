@@ -20,6 +20,7 @@ type MockStore struct {
 	storageEntries        []StorageEntry
 	syncStates            map[string]SyncState
 	globalStats           GlobalStats
+	globalStatsSet        bool
 	monitored             map[string]MonitoredContract
 	healthChecks          []HealthCheck
 	alerts                []ContractAlert
@@ -117,17 +118,24 @@ func (m *MockStore) ListLabels(_ context.Context, workspaceID, query string) ([]
 			out = append(out, label)
 		}
 	}
+	// The postgres query orders by label.
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Label < out[j].Label })
+	if len(out) > 100 {
+		out = out[:100]
+	}
 	return out, nil
 }
 
 func (m *MockStore) ResolveLabel(_ context.Context, workspaceID, query string) (Label, error) {
+	// The postgres query gives workspace-scoped labels priority over public
+	// ones with the same name.
 	for _, label := range m.labels {
-		if label.Public && strings.EqualFold(label.Label, query) {
+		if !label.Public && label.WorkspaceID == workspaceID && strings.EqualFold(label.Label, query) {
 			return label, nil
 		}
 	}
 	for _, label := range m.labels {
-		if !label.Public && label.WorkspaceID == workspaceID && strings.EqualFold(label.Label, query) {
+		if label.Public && strings.EqualFold(label.Label, query) {
 			return label, nil
 		}
 	}
@@ -348,12 +356,23 @@ func (m *MockStore) GetGlobalStats(_ context.Context) (GlobalStats, error) {
 	if m.GetGlobalStatsErr != nil {
 		return GlobalStats{}, m.GetGlobalStatsErr
 	}
-	return m.globalStats, nil
+	if m.globalStatsSet {
+		return m.globalStats, nil
+	}
+	// Derive counts from the in-memory rows so the mock mirrors the
+	// postgres aggregate query instead of returning a bare stub.
+	return GlobalStats{
+		TrackedContracts:    int64(len(m.contracts)),
+		TotalEvents:         int64(len(m.events)),
+		TotalInvocations:    int64(len(m.invocations)),
+		TotalStorageEntries: int64(len(m.storageEntries)),
+	}, nil
 }
 
 // SetGlobalStats lets tests control what GetGlobalStats returns.
 func (m *MockStore) SetGlobalStats(gs GlobalStats) {
 	m.globalStats = gs
+	m.globalStatsSet = true
 }
 
 func (m *MockStore) CreateNextMonthPartition(_ context.Context) error { return nil }
@@ -947,7 +966,8 @@ func (m *MockStore) RotateAPIKey(_ context.Context, id, newHash, newPrefix strin
 }
 
 func (m *MockStore) ListAPIKeys(_ context.Context, cursor string, limit int) ([]APIKey, string, error) {
-	if limit <= 0 {
+	// Same page-size bounds as the postgres implementation.
+	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	var out []APIKey
@@ -968,7 +988,9 @@ func (m *MockStore) ListAPIKeys(_ context.Context, cursor string, limit int) ([]
 
 func (m *MockStore) RevokeAPIKey(_ context.Context, id string) error {
 	for i := range m.apiKeys {
-		if m.apiKeys[i].ID == id {
+		// A key that is already revoked is no longer found, matching the
+		// postgres UPDATE ... WHERE revoked_at IS NULL.
+		if m.apiKeys[i].ID == id && !m.apiKeys[i].Revoked() {
 			now := time.Now().UTC()
 			m.apiKeys[i].RevokedAt = &now
 			return nil
@@ -1099,6 +1121,9 @@ func (m *MockStore) RotateSigningSecret(_ context.Context, id, secret, hash stri
 func (m *MockStore) ListAll(_ context.Context) ([]AlertSubscription, error) {
 	out := make([]AlertSubscription, len(m.alertSubscriptions))
 	copy(out, m.alertSubscriptions)
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
 	return out, nil
 }
 
@@ -1300,10 +1325,14 @@ func (m *MockStore) SearchContracts(_ context.Context, query string, limit int) 
 	for _, c := range m.contracts {
 		if strings.Contains(strings.ToLower(c.ID), searchPattern) || strings.Contains(strings.ToLower(c.Label), searchPattern) {
 			results = append(results, c)
-			if len(results) >= limit {
-				break
-			}
 		}
+	}
+	// The postgres query orders by added_at DESC before applying the limit.
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].AddedAt.After(results[j].AddedAt)
+	})
+	if len(results) > limit {
+		results = results[:limit]
 	}
 
 	return results, nil

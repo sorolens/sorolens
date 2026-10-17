@@ -2,6 +2,7 @@ package pgstore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -246,6 +247,146 @@ func TestIndexerCursor_NeverMovesBackwards(t *testing.T) {
 		if err != nil || got != step.want {
 			t.Fatalf("after set %d: cursor = %d, %v; want %d", step.set, got, err, step.want)
 		}
+	}
+}
+
+// TestBatchInsertWithCursor_CommitsAtomically injects a failure between the
+// event write and the cursor write by pointing an invocation at an untracked
+// contract. The whole window must roll back, and retrying the same events must
+// commit exactly once.
+func TestBatchInsertWithCursor_CommitsAtomically(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	prefix := uniquePrefix(t)
+	cid := seedContracts(t, s, prefix, "a")[0]
+	network := prefix + "net"
+	t.Cleanup(func() {
+		s.pool.Exec(ctx, `DELETE FROM indexer_cursors WHERE network = $1`, network) //nolint:errcheck
+	})
+
+	closedAt := time.Now().UTC().Truncate(time.Second)
+	events := []poller.Event{
+		{ID: prefix + "ev1", ContractID: cid, Network: "testnet", Ledger: 40,
+			LedgerClosedAt: closedAt, TxHash: prefix + "tx1", Type: "contract",
+			TopicXDR: []string{"AAAADw=="}, ValueXDR: "AAAAAQ==", InSuccessfulCall: true},
+		{ID: prefix + "ev2", ContractID: cid, Network: "testnet", Ledger: 41,
+			LedgerClosedAt: closedAt, TxHash: prefix + "tx2", Type: "contract", ValueXDR: "AAAAAQ=="},
+	}
+	good := []poller.Invocation{{
+		TxHash: prefix + "tx1", ContractID: cid, Network: "testnet", Ledger: 40,
+		LedgerClosedAt: closedAt, Status: "SUCCESS", ResultXDR: "AAAA",
+	}}
+	bad := []poller.Invocation{{
+		TxHash: prefix + "tx1", ContractID: prefix + "missing", Network: "testnet",
+		Ledger: 40, LedgerClosedAt: closedAt, Status: "SUCCESS",
+	}}
+	state := poller.SyncState{ContractID: cid, LastLedger: 42}
+
+	if _, err := s.BatchInsertWithCursor(ctx, network, 42, events, bad, state); err == nil {
+		t.Fatal("BatchInsertWithCursor succeeded with an invocation referencing a missing contract")
+	}
+
+	var nEvents, nInv int
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE contract_id = $1`, cid).Scan(&nEvents); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM invocations WHERE contract_id = $1`, cid).Scan(&nInv); err != nil {
+		t.Fatal(err)
+	}
+	if nEvents != 0 || nInv != 0 {
+		t.Fatalf("after rollback: %d events, %d invocations; want 0 and 0", nEvents, nInv)
+	}
+	if st, err := s.GetSyncState(ctx, cid); err != nil || st.LastLedger != 0 {
+		t.Fatalf("sync state after rollback = %+v, %v; want zero", st, err)
+	}
+	if cursor, err := s.GetIndexerCursor(ctx, network); err != nil || cursor != 0 {
+		t.Fatalf("cursor after rollback = %d, %v; want 0", cursor, err)
+	}
+
+	// Retry the same window and then repeat it: ON CONFLICT keeps both
+	// idempotent, and each successful call advances the cursor exactly once.
+	for round := 1; round <= 2; round++ {
+		if _, err := s.BatchInsertWithCursor(ctx, network, 42, events, good, state); err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
+	}
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE contract_id = $1`, cid).Scan(&nEvents); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM invocations WHERE contract_id = $1`, cid).Scan(&nInv); err != nil {
+		t.Fatal(err)
+	}
+	if nEvents != 2 || nInv != 1 {
+		t.Fatalf("after retry: %d events, %d invocations; want 2 and 1", nEvents, nInv)
+	}
+	if st, err := s.GetSyncState(ctx, cid); err != nil || st.LastLedger != 42 {
+		t.Fatalf("sync state after retry = %+v, %v; want 42", st, err)
+	}
+	if cursor, err := s.GetIndexerCursor(ctx, network); err != nil || cursor != 42 {
+		t.Fatalf("cursor after retry = %d, %v; want 42", cursor, err)
+	}
+}
+
+// TestBatchInsertWithCursor_ParksRejectedEvent verifies the DLQ path stays
+// transactional: a single unstoreable event is retried, parked, and the rest
+// of the window (including the cursors) still commits.
+func TestBatchInsertWithCursor_ParksRejectedEvent(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	prefix := uniquePrefix(t)
+	cid := seedContracts(t, s, prefix, "d")[0]
+	network := prefix + "net"
+	closedAt := time.Now().UTC().Truncate(time.Second)
+	t.Cleanup(func() {
+		s.pool.Exec(ctx, `DELETE FROM indexer_cursors WHERE network = $1`, network)     //nolint:errcheck
+		s.pool.Exec(ctx, `DELETE FROM failed_events WHERE event_id = $1`, prefix+"bad") //nolint:errcheck
+	})
+
+	badEvent := poller.Event{
+		ID: prefix + "bad", ContractID: prefix + "missing", Network: "testnet", Ledger: 10,
+		LedgerClosedAt: closedAt, TxHash: prefix + "badtx", Type: "contract", ValueXDR: "AAAA",
+	}
+	goodEvent := poller.Event{
+		ID: prefix + "good", ContractID: cid, Network: "testnet", Ledger: 11,
+		LedgerClosedAt: closedAt, TxHash: prefix + "goodtx", Type: "contract", ValueXDR: "AAAA",
+	}
+
+	parked, err := s.BatchInsertWithCursor(ctx, network, 12,
+		[]poller.Event{badEvent, goodEvent}, nil,
+		poller.SyncState{ContractID: cid, LastLedger: 12})
+	if err != nil {
+		t.Fatalf("BatchInsertWithCursor: %v", err)
+	}
+	if len(parked) != 1 || parked[0].EventID != badEvent.ID {
+		t.Fatalf("parked = %+v, want the bad event", parked)
+	}
+	if !strings.Contains(parked[0].ErrorMessage, "insert event") {
+		t.Errorf("parked error = %q, want the insert failure", parked[0].ErrorMessage)
+	}
+
+	var stored int
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE id = $1`, goodEvent.ID).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != 1 {
+		t.Errorf("good event stored = %d, want 1", stored)
+	}
+	var payload []byte
+	if err := s.pool.QueryRow(ctx, `SELECT event_payload FROM failed_events WHERE event_id = $1`, badEvent.ID).Scan(&payload); err != nil {
+		t.Fatalf("failed_events row: %v", err)
+	}
+	var decoded poller.Event
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("event_payload is not JSON: %v", err)
+	}
+	if decoded.ID != badEvent.ID {
+		t.Errorf("payload event id = %q, want %q", decoded.ID, badEvent.ID)
+	}
+	if st, err := s.GetSyncState(ctx, cid); err != nil || st.LastLedger != 12 {
+		t.Fatalf("sync state = %+v, %v; want 12", st, err)
+	}
+	if cursor, err := s.GetIndexerCursor(ctx, network); err != nil || cursor != 12 {
+		t.Fatalf("cursor = %d, %v; want 12", cursor, err)
 	}
 }
 

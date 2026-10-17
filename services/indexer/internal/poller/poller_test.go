@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
@@ -232,13 +233,44 @@ func (f *fakeStore) SetIndexerCursor(_ context.Context, network string, ledger u
 	return nil
 }
 
-func (f *fakeStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error {
+// BatchInsertWithCursor mirrors the transactional store: rejected events are
+// retried, then parked in f.failedEvents and excluded from f.events, while
+// accepted rows and both cursors commit. insertErr aborts the whole batch.
+func (f *fakeStore) BatchInsertWithCursor(_ context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) ([]FailedEvent, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.insertErr != nil {
-		return f.insertErr
+		return nil, f.insertErr
 	}
-	f.events = append(f.events, events...)
+	var parked []FailedEvent
+	for _, e := range events {
+		stored := false
+		var lastErr error
+		for attempt := 1; attempt <= 3; attempt++ {
+			if err, ok := f.eventInsertErrs[e.ID]; ok {
+				lastErr = err
+				continue
+			}
+			if n, ok := f.eventInsertFailTimes[e.ID]; ok && n > 0 {
+				f.eventInsertFailTimes[e.ID] = n - 1
+				lastErr = errors.New("transient insert failure")
+				continue
+			}
+			stored = true
+			break
+		}
+		if stored {
+			f.events = append(f.events, e)
+			continue
+		}
+		payload, _ := json.Marshal(e)
+		fe := FailedEvent{
+			EventID: e.ID, ContractID: e.ContractID, Network: e.Network,
+			EventPayload: payload, ErrorMessage: lastErr.Error(), Attempts: 3,
+		}
+		f.failedEvents = append(f.failedEvents, fe)
+		parked = append(parked, fe)
+	}
 	f.invocations = append(f.invocations, invocations...)
 	if syncState.ContractID != "" {
 		f.syncStates[syncState.ContractID] = syncState
@@ -249,7 +281,7 @@ func (f *fakeStore) BatchInsertWithCursor(ctx context.Context, network string, l
 	if ledger > f.indexerCursors[network] {
 		f.indexerCursors[network] = ledger
 	}
-	return nil
+	return parked, nil
 }
 func (f *fakeStore) RecentHourlyActivity(_ context.Context, contractID string, _ int) ([]HourlyActivity, error) {
 	f.mu.Lock()
@@ -1006,7 +1038,7 @@ func TestPoller_noUpgradeWhenWasmHashUnchanged(t *testing.T) {
 	}
 }
 
-func TestInsertEventsWithDLQ_BadEventParked(t *testing.T) {
+func TestProcessContract_BadEventParkedInTransaction(t *testing.T) {
 	st := newFakeStore([]Contract{{ID: "C1", Status: "active", Network: "testnet"}})
 	st.eventInsertErrs = map[string]error{
 		"bad-event": errors.New("deliberately bad event"),
@@ -1063,22 +1095,24 @@ func TestInsertEventsWithDLQ_BadEventParked(t *testing.T) {
 	}
 }
 
-func TestInsertEventsWithDLQ_RetryThenSuccess(t *testing.T) {
+func TestBatchInsertWithCursor_RetryThenSuccess(t *testing.T) {
 	st := newFakeStore(nil)
 	st.eventInsertFailTimes = map[string]int{"flaky": 2} // fail twice, succeed on 3rd
-	p := New(&fakeRPC{}, st, newFakeRedis(), Config{}, slog.Default())
-	err := p.insertEventsWithDLQ(context.Background(), []Event{{
+	parked, err := st.BatchInsertWithCursor(context.Background(), "testnet", 10, []Event{{
 		ID: "flaky", ContractID: "C1", Network: "testnet",
-	}})
+	}}, nil, SyncState{ContractID: "C1", LastLedger: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if len(st.failedEvents) != 0 {
-		t.Fatalf("unexpected DLQ entries: %d", len(st.failedEvents))
+	if len(parked) != 0 || len(st.failedEvents) != 0 {
+		t.Fatalf("unexpected DLQ entries: parked=%d stored=%d", len(parked), len(st.failedEvents))
 	}
 	if len(st.events) != 1 || st.events[0].ID != "flaky" {
 		t.Fatalf("events = %+v", st.events)
+	}
+	if st.syncStates["C1"].LastLedger != 10 || st.indexerCursors["testnet"] != 10 {
+		t.Fatalf("cursors = %+v / %+v, want both at 10", st.syncStates["C1"], st.indexerCursors["testnet"])
 	}
 }

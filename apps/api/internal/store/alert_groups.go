@@ -236,6 +236,10 @@ func (m *MockStore) ListAlertGroups(_ context.Context, cursor string, limit int,
 		if f.Severity != "" && ag.Severity != f.Severity {
 			continue
 		}
+		// The postgres query joins monitored_contracts to filter by network.
+		if f.Network != "" && m.monitored[ag.ContractID].Network != f.Network {
+			continue
+		}
 		if cursor != "" {
 			if ag.LastSeen.After(cursorTS) {
 				continue
