@@ -19,6 +19,7 @@ import {
   type CursorHistory,
 } from "@/lib/eventsExplorer";
 import type { EventType, GlobalEvent } from "@/lib/types";
+import { useLocale } from "@/lib/i18n";
 
 const PAGE_SIZE = 25;
 
@@ -45,9 +46,9 @@ const buttonClass =
   "rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40";
 
 function EventRow({ event }: { event: GlobalEvent }) {
+  const { formatNumber, formatDateTime } = useLocale();
   const [expanded, setExpanded] = useState(false);
   const data = event.value_decoded ?? event.value_xdr;
-  const closedAt = new Date(event.ledger_closed_at);
 
   return (
     <>
@@ -72,13 +73,13 @@ function EventRow({ event }: { event: GlobalEvent }) {
           </button>
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-right font-mono text-xs text-[var(--color-text-secondary)]">
-          {event.ledger.toLocaleString()}
+          {formatNumber(event.ledger)}
         </td>
         <td
           className="whitespace-nowrap px-4 py-3 text-xs text-[var(--color-text-secondary)]"
           title={event.ledger_closed_at}
         >
-          {Number.isNaN(closedAt.getTime()) ? "-" : closedAt.toLocaleString()}
+          {formatDateTime(event.ledger_closed_at)}
         </td>
       </tr>
       {expanded && (

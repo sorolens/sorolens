@@ -421,6 +421,7 @@ export default function InvocationsPage() {
         <DataTable<Invocation>
           columns={COLUMNS}
           data={sorted}
+          virtualized
           rowKey={(inv) => `${inv.ledger}:${inv.tx_hash}`}
           sortColumn={sortColumn}
           sortDirection={sortDirection}

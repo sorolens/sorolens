@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getContractForMetadata } from "@/lib/serverData";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -7,13 +8,20 @@ type Props = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const shortId = id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
+  const contract = await getContractForMetadata(id);
+  const label = contract?.label?.trim() || `Contract ${shortId}`;
+  const network = contract?.network;
+  const title = network ? `${label} (${network})` : label;
+  const description = network
+    ? `Events, invocations, storage health, and anomaly detection for ${label} on ${network}.`
+    : `Events, invocations, storage health, and anomaly detection for Soroban contract ${id}.`;
 
   return {
-    title: `Contract ${shortId}`,
-    description: `Events, invocations, storage health, and anomaly detection for Soroban contract ${id}.`,
+    title,
+    description,
     openGraph: {
-      title: `Contract ${shortId} — Sorolens`,
-      description: `Detailed observability dashboard for Soroban contract ${id}.`,
+      title: `${title} — Sorolens`,
+      description,
       url: `https://sorolens.dev/contracts/${id}`,
     },
     alternates: {
