@@ -16,6 +16,9 @@ type Contract struct {
 	// Tags are free-form labels held in the contract_tags table, hydrated
 	// alongside the contract so the list and detail responses carry them.
 	Tags []string
+	// TrackingPreset is the preset type applied when the contract was tracked
+	// (e.g. "dex", "lending", "stablecoin"). Empty when no preset was selected.
+	TrackingPreset string
 }
 
 // Event is a single contract event indexed from the Soroban RPC.

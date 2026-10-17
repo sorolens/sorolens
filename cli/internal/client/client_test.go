@@ -84,7 +84,7 @@ func TestTrackContract422ReturnsError(t *testing.T) {
 	defer srv.Close()
 
 	c := client.New(srv.URL, 5*time.Second)
-	_, err := c.TrackContract(context.Background(), "short-id", "alias", "testnet")
+	_, err := c.TrackContract(context.Background(), "short-id", "alias", "testnet", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

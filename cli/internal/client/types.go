@@ -12,6 +12,9 @@ type Contract struct {
 	BackfillCompleteAt *time.Time `json:"backfill_complete_at"`
 	Status             string     `json:"status"`
 	AddedAt            time.Time  `json:"added_at"`
+	// TrackingPreset is the preset type applied when the contract was tracked
+	// (e.g. "dex", "lending", "stablecoin"). Empty when no preset was selected.
+	TrackingPreset string `json:"tracking_preset,omitempty"`
 }
 
 // Label mirrors the API label response.
