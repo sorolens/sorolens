@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MonoId } from "@sorolens/ui";
@@ -10,25 +10,24 @@ import {
   getContractStorage,
   getContractStats,
   getContractSnapshot,
-  getContractSummary,
   addContractTag,
   removeContractTag,
+  getContractSummary,
   ApiError,
 } from "@/lib/api";
 import type {
   ContractDetail,
   ContractEvent,
   ContractStats,
-  ContractSummary,
   StorageEntry,
   VolumePoint,
   ResourceTrendPoint,
   TimeWindow,
+  ContractSummary,
 } from "@/lib/types";
 import { getActivitySeries } from "@/lib/activitySeries";
 import { ensureSession } from "@/lib/user";
 import { StatCard } from "@/components/StatCard";
-import { ContractSummaryCard } from "@/components/ContractSummaryCard";
 import { TagInput } from "@/components/TagInput";
 import {
   CardSkeleton,
@@ -44,6 +43,7 @@ import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { ContractNotesPanel } from "@/components/ContractNotesPanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
+import { ContractSummaryCard } from "@/components/ContractSummaryCard";
 import { HealthScoreCard } from "@/components/HealthScoreCard";
 import { AddToGroup } from "@/components/AddToGroup";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
@@ -92,8 +92,8 @@ function ContractDetailContent({ id }: { id: string }) {
   const [storageHasMore, setStorageHasMore] = useState(false);
 
   const [summary, setSummary] = useState<ContractSummary | null>(null);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   const { isConnected: isStreamConnected } = useEventStream({
     contractId: id,
@@ -266,14 +266,8 @@ function ContractDetailContent({ id }: { id: string }) {
       try {
         const data = await getContractSummary(id);
         if (!cancelled) setSummary(data);
-      } catch (err) {
-        if (!cancelled) {
-          setSummaryError(
-            err instanceof ApiError && err.status === 404
-              ? "No summary available for this contract yet."
-              : "Failed to load contract summary."
-          );
-        }
+      } catch {
+        if (!cancelled) setSummaryError("Failed to load summary.");
       } finally {
         if (!cancelled) setSummaryLoading(false);
       }
@@ -355,14 +349,6 @@ function ContractDetailContent({ id }: { id: string }) {
         setTagSaving(false);
       }
     },
-    [id]
-  );
-
-  const exportLinks = useMemo(
-    () => [
-      { label: "Download snapshot.json", href: `/contracts/${id}/snapshot.json` },
-      { label: "Download summary", href: `/contracts/${id}/summary` },
-    ],
     [id]
   );
 
@@ -461,13 +447,11 @@ function ContractDetailContent({ id }: { id: string }) {
         </div>
       </header>
 
-      <section className="mb-8">
-        <ContractSummaryCard
-          summary={summary}
-          loading={summaryLoading}
-          error={summaryError}
-        />
-      </section>
+      <ContractSummaryCard
+        summary={summary}
+        loading={summaryLoading}
+        error={summaryError}
+      />
 
       <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -595,17 +579,21 @@ function ContractDetailContent({ id }: { id: string }) {
 
       <section className="mb-8">
         <h2 className="mb-4 text-xl font-semibold">Snapshot / replay</h2>
-        <div className="mb-3 flex flex-wrap gap-3">
-          {exportLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              download
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-border)]"
-            >
-              {link.label}
-            </a>
-          ))}
+        <div className="mb-3 flex flex-wrap gap-3 text-sm">
+          <a
+            href={`/api/contracts/${id}/snapshot.json`}
+            download={`contract-${id}-snapshot.json`}
+            className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
+          >
+            Download snapshot.json
+          </a>
+          <a
+            href={`/api/contracts/${id}/summary`}
+            download={`contract-${id}-summary.json`}
+            className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
+          >
+            Download summary
+          </a>
         </div>
         <SnapshotPanel
           contractId={id}

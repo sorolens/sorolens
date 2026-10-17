@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { ContractSummaryCard } from "@/components/contracts/contract-summary-card";
-import { SnapshotExportLinks } from "@/components/contracts/snapshot-export-links";
+import Link from "next/link";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -26,17 +25,29 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default function ContractDetailLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ id: string }>;
 }) {
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <ContractSummaryCard contractIdPromise={params} />
-        <SnapshotExportLinks contractIdPromise={params} />
-      </div>
+    <div className="flex flex-col gap-4">
+      <nav
+        aria-label="Contract exports"
+        className="flex flex-wrap items-center gap-3 text-sm"
+      >
+        <Link
+          href={`/contracts/${id}/snapshot.json`}
+          download
+          className="rounded-md border border-neutral-300 px-3 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+        >
+          Download snapshot.json
+        </Link>
+        <Link
+          href={`/contracts/${id}/summary`}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+        >
+          View summary
+        </Link>
+      </nav>
       {children}
     </div>
   );
