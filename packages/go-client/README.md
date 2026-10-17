@@ -186,6 +186,35 @@ it := c.IterateContracts(ctx, &client.ListContractsParams{
 - **Watchlist**: `ListWatchlist`, `AddToWatchlist`, `RemoveFromWatchlist`, `GetWatchlistStatus`
 - **Advanced / Raw Access**: `c.Generated()` exposes the full underlying `*ClientWithResponses` for any route.
 
+## Examples
+
+Runnable examples live in [`examples/`](examples) and cover the four things most
+integrations need:
+
+| Example | Shows |
+| --- | --- |
+| [`examples/pagination`](examples/pagination) | Walking every page with the opaque `next_cursor`. |
+| [`examples/errors`](examples/errors) | Branching on the typed `JSON404` / `JSON429` error bodies. |
+| [`examples/sse`](examples/sse) | Consuming the `/api/v1/stream/events` Server-Sent Events stream. |
+| [`examples/webhooks`](examples/webhooks) | Verifying an `X-Sorolens-Signature` webhook ([docs/webhooks.md](../../docs/webhooks.md)). |
+
+The pagination, errors and SSE examples default to the public API; point them at
+a deployment with `SOROLENS_BASE_URL` (and `SOROLENS_API_KEY` when required):
+
+```sh
+SOROLENS_BASE_URL=http://localhost:8080 SOROLENS_API_KEY=sl_dev_... \
+  go run ./examples/pagination
+```
+
+The webhook example is self-contained and runs offline:
+
+```sh
+go run ./examples/webhooks
+```
+
+CI compiles every example and runs their self-checks as part of
+`go test ./...`.
+
 ## Regenerating
 
 ```sh

@@ -48,6 +48,10 @@ jobs:
           version: latest
           working-directory: ${{ matrix.module }}
           args: --timeout=10m
+      - name: Build SDK examples
+        if: matrix.module == 'packages/go-client'
+        working-directory: packages/go-client
+        run: go build ./examples/...
       - name: Start Postgres
         working-directory: ./
         run: |

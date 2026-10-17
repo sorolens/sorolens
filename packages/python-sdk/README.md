@@ -127,13 +127,42 @@ with Client(api_key="sk_live_...") as client:
 
 `AsyncClient` exposes the same names as coroutines.
 
+## Examples
+
+Runnable examples live in [`examples/`](examples). Each one has an offline
+`--self-test` mode that CI runs, and a normal mode that talks to a deployment.
+
+| Example | Shows |
+| --- | --- |
+| [`examples/pagination.py`](examples/pagination.py) | Walking every page with the opaque `next_cursor`. |
+| [`examples/errors.py`](examples/errors.py) | Branching on `NotFoundError`, `RateLimitError` and `APIError`, plus network failures. |
+| [`examples/sse.py`](examples/sse.py) | Reading the `/api/v1/stream/events` Server-Sent Events stream with `httpx`. |
+| [`examples/webhooks.py`](examples/webhooks.py) | Verifying an `X-Sorolens-Signature` webhook ([docs/webhooks.md](../../docs/webhooks.md)). |
+
+Point the pagination, errors and SSE examples at a deployment with
+`SOROLENS_BASE_URL` (and `SOROLENS_API_KEY` when required):
+
+```bash
+SOROLENS_BASE_URL=http://localhost:8080 SOROLENS_API_KEY=sl_dev_... \
+  python examples/pagination.py
+```
+
+The webhook example is self-contained and runs offline:
+
+```bash
+python examples/webhooks.py
+```
+
+Run any example against a built-in mock with `--self-test`, for example
+`python examples/pagination.py --self-test`.
+
 ## Development
 
 ```bash
 cd packages/python-sdk
 pip install -e ".[dev]"
 pytest
-ruff check src tests
+ruff check src tests examples
 ```
 
 The low-level client is generated, not edited by hand. Regenerate it from the
