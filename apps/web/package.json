@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --environment jsdom",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "gen:openapi-types": "openapi-typescript ../../docs/openapi.yaml -o lib/types/openapi.gen.ts"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
@@ -36,8 +37,11 @@
     "@types/react-dom": "^19.1.6",
     "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^4.3.0",
+    "ajv": "^8.20.0",
     "fake-indexeddb": "^6.2.5",
+    "js-yaml": "^5.5.0",
     "jsdom": "^26.1.0",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4.1.6",
     "typescript": "^5.5.0",
     "vitest": "^2.1.9",

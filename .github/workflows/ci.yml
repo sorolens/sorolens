@@ -109,6 +109,57 @@ jobs:
         run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
       - name: Verify no diff
         run: git diff --exit-code -- packages/go-client/internal
+
+  # ------------------------------------------------------------
+  # Web: generated OpenAPI types (issue #599): fail if the checked-in
+  # generated types under apps/web/lib/types/openapi.gen.ts are out of date
+  # with docs/openapi.yaml.
+  # ------------------------------------------------------------
+  openapi-types-stale:
+    name: Web OpenAPI types up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 11
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Regenerate web OpenAPI types
+        working-directory: apps/web
+        run: pnpm run gen:openapi-types
+      - name: Verify no diff
+        run: git diff --exit-code -- apps/web/lib/types/openapi.gen.ts apps/web/package.json
+
+  # ------------------------------------------------------------
+  # Web unit tests, including Playwright fixture validation against OpenAPI.
+  # ------------------------------------------------------------
+  web-test:
+    name: Web unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 11
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run web unit tests
+        working-directory: apps/web
+        run: pnpm test
+
   # ------------------------------------------------------------
   # SDK coverage guard (issue #556): every operation declared in
   # docs/openapi.yaml must be exposed by each SDK, or be documented as an

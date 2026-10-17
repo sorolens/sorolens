@@ -1,3 +1,5 @@
+import type { components as OpenAPITypes } from "./types/openapi.gen";
+
 export interface Contract {
   id: string;
   network: string;
@@ -115,14 +117,13 @@ export interface InvocationFrequencyPoint {
 
 export type StatsResponse = ContractStats;
 
-/** One day of averaged per-invocation resource usage (issue #184). */
-export interface ResourceTrendPoint {
-  date: string;
-  avg_cpu_insn: number;
-  avg_mem_byte: number;
-  avg_fee: number;
-  count: number;
-}
+/** One day of averaged per-invocation resource usage (issue #184).
+ *
+ * The server-side /resource-trend endpoint (issue #600) returns this shape.
+ * Generated from docs/openapi.yaml by `pnpm gen:openapi-types` (issue #599)
+ * and re-exported here so there is no hand-written duplicate.
+ */
+export type ResourceTrendPoint = OpenAPITypes["schemas"]["ResourceTrendPoint"];
 
 export interface ContractForecastPoint {
   date: string;

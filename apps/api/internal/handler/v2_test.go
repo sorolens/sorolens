@@ -345,6 +345,9 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		"POST /api/v1/watched-accounts":        true,
 		"GET /api/v1/watched-accounts":         true,
 		"DELETE /api/v1/watched-accounts/{id}": true,
+		// Server-side resource trend (issue #600): a v1-only perf endpoint
+		// consumed by the dashboard; no v2 envelope yet.
+		"GET /api/v1/contracts/{id}/resource-trend": true,
 		// Audit trail (issue #122): admin-only introspection of request logs,
 		// not part of the public v2 data surface.
 		"GET /api/v1/admin/audit": true,

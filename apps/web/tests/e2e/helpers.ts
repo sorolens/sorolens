@@ -52,6 +52,10 @@ export function defaultHandlers(): Record<string, Handler> {
       body: { groups: [], next_cursor: "" },
     }),
     "watchdog/stats": () => ({ status: 200, body: watchdogStats() }),
+    "resource-trend": () => ({
+      status: 200,
+      body: [resourceTrendPoint()],
+    }),
     // Must precede "contracts/" so the wizard's pre-flight check is not answered
     // by the contract-detail handler.
     "contracts/validate": (route) => {
@@ -412,15 +416,27 @@ export function contractEventRate() {
 
 export function storageEntry() {
   return {
+    contract_id: CONTRACT_ID,
+    network: "testnet",
     key_xdr: "AAAAAQ==",
     key_decoded: "balance",
     value_xdr: "AAAAAQ==",
     value_decoded: "1000",
     durability: "persistent",
-    live_until_ledger: null,
-    ledgers_until_expiry: null,
-    status: "live",
+    live_until_ledger: 120_500,
     last_modified_ledger: 120_400,
+    status: "live",
+    last_seen_at: "2026-07-03T08:00:00Z",
+  };
+}
+
+export function resourceTrendPoint() {
+  return {
+    date: "2026-07-03",
+    avg_cpu_insn: 2000,
+    avg_mem_byte: 600,
+    avg_fee: 150,
+    count: 2,
   };
 }
 

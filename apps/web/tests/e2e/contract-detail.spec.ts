@@ -5,6 +5,13 @@ test("contract detail renders header, stats and activity sections", async ({
   page,
 }) => {
   await mockApi(page);
+  const trendRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/resource-trend")) {
+      trendRequests.push(url.href);
+    }
+  });
   await page.goto(`/contracts/${CONTRACT_ID}`);
 
   await expectHeading(page, CONTRACT_ID.slice(0, 8), { exact: false });

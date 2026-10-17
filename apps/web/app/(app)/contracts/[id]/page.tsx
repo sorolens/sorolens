@@ -450,6 +450,17 @@ function ContractDetailContent({ id }: { id: string }) {
       </section>
 
       <section className="mb-8">
+        <h2 className="mb-4 text-xl font-semibold">Resource usage trend</h2>
+        <div className="rounded-lg bg-[var(--color-bg-card)] p-4">
+          {trendLoading ? (
+            <ChartSkeleton />
+          ) : (
+            <ResourceTrendChart data={trend} />
+          )}
+        </div>
+      </section>
+
+      <section className="mb-8">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Activity</h2>
           <WindowSelector selected={window} onChange={setWindow} />
