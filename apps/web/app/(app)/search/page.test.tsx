@@ -50,7 +50,7 @@ const CONTRACT_ID = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 const TX_HASH = "a".repeat(64);
 
 function renderWithQuery(query: string) {
-  searchParams.clear();
+  for (const key of Array.from(searchParams.keys())) searchParams.delete(key);
   if (query) searchParams.set("q", query);
   return render(<SearchPage />);
 }

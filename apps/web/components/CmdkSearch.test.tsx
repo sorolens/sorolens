@@ -60,7 +60,7 @@ describe("CmdkSearch", () => {
   it("exposes desktop and mobile triggers", () => {
     render(<CmdkSearch />);
     expect(
-      screen.getAllByRole("button", { name: "Search contracts (Ctrl+K)" })
+      screen.getAllByRole("button", { name: "Search (Ctrl+K)" })
     ).toHaveLength(2);
   });
 

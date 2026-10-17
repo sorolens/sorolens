@@ -106,6 +106,6 @@ export default async function ContractOgImage({ params }: Props) {
         )}
       </div>
     </div>,
-    { ...size, alt: card.alt }
+    { ...size }
   );
 }

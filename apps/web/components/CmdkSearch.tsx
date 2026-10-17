@@ -111,7 +111,7 @@ export function CmdkSearch() {
     <>
       <button
         onClick={() => setOpen(true)}
-        aria-label="Search contracts (Ctrl+K)"
+        aria-label="Search (Ctrl+K)"
         className="hidden md:flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--color-text-secondary)] bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-md hover:border-[var(--color-text-secondary)] transition-colors"
       >
         <SearchIcon />
@@ -124,7 +124,7 @@ export function CmdkSearch() {
       {/* Mobile entry point: the shortcut is keyboard-only, so expose a button. */}
       <button
         onClick={() => setOpen(true)}
-        aria-label="Search contracts (Ctrl+K)"
+        aria-label="Search (Ctrl+K)"
         className="md:hidden flex items-center justify-center h-9 w-9 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
       >
         <SearchIcon />

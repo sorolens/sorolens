@@ -26,8 +26,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
-      - src: ../LICENSE
-        dst: LICENSE
+      - LICENSE
 
 checksum:
   name_template: "checksums.txt"
