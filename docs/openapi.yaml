@@ -1046,6 +1046,47 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/contracts/{id}/resource-trend:
+    get:
+      tags: [Stats]
+      summary: Per-contract resource usage trend (bucketed by day)
+      description: |
+        Returns one bucket per calendar day for the most recent `days` days,
+        averaging CPU instructions, memory bytes and fees charged across the
+        contract's invocations. Days with no invocations are zero-filled so
+        the chart's x-axis stays contiguous. Aggregation happens server-side
+        in a single query, replacing client-side paging over /invocations
+        (issue #600).
+      operationId: getContractResourceTrend
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 30
+            maximum: 3650
+          description: Number of days to bucket (default 30; capped at 3650).
+      responses:
+        "200":
+          description: Bucketed CPU, memory and fee by day
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ResourceTrendPoint"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/contracts/{id}/forecast:
     get:
       tags: [Forecast]
@@ -5310,6 +5351,23 @@ components:
           format: int64
         window_duration:
           type: string
+
+    ResourceTrendPoint:
+      type: object
+      required: [date, avg_cpu_insn, avg_mem_byte, avg_fee, count]
+      description: One day of averaged per-invocation resource usage.
+      properties:
+        date:
+          type: string
+          example: "2026-07-03"
+        avg_cpu_insn:
+          type: number
+        avg_mem_byte:
+          type: number
+        avg_fee:
+          type: number
+        count:
+          type: integer
 
     ForecastPoint:
       type: object

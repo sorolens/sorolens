@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState, type MouseEvent } from "react";
 
 export interface CopyButtonProps {

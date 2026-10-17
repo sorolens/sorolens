@@ -763,6 +763,34 @@ Paginated invocation list.
 
 ---
 
+#### `GET /api/v1/contracts/:id/resource-trend`
+
+Daily resource-usage aggregates for a contract's chart. Aggregation is done
+server-side in one query rather than paging through individual invocations.
+
+**Query params:** `days` (optional, default 30, minimum 1, capped at 3650).
+Buckets use UTC calendar days and include today; days with no invocations are
+returned with zero values. Each average is per invocation, and `avg_fee` is in
+stroops.
+
+**Response `200`:**
+
+```json
+[
+  {
+    "date": "2026-07-26",
+    "avg_cpu_insn": 4883530,
+    "avg_mem_byte": 2298162,
+    "avg_fee": 123456,
+    "count": 4
+  }
+]
+```
+
+Invalid non-positive or non-integer `days` values return `422`.
+
+---
+
 #### `GET /api/v1/contracts/:id/invocations/:tx_hash`
 
 Full detail for a single invocation, including all associated events.

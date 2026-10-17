@@ -10,7 +10,7 @@
   --color-border: #e2e8f0;
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
-  --color-accent: #3b82f6;
+  --color-accent: #1d4ed8;
 }
 
 :root[data-theme="dark"] {
@@ -27,4 +27,65 @@
 body {
   background-color: var(--color-bg-page);
   color: var(--color-text-primary);
+}
+
+.markdown-content h1 {
+  margin-bottom: 1.25rem;
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.markdown-content h2 {
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.markdown-content p,
+.markdown-content li {
+  color: var(--color-text-secondary);
+  line-height: 1.75;
+}
+
+.markdown-content p + p {
+  margin-top: 1rem;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0.75rem 0 1.25rem;
+  padding-left: 1.5rem;
+}
+
+.markdown-content ul {
+  list-style: disc;
+}
+
+.markdown-content ol {
+  list-style: decimal;
+}
+
+.markdown-content a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.markdown-content pre {
+  margin: 1rem 0 1.5rem;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: rgb(0 0 0 / 0.2);
+  padding: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.markdown-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }

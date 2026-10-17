@@ -65,6 +65,7 @@ type MockStore struct {
 	GetContractStatsErr         error
 	RecentEventsErr             error
 	RecentInvocationsErr        error
+	ResourceTrendErr            error
 	CreateAPIKeyErr             error
 	GetAPIKeyErr                error
 	UpsertUserErr               error
@@ -683,6 +684,64 @@ func (m *MockStore) GetContractStats(_ context.Context, contractID, window strin
 		}
 	}
 	return cs, nil
+}
+
+// ResourceTrend aggregates the in-memory invocations into per-day buckets
+// (midnight UTC), averaging cpu_insn, mem_byte and resource_fee_charged for
+// the given contract over the most recent `days` days. Mirrors the postgres
+// generate_series behaviour: every day in the window appears, empty days as
+// zeroes, oldest first.
+func (m *MockStore) ResourceTrend(_ context.Context, contractID string, days int) ([]ResourceTrendBucket, error) {
+	if m.ResourceTrendErr != nil {
+		return nil, m.ResourceTrendErr
+	}
+	if days <= 0 {
+		days = 30
+	}
+	if days > 3650 {
+		days = 3650
+	}
+	now := time.Now().UTC()
+	dayOf := func(t time.Time) time.Time {
+		y, mo, d := t.UTC().Date()
+		return time.Date(y, mo, d, 0, 0, 0, 0, time.UTC)
+	}
+	today := dayOf(now)
+	firstDay := today.AddDate(0, 0, -(days - 1))
+	type dayAgg struct {
+		cpu, mem, fee int64
+		count         int
+	}
+	sum := make(map[time.Time]dayAgg)
+	for _, inv := range m.invocations {
+		day := dayOf(inv.LedgerClosedAt)
+		if inv.ContractID != contractID || day.Before(firstDay) || day.After(today) {
+			continue
+		}
+		s := sum[day]
+		s.cpu += inv.CPUInsn
+		s.mem += inv.MemByte
+		s.fee += inv.ResourceFeeCharged
+		s.count++
+		sum[day] = s
+	}
+	var out []ResourceTrendBucket
+	for i := 0; i < days; i++ {
+		d := firstDay.AddDate(0, 0, i)
+		s, ok := sum[d]
+		if !ok {
+			out = append(out, ResourceTrendBucket{Day: d})
+			continue
+		}
+		out = append(out, ResourceTrendBucket{
+			Day:         d,
+			AvgCPUInsn:  float64(s.cpu) / float64(s.count),
+			AvgMemByte:  float64(s.mem) / float64(s.count),
+			AvgFee:      float64(s.fee) / float64(s.count),
+			Count:       s.count,
+		})
+	}
+	return out, nil
 }
 
 // DailyAggregates aggregates the in-memory events/invocations into per-day

@@ -1265,6 +1265,15 @@ type ReportSubscription struct {
 // ReportSubscriptionFrequency defines model for ReportSubscription.Frequency.
 type ReportSubscriptionFrequency string
 
+// ResourceTrendPoint One day of averaged per-invocation resource usage.
+type ResourceTrendPoint struct {
+	AvgCpuInsn float32 `json:"avg_cpu_insn"`
+	AvgFee     float32 `json:"avg_fee"`
+	AvgMemByte float32 `json:"avg_mem_byte"`
+	Count      int     `json:"count"`
+	Date       string  `json:"date"`
+}
+
 // RoleError defines model for RoleError.
 type RoleError struct {
 	Error    string `json:"error"`
@@ -1984,6 +1993,12 @@ type ListContractInvocationsParamsNetwork string
 
 // ListContractInvocationsParamsStatus defines parameters for ListContractInvocations.
 type ListContractInvocationsParamsStatus string
+
+// GetContractResourceTrendParams defines parameters for GetContractResourceTrend.
+type GetContractResourceTrendParams struct {
+	// Days Number of days to bucket (default 30; capped at 3650).
+	Days *int `form:"days,omitempty" json:"days,omitempty"`
+}
 
 // GetContractSnapshotParams defines parameters for GetContractSnapshot.
 type GetContractSnapshotParams struct {
@@ -3143,6 +3158,9 @@ type ClientInterface interface {
 
 	UpdateContractNote(ctx context.Context, id ContractID, noteID NoteID, body UpdateContractNoteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetContractResourceTrend request
+	GetContractResourceTrend(ctx context.Context, id ContractID, params *GetContractResourceTrendParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetContractSnapshot request
 	GetContractSnapshot(ctx context.Context, id ContractID, params *GetContractSnapshotParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -3952,6 +3970,18 @@ func (c *Client) UpdateContractNoteWithBody(ctx context.Context, id ContractID, 
 
 func (c *Client) UpdateContractNote(ctx context.Context, id ContractID, noteID NoteID, body UpdateContractNoteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateContractNoteRequest(c.Server, id, noteID, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetContractResourceTrend(ctx context.Context, id ContractID, params *GetContractResourceTrendParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetContractResourceTrendRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -7293,6 +7323,62 @@ func NewUpdateContractNoteRequestWithBody(server string, id ContractID, noteID N
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetContractResourceTrendRequest generates requests for GetContractResourceTrend
+func NewGetContractResourceTrendRequest(server string, id ContractID, params *GetContractResourceTrendParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/contracts/%s/resource-trend", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Days != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "days", runtime.ParamLocationQuery, *params.Days); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -13096,6 +13182,9 @@ type ClientWithResponsesInterface interface {
 
 	UpdateContractNoteWithResponse(ctx context.Context, id ContractID, noteID NoteID, body UpdateContractNoteJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateContractNoteResponse, error)
 
+	// GetContractResourceTrendWithResponse request
+	GetContractResourceTrendWithResponse(ctx context.Context, id ContractID, params *GetContractResourceTrendParams, reqEditors ...RequestEditorFn) (*GetContractResourceTrendResponse, error)
+
 	// GetContractSnapshotWithResponse request
 	GetContractSnapshotWithResponse(ctx context.Context, id ContractID, params *GetContractSnapshotParams, reqEditors ...RequestEditorFn) (*GetContractSnapshotResponse, error)
 
@@ -14305,6 +14394,31 @@ func (r UpdateContractNoteResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateContractNoteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetContractResourceTrendResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]ResourceTrendPoint
+	JSON422      *InvalidInput
+	JSON429      *RateLimited
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetContractResourceTrendResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetContractResourceTrendResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -17526,6 +17640,15 @@ func (c *ClientWithResponses) UpdateContractNoteWithResponse(ctx context.Context
 	return ParseUpdateContractNoteResponse(rsp)
 }
 
+// GetContractResourceTrendWithResponse request returning *GetContractResourceTrendResponse
+func (c *ClientWithResponses) GetContractResourceTrendWithResponse(ctx context.Context, id ContractID, params *GetContractResourceTrendParams, reqEditors ...RequestEditorFn) (*GetContractResourceTrendResponse, error) {
+	rsp, err := c.GetContractResourceTrend(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetContractResourceTrendResponse(rsp)
+}
+
 // GetContractSnapshotWithResponse request returning *GetContractSnapshotResponse
 func (c *ClientWithResponses) GetContractSnapshotWithResponse(ctx context.Context, id ContractID, params *GetContractSnapshotParams, reqEditors ...RequestEditorFn) (*GetContractSnapshotResponse, error) {
 	rsp, err := c.GetContractSnapshot(ctx, id, params, reqEditors...)
@@ -20217,6 +20340,53 @@ func ParseUpdateContractNoteResponse(rsp *http.Response) (*UpdateContractNoteRes
 			return nil, err
 		}
 		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetContractResourceTrendResponse parses an HTTP response from a GetContractResourceTrendWithResponse call
+func ParseGetContractResourceTrendResponse(rsp *http.Response) (*GetContractResourceTrendResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetContractResourceTrendResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []ResourceTrendPoint
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest InvalidInput
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest InternalError

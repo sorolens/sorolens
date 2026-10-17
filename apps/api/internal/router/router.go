@@ -303,6 +303,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/invocations/{tx_hash}/trace", h.GetInvocationTrace)
 		get("/contracts/{id}/storage", h.ListStorageEntries)
 		get("/contracts/{id}/stats", h.ContractStats)
+		// Server-side resource-usage trend (issue #600): bucketed CPU, memory
+		// and fee by day in a single request, replacing client-side paging.
+		get("/contracts/{id}/resource-trend", h.ResourceTrend)
 		get("/contracts/{id}/forecast", h.ContractForecast)
 		get("/contracts/{id}/snapshot", h.ContractSnapshot)
 		get("/contracts/{id}/snapshot.json", h.ContractSnapshotExport)

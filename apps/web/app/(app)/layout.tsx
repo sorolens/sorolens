@@ -40,7 +40,10 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             Sorolens
           </Link>
           <div className="flex flex-wrap items-center gap-4">
-            <nav className="flex gap-4 text-sm">
+            <nav
+              aria-label="Dashboard navigation"
+              className="flex flex-wrap gap-4 text-sm"
+            >
               <Link
                 href="/live"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
@@ -88,6 +91,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
                 {t("nav.playground")}
+              </Link>
+              <Link
+                href="/docs"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                Docs
               </Link>
               <Link
                 href="/settings"

@@ -27,6 +27,7 @@ import type {
   RecentEventsResponse,
   MonitoredContractsResponse,
   ReportFormat,
+  ResourceTrendPoint,
   StatsResponse,
   StorageResponse,
   TimeWindow,
@@ -405,6 +406,18 @@ export function getContractStats(
 ): Promise<StatsResponse> {
   return fetchJson<StatsResponse>(
     `${API_URL}/api/v1/contracts/${id}/stats?window=${window}`
+  );
+}
+
+// Server-side resource usage trend (issue #600): one bucket per calendar day,
+// averaged cpu/mem/fee, fetched in a single request instead of paging through
+// /invocations client-side.
+export function getContractResourceTrend(
+  id: string,
+  days = 30
+): Promise<ResourceTrendPoint[]> {
+  return fetchJson<ResourceTrendPoint[]>(
+    `${API_URL}/api/v1/contracts/${id}/resource-trend?days=${days}`
   );
 }
 

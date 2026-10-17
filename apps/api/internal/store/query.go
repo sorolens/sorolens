@@ -118,6 +118,17 @@ type DailyAggregate struct {
 	Events      float64
 }
 
+// ResourceTrendBucket holds one calendar day of averaged per-invocation
+// resource usage (midnight UTC). Days with no invocations yield a zero bucket
+// so a chart's x-axis stays contiguous.
+type ResourceTrendBucket struct {
+	Day         time.Time // midnight UTC
+	AvgCPUInsn  float64
+	AvgMemByte  float64
+	AvgFee      float64
+	Count       int
+}
+
 // QueryStore provides read-only querying methods needed by the HTTP API.
 type QueryStore interface {
 	ListEvents(ctx context.Context, contractID, cursor string, limit int, f EventFilters) ([]Event, string, error)
@@ -172,6 +183,12 @@ type QueryStore interface {
 	// yield a zero bucket, providing a contiguous series to the indexer's
 	// anomaly detector.
 	RecentHourlyActivity(ctx context.Context, contractID string, hours int) ([]HourlyActivity, error)
+	// ResourceTrend returns one bucket per calendar day for the most recent
+	// `days` days (midnight UTC, oldest first), averaging cpu_insn,
+	// mem_byte and resource_fee_charged across the contract's invocations.
+	// Days with no invocations yield a zero bucket, so the trend chart's
+	// x-axis stays contiguous without paging through raw invocations.
+	ResourceTrend(ctx context.Context, contractID string, days int) ([]ResourceTrendBucket, error)
 }
 
 // ---- ListEvents --------------------------------------------------------------
@@ -854,6 +871,73 @@ func (s *postgresStore) RecentHourlyActivity(ctx context.Context, contractID str
 		a.CPU = int64(cpu)
 		a.Fees = int64(fees)
 		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// ResourceTrend queries one bucket per calendar day for the most recent
+// `days` days (midnight UTC, oldest first), averaging cpu_insn, mem_byte and
+// resource_fee_charged across the contract's invocations. generate_series
+// guarantees a zero-filled bucket for every day in the window even when the
+// contract was idle.
+func (s *postgresStore) ResourceTrend(ctx context.Context, contractID string, days int) ([]ResourceTrendBucket, error) {
+	if days <= 0 {
+		days = 30
+	}
+	if days > 3650 {
+		days = 3650
+	}
+	rows, err := s.pool.Query(ctx, `
+		WITH bounds AS (
+			SELECT (now() AT TIME ZONE 'UTC')::date - ($2::int - 1) AS first_day,
+			       (now() AT TIME ZONE 'UTC')::date AS last_day
+		),
+		buckets AS (
+			SELECT generate_series(first_day, last_day, interval '1 day')::date AS day
+			FROM bounds
+		)
+		SELECT b.day,
+		       COALESCE(inv.avg_cpu_insn, 0) AS avg_cpu_insn,
+		       COALESCE(inv.avg_mem_byte, 0) AS avg_mem_byte,
+		       COALESCE(inv.avg_fee, 0) AS avg_fee,
+		       COALESCE(inv.count, 0) AS count
+		FROM buckets b
+		LEFT JOIN (
+			SELECT (i.ledger_closed_at AT TIME ZONE 'UTC')::date AS day,
+			       AVG(i.cpu_insn) AS avg_cpu_insn,
+			       AVG(i.mem_byte) AS avg_mem_byte,
+			       AVG(i.resource_fee_charged) AS avg_fee,
+			       COUNT(*) AS count
+			FROM invocations i
+			CROSS JOIN bounds
+			WHERE i.contract_id = $1
+			  AND i.ledger_closed_at >= bounds.first_day::timestamp AT TIME ZONE 'UTC'
+			  AND i.ledger_closed_at < (bounds.last_day + 1)::timestamp AT TIME ZONE 'UTC'
+			GROUP BY 1
+		) inv ON inv.day = b.day
+		ORDER BY b.day ASC`,
+		contractID, days,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("resource trend: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ResourceTrendBucket
+	for rows.Next() {
+		var b ResourceTrendBucket
+		var day time.Time
+		var cpu, mem, fee float64
+		var count int
+		if err := rows.Scan(&day, &cpu, &mem, &fee, &count); err != nil {
+			return nil, fmt.Errorf("resource trend scan: %w", err)
+		}
+		b.Day = day
+		b.AvgCPUInsn = cpu
+		b.AvgMemByte = mem
+		b.AvgFee = fee
+		b.Count = count
+		out = append(out, b)
 	}
 	return out, rows.Err()
 }
