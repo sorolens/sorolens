@@ -127,7 +127,6 @@ type AlertsResponse struct {
 	Alerts []ContractAlert `json:"alerts"`
 }
 
-
 // MonitoredContract mirrors the API watchdog monitored-contract response.
 type MonitoredContract struct {
 	ContractID    string     `json:"contract_id"`
@@ -162,4 +161,50 @@ type SorolensError struct {
 
 func (e *SorolensError) Error() string {
 	return e.Message
+}
+
+// ContractReport mirrors the API report response for a contract's monthly SLA.
+type ContractReport struct {
+	ContractID           string     `json:"contract_id"`
+	Month                string     `json:"month"`
+	UptimePct            float64    `json:"uptime_pct"`
+	TotalChecks          int64      `json:"total_checks"`
+	HealthyChecks        int64      `json:"healthy_checks"`
+	Incidents            int64      `json:"incidents"`
+	MTTRSeconds          float64    `json:"mttr_seconds"`
+	TotalDowntimeSeconds float64    `json:"total_downtime_seconds"`
+	LongestOutageSeconds float64    `json:"longest_outage_seconds"`
+	OngoingOutage        bool       `json:"ongoing_outage"`
+	CriticalAlerts       int64      `json:"critical_alerts"`
+	WarningAlerts        int64      `json:"warning_alerts"`
+	InfoAlerts           int64      `json:"info_alerts"`
+	TotalAlerts          int64      `json:"total_alerts"`
+	FirstCheck           *time.Time `json:"first_check"`
+	LastCheck            *time.Time `json:"last_check"`
+	Signed               bool       `json:"signed"`
+	Signature            string     `json:"signature,omitempty"`
+	SignatureAlgorithm   string     `json:"signature_algorithm,omitempty"`
+	SamplingNote         string     `json:"sampling_note,omitempty"`
+}
+
+// ContractSnapshot mirrors the API contract storage snapshot at a historical ledger.
+type ContractSnapshot struct {
+	ContractID         string         `json:"contract_id"`
+	Network            string         `json:"network"`
+	Ledger             uint32         `json:"ledger"`
+	FirstTrackedLedger uint32         `json:"first_tracked_ledger"`
+	Storage            []StorageEntry `json:"storage"`
+	LastEvent          *Event         `json:"last_event"`
+}
+
+// ContractSnapshotExport mirrors the portable contract snapshot export document.
+type ContractSnapshotExport struct {
+	SchemaVersion int            `json:"schema_version"`
+	ContractID    string         `json:"contract_id"`
+	Network       string         `json:"network"`
+	Ledger        uint32         `json:"ledger"`
+	Metadata      Contract       `json:"metadata"`
+	Storage       []StorageEntry `json:"storage"`
+	Events        []Event        `json:"events"`
+	Summary       any            `json:"summary"`
 }

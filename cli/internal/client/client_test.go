@@ -225,7 +225,6 @@ func TestListAlertsSeverityFilter(t *testing.T) {
 	}
 }
 
-
 func TestGetMonitoredContractHappyPath(t *testing.T) {
 	want := client.MonitoredContract{
 		ContractID:    "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
@@ -379,5 +378,144 @@ func TestStreamEventsNon2xxReturnsSorolensError(t *testing.T) {
 	}
 	if se.Code != "UNAVAILABLE" {
 		t.Errorf("Code: got %q, want UNAVAILABLE", se.Code)
+	}
+}
+
+func TestGetContractReportHappyPath(t *testing.T) {
+	contractID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	want := client.ContractReport{
+		ContractID:    contractID,
+		Month:         "2026-02",
+		UptimePct:     99.95,
+		TotalChecks:   2000,
+		HealthyChecks: 1999,
+		Incidents:     1,
+		Signed:        true,
+		Signature:     "abcdef",
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/reports/"+contractID {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("month"); got != "2026-02" {
+			t.Errorf("month query: got %q, want 2026-02", got)
+		}
+		if got := r.URL.Query().Get("format"); got != "json" {
+			t.Errorf("format query: got %q, want json", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(want)
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, 5*time.Second)
+	got, err := c.GetContractReport(context.Background(), contractID, "2026-02")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.ContractID != want.ContractID {
+		t.Errorf("ContractID: got %q, want %q", got.ContractID, want.ContractID)
+	}
+	if got.UptimePct != want.UptimePct {
+		t.Errorf("UptimePct: got %f, want %f", got.UptimePct, want.UptimePct)
+	}
+}
+
+func TestGetContractReportNon2xxReturnsSorolensError(t *testing.T) {
+	contractID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]string{
+				"code":    "NOT_IMPLEMENTED",
+				"message": "sla reporting not supported",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, 5*time.Second)
+	_, err := c.GetContractReport(context.Background(), contractID, "2026-02")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	se, ok := err.(*client.SorolensError)
+	if !ok {
+		t.Fatalf("expected *SorolensError, got %T", err)
+	}
+	if se.Status != http.StatusNotImplemented {
+		t.Errorf("Status: got %d, want 501", se.Status)
+	}
+}
+
+func TestGetContractSnapshotHappyPath(t *testing.T) {
+	contractID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	want := client.ContractSnapshot{
+		ContractID: contractID,
+		Network:    "testnet",
+		Ledger:     500,
+		Storage: []client.StorageEntry{
+			{ContractID: contractID, KeyXDR: "AAAA", Durability: "persistent", LiveUntilLedger: 1000},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/contracts/"+contractID+"/snapshot" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("ledger"); got != "500" {
+			t.Errorf("ledger query: got %q, want 500", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(want)
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, 5*time.Second)
+	got, err := c.GetContractSnapshot(context.Background(), contractID, 500)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Ledger != 500 {
+		t.Errorf("Ledger: got %d, want 500", got.Ledger)
+	}
+	if len(got.Storage) != 1 {
+		t.Fatalf("Storage count: got %d, want 1", len(got.Storage))
+	}
+}
+
+func TestGetContractSnapshotExportHappyPath(t *testing.T) {
+	contractID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	want := client.ContractSnapshotExport{
+		SchemaVersion: 1,
+		ContractID:    contractID,
+		Network:       "testnet",
+		Ledger:        600,
+		Storage: []client.StorageEntry{
+			{ContractID: contractID, KeyXDR: "BBBB", Durability: "instance", LiveUntilLedger: 2000},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/contracts/"+contractID+"/snapshot.json" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(want)
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, 5*time.Second)
+	got, err := c.GetContractSnapshotExport(context.Background(), contractID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Ledger != 600 {
+		t.Errorf("Ledger: got %d, want 600", got.Ledger)
+	}
+	if len(got.Storage) != 1 {
+		t.Fatalf("Storage count: got %d, want 1", len(got.Storage))
 	}
 }

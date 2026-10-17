@@ -14,6 +14,7 @@ import (
 
 	"github.com/sorolens/sorolens/services/indexer/internal/pgstore"
 	"github.com/sorolens/sorolens/services/indexer/internal/poller"
+	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
 )
 
 // mockSubscriptionLister stands in for *pgstore.Store so the dispatch path can
@@ -94,6 +95,8 @@ func TestExpiryNotifierDeliversSummaryToConfiguredWebhook(t *testing.T) {
 	}))
 	defer srv.Close()
 	srvURL = srv.URL
+	// httptest servers listen on loopback, which the default client refuses.
+	t.Cleanup(watchdog.SetHTTPClient(&http.Client{Timeout: 5 * time.Second}))
 
 	lister := &mockSubscriptionLister{subs: []pgstore.AlertSubscription{
 		{ID: "sub-1", ContractID: "CDXQ", WebhookURL: srvURL, SeverityFilter: "Critical", ChannelType: "webhook"},
