@@ -120,6 +120,28 @@ Every operation returns `Result<T, Error>`. Non-2xx responses become
 Local validation failures (an empty contract ID, an out-of-range `horizon` or
 `limit`) are rejected with `Error::InvalidRequest` **before** any network call.
 
+## Examples
+
+Runnable examples live in [`examples/`](examples) and run with
+`cargo run --example <name>`:
+
+| Example | Shows |
+| --- | --- |
+| [`pagination`](examples/pagination.rs) | Walking every page of `list_contracts` with the opaque `next_cursor`. |
+| [`errors`](examples/errors.rs) | Handling `Error::Api` responses (404 not found, 429 rate limited). |
+| [`sse`](examples/sse.rs) | Reading the `/api/v1/stream/events` Server-Sent Events stream with `reqwest`. The SDK's `stream_contract_events` is a short-poll, not SSE. |
+| [`webhooks`](examples/webhooks.rs) | Verifying an `X-Sorolens-Signature` webhook ([docs/webhooks.md](../../docs/webhooks.md)). |
+
+The pagination, errors and SSE examples default to the public API; point them at
+a deployment with `SOROLENS_BASE_URL` (and `SOROLENS_API_KEY` when required).
+Each also has an offline check, which is what CI runs:
+
+```sh
+cargo run --example pagination -- --self-test
+```
+
+The webhook example is self-contained and always runs offline.
+
 ## Testing
 
 The suite runs entirely offline: recorded responses shaped like the schemas in

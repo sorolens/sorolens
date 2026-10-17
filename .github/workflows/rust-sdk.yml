@@ -44,6 +44,13 @@ jobs:
       - name: cargo test --doc
         working-directory: packages/rust-sdk
         run: cargo test --doc
+      - name: Run examples (offline self-test)
+        working-directory: packages/rust-sdk
+        run: |
+          for ex in pagination errors sse webhooks; do
+            echo "== $ex"
+            timeout 60 cargo run --quiet --all-features --example "$ex" -- --self-test
+          done
 
   # ------------------------------------------------------------
   # Publish sorolens-sdk to crates.io when a rust-sdk-v* tag is pushed.

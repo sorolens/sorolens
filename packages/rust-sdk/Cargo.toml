@@ -29,5 +29,7 @@ serde_json = "1"
 thiserror = "2"
 
 [dev-dependencies]
+hmac = "0.12"
 httpmock = "0.7"
+sha2 = "0.10"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
