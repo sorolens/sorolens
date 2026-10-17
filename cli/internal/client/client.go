@@ -237,11 +237,15 @@ func (c *Client) ListAlerts(ctx context.Context, opts ListAlertsOpts) (AlertsRes
 }
 
 // TrackContract registers a contract for tracking.
-func (c *Client) TrackContract(ctx context.Context, contractID, alias, network string) (Contract, error) {
+// When preset is non-empty it must be a known preset type (e.g. "dex",
+// "lending", "stablecoin"). The API validates the preset against its built-in
+// registry and stores it on the contract row.
+func (c *Client) TrackContract(ctx context.Context, contractID, alias, network, preset string) (Contract, error) {
 	body := map[string]string{
 		"id":      contractID,
 		"network": network,
 		"label":   alias,
+		"preset":  preset,
 	}
 	var out Contract
 	err := c.do(ctx, http.MethodPost, "/api/v1/contracts", body, &out)
