@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
-import { ContractSummaryCard } from "@/components/contracts/contract-summary-card";
-import { SnapshotExportLinks } from "@/components/contracts/snapshot-export-links";
+import { ContractSummaryCard } from "./ContractSummaryCard";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -37,7 +36,6 @@ export default async function ContractDetailLayout({
   return (
     <>
       <ContractSummaryCard contractId={id} />
-      <SnapshotExportLinks contractId={id} />
       {children}
     </>
   );

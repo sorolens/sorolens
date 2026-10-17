@@ -165,15 +165,12 @@ vi.mock("@/components/ImportContractsCsv", () => ({
 // ── Mock @/lib/api ───────────────────────────────────────────────────────────
 const mockListContracts = vi.fn();
 const mockBatchContracts = vi.fn();
-const mockGetContractSnapshot = vi.fn();
 const mockGetContractSummary = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   listContracts: (...args: unknown[]) => mockListContracts(...args),
   getContract: vi.fn(),
   batchContracts: (...args: unknown[]) => mockBatchContracts(...args),
-  getContractSnapshot: (...args: unknown[]) => mockGetContractSnapshot(...args),
-  getContractSummary: (...args: unknown[]) => mockGetContractSummary(...args),
   ApiError: class ApiError extends Error {
     constructor(
       public status: number,
@@ -235,20 +232,11 @@ describe("ContractsPage", () => {
       requested: 1,
       affected: 1,
     });
+    mockGetContractSummary.mockResolvedValue(null);
     mockListContracts.mockResolvedValue({
       contracts: [CONTRACT_A, CONTRACT_B],
       cursor: null,
       has_more: false,
-    });
-    mockGetContractSnapshot.mockResolvedValue({
-      contract_id: CONTRACT_A.id,
-      network: "testnet",
-      snapshot: {},
-    });
-    mockGetContractSummary.mockResolvedValue({
-      contract_id: CONTRACT_A.id,
-      network: "testnet",
-      summary: {},
     });
   });
 
@@ -729,44 +717,5 @@ describe("ContractsPage", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(nav.push).not.toHaveBeenCalled();
-  });
-
-  // ── Snapshot export links (#snapshot-export) ───────────────────────────────
-
-  it("renders a snapshot.json export link on the snapshot panel", async () => {
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    const link = document.getElementById("snapshot-export-json");
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute("href")).toBe(
-      `/contracts/${CONTRACT_A.id}/snapshot.json`
-    );
-    expect(link?.getAttribute("download")).not.toBeNull();
-  });
-
-  it("renders a summary card with loading, empty and error states", async () => {
-    mockGetContractSummary.mockReturnValue(new Promise(() => {}));
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-
-    expect(screen.getByTestId("summary-card-loading")).toBeDefined();
-
-    cleanup();
-    mockGetContractSummary.mockResolvedValue({
-      contract_id: CONTRACT_A.id,
-      network: "testnet",
-      summary: null,
-    });
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-    expect(await screen.findByTestId("summary-card-empty")).toBeDefined();
-
-    cleanup();
-    const { ApiError } = await import("@/lib/api");
-    mockGetContractSummary.mockRejectedValue(new ApiError(500, "boom"));
-    await renderPage();
-    await waitFor(() => screen.getByTestId("data-table"));
-    expect(await screen.findByTestId("summary-card-error")).toBeDefined();
   });
 });

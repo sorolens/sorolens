@@ -19,11 +19,11 @@ import type {
   ContractDetail,
   ContractEvent,
   ContractStats,
+  ContractSummary,
   StorageEntry,
   VolumePoint,
   ResourceTrendPoint,
   TimeWindow,
-  ContractSummary,
 } from "@/lib/types";
 import { getActivitySeries } from "@/lib/activitySeries";
 import { ensureSession } from "@/lib/user";
@@ -43,8 +43,8 @@ import { EventsTable } from "@/components/EventsTable";
 import { StoragePanel } from "@/components/StoragePanel";
 import { ContractNotesPanel } from "@/components/ContractNotesPanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
-import { HealthScoreCard } from "@/components/HealthScoreCard";
 import { ContractSummaryCard } from "@/components/ContractSummaryCard";
+import { HealthScoreCard } from "@/components/HealthScoreCard";
 import { AddToGroup } from "@/components/AddToGroup";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { CallTracePanel } from "@/components/CallTracePanel";
@@ -66,10 +66,6 @@ function ContractDetailContent({ id }: { id: string }) {
   const [contractError, setContractError] = useState<string | null>(null);
   const [contractLoading, setContractLoading] = useState(true);
 
-  const [summary, setSummary] = useState<ContractSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(true);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
-
   // User-defined tags are edited inline on this page.
   const [tags, setTags] = useState<string[]>([]);
   const [tagError, setTagError] = useState<string | null>(null);
@@ -90,6 +86,10 @@ function ContractDetailContent({ id }: { id: string }) {
   const [eventsHasMore, setEventsHasMore] = useState(false);
   const [showFailedOnly, setShowFailedOnly] = useState(false);
 
+  const [summary, setSummary] = useState<ContractSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
   const [storage, setStorage] = useState<StorageEntry[]>([]);
   const [storageLoading, setStorageLoading] = useState(true);
   const [storageCursor, setStorageCursor] = useState<string | null>(null);
@@ -104,34 +104,6 @@ function ContractDetailContent({ id }: { id: string }) {
       });
     },
   });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadSummary() {
-      setSummaryLoading(true);
-      setSummaryError(null);
-      try {
-        const data = await getContractSummary(id);
-        if (!cancelled) setSummary(data);
-      } catch (err) {
-        if (!cancelled) {
-          setSummaryError(
-            err instanceof ApiError && err.status === 404
-              ? "No summary available for this contract yet."
-              : "Failed to load contract summary."
-          );
-        }
-      } finally {
-        if (!cancelled) setSummaryLoading(false);
-      }
-    }
-
-    loadSummary();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,6 +231,28 @@ function ContractDetailContent({ id }: { id: string }) {
       cancelled = true;
     };
   }, [id, showFailedOnly]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSummary() {
+      setSummaryLoading(true);
+      setSummaryError(null);
+      try {
+        const data = await getContractSummary(id);
+        if (!cancelled) setSummary(data);
+      } catch {
+        if (!cancelled) setSummaryError("Failed to load contract summary.");
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
+      }
+    }
+
+    loadSummary();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -433,6 +427,14 @@ function ContractDetailContent({ id }: { id: string }) {
           <AddToGroup contractId={id} />
           <VerifiedBadge contractId={id} />
         </div>
+        <div className="mt-6">
+          <ContractSummaryCard
+            contractId={id}
+            summary={summary}
+            loading={summaryLoading}
+            error={summaryError}
+          />
+        </div>
         <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-secondary)]">
           <span>Network: {contract?.network}</span>
           {stats && (
@@ -452,12 +454,6 @@ function ContractDetailContent({ id }: { id: string }) {
           />
         </div>
       </header>
-
-      <ContractSummaryCard
-        summary={summary}
-        loading={summaryLoading}
-        error={summaryError}
-      />
 
       <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -588,7 +584,6 @@ function ContractDetailContent({ id }: { id: string }) {
         <SnapshotPanel
           contractId={id}
           currentLedger={stats?.last_synced_ledger ?? 0}
-          exportBasePath={`/contracts/${id}`}
         />
       </section>
 
