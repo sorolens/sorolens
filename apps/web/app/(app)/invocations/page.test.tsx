@@ -178,6 +178,7 @@ async function renderPage() {
 describe("InvocationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState({}, "", "/invocations");
     mockListInvocations.mockResolvedValue({
       invocations: INVOCATIONS,
       next_cursor: null,
@@ -206,6 +207,33 @@ describe("InvocationsPage", () => {
         expect.objectContaining({ cursor: undefined, limit: 20 })
       );
     });
+  });
+
+  it("restores filters and cursor pagination from the URL", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/invocations?contract_id=CBBB&fn=mint&since=2026-09-01&cursor=cursor-two"
+    );
+
+    await renderPage();
+
+    await waitFor(() =>
+      expect(mockListInvocations).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          contract_id: "CBBB",
+          fn: "mint",
+          since: "2026-09-01",
+          cursor: "cursor-two",
+        })
+      )
+    );
+    expect(document.getElementById("invocations-contract-filter")).toHaveValue(
+      "CBBB"
+    );
+    expect(document.getElementById("invocations-fn-filter")).toHaveValue(
+      "mint"
+    );
   });
 
   it("shows the empty state when the API returns no invocations", async () => {

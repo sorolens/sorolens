@@ -63,6 +63,12 @@ go run ./cmd/sorolens index --once
 
 The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
 
+Web performance checks run in CI for pull requests. Lighthouse scores and page
+weight budgets are defined in `apps/web/lighthouserc.json`; CI uploads the HTML
+and JSON reports as the `lighthouse-reports` artifact. To inspect bundle
+composition locally, run `ANALYZE=true pnpm --filter @sorolens/web build` and
+open the client report under `apps/web/.next/analyze`.
+
 The indexer processes contracts concurrently. Set `INDEXER_WORKERS` to tune
 the worker count; it defaults to `GOMAXPROCS`. Each contract is handled by one
 worker at a time, preserving that contract's processing order.

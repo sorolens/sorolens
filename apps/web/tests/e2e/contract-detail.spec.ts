@@ -30,25 +30,53 @@ test("contract detail renders header, stats and activity sections", async ({
   await expect(page.locator(".recharts-wrapper")).toHaveCount(2);
 });
 
-test("contract detail renders Events and Storage TTL sections", async ({
+test("contract detail tabs expose events, invocations, storage and overview", async ({
   page,
 }) => {
   await mockApi(page);
   await page.goto(`/contracts/${CONTRACT_ID}`);
 
+  await page.getByRole("tab", { name: "Events" }).click();
   await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Storage TTL" })
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Snapshot / replay" })
-  ).toBeVisible();
   await expect(
     page.getByText("transfer", { exact: false }).first()
   ).toBeVisible();
   await expect(
     page.getByText("balance", { exact: false }).first()
   ).toBeVisible();
+
+  await page.getByRole("tab", { name: "Invocations" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Invocations" })
+  ).toBeVisible();
+  await expect(page.getByText("transfer", { exact: true })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Storage" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Storage TTL" })
+  ).toBeVisible();
+
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Snapshot / replay" })
+  ).toBeVisible();
+});
+
+test("contract detail restores a deep-linked tab and invocation filters", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.goto(
+    `/contracts/${CONTRACT_ID}?tab=invocations&function_name=transfer&status=SUCCESS`
+  );
+
+  await expect(page.getByRole("tab", { name: "Invocations" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  await expect(page.getByLabel("Function")).toHaveValue("transfer");
+  await expect(page.getByLabel("Status")).toHaveValue("SUCCESS");
+  await expect(page.getByText("transfer", { exact: true })).toBeVisible();
 });
 
 test("contract detail links back to the contracts list", async ({ page }) => {

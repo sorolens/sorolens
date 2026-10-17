@@ -57,6 +57,7 @@ function event(n: number, overrides: Partial<GlobalEvent> = {}): GlobalEvent {
 
 beforeEach(() => {
   listAllEvents.mockReset();
+  window.history.replaceState({}, "", "/events");
 });
 
 afterEach(() => {
@@ -134,6 +135,32 @@ describe("EventsExplorerPage", () => {
           cursor: undefined,
         })
       )
+    );
+    expect(window.location.search).toContain("contract_id=CAAQ");
+    expect(window.location.search).toContain("type=system");
+  });
+
+  it("restores applied filters and the current page from the URL", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/events?contract_id=CAAQ&type=system&from=2026-09-01&cursor=cursor-two"
+    );
+    listAllEvents.mockResolvedValue({ events: [event(2)], next_cursor: "" });
+
+    render(<EventsExplorerPage />);
+
+    expect(await screen.findByText("1,002")).toBeInTheDocument();
+    expect(screen.getByLabelText("Contract ID")).toHaveValue("CAAQ");
+    expect(screen.getByLabelText("Event type")).toHaveValue("system");
+    expect(screen.getByLabelText("From (UTC)")).toHaveValue("2026-09-01");
+    expect(screen.getByText("Page 2")).toBeInTheDocument();
+    expect(listAllEvents).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        contractId: "CAAQ",
+        type: "system",
+        cursor: "cursor-two",
+      })
     );
   });
 

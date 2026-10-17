@@ -125,6 +125,32 @@ function defaultContract(route: Route): { status: number; body: unknown } {
       body: { invocations: [contractInvocation()], next_cursor: "" },
     };
   }
+  if (path.endsWith("/invocations")) {
+    return {
+      status: 200,
+      body: {
+        invocations: [
+          {
+            tx_hash: "TX1234567890",
+            contract_id: CONTRACT_ID,
+            network: "testnet",
+            ledger: 42,
+            ledger_closed_at: "2026-07-03T08:00:00Z",
+            status: "SUCCESS",
+            function_name: "transfer",
+            args_decoded: {},
+            result_decoded: null,
+            resource_fee_charged: 100,
+            cpu_insn: 200,
+            mem_byte: 300,
+            ledger_read_byte: 10,
+            ledger_write_byte: 20,
+          },
+        ],
+        next_cursor: null,
+      },
+    };
+  }
   if (path.endsWith("/storage")) {
     return {
       status: 200,

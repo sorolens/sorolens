@@ -226,6 +226,7 @@ describe("ContractsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     nav.setQuery("");
+    window.history.replaceState({}, "", "/contracts");
     mockBatchContracts.mockResolvedValue({
       action: "untrack",
       requested: 1,
@@ -632,7 +633,7 @@ describe("ContractsPage", () => {
       )
     );
     // …and the active sort is written to the URL so the view is shareable.
-    expect(nav.replace).toHaveBeenCalledWith("?sort=label&dir=asc");
+    expect(window.location.search).toBe("?sort=label&dir=asc");
     // The visual indicator is rendered for the active sort column.
     expect(screen.getByText("▲")).toBeDefined();
   });
@@ -645,19 +646,20 @@ describe("ContractsPage", () => {
     // First click on the default column (added_at, desc) flips to asc.
     fireEvent.click(screen.getByTestId("col-added_at"));
     await waitFor(() =>
-      expect(nav.replace).toHaveBeenCalledWith("?sort=added_at&dir=asc")
+      expect(window.location.search).toBe("?sort=added_at&dir=asc")
     );
 
     // Second click flips back to desc.
     fireEvent.click(screen.getByTestId("col-added_at"));
     await waitFor(() =>
-      expect(nav.replace).toHaveBeenCalledWith("?sort=added_at&dir=desc")
+      expect(window.location.search).toBe("?sort=added_at&dir=desc")
     );
     expect(screen.getByText("▼")).toBeDefined();
   });
 
   it("initializes the sort from the URL on load", async () => {
     nav.setQuery("?sort=status&dir=asc");
+    window.history.replaceState({}, "", "/contracts?sort=status&dir=asc");
 
     await renderPage();
     await waitFor(() => screen.getByTestId("data-table"));

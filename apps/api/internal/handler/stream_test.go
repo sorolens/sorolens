@@ -108,6 +108,51 @@ func TestStreamEventsSSE_ReceivesPublishedEvent(t *testing.T) {
 	}
 }
 
+func TestStreamEventsSSE_ReplaysAfterLastEventID(t *testing.T) {
+	h := &Handler{Store: store.NewMockStore(), Logger: testLogger()}
+	contractID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	h.Hub().PublishEvent(store.Event{ID: "evt-before", ContractID: contractID})
+	h.Hub().PublishEvent(store.Event{ID: "evt-after", ContractID: contractID})
+
+	ts := httptest.NewServer(http.HandlerFunc(h.StreamEventsSSE))
+	defer ts.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL, nil)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	req.Header.Set("Last-Event-ID", "evt-before")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+	var gotID string
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read replayed event: %v", err)
+		}
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "id: ") {
+			gotID = strings.TrimPrefix(line, "id: ")
+		}
+		if strings.Contains(line, `"id":"evt-after"`) {
+			break
+		}
+		if strings.Contains(line, `"id":"evt-before"`) {
+			t.Fatal("replayed the event identified by Last-Event-ID")
+		}
+	}
+	if gotID != "evt-after" {
+		t.Fatalf("SSE id = %q, want evt-after", gotID)
+	}
+}
+
 func TestStreamEventsSSE_FiltersByContractID(t *testing.T) {
 	st := store.NewMockStore()
 	h := &Handler{
