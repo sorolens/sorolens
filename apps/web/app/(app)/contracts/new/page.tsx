@@ -33,6 +33,124 @@ const STEPS = [
   { key: "configure", label: "Configure", hint: "Label and monitoring" },
 ] as const;
 
+/** Maximum number of contract rows posted to the API at once. */
+export const IMPORT_CONCURRENCY = 5;
+
+/** A single row parsed from an ImportContractsCsv upload. */
+export interface ImportRow {
+  /** 1-based line number in the source CSV, for error reporting. */
+  line: number;
+  contract_id: string;
+  network: string;
+  label?: string;
+}
+
+/** Per-row outcome of an import attempt. */
+export interface ImportRowResult {
+  line: number;
+  contract_id: string;
+  ok: boolean;
+  error?: string;
+}
+
+/** Aggregate result returned by {@link importContractsCsv}. */
+export interface ImportReport {
+  total: number;
+  succeeded: number;
+  failed: number;
+  rows: ImportRowResult[];
+}
+
+/**
+ * Run `worker` over `items` with bounded parallelism, invoking `onProgress`
+ * after each item settles. Preserves input order in the returned results.
+ */
+export async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+  onProgress?: (done: number, total: number) => void
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let done = 0;
+  const size = Math.max(1, Math.min(limit, items.length));
+
+  async function pump(): Promise<void> {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await worker(items[i], i);
+      done += 1;
+      onProgress?.(done, items.length);
+    }
+  }
+
+  await Promise.all(Array.from({ length: size }, () => pump()));
+  return results;
+}
+
+/**
+ * Import parsed CSV rows with bounded parallelism and per-row error capture.
+ * `track` is injected so this stays testable without the network.
+ */
+export async function importContractsCsv(
+  rows: ImportRow[],
+  track: (row: ImportRow) => Promise<void>,
+  options?: {
+    concurrency?: number;
+    onProgress?: (done: number, total: number) => void;
+  }
+): Promise<ImportReport> {
+  const results = await runWithConcurrency(
+    rows,
+    options?.concurrency ?? IMPORT_CONCURRENCY,
+    async (row): Promise<ImportRowResult> => {
+      try {
+        await track(row);
+        return { line: row.line, contract_id: row.contract_id, ok: true };
+      } catch (err) {
+        return {
+          line: row.line,
+          contract_id: row.contract_id,
+          ok: false,
+          error:
+            err instanceof ApiError
+              ? err.message
+              : err instanceof Error
+                ? err.message
+                : "Unknown error",
+        };
+      }
+    },
+    options?.onProgress
+  );
+
+  const failed = results.filter((r) => !r.ok).length;
+  return {
+    total: results.length,
+    succeeded: results.length - failed,
+    failed,
+    rows: results,
+  };
+}
+
+/** Render an {@link ImportReport} as a downloadable CSV error report. */
+export function importReportToCsv(report: ImportReport): string {
+  const header = "line,contract_id,status,error";
+  const body = report.rows.map((r) =>
+    [
+      r.line,
+      r.contract_id,
+      r.ok ? "ok" : "error",
+      (r.error ?? "").replace(/"/g, '""'),
+    ]
+      .map((cell) => (typeof cell === "string" && /[",\n]/.test(cell) ? `"${cell}"` : cell))
+      .join(",")
+  );
+  return [header, ...body].join("\n");
+}
+
 type Validation =
   | { status: "idle" }
   | { status: "checking" }
