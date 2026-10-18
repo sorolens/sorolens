@@ -6,6 +6,8 @@
 //	GET /contracts/{id}/changelog        – JSON array of ContractVersion records
 //	GET /contracts/{id}/changelog/feed   – Atom 1.0 XML feed
 //	GET /contracts/{id}/changelog/badge  – SVG badge with latest wasm hash slice
+//	GET /changelog/feed                  – Atom 1.0 XML feed of all contracts
+//	GET /changelog/badge                 – SVG badge summarising the changelog
 package changelog
 
 import (
@@ -265,4 +267,66 @@ func shortHash(h string) string {
 		return h
 	}
 	return h[:8]
+}
+
+// ---- global changelog routes ----------------------------------------------
+
+// GetGlobalFeed handles GET /changelog/feed.
+// It returns an Atom 1.0 XML feed aggregating the latest Wasm hash changes
+// across all known contracts, suitable for a site-wide changelog reader.
+func (h *Handler) GetGlobalFeed(w http.ResponseWriter, r *http.Request) {
+	versions, err := h.store.ListRecentContractVersions(r.Context(), 50)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	selfURL := fmt.Sprintf("%s/changelog/feed", baseURL(r))
+
+	updated := time.Now().UTC().Format(time.RFC3339)
+	if len(versions) > 0 {
+		updated = versions[0].RecordedAt.UTC().Format(time.RFC3339)
+	}
+
+	feed := atomFeed{
+		Title:   "Sorolens contract changelog",
+		ID:      selfURL,
+		Updated: updated,
+		Link:    atomLink{Href: selfURL, Rel: "self"},
+	}
+
+	for _, v := range versions {
+		txInfo := "no tx linked"
+		if v.TxHash != "" {
+			txInfo = "tx: " + v.TxHash
+		}
+		verifiedInfo := ""
+		if v.VerifiedSourceRef != "" {
+			verifiedInfo = fmt.Sprintf(" | source: %s", v.VerifiedSourceRef)
+		}
+		feed.Entries = append(feed.Entries, atomEntry{
+			Title:   fmt.Sprintf("%s: wasm %s (ledger %d)", v.ContractID, shortHash(v.WasmHash), v.FirstSeenLedger),
+			ID:      fmt.Sprintf("%s/contracts/%s/changelog#%d", baseURL(r), v.ContractID, v.ID),
+			Updated: v.RecordedAt.UTC().Format(time.RFC3339),
+			Content: fmt.Sprintf("contract=%s | hash=%s | first_seen_ledger=%d | %s%s",
+				v.ContractID, v.WasmHash, v.FirstSeenLedger, txInfo, verifiedInfo),
+			Link: atomLink{Href: fmt.Sprintf("%s/contracts/%s/changelog", baseURL(r), v.ContractID)},
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/atom+xml; charset=utf-8")
+	w.Write([]byte(xml.Header))    //nolint:errcheck
+	xml.NewEncoder(w).Encode(feed) //nolint:errcheck
+}
+
+// GetGlobalBadge handles GET /changelog/badge.
+// It returns an SVG badge summarising the total number of tracked Wasm hash
+// changes across all contracts, suitable for embedding in READMEs.
+func (h *Handler) GetGlobalBadge(w http.ResponseWriter, r *http.Request) {
+	count, err := h.store.CountContractVersions(r.Context())
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writeBadge(w, fmt.Sprintf("%d versions", count))
 }
