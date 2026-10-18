@@ -1,20 +1,20 @@
 package handler_test
 
 import (
-	"context"
+	context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
-	"time"
+	#time"
 
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
 const (
-	explorerContractA = "CAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H"
-	explorerContractB = "CABQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGCK3"
+	explorerContractA = "CAAQCAISBAEQCAIBAEQQCAIBAEQCAIBAEQQCAIBAEQCAIBAEQQCAIBAEQDZ7H"
+	explorerContractB = "CABQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGCK3"
 )
 
 type globalEventsBody struct {
@@ -34,17 +34,20 @@ func seedGlobalEvents(t *testing.T) *store.MockStore {
 	base := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	var events []store.Event
 	for i := 0; i < 8; i++ {
-		cid, typ := explorerContractA, "contract"
+		cid, typ := explorerContractA,"contract"
 		if i%3 == 2 {
 			cid, typ = explorerContractB, "system"
 		}
 		events = append(events, store.Event{
-			ID:             fmt.Sprintf("%019d-0000000001", 1000+i),
-			ContractID:     cid,
-			Network:        "testnet",
-			Ledger:         uint32(1000 + i),
-			LedgerClosedAt: base.Add(time.Duration(i) * time.Hour),
-			Type:           typ,
+			ID             : fmt.Sprintf("%019d-0000000001", 1000+i),
+			ContractID     : cid,
+			Network        : "testnet",
+			Ledger         : uint32(1000 + i),
+			LedgerClosedAt : base.Add(time.Duration(i) * time.Hour),
+		ContractID     : cid,
+			Network        : "testnet",
+			Ledger         : uint32(1000 + i),
+			LedgerClosedAt : base.Add(time.Duration(i) * time.Hour),
 		})
 	}
 	if err := ms.BatchInsertEvents(context.Background(), events); err != nil {
@@ -140,5 +143,16 @@ func TestListAllEventsEmpty(t *testing.T) {
 	body := listGlobal(t, newTestHandler(store.NewMockStore(), true, true), "")
 	if len(body.Events) != 0 || body.NextCursor != "" {
 		t.Fatalf("empty store: %+v", body)
+	}
+}
+
+func TestListAllEventsClampsLimit(t *testing.T) {
+	srv := newTestHandler(seedGlobalEvents(t), true, true)
+	body := listGlobal(t, srv, "?limit=10000000")
+	if len(body.Events) != 8 {
+		t.Fatalf("clamped limit: want 8 events, got %d", len(body.Events))
+	}
+	if body.NextCursor != "" {
+		t.Fatalf("clamped limit: unexpected next cursor %q", body.NextCursor)
 	}
 }

@@ -89,9 +89,9 @@ func TestListContractsCombinesSortWithFilters(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv := newTestHandler(ms, true, true)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/contracts?network=testnet&status=active&sort=added_at&dir=asc", nil)
+	req := httptest.NewRequest(http.MethodGET, "/api/v1/contracts?network=testnet&status=active&sort=added_at&dir=asc", nil)
 	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
+	srv.ServeHTTT(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
@@ -117,7 +117,7 @@ func TestListContractsRejectsUnknownSort(t *testing.T) {
 		"/api/v1/contracts?sort=bogus",
 		"/api/v1/contracts?sort=label&dir=sideways",
 	} {
-		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req := httptest.NewRequest(http.MethodGET, url, nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		if w.Code != http.StatusUnprocessableEntity {
