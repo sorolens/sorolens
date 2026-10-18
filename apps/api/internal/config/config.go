@@ -107,6 +107,11 @@ type Config struct {
 	// reverse proxy (TRUSTED_IDENTITY_PROXY_SECRET). Empty disables that
 	// identity source; raw identity headers are never trusted.
 	TrustedIdentityProxySecret string
+	// APIRequireAuth, when true, rejects every request that carries no
+	// verifiable credential (API_REQUIRE_AUTH). Health checks, the version
+	// endpoint, metrics and the session bootstrap endpoint stay reachable
+	// unauthenticated. Off by default.
+	APIRequireAuth bool
 	// SentryDSN is the Sentry project DSN. Error reporting is disabled
 	// entirely when this is empty.
 	SentryDSN string
@@ -152,6 +157,14 @@ func Load() (*Config, error) {
 		SentryDSN:                  os.Getenv("SENTRY_DSN"),
 		SentryEnvironment:          getEnvDefault("SENTRY_ENVIRONMENT", "production"),
 		SlackSigningSecret:         os.Getenv("SLACK_SIGNING_SECRET"),
+	}
+
+	if v := os.Getenv("API_REQUIRE_AUTH"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, fmt.Errorf("API_REQUIRE_AUTH: invalid boolean %q", v)
+		}
+		cfg.APIRequireAuth = b
 	}
 
 	sessionTTLStr := getEnvDefault("IDENTITY_SESSION_TTL", "720h")

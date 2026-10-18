@@ -265,7 +265,7 @@ func resolveSession(r *http.Request, lookup IdentityLookup, opts IdentityOptions
 
 func resolveAPIKey(r *http.Request, lookup IdentityLookup, token string, logger *slog.Logger) (VerifiedIdentity, bool) {
 	key, err := lookup.GetAPIKeyByHash(r.Context(), store.HashKey(token))
-	if err != nil || key.Revoked() {
+	if err != nil || key.Revoked() || key.Expired() {
 		return VerifiedIdentity{}, false
 	}
 	if err := lookup.TouchAPIKey(r.Context(), key.ID); err != nil && logger != nil {
