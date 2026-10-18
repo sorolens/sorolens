@@ -50,9 +50,10 @@ func New(h *handler.Handler) http.Handler {
 		// Stats
 		get("/stats/global", h.GlobalStats)
 
-		// Contracts. Registration mutates shared state, so it requires at
-		// least contributor role. Reads stay open.
+		// Contracts. Registration and untracking mutate shared state, so
+		// they require at least contributor role. Reads stay open.
 		r.With(scope, contributor).Post("/contracts", h.RegisterContract)
+		r.With(scope, contributor).Delete("/contracts/{id}", h.UntrackContract)
 		get("/contracts", h.ListContracts)
 		get("/contracts/{id}", h.GetContract)
 		get("/contracts/{id}/events", h.ListEvents)

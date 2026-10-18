@@ -29,6 +29,7 @@ type MockStore struct {
 	// Error injection
 	UpsertContractErr   error
 	GetContractErr      error
+	UntrackContractErr  error
 	ListContractsErr    error
 	GetGlobalStatsErr   error
 	ListEventsErr       error
@@ -80,6 +81,22 @@ func (m *MockStore) GetContract(_ context.Context, contractID string) (Contract,
 		return Contract{}, ErrNotFound
 	}
 	return c, nil
+}
+
+// UntrackContract soft-deletes a contract by flipping its status to
+// ContractStatusPaused, mirroring the postgres implementation: the row and
+// all seeded history stay in the mock for later assertions.
+func (m *MockStore) UntrackContract(_ context.Context, contractID string) error {
+	if m.UntrackContractErr != nil {
+		return m.UntrackContractErr
+	}
+	c, ok := m.contracts[contractID]
+	if !ok {
+		return ErrNotFound
+	}
+	c.Status = ContractStatusPaused
+	m.contracts[contractID] = c
+	return nil
 }
 
 func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {

@@ -56,6 +56,24 @@ func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Con
 	return c, err
 }
 
+// UntrackContract stops indexing a contract by soft-deleting it: the row and
+// all indexed history are retained, only the status flips to "paused" so the
+// indexer (which polls active/backfilling contracts) skips it from then on.
+// Returns ErrNotFound when no contract has the given ID.
+func (s *postgresStore) UntrackContract(ctx context.Context, contractID string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE contracts SET status = $2 WHERE id = $1`,
+		contractID, ContractStatusPaused,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListContracts returns a list of contracts matching the optional filters,
 // ordered by ID. The cursor is the last-seen contract ID (lexicographic order).
 func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {

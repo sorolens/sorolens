@@ -34,6 +34,7 @@ var routeScopes = map[string]string{
 
 	"GET /api/v1/contracts":                  ScopeReadContracts,
 	"POST /api/v1/contracts":                 ScopeWriteContracts,
+	"DELETE /api/v1/contracts/{id}":          ScopeWriteContracts,
 	"GET /api/v1/contracts/{id}":             ScopeReadContracts,
 	"GET /api/v1/contracts/{id}/events":      ScopeReadContracts,
 	"GET /api/v1/contracts/{id}/invocations": ScopeReadContracts,

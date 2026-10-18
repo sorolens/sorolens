@@ -312,6 +312,28 @@ func (h *Handler) GetContract(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, contractFromStore(c))
 }
 
+// UntrackContract handles DELETE /api/v1/contracts/{id}.
+//
+// Untracking is a soft delete by policy: the contract row and all indexed
+// history (events, invocations, storage entries) are retained, the contract's
+// status becomes "paused", and the indexer stops polling it because the
+// poller only indexes active/backfilling contracts. Re-registering the
+// contract with POST /api/v1/contracts resumes tracking.
+func (h *Handler) UntrackContract(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	err := h.Store.UntrackContract(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "contract not found")
+		return
+	}
+	if err != nil {
+		h.Logger.Error("untrack contract", "err", err, "contract_id", id)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to untrack contract")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ListEvents handles GET /api/v1/contracts/{id}/events.
 func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")

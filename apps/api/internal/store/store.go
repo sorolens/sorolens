@@ -32,6 +32,12 @@ type Store interface {
 	// GetContract returns the contract with the given ID, or ErrNotFound.
 	GetContract(ctx context.Context, contractID string) (Contract, error)
 
+	// UntrackContract stops indexing a contract by soft-deleting it: the
+	// contract row and all indexed history are retained, its status becomes
+	// ContractStatusPaused, and the indexer stops polling it. Returns
+	// ErrNotFound when the contract does not exist.
+	UntrackContract(ctx context.Context, contractID string) error
+
 	// ListContracts returns a cursor-paginated list of tracked contracts
 	// matching the optional filters. cursor is opaque; pass "" for the first
 	// page. Returns the next cursor (empty string when there are no more
