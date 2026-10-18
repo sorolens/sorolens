@@ -415,6 +415,20 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope).Delete("/reports/subscriptions/{id}", h.DeleteReportSubscription)
 		get("/reports/unsubscribe", h.UnsubscribeReport)
 
+		// Web-push subscriptions (issue #592): the durable store behind
+		// apps/web/app/api/push/*, which used to keep subscriptions in an
+		// in-memory Map. POST and the two DELETE forms are self-service
+		// like the report subscriptions above — a push endpoint is an
+		// unguessable https URL owned by the subscriber, so possession of
+		// it is the capability. GET is different: it returns the RFC 8291
+		// key material the alert fan-out needs to encrypt, so it is gated
+		// exactly like the webhook subscriptions (read-watchdog scope plus
+		// contributor role) and must never answer anonymously.
+		r.With(scope).Post("/push/subscriptions", h.CreatePushSubscription)
+		r.With(scope, contributor).Get("/push/subscriptions", h.ListPushSubscriptions)
+		r.With(scope).Delete("/push/subscriptions", h.UnsubscribePush)
+		r.With(scope).Delete("/push/subscriptions/{id}", h.DeletePushSubscription)
+
 		// Alert notification subscriptions (issue #127). They hold
 		// integration secrets, so reading them also needs contributor.
 		r.With(scope, contributor).Post("/watchdog/subscriptions", h.CreateSubscription)

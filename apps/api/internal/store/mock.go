@@ -25,6 +25,7 @@ type MockStore struct {
 	alerts                []ContractAlert
 	apiKeys               []APIKey
 	reportSubs            []ReportSubscription
+	pushSubs              []PushSubscription
 	contractUpgrades      []ContractUpgrade
 	watchlist             map[string]map[string]bool
 	alertSubscriptions    []AlertSubscription
@@ -53,6 +54,7 @@ type MockStore struct {
 	// Error injection
 	UpsertContractErr           error
 	GetContractErr              error
+	PushStoreErr                error
 	ListContractsErr            error
 	DeleteContractsErr          error
 	SetContractLabelErr         error

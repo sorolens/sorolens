@@ -106,6 +106,15 @@ var routeScopes = map[string]string{
 	"DELETE /api/v1/api-keys/{id}":      ScopeAdmin,
 	"POST /api/v1/api-keys/{id}/rotate": ScopeAdmin,
 
+	// Web-push subscriptions (issue #592). Mutations are write-scoped like
+	// the other self-service subscription surfaces; the list response
+	// carries push-encryption key material, so it is read-watchdog-scoped
+	// and role-gated to contributors in the router.
+	"POST /api/v1/push/subscriptions":        ScopeWriteContracts,
+	"GET /api/v1/push/subscriptions":         ScopeReadWatchdog,
+	"DELETE /api/v1/push/subscriptions":      ScopeWriteContracts,
+	"DELETE /api/v1/push/subscriptions/{id}": ScopeWriteContracts,
+
 	// v2 (issue #144): the same scope vocabulary applies, keyed by the v2
 	// route pattern.
 	"GET /api/v2/stats/global":   ScopeReadContracts,

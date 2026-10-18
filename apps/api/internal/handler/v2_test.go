@@ -355,6 +355,13 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		"GET /api/v1/reports/subscriptions":         true,
 		"DELETE /api/v1/reports/subscriptions/{id}": true,
 		"GET /api/v1/reports/unsubscribe":           true,
+		// Web-push subscriptions (issue #592): self-service browser channel
+		// registration with no v2 envelope yet (same posture as the digest
+		// subscriptions above).
+		"POST /api/v1/push/subscriptions":        true,
+		"GET /api/v1/push/subscriptions":         true,
+		"DELETE /api/v1/push/subscriptions":      true,
+		"DELETE /api/v1/push/subscriptions/{id}": true,
 	}
 
 	var missing []string
