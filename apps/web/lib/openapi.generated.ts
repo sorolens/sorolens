@@ -2574,6 +2574,59 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/push/subscriptions": {
+      get: {
+        operationId: "listPushSubscriptions",
+        summary: "List web-push subscriptions with key material",
+        tags: ["Watchdog"],
+        parameters: [
+          {
+            name: "user_id",
+            in: "query",
+            required: false,
+            description: "Restrict to one user's devices; omit to list all.",
+            type: "string",
+          },
+        ],
+      },
+      post: {
+        operationId: "createPushSubscription",
+        summary: "Register a browser web-push subscription",
+        tags: ["Watchdog"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+      delete: {
+        operationId: "unsubscribePush",
+        summary: "Unsubscribe a browser by push endpoint",
+        tags: ["Watchdog"],
+        parameters: [
+          {
+            name: "endpoint",
+            in: "query",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/push/subscriptions/{id}": {
+      delete: {
+        operationId: "deletePushSubscription",
+        summary: "Delete a web-push subscription by id",
+        tags: ["Watchdog"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/reports/subscriptions": {
       get: {
         operationId: "listReportSubscriptions",

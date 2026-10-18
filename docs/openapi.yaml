@@ -4188,6 +4188,155 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/push/subscriptions:
+    post:
+      tags: [Watchdog]
+      summary: Register a browser web-push subscription
+      description: |
+        Persists a PushSubscription.toJSON() payload (issue #592). The
+        endpoint column is the idempotency key: re-subscribing the same
+        browser endpoint refreshes the stored row and answers 200 instead
+        of creating a duplicate. Endpoint must be an https push-service
+        URL; the keys are validated against RFC 8291 shapes.
+      operationId: createPushSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, keys]
+              properties:
+                endpoint:
+                  type: string
+                  format: uri
+                  maxLength: 2048
+                keys:
+                  type: object
+                  required: [auth, p256dh]
+                  properties:
+                    auth:
+                      type: string
+                      description: Base64url auth secret (16-32 bytes decoded).
+                    p256dh:
+                      type: string
+                      description: Base64url 65-byte uncompressed P-256 public key.
+                user_id:
+                  type: string
+                  maxLength: 128
+                  description: Optional owner binding.
+                filters:
+                  type: object
+                  description: >-
+                    Optional JSON object of delivery preferences
+                    (contract ids, severities). Max 4096 bytes.
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushSubscription"
+        "200":
+          description: Existing subscription refreshed (idempotent re-subscribe)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushSubscription"
+        "403":
+          description: API key presented without write:contracts scope
+        "413":
+          description: Request body exceeds the global limit
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    get:
+      tags: [Watchdog]
+      summary: List web-push subscriptions with key material
+      description: |
+        Returns the stored subscriptions for alert fan-out. This response
+        carries the push encryption keys, so the operation requires the
+        read:watchdog scope and at least the contributor role; it never
+        answers anonymously (401).
+      operationId: listPushSubscriptions
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Restrict to one user's devices; omit to list all.
+      responses:
+        "200":
+          description: Subscriptions (with p256dh/auth for the sender)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscriptions]
+                properties:
+                  subscriptions:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/PushSubscription"
+                        - type: object
+                          properties:
+                            p256dh_key:
+                              type: string
+                            auth_key:
+                              type: string
+        "401":
+          description: Anonymous callers are never served key material
+        "403":
+          description: Key without read:watchdog scope, or role below contributor
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Watchdog]
+      summary: Unsubscribe a browser by push endpoint
+      description: >-
+        Hard-deletes the row matching the given push endpoint. The endpoint
+        is an unguessable https URL owned by the subscriber, so possession
+        of it is the capability (same posture as the digest one-click
+        unsubscribe). Also used by the sender on HTTP 410 Gone.
+      operationId: unsubscribePush
+      parameters:
+        - name: endpoint
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Subscription removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/push/subscriptions/{id}:
+    delete:
+      tags: [Watchdog]
+      summary: Delete a web-push subscription by id
+      operationId: deletePushSubscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Subscription removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/reports/subscriptions:
     post:
       tags: [Reports]
@@ -5471,6 +5620,28 @@ components:
         day_of_week:
           type: integer
         created_at:
+          type: string
+          format: date-time
+
+    PushSubscription:
+      type: object
+      required: [id, endpoint, created_at, updated_at]
+      description: >-
+        Public shape returned by the subscribe call: the caller's own
+        endpoint is echoed, but the push key material never is. The
+        scope-gated list operation augments this with p256dh_key/auth_key.
+      properties:
+        id:
+          type: string
+        endpoint:
+          type: string
+          format: uri
+        user_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
 
