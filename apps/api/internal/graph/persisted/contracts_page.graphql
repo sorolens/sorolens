@@ -1,0 +1,19 @@
+query ContractsPage($network: String, $first: Int, $after: String) {
+  contracts(network: $network, first: $first, after: $after) {
+    nodes {
+      id
+      label
+      status
+      monitor {
+        status
+      }
+      alerts(first: 5) {
+        severity
+        message
+      }
+    }
+    pageInfo {
+      nextCursor
+    }
+  }
+}

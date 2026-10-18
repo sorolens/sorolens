@@ -1,0 +1,153 @@
+# docker-compose.prod.yml
+#
+# Production-style Compose file: API + Postgres + Redis + a one-shot migrate
+# service that applies all pending SQL migrations before the API starts.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Required environment variables (set in a .env file or via your platform):
+#   DATABASE_URL       - pooled Postgres DSN
+#   DIRECT_DATABASE_URL - non-pooled DSN used by the migrate service
+#   REDIS_URL          - Redis DSN  (redis://redis:6379/0 if using this Compose)
+#   STELLAR_NETWORK    - testnet | mainnet | futurenet
+#   SOROBAN_RPC_URL    - Soroban JSON-RPC endpoint for the chosen network
+#   WATCHDOG_CONTRACT_ID - deployed watchdog contract address
+#   PORT               - API listen port (default: 8080)
+#   CORS_ALLOWED_ORIGINS - comma-separated list of allowed origins
+#                          (e.g. https://sorolens-web-iota.vercel.app)
+#
+# Optional:
+#   INITIAL_ADMIN_GITHUB_ID - seeds the first admin user on startup
+#   SENTRY_DSN              - Sentry error-reporting DSN
+
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Database
+  # ─────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sorolens
+      POSTGRES_USER: sorolens
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sorolens}
+    volumes:
+      - sorolens_postgres_data:/var/lib/postgresql/data
+    networks:
+      - sorolens_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sorolens -d sorolens"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Cache / advisory locks
+  # ─────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - sorolens_redis_data:/data
+    networks:
+      - sorolens_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # One-shot migration service
+  # Runs all *.up.sql files in order and exits.  The API waits for it.
+  # ─────────────────────────────────────────────────────────────────────────
+  migrate:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    network_mode: "service:postgres"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-sorolens}
+      PGCONNECT_TIMEOUT: "10"
+    volumes:
+      - ./apps/api/internal/db/migrations:/migrations:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        # Idempotency check: skip if schema already applied.
+        if psql -h localhost -U sorolens -d sorolens -tAc \
+            "SELECT to_regclass('public.contracts')" | grep -q contracts; then
+          echo "schema already present; skipping migrations"
+          exit 0
+        fi
+        for f in $$(ls /migrations/*.up.sql | sort); do
+          echo "applying $$f"
+          psql -q -h localhost -U sorolens -d sorolens -f "$$f"
+        done
+        echo "all migrations applied"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Sorolens REST API
+  # ─────────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILT_AT: ${BUILT_AT:-unknown}
+    image: sorolens/api:${VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - sorolens_net
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      # Required
+      DATABASE_URL: ${DATABASE_URL:-postgres://sorolens:sorolens@postgres:5432/sorolens?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      # Soroban
+      STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
+      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
+      WATCHDOG_CONTRACT_ID: ${WATCHDOG_CONTRACT_ID:-}
+      # Server
+      PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # CORS – set to your Vercel URL (comma-separated for multiple).
+      # Leave blank or set to * to allow all origins.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
+      # Optional
+      INITIAL_ADMIN_GITHUB_ID: ${INITIAL_ADMIN_GITHUB_ID:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  sorolens_postgres_data:
+  sorolens_redis_data:
+
+networks:
+  sorolens_net:
+    name: sorolens_net

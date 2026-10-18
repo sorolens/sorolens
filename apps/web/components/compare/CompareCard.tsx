@@ -9,7 +9,12 @@ interface CompareCardProps {
   last_check: string | null;
 }
 
-export function CompareCard({ contract, stats, health_status, last_check }: CompareCardProps) {
+export function CompareCard({
+  contract,
+  stats,
+  health_status,
+  last_check,
+}: CompareCardProps) {
   const label = contract.label ?? contract.id;
   const lastActivity = last_check ?? stats.last_activity;
 

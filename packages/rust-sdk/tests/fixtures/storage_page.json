@@ -1,0 +1,18 @@
+{
+  "storage": [
+    {
+      "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      "network": "testnet",
+      "key_xdr": "AAAABg==",
+      "key_decoded": { "symbol": "balance" },
+      "value_xdr": "AAAABw==",
+      "value_decoded": { "amount": "1000" },
+      "durability": "persistent",
+      "live_until_ledger": 2000000,
+      "last_modified_ledger": 1234600,
+      "status": "live",
+      "last_seen_at": "2026-01-15T11:00:05Z"
+    }
+  ],
+  "next_cursor": "c3RvcmFnZS1jdXJzb3I="
+}

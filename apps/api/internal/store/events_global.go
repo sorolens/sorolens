@@ -1,18 +1,16 @@
 package store
 
 import (
-		"context"
-		"encoding/json"
-		"fmt"
-		"sort"
-		"strings"
-		"time"
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
 )
 
 // GlobalEventFilters holds optional filters for the cross-contract events
-
 // explorer (issue #97).
-
 type GlobalEventFilters struct {
 	// ContractID matches contracts whose ID starts with this value, so a
 	// partially typed contract ID still narrows the feed.
@@ -25,7 +23,6 @@ type GlobalEventFilters struct {
 }
 
 // GlobalEventStore lists events across every tracked contract.
-
 type GlobalEventStore interface {
 	// ListAllEvents returns events newest first. cursor is the ID of the
 	// last event on the previous page ("" for the first page); the returned
@@ -41,37 +38,21 @@ func optionalTime(t time.Time) *time.Time {
 }
 
 // ListAllEvents returns events across every tracked contract, newest first.
-
 //
-
 // The global feed is one of the hottest queries in the API. To keep it
-
 // fast past one million events the query must be able to use the composite
-
 // indexes added in migration 0004_global_events_indexes.up.sql:
-
 //
-
 //   - events_global_feed_idx (id DESC)
-
 //   - events_contract_feed_idx (contract_id, id DESC)
-
 //   - events_type_feed_idx (type, id DESC)
-
 //   - events_network_feed_idx (network, id DESC)
-
 //   - events_ledger_closed_at_feed_idx (ledger_closed_at, id DESC)
-
 //
-
 // The contract_id LIKE predicate is written as a prefix match on a
-
 // text column. Postgres can use the composite index for the contract_id
-
 // equality/prefix filter when the LIKE pattern is anchored at the start, so
-
 // the query remains index-friendly.
-
 func (s *postgresStore) ListAllEvents(ctx context.Context, cursor string, limit int, f GlobalEventFilters) ([]Event, string, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -102,7 +83,7 @@ func (s *postgresStore) ListAllEvents(ctx context.Context, cursor string, limit 
 	var out []Event
 	for rows.Next() {
 		var e Event
-		var topicXHR, topicDec, valDec []byte
+		var topicXDR, topicDec, valDec []byte
 		if err := rows.Scan(
 			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
 			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
@@ -128,14 +109,12 @@ func (s *postgresStore) ListAllEvents(ctx context.Context, cursor string, limit 
 }
 
 // likePrefix escapes LIKE wildcards so user input is matched literally.
-
 func likePrefix(s string) string {
 	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return r.Replace(s)
 }
 
 // ListAllEvents implements GlobalEventStore for tests.
-
 func (m *MockStore) ListAllEvents(_ context.Context, cursor string, limit int, f GlobalEventFilters) ([]Event, string, error) {
 	if m.ListEventsErr != nil {
 		return nil, "", m.ListEventsErr

@@ -34,7 +34,7 @@ export function contractRowKey(row: ContractRow): string {
 
 export function buildOptimisticContract(
   input: TrackContractRequest,
-  network: string | undefined,
+  network: string | undefined
 ): ContractRow {
   optimisticCounter += 1;
   return {
@@ -45,6 +45,7 @@ export function buildOptimisticContract(
     status: "pending",
     wasm_hash: null,
     added_at: new Date().toISOString(),
+    last_activity_at: null,
     optimisticId: `optimistic-${optimisticCounter}`,
   };
 }
@@ -63,7 +64,7 @@ export async function trackContractOptimistically(
     userId: string;
     network?: string;
     shouldRollback?: () => boolean;
-  },
+  }
 ): Promise<TrackResult> {
   const snapshot = list;
   setList([buildOptimisticContract(input, options.network), ...snapshot]);

@@ -20,7 +20,9 @@ function fakeFetch(payload: unknown, status = 200) {
   const calls: Recorded[] = [];
   const impl = (async (url: string | URL, init: RequestInit = {}) => {
     const headers: Record<string, string> = {};
-    for (const [k, v] of Object.entries((init.headers ?? {}) as Record<string, string>)) {
+    for (const [k, v] of Object.entries(
+      (init.headers ?? {}) as Record<string, string>
+    )) {
       headers[k.toLowerCase()] = v;
     }
     calls.push({
@@ -43,7 +45,11 @@ function responseBody(status: number, payload: unknown): string | null {
   return payload === undefined ? "" : JSON.stringify(payload);
 }
 
-function apiWith(payload: unknown, status = 200, baseUrl = "https://api.sorolens.test/") {
+function apiWith(
+  payload: unknown,
+  status = 200,
+  baseUrl = "https://api.sorolens.test/"
+) {
   const { impl, calls } = fakeFetch(payload, status);
   const api = new SorolensApi({ baseUrl, apiKey: "sl_admin", fetchImpl: impl });
   return { api, calls };
@@ -78,7 +84,9 @@ describe("SorolensApi.getContractStatus", () => {
 
     const status = await api.getContractStatus(CONTRACT);
 
-    expect(calls[0].url).toBe(`https://api.sorolens.test/api/v1/contracts/${CONTRACT}`);
+    expect(calls[0].url).toBe(
+      `https://api.sorolens.test/api/v1/contracts/${CONTRACT}`
+    );
     expect(calls[0].method).toBe("GET");
     expect(calls[0].headers.authorization).toBe("Bearer sl_admin");
     expect(status).toEqual({
@@ -93,14 +101,20 @@ describe("SorolensApi.getContractStatus", () => {
 
   it("prefers the caller's own key and forwards the user id", async () => {
     const { api, calls } = apiWith({ id: CONTRACT });
-    await api.getContractStatus(CONTRACT, { apiKey: "sl_user", userId: "discord-42" });
+    await api.getContractStatus(CONTRACT, {
+      apiKey: "sl_user",
+      userId: "discord-42",
+    });
     expect(calls[0].headers.authorization).toBe("Bearer sl_user");
     expect(calls[0].headers["x-user-id"]).toBe("discord-42");
   });
 
   it("omits Authorization when neither caller nor client has a key", async () => {
     const { impl, calls } = fakeFetch({ id: CONTRACT });
-    const api = new SorolensApi({ baseUrl: "https://api.sorolens.test", fetchImpl: impl });
+    const api = new SorolensApi({
+      baseUrl: "https://api.sorolens.test",
+      fetchImpl: impl,
+    });
     await api.getContractStatus(CONTRACT);
     expect(calls[0].headers.authorization).toBeUndefined();
   });
@@ -132,7 +146,7 @@ describe("SorolensApi.listAlerts", () => {
     const alerts = await api.listAlerts(CONTRACT, 3);
 
     expect(calls[0].url).toBe(
-      `https://api.sorolens.test/api/v1/watchdog/contracts/${CONTRACT}/alerts?limit=3`,
+      `https://api.sorolens.test/api/v1/watchdog/contracts/${CONTRACT}/alerts?limit=3`
     );
     expect(alerts[0]).toEqual({
       contractId: CONTRACT,
@@ -169,27 +183,42 @@ describe("SorolensApi watchlist", () => {
 
   it("removes a contract and reports the post-condition", async () => {
     const { api, calls } = apiWith({ in_watchlist: false });
-    expect(await api.removeFromWatchlist(CONTRACT, { userId: "d" })).toBe(false);
+    expect(await api.removeFromWatchlist(CONTRACT, { userId: "d" })).toBe(
+      false
+    );
     expect(calls[0].method).toBe("DELETE");
     expect(calls[0].url).toBe(
-      `https://api.sorolens.test/api/v1/watchlist/${CONTRACT}`,
+      `https://api.sorolens.test/api/v1/watchlist/${CONTRACT}`
     );
   });
 
   it("lists watched contract ids, dropping malformed rows", async () => {
-    const { api } = apiWith({ items: [{ contract_id: CONTRACT }, {}, { contract_id: "" }] });
+    const { api } = apiWith({
+      items: [{ contract_id: CONTRACT }, {}, { contract_id: "" }],
+    });
     expect(await api.listWatchlist()).toEqual([CONTRACT]);
   });
 });
 
 describe("SorolensApi key provisioning", () => {
   it("creates an admin-scoped key and returns its material", async () => {
-    const { api, calls } = apiWith({ id: "key_1", key: "sl_new", key_prefix: "sl_abcd1234" });
+    const { api, calls } = apiWith({
+      id: "key_1",
+      key: "sl_new",
+      key_prefix: "sl_abcd1234",
+    });
     const grant = await api.provisionApiKey("discord:1:alice");
-    expect(grant).toEqual({ id: "key_1", key: "sl_new", keyPrefix: "sl_abcd1234" });
+    expect(grant).toEqual({
+      id: "key_1",
+      key: "sl_new",
+      keyPrefix: "sl_abcd1234",
+    });
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe("https://api.sorolens.test/api/v1/api-keys");
-    expect(calls[0].body).toEqual({ name: "discord:1:alice", scopes: USER_KEY_SCOPES });
+    expect(calls[0].body).toEqual({
+      name: "discord:1:alice",
+      scopes: USER_KEY_SCOPES,
+    });
   });
 
   it("throws when the API does not return key material", async () => {
@@ -199,15 +228,23 @@ describe("SorolensApi key provisioning", () => {
 
   it("revokes by id and accepts 204 with no body", async () => {
     const { impl, calls } = fakeFetch(undefined, 204);
-    const api = new SorolensApi({ baseUrl: "https://api.sorolens.test", fetchImpl: impl });
+    const api = new SorolensApi({
+      baseUrl: "https://api.sorolens.test",
+      fetchImpl: impl,
+    });
     await expect(api.revokeApiKey("key_1")).resolves.toBeUndefined();
-    expect(calls[0].url).toBe("https://api.sorolens.test/api/v1/api-keys/key_1");
+    expect(calls[0].url).toBe(
+      "https://api.sorolens.test/api/v1/api-keys/key_1"
+    );
   });
 });
 
 describe("SorolensApi errors", () => {
   it("surfaces the API's status and code", async () => {
-    const { api } = apiWith({ error: "contract not found", code: "not_found" }, 404);
+    const { api } = apiWith(
+      { error: "contract not found", code: "not_found" },
+      404
+    );
     const err = await api.getContractStatus(CONTRACT).catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(404);
@@ -219,7 +256,10 @@ describe("SorolensApi errors", () => {
     const impl = (async () => {
       throw new TypeError("fetch failed");
     }) as unknown as typeof fetch;
-    const api = new SorolensApi({ baseUrl: "https://api.sorolens.test", fetchImpl: impl });
+    const api = new SorolensApi({
+      baseUrl: "https://api.sorolens.test",
+      fetchImpl: impl,
+    });
     const err = await api.getContractStatus(CONTRACT).catch((e) => e);
     expect((err as ApiError).status).toBe(0);
     expect((err as ApiError).message).toContain("could not reach Sorolens API");

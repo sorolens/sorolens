@@ -23,7 +23,10 @@ function requireClient(): Octokit {
 }
 
 /** Number of merged PRs authored by `login` against `repo` (e.g. "sorolens/sorolens"). */
-export async function countMergedPRs(login: string, repo: string): Promise<number> {
+export async function countMergedPRs(
+  login: string,
+  repo: string
+): Promise<number> {
   const gh = requireClient();
   const q = `repo:${repo} is:pr is:merged author:${login}`;
   const r = await gh.search.issuesAndPullRequests({
@@ -34,13 +37,20 @@ export async function countMergedPRs(login: string, repo: string): Promise<numbe
 }
 
 /** Validate a GitHub login exists (returns null if 404). */
-export async function getUser(login: string): Promise<{ login: string; id: number } | null> {
+export async function getUser(
+  login: string
+): Promise<{ login: string; id: number } | null> {
   const gh = requireClient();
   try {
     const r = await gh.users.getByUsername({ username: login });
     return { login: r.data.login, id: r.data.id };
   } catch (e: unknown) {
-    if (e && typeof e === "object" && "status" in e && (e as { status: number }).status === 404) {
+    if (
+      e &&
+      typeof e === "object" &&
+      "status" in e &&
+      (e as { status: number }).status === 404
+    ) {
       return null;
     }
     throw e;

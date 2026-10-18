@@ -1,0 +1,22 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is git-ignored.
+
+region = "us-east-1"
+name   = "sorolens"
+
+# Sorolens does not publish images yet (#96, #381): build and push your own,
+# always with an explicit tag or digest.
+api_image       = "123456789012.dkr.ecr.us-east-1.amazonaws.com/sorolens-api:0.1.0"
+indexer_image   = "123456789012.dkr.ecr.us-east-1.amazonaws.com/sorolens-indexer:0.1.0"
+dashboard_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/sorolens-dashboard:0.1.0"
+
+# HTTPS (recommended): an ACM certificate for domain_name in this region.
+certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
+domain_name     = "sorolens.example.com"
+route53_zone_id = "Z0000000000000000000"
+
+# Quick evaluation without a domain instead (plain HTTP, not for real data):
+# allow_http_only = true
+
+stellar_network = "testnet"
+# soroban_rpc_urls = { mainnet = "https://your-mainnet-rpc.example.com" }
+# watchdog_contract_id = "C..."

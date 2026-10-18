@@ -1,0 +1,8 @@
+{
+  "total_monitored": 12,
+  "healthy": 9,
+  "degraded": 2,
+  "unresponsive": 1,
+  "total_alerts": 34,
+  "critical_alerts": 3
+}

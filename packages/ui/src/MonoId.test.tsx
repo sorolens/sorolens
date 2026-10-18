@@ -22,7 +22,9 @@ describe("MonoId", () => {
 
     const button = screen.getByRole("button", { name: `Copy ${value}` });
     expect(button).toHaveAttribute("title", value);
-    expect(button).toHaveStyle("font-family: \"JetBrains Mono\", \"SFMono-Regular\", Consolas, \"Liberation Mono\", monospace");
+    expect(button).toHaveStyle(
+      'font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace'
+    );
     expect(button).toHaveTextContent("abcdef...dcba");
 
     fireEvent.click(button);

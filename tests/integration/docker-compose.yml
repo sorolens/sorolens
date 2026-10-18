@@ -1,40 +1,119 @@
-version: '3.8'
+# End-to-end integration stack for the Sorolens indexer.
+#
+# Flow exercised by `make integration-test`:
+#
+#   mock RPC (one real event) -> indexer -mode once -> Postgres -> API
+#
+# The API image is built from the monorepo root because apps/api/Dockerfile
+# copies the API module from there. The indexer runs on demand
+# (`docker compose run --rm indexer -mode once`) after the suite has registered
+# and activated its fixture contract.
 services:
   postgres:
-    image: postgres:15
+    image: postgres:16-alpine
     environment:
-      POSTGRES_PASSWORD: test
       POSTGRES_DB: sorolens_test
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: test
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sorolens_test"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    networks:
+      - integration_net
+
   redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
+    image: redis:7-alpine
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    networks:
+      - integration_net
+
   mock-rpc:
     build: ./mock_rpc
-    ports:
-      - "8000:8000"
-  api:
-    build: ../../apps/api
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - integration_net
+
+  # Applies the same schema CI applies: every *.up.sql in sorted order via
+  # psql (golang-migrate cannot read this directory until the duplicate
+  # migration versions are renumbered).
+  migrate:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:test@postgres:5432/sorolens_test
+      PGPASSWORD: test
+      PGCONNECT_TIMEOUT: "10"
+    volumes:
+      - ../../apps/api/internal/db/migrations:/migrations:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        for f in $$(ls /migrations/*.up.sql | sort); do
+          echo "applying $$f"
+          psql -q -h postgres -U postgres -d sorolens_test -f "$$f"
+        done
+        echo "migrations applied"
+    restart: "no"
+    networks:
+      - integration_net
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgres://postgres:test@postgres:5432/sorolens_test?sslmode=disable
       REDIS_URL: redis://redis:6379
-      RPC_URL: http://mock-rpc:8000
+      SOROBAN_RPC_URL: http://mock-rpc:8000
+      STELLAR_NETWORK: testnet
+      IDENTITY_SIGNING_KEY: integration-test-signing-key
+      LOG_LEVEL: info
+      PORT: "8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
+    networks:
+      - integration_net
+
+  # One-shot: started explicitly by the test suite, never by `up`.
+  indexer:
+    build:
+      context: ../..
+      dockerfile: services/indexer/Dockerfile
+    profiles: ["indexer"]
+    environment:
+      DATABASE_URL: postgres://postgres:test@postgres:5432/sorolens_test?sslmode=disable
+      # The poller first looks up the contract's network name, so the network
+      # specific variable is the one that must be set for a testnet contract.
+      SOROBAN_RPC_URL: http://mock-rpc:8000
+      SOROBAN_RPC_URL_TESTNET: http://mock-rpc:8000
+      INDEXER_METRICS_ADDR: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-rpc:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - integration_net
+
+networks:
+  integration_net:

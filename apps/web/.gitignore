@@ -3,3 +3,9 @@ node_modules
 tsconfig.tsbuildinfo
 /test-results
 /playwright-report
+
+# next-pwa generated files
+public/sw.js*
+public/workbox-*.js*
+public/worker-*.js*
+public/swe-worker-*.js*

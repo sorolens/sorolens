@@ -5,6 +5,7 @@
 
 # Node
 node_modules/
+.pnpm-store/
 dist/
 .next/
 .turbo/
@@ -17,6 +18,7 @@ coverage/
 target/
 
 # Go
+.bin/
 *.exe
 *.test
 sorolens-bin
@@ -30,3 +32,9 @@ sorolens-bin
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/

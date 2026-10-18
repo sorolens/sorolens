@@ -11,25 +11,25 @@ This page documents the slash commands and how they authenticate.
 
 ### Contributor linking
 
-| Command | Purpose |
-|---|---|
-| `/connect` | One-click GitHub OAuth linking. Replies with a personal, HMAC-signed link that expires after 10 minutes. |
-| `/link github <username>` | Manual fallback that skips OAuth. |
-| `/unlink` | Removes the GitHub link **and** revokes the member's Sorolens API key. |
-| `/whoami` | Shows the GitHub account linked to your Discord id. |
-| `/mypr` | Shows the merged-PR count in `sorolens/sorolens` and the current role tier. |
+| Command                   | Purpose                                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `/connect`                | One-click GitHub OAuth linking. Replies with a personal, HMAC-signed link that expires after 10 minutes. |
+| `/link github <username>` | Manual fallback that skips OAuth.                                                                        |
+| `/unlink`                 | Removes the GitHub link **and** revokes the member's Sorolens API key.                                   |
+| `/whoami`                 | Shows the GitHub account linked to your Discord id.                                                      |
+| `/mypr`                   | Shows the merged-PR count in `sorolens/sorolens` and the current role tier.                              |
 
 ### Contract queries
 
 These commands call the Sorolens HTTP API (`apps/api`). All four require a
 linked GitHub account so the bot can attribute the request to a real person.
 
-| Command | API call | Reply |
-|---|---|---|
-| `/status <contract>` | `GET /api/v1/contracts/{id}` | Embed with the contract's status, network, label and wasm hash. |
+| Command                      | API call                                     | Reply                                                            |
+| ---------------------------- | -------------------------------------------- | ---------------------------------------------------------------- |
+| `/status <contract>`         | `GET /api/v1/contracts/{id}`                 | Embed with the contract's status, network, label and wasm hash.  |
 | `/alerts <contract> [limit]` | `GET /api/v1/watchdog/contracts/{id}/alerts` | Embed listing the most recent watchdog alerts (1–10, default 5). |
-| `/watch <contract>` | `POST /api/v1/watchlist` | Confirms the contract is on your watchlist. |
-| `/unwatch <contract>` | `DELETE /api/v1/watchlist/{contractId}` | Confirms removal. |
+| `/watch <contract>`          | `POST /api/v1/watchlist`                     | Confirms the contract is on your watchlist.                      |
+| `/unwatch <contract>`        | `DELETE /api/v1/watchlist/{contractId}`      | Confirms removal.                                                |
 
 `<contract>` must be a Stellar contract id: 56 characters, starting with `C`.
 The bot validates the shape before spending an API call and replies
@@ -74,11 +74,11 @@ cannot exhaust the upstream quota for everyone.
 
 Add these to the bot's environment (see `.env.example`):
 
-| Variable | Required | Meaning |
-|---|---|---|
-| `SOROLENS_API_BASE_URL` | no (default `http://localhost:8080`) | Base URL of the Sorolens API. |
-| `SOROLENS_API_KEY` | no | Admin-scoped (`admin:*`) key used to mint per-user keys. Without it, commands run on the public read surface. |
-| `COMMAND_RATE_LIMIT_PER_MINUTE` | no (default `10`) | Per-user command budget per minute. |
+| Variable                        | Required                             | Meaning                                                                                                       |
+| ------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `SOROLENS_API_BASE_URL`         | no (default `http://localhost:8080`) | Base URL of the Sorolens API.                                                                                 |
+| `SOROLENS_API_KEY`              | no                                   | Admin-scoped (`admin:*`) key used to mint per-user keys. Without it, commands run on the public read surface. |
+| `COMMAND_RATE_LIMIT_PER_MINUTE` | no (default `10`)                    | Per-user command budget per minute.                                                                           |
 
 After deploying, re-run the registration script so Discord learns the new
 commands:
@@ -90,13 +90,13 @@ npm run register
 
 ## Failure modes
 
-| Situation | Behaviour |
-|---|---|
-| Contract not tracked by Sorolens | Ephemeral "not tracked" message (API `404`). |
-| API key rejected or missing scope | Ephemeral prompt to re-run `/connect` (API `401`/`403`). |
-| Sorolens API unreachable | Ephemeral "try again shortly"; the interaction is still acknowledged so Discord does not show a failed command. |
-| Member over the rate limit | Ephemeral retry message; no API call is made. |
-| Command run without a linked account | Ephemeral prompt to run `/connect` first. |
+| Situation                            | Behaviour                                                                                                       |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Contract not tracked by Sorolens     | Ephemeral "not tracked" message (API `404`).                                                                    |
+| API key rejected or missing scope    | Ephemeral prompt to re-run `/connect` (API `401`/`403`).                                                        |
+| Sorolens API unreachable             | Ephemeral "try again shortly"; the interaction is still acknowledged so Discord does not show a failed command. |
+| Member over the rate limit           | Ephemeral retry message; no API call is made.                                                                   |
+| Command run without a linked account | Ephemeral prompt to run `/connect` first.                                                                       |
 
 ## Tests
 

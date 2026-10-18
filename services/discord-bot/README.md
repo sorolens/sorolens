@@ -9,17 +9,17 @@ Runs as a single Node.js process. Deploys to Render's free tier (Docker) with an
 
 ## Slash commands
 
-| Command | What it does |
-|---|---|
-| `/connect` | **Recommended.** Auto-links your GitHub via one-click OAuth. No typing. |
-| `/link github <username>` | Manual fallback if you cannot use OAuth. |
-| `/unlink` | Remove the GitHub link on your Discord account. |
-| `/whoami` | Show your current linked GitHub account, if any. |
-| `/mypr` | Show your merged PR count and current tier. |
-| `/status <contract>` | Show the current Sorolens status of a tracked contract. |
-| `/alerts <contract> [limit]` | Show the latest watchdog alerts for a contract. |
-| `/watch <contract>` | Add a contract to your Sorolens watchlist. |
-| `/unwatch <contract>` | Remove a contract from your watchlist. |
+| Command                      | What it does                                                            |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| `/connect`                   | **Recommended.** Auto-links your GitHub via one-click OAuth. No typing. |
+| `/link github <username>`    | Manual fallback if you cannot use OAuth.                                |
+| `/unlink`                    | Remove the GitHub link on your Discord account.                         |
+| `/whoami`                    | Show your current linked GitHub account, if any.                        |
+| `/mypr`                      | Show your merged PR count and current tier.                             |
+| `/status <contract>`         | Show the current Sorolens status of a tracked contract.                 |
+| `/alerts <contract> [limit]` | Show the latest watchdog alerts for a contract.                         |
+| `/watch <contract>`          | Add a contract to your Sorolens watchlist.                              |
+| `/unwatch <contract>`        | Remove a contract from your watchlist.                                  |
 
 See [`docs/discord-bot.md`](../../docs/discord-bot.md) for the API-backed query commands in detail.
 
@@ -27,11 +27,11 @@ New members are also DM'd a personal `/connect` link automatically when they joi
 
 ## Role tiers
 
-| Tier | Requirement | Default threshold |
-|---|---|---|
-| Verified | Member of the server (assigned via Discord Onboarding) | n/a |
-| Contributor | Merged PRs in `sorolens/sorolens` >= `CONTRIBUTOR_THRESHOLD` | 1 |
-| Core Contributor | Merged PRs >= `CORE_CONTRIBUTOR_THRESHOLD` | 3 |
+| Tier             | Requirement                                                  | Default threshold |
+| ---------------- | ------------------------------------------------------------ | ----------------- |
+| Verified         | Member of the server (assigned via Discord Onboarding)       | n/a               |
+| Contributor      | Merged PRs in `sorolens/sorolens` >= `CONTRIBUTOR_THRESHOLD` | 1                 |
+| Core Contributor | Merged PRs >= `CORE_CONTRIBUTOR_THRESHOLD`                   | 3                 |
 
 Only the highest tier a contributor qualifies for is held at any time (Core Contributors do not also hold Contributor).
 
@@ -66,15 +66,15 @@ Render's free tier sleeps after 15 minutes of inactivity, which breaks the Disco
 2. Dashboard: **New +** > **Web Service** > pick `sorolens/sorolens`.
 3. Fields:
 
-   | Field | Value |
-   |---|---|
-   | Name | `sorolens-discord-bot` |
-   | Region | Oregon or Ohio |
-   | Branch | `main` |
+   | Field              | Value                  |
+   | ------------------ | ---------------------- |
+   | Name               | `sorolens-discord-bot` |
+   | Region             | Oregon or Ohio         |
+   | Branch             | `main`                 |
    | **Root Directory** | `services/discord-bot` |
-   | Runtime | **Docker** |
-   | Dockerfile Path | `./Dockerfile` |
-   | Instance Type | **Free** |
+   | Runtime            | **Docker**             |
+   | Dockerfile Path    | `./Dockerfile`         |
+   | Instance Type      | **Free**               |
 
 4. Under **Environment Variables**, add every entry from `.env.example`. Set `DATABASE_PATH=/tmp/mappings.db` (Render's free tier has no persistent disk; contributors can `/link` again after each redeploy).
 5. Click **Create Web Service** and wait for the green **Live** badge (~4-6 minutes).
@@ -120,12 +120,12 @@ The webhook receiver uses `@octokit/webhooks` which validates the HMAC-SHA256 si
 
 ## Failure modes and what happens
 
-| Scenario | Behaviour |
-|---|---|
-| PR merged by contributor who has not run `/link` | Bot logs and skips. Contributor can `/link` any time; roles sync immediately. |
-| Contributor tries to `/link` a GitHub name already linked to another Discord user | Command replies with an error; no state changes. |
-| GitHub API rate limit | Command replies with the error message. Retry manually or wait ~1 min. |
-| Bot crashes / redeploys | Slash commands stay registered. On Render's free tier `DATABASE_PATH` points at `/tmp` and mappings reset on redeploy - contributors just run `/link` again. Move to a paid disk if that gets annoying. |
+| Scenario                                                                          | Behaviour                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PR merged by contributor who has not run `/link`                                  | Bot logs and skips. Contributor can `/link` any time; roles sync immediately.                                                                                                                           |
+| Contributor tries to `/link` a GitHub name already linked to another Discord user | Command replies with an error; no state changes.                                                                                                                                                        |
+| GitHub API rate limit                                                             | Command replies with the error message. Retry manually or wait ~1 min.                                                                                                                                  |
+| Bot crashes / redeploys                                                           | Slash commands stay registered. On Render's free tier `DATABASE_PATH` points at `/tmp` and mappings reset on redeploy - contributors just run `/link` again. Move to a paid disk if that gets annoying. |
 
 ## Security notes
 

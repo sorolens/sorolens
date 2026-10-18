@@ -1,0 +1,9 @@
+{
+  "event_count": 128,
+  "invocation_count": 42,
+  "storage_count": 57,
+  "last_synced_ledger": 1234600,
+  "window_event_count": 12,
+  "window_invocation_count": 7,
+  "window_duration": "24h"
+}

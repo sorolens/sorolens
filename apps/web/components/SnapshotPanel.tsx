@@ -14,7 +14,10 @@ interface SnapshotPanelProps {
  * Ledger scrubber for time-travel debugging: pick a ledger, see the storage
  * state and last known event as they were at that point.
  */
-export function SnapshotPanel({ contractId, currentLedger }: SnapshotPanelProps) {
+export function SnapshotPanel({
+  contractId,
+  currentLedger,
+}: SnapshotPanelProps) {
   const [ledger, setLedger] = useState("");
   const [snapshot, setSnapshot] = useState<ContractSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +38,7 @@ export function SnapshotPanel({ contractId, currentLedger }: SnapshotPanelProps)
       setError(
         err instanceof ApiError
           ? err.message
-          : "Failed to load snapshot for that ledger",
+          : "Failed to load snapshot for that ledger"
       );
     } finally {
       setLoading(false);
@@ -61,7 +64,9 @@ export function SnapshotPanel({ contractId, currentLedger }: SnapshotPanelProps)
               setLedger(e.target.value);
               setError(null);
             }}
-            placeholder={currentLedger > 0 ? String(currentLedger) : "e.g. 12345"}
+            placeholder={
+              currentLedger > 0 ? String(currentLedger) : "e.g. 12345"
+            }
             className="w-48 rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2 font-mono text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
           />
         </div>
@@ -76,7 +81,8 @@ export function SnapshotPanel({ contractId, currentLedger }: SnapshotPanelProps)
         </button>
         {snapshot && (
           <span className="text-xs text-[var(--color-text-secondary)]">
-            First tracked ledger: {snapshot.first_tracked_ledger.toLocaleString()}
+            First tracked ledger:{" "}
+            {snapshot.first_tracked_ledger.toLocaleString()}
           </span>
         )}
       </div>
@@ -95,7 +101,8 @@ export function SnapshotPanel({ contractId, currentLedger }: SnapshotPanelProps)
           {snapshot.last_event ? (
             <div className="mb-4 rounded-md border border-[var(--color-border)] bg-black/20 p-3 text-xs">
               <div className="mb-1 font-medium text-[var(--color-text-secondary)]">
-                Last known event at or before ledger {snapshot.ledger.toLocaleString()}
+                Last known event at or before ledger{" "}
+                {snapshot.ledger.toLocaleString()}
               </div>
               <div className="font-mono">
                 {snapshot.last_event.id} · ledger{" "}
