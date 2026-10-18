@@ -4,11 +4,6 @@ export const metadata: Metadata = {
   title: "Compare Contracts",
   description:
     "Side-by-side comparison of Soroban contract metrics — event volume, invocation costs, health scores, and 7-day trends.",
-  openGraph: {
-    title: "Compare Contracts — Sorolens",
-    description: "Side-by-side comparison of Soroban contract metrics.",
-    url: "/compare",
-  },
   alternates: {
     canonical: "/compare",
   },
