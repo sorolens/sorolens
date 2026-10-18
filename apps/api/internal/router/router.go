@@ -268,15 +268,15 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/compare", h.CompareContracts)
 
 		// Contract changelog (issue #601). The handler exposes a
-		// per-contract changelog, a global feed and a badge count. Reads
-		// are public like the rest of the v0.1 surface.
+		// per-contract changelog plus a cross-contract feed and a badge
+		// counter used by the dashboard tab. Reads only, so the public
+		// v0.1 scope rules apply.
 		get("/contracts/{id}/changelog", h.ContractChangelog)
 		get("/changelog/feed", h.ChangelogFeed)
 		get("/changelog/badge", h.ChangelogBadge)
 
 		// Response cache (issue #143): hot reads are cached for CacheTTL and
 		// a successful write purges the namespace it changes.
-		cacheContracts := middleware.Cache(h.Cache, middleware.CacheNamespaceContracts)
-		_ = cacheContracts
+		cacheContracts := middleware.Cache(h.Cache, middleware.CacheNamespace
 	})
 }

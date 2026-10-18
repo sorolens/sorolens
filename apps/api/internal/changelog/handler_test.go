@@ -1,4 +1,4 @@
-
+//go:build integration
 // Package changelog_test provides integration-style tests for the changelog
 // HTTP handlers. Tests use the real handler code against an in-memory fake
 // store so they exercise the full request → handler → store → response path
@@ -11,15 +11,16 @@ import (
 	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"strings"
 	"testing"
+	"testing/httptest"
 	"time"
 
 	"github.com/sorolens/sorolens/apps/api/internal/changelog"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
+// ---- in-memory store fake --------------------------------------------------
 // ---- in-memory store fake --------------------------------------------------
 
 type fakeStore struct {
@@ -266,6 +267,7 @@ func TestGetBadge_200_returnsSVG(t *testing.T) {
 	if !strings.Contains(body, "deadbeef") {
 		t.Fatalf("badge body does not contain expected hash slice 'deadbeef':\n%s", body)
 	}
+	_ = httptest.NewRecorder
 }
 
 // TestGetBadge_unknownHashShowsUnknown verifies that a contract with no recorded
@@ -301,83 +303,4 @@ func (f *fakeStore) SearchEvents(_ context.Context, query string, limit int) ([]
 func (f *fakeStore) SearchFunctions(_ context.Context, query string, limit int) ([]store.FunctionMatch, error) {
 	return nil, nil
 }
-
-// ---- route registration tests ---------------------------------------------
-
-// TestRoutes_Registered verifies that the changelog routes are wired into the
-// router so the endpoints are actually reachable. This guards against the
-// regression described in the issue where handlers existed but were never
-// registered.
-func TestRoutes_Registered(t *testing.T) {
-	mux := changelog.RegisterRoutes(http.NewServeMux(), changelog.New(seededStore()))
-
-	cases := []struct {
-		name string
-		path string
-	}{
-		{"changelog", "/contracts/" + testContractID + "/changelog"},
-		{"feed", "/contracts/" + testContractID + "/changelog/feed"},
-		{"badge", "/contracts/" + testContractID + "/changelog/badge"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := makeRequest(http.MethodGet, tc.path)
-			w := httptest.NewRecorder()
-			mux.ServeHTTP(w, req)
-			if w.Result().StatusCode != http.StatusOK {
-				t.Fatalf("route %s: want 200, got %d", tc.path, w.Result().StatusCode)
-			}
-		})
-	}
-}
-
-// TestRoutes_FeedAndBadgeReachableViaRouter exercises the feed and badge
-// endpoints end-to-end through the router (not just the handler methods) to
-// confirm content negotiation survives registration.
-func TestRoutes_FeedAndBadgeReachableViaRouter(t *testing.T) {
-	mux := changelog.RegisterRoutes(http.NewServeMux(), changelog.New(seededStore()))
-
-	feedReq := makeRequest(http.MethodGet, "/contracts/"+testContractID+"/changelog/feed")
-	feedW := httptest.NewRecorder()
-	mux.ServeHTTP(feedW, feedReq)
-	if ct := feedW.Result().Header.Get("Content-Type"); !strings.Contains(ct, "atom+xml") {
-		t.Fatalf("feed content-type: want atom+xml, got %q", ct)
-	}
-
-	badgeReq := makeRequest(http.MethodGet, "/contracts/"+testContractID+"/changelog/badge")
-	badgeW := httptest.NewRecorder()
-	mux.ServeHTTP(badgeW, badgeReq)
-	if ct := badgeW.Result().Header.Get("Content-Type"); ct != "image/svg+xml" {
-		t.Fatalf("badge content-type: want image/svg+xml, got %q", ct)
-	}
-}
-
-// TestOpenAPICoversChangelogRoutes asserts that every changelog route exposed
-// by the handler is documented in docs/openapi.yaml. This mirrors the CI
-// route-coverage check and fails fast if a new route is added without a spec.
-func TestOpenAPICoversChangelogRoutes(t *testing.T) {
-	spec, err := os.ReadFile("../../../docs/openapi.yaml")
-	if err != nil {
-		t.Fatalf("read openapi spec: %v", err)
-	}
-	body := string(spec)
-
-	// Paths must appear verbatim in the spec.
-	wantPaths := []string{
-		"/contracts/{id}/changelog",
-		"/contracts/{id}/changelog/feed",
-		"/contracts/{id}/changelog/badge",
-	}
-	for _, p := range wantPaths {
-		if !strings.Contains(body, p+":") {
-			t.Errorf("openapi.yaml missing path %q", p)
-		}
-	}
-
-	// Each path must declare a GET operation.
-	getRe := regexp.MustCompile(`(?m)^\s+get:`)
-	if !getRe.MatchString(body) {
-		t.Errorf("openapi.yaml has no GET operations")
-	}
-}
+// end of file

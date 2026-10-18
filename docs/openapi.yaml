@@ -48,6 +48,8 @@ tags:
     description: Global and per-contract statistics
   - name: Contracts
     description: Tracked contract registration and lookup
+  - name: Changelog
+    description: Per-contract changelog entries, feed, and unread badge
   - name: Verification
     description: Contract source verification and Wasm hash matching
   - name: Events
@@ -77,8 +79,6 @@ tags:
   - name: Watchdog
     description: On-chain watchdog monitoring data
 
-  - name: Changelog
-    description: Per-contract changelog entries, feed, and unread badge
   - name: Version
     description: Build metadata for the running API instance
   - name: Alerts
@@ -144,6 +144,10 @@ paths:
     get:
       tags: [Changelog]
       summary: List a contract's changelog entries
+      description: >-
+        Returns the changelog entries recorded for a contract, newest first.
+        Entries are generated from on-chain activity (upgrades, verification
+        changes, notable events) and are read-only.
       operationId: listContractChangelog
       security:
         - ApiKeyAuth: [read:contracts]
@@ -153,7 +157,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
-          description: Page of changelog entries, newest first
+          description: Page of changelog entries
           content:
             application/json:
               schema:
@@ -177,15 +181,19 @@ paths:
     get:
       tags: [Changelog]
       summary: Cross-contract changelog feed
+      description: >-
+        Newest changelog entries across every tracked contract, for the
+        dashboard changelog tab.
       operationId: getChangelogFeed
       security:
         - ApiKeyAuth: [read:contracts]
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/NetworkParam"
       responses:
         "200":
-          description: Page of changelog entries across tracked contracts, newest first
+          description: Page of changelog entries, newest first
           content:
             application/json:
               schema:
@@ -207,16 +215,29 @@ paths:
     get:
       tags: [Changelog]
       summary: Unread changelog badge count
+      description: >-
+        Returns the number of changelog entries the caller has not yet seen,
+        used to render the unread badge on the changelog tab.
       operationId: getChangelogBadge
       security:
         - ApiKeyAuth: [read:contracts]
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Only count entries at or after this RFC 3339 timestamp.
       responses:
         "200":
-          description: Unread changelog entry count
+          description: Unread badge count
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChangelogBadge"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
   /health:
@@ -6265,38 +6286,6 @@ components:
           type: string
           description: RFC3339 build timestamp injected at build time; "dev" when unset or malformed.
           example: "2026-01-02T15:04:05Z"
-
-    ChangelogEntry:
-      type: object
-      required: [id, contract_id, network, kind, summary, created_at]
-      properties:
-        id:
-          type: string
-        contract_id:
-          type: string
-        network:
-          type: string
-        kind:
-          type: string
-          description: Entry category (e.g. upgrade, verification, event).
-        summary:
-          type: string
-        details:
-          type: object
-          additionalProperties: true
-          description: Structured payload for the entry; shape depends on kind.
-        created_at:
-          type: string
-          format: date-time
-
-    ChangelogBadge:
-      type: object
-      required: [unread]
-      properties:
-        unread:
-          type: integer
-          format: int64
-          description: Number of unread changelog entries for the caller.
 
     ContractSnapshotExport:
       type: object
