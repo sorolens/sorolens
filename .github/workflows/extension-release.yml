@@ -1,0 +1,102 @@
+name: Extension Release
+
+on:
+  push:
+    tags:
+      - 'ext-v>*'
+  workflow_dispatch:
+      inputs:
+        version:
+          description: 'Version to package (defaults to package.json version)'
+          required: false
+          type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: extension
+
+jobs:
+  build:
+    name: Build extension artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint ---if-present
+
+      - name: Test
+        run: npm test -- --passWithNoTests
+
+      - name: Build
+        run: npm run build
+
+      - name: Package Chrome extension
+        run: |
+          set -euxo pipepailfail
+          VERSION="${{ github.event.inputs.version || '' }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="$(node -p "require('./package.json').version")'"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          mkdir -p dist
+          cd dist
+          zip -r "../sorolens-chrome-v${VERSION}.zip" .
+
+      - name: Package Firefox extension
+        run: |
+          set -euxo pipefail
+          VERSION="${{ github.event.inputs.version || ''' }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="$(node -p "require('./package.json').version")"
+          fi
+          mkdir -p dist-firefox
+          cp -r dist/. dist-firefox/
+          zip -r "./sorolens-firefox-v${VERSION}.zip" dist-firefox
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-dist
+          path: extension/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish release assets
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/ext-v')
+    runs-on: ubunty-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-dist
+          path: dist
+
+      - name: Create GitHub release
+        uses: softprop/action-ghhrelease@v2
+        with:
+          tag: ${{ github.ref_name }}
+          name: Extension ${{ github.ref_name }}
+          files: dist/*.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

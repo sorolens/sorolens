@@ -168,6 +168,51 @@ jobs:
       - name: Lint
         run: pnpm --filter "./packages/**" lint
   # ------------------------------------------------------------
+  # Browser extension: lint and tests (issue #562)
+  # ------------------------------------------------------------
+  extension:
+    name: Browser extension (lint + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 11
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "store=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.store }}
+          key: pnpm-node22-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-node22-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Lint extension
+        working-directory: extension
+        run: pnpm lint
+      - name: Test extension
+        working-directory: extension
+        run: pnpm test
+      - name: Package extension (Chrome + Firefox)
+        working-directory: extension
+        run: pnpm package
+      - name: Upload extension artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-dist
+          path: |
+            extension/dist/*.zip
+          if-no-files-found: error
+  # ------------------------------------------------------------
   # Prettier formatting (issue #216). Runs the acceptance criterion
   # verbatim: `pnpm prettier --check` must pass in CI.
   # ------------------------------------------------------------
@@ -189,6 +234,41 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: prettier --check
         run: pnpm exec prettier --check apps/web package.json eslint.config.mjs
+  # ------------------------------------------------------------
+  # Browser extension release: signed-ready zips for Chrome and Firefox
+  # ------------------------------------------------------------
+  extension-package:
+    name: Package browser extension
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 11
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build and package extension
+        working-directory: extension
+        run: pnpm package
+      - name: Upload Chrome zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-chrome
+          path: extension/dist/*chrome*.zip
+          if-no-files-found: error
+      - name: Upload Firefox zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-firefox
+          path: extension/dist/*firefox*.zip
+          if-no-files-found: error
 
   # ------------------------------------------------------------
   # TypeScript type-check (fast, no build output needed)
