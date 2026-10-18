@@ -56,14 +56,15 @@ function metricLabel(node: TraceNode, metric: Metric): string {
   return "";
 }
 
-// Warm palette, one shade per depth, so nested frames read like a flame graph.
+// Theme-aware categorical palette (--chart-N in globals.css), one shade per
+// depth, so nested frames read like a flame graph in BOTH themes (issue #609).
 const DEPTH_COLORS = [
-  "bg-amber-500/70",
-  "bg-orange-500/70",
-  "bg-rose-500/70",
-  "bg-pink-500/70",
-  "bg-fuchsia-500/70",
-  "bg-purple-500/70",
+  "bg-[var(--chart-3)]",
+  "bg-[var(--chart-5)]",
+  "bg-[var(--chart-6)]",
+  "bg-[var(--chart-4)]",
+  "bg-[var(--chart-1)]",
+  "bg-[var(--chart-2)]",
 ];
 
 function FlameFrame({
@@ -95,21 +96,21 @@ function FlameFrame({
       >
         <div
           className={`flex h-8 items-center gap-2 overflow-hidden rounded px-2 text-xs ${color} ${
-            isRoot ? "ring-1 ring-amber-300/60" : ""
+            isRoot ? "ring-1 ring-[var(--color-warning)]" : ""
           }`}
           style={{ width: `${width}%` }}
           title={`${frameLabel(node)} (${node.span_id})`}
         >
-          <span className="truncate font-medium text-white">
+          <span className="truncate font-medium text-[var(--color-on-chart)]">
             {frameLabel(node)}
           </span>
           {node.contract_id && (
-            <span className="truncate font-mono text-[10px] text-white/80">
+            <span className="truncate font-mono text-[10px] text-[var(--color-on-chart)]">
               {node.contract_id.slice(0, 8)}…{node.contract_id.slice(-4)}
             </span>
           )}
           {label && (
-            <span className="ml-auto shrink-0 font-mono text-[10px] text-white/90">
+            <span className="ml-auto shrink-0 font-mono text-[10px] text-[var(--color-on-chart)]">
               {label}
             </span>
           )}
@@ -157,7 +158,7 @@ export function TraceFlameGraph({
         )}
         {truncated && (
           <span
-            className="rounded-full bg-yellow-900/40 px-2 py-0.5 font-medium text-yellow-400"
+            className="rounded-full bg-[var(--color-warning-bg)] px-2 py-0.5 font-medium text-[var(--color-warning)]"
             data-testid="flamegraph-truncated"
           >
             Truncated - some frames were dropped

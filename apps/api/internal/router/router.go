@@ -234,6 +234,13 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// GET /api/v1/alerts          — grouped view (default)
 		// GET /api/v1/alerts?flat=true — raw ContractAlert feed
 		get("/alerts", h.ListAlerts)
+
+		// Integrations catalog and test-send (issue #612). Reads are public
+		// like the rest of the v0.1 surface; the test send triggers an
+		// outbound request, so it requires the contributor role like other
+		// writes.
+		get("/integrations", h.ListIntegrations)
+		r.With(scope, contributor).Post("/integrations/{id}/test", h.TestIntegration)
 		// User-defined alert rules (rule language). Reads are public like the
 		// rest of the v0.1 surface; authoring mutates shared state, so it needs
 		// the contributor role like contract registration.

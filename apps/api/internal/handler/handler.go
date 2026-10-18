@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -98,6 +99,23 @@ type Handler struct {
 	// reporting handlers fall back to REPORT_SIGNING_KEY; with neither set the
 	// reports are emitted unsigned and every response says so.
 	ReportSigningKey string
+
+	// Getenv looks up integration configuration (issue #612). Nil means
+	// os.Getenv; tests inject a fake environment.
+	Getenv func(string) string
+	// IntegrationHTTPClient delivers integration test messages (issue #612).
+	// Nil means http.DefaultClient; tests inject a client pointed at an
+	// httptest server.
+	IntegrationHTTPClient *http.Client
+	// SlackSigningSecret verifies Slack slash command requests (issue #127).
+	// Empty disables the Slack command endpoint.
+	SlackSigningSecret string
+	// RequestTimeout caps handling of every /api/v1 route except the SSE
+	// stream (issue #154). Zero means middleware.DefaultRequestTimeout.
+	RequestTimeout time.Duration
+	// StreamTimeout bounds one SSE connection. Zero means
+	// middleware.DefaultStreamTimeout.
+	StreamTimeout time.Duration
 
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.

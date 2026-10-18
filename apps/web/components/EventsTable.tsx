@@ -28,7 +28,7 @@ function EventRow({ event }: { event: ContractEvent }) {
   return (
     <>
       <tr
-        className="cursor-pointer border-b border-[var(--color-border)] transition-colors hover:bg-white/5"
+        className="cursor-pointer border-b border-[var(--color-border)] transition-colors hover:bg-[var(--color-bg-hover)]"
         onClick={() => setExpanded(!expanded)}
       >
         <td className="px-4 py-3 font-mono text-xs">
@@ -48,8 +48,8 @@ function EventRow({ event }: { event: ContractEvent }) {
           <span
             className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
               event.in_successful_call
-                ? "bg-green-900/40 text-green-400"
-                : "bg-red-900/40 text-red-400"
+                ? "bg-[var(--color-safe-bg)] text-[var(--color-safe)]"
+                : "bg-[var(--color-danger-bg)] text-[var(--color-danger)]"
             }`}
           >
             {event.in_successful_call ? "OK" : "FAIL"}
@@ -63,7 +63,7 @@ function EventRow({ event }: { event: ContractEvent }) {
         </td>
       </tr>
       {expanded && (
-        <tr className="bg-white/[0.02]">
+        <tr className="bg-[var(--color-bg-hover)]">
           <td
             colSpan={7}
             className="border-b border-[var(--color-border)] px-8 py-4"
@@ -73,7 +73,7 @@ function EventRow({ event }: { event: ContractEvent }) {
                 <div className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
                   Decoded Topics
                 </div>
-                <pre className="overflow-x-auto rounded bg-black/20 p-3 font-mono text-xs leading-relaxed">
+                <pre className="overflow-x-auto rounded bg-[var(--color-bg-elevated)] p-3 font-mono text-xs leading-relaxed">
                   {JSON.stringify(decodedTopics, null, 2)}
                 </pre>
               </div>
@@ -81,7 +81,7 @@ function EventRow({ event }: { event: ContractEvent }) {
                 <div className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
                   Raw Value
                 </div>
-                <pre className="overflow-x-auto rounded bg-black/20 p-3 font-mono text-xs leading-relaxed">
+                <pre className="overflow-x-auto rounded bg-[var(--color-bg-elevated)] p-3 font-mono text-xs leading-relaxed">
                   {event.value_decoded != null
                     ? JSON.stringify(event.value_decoded, null, 2)
                     : event.value_xdr}
@@ -144,7 +144,7 @@ export function EventsTable({
             type="button"
             onClick={onLoadMore}
             disabled={loading}
-            className="rounded-md bg-white/10 px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-white/20 disabled:opacity-50"
+            className="rounded-md bg-[var(--color-bg-elevated)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
           >
             {loading ? "Loading..." : "Load More"}
           </button>

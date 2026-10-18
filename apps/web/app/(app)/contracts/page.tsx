@@ -48,12 +48,12 @@ const PASTE_CONTRACT_ID_RE = /^C[A-Z0-9]{55}$/;
 
 function StatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
-    active: "bg-green-900/40 text-green-400",
-    backfilling: "bg-blue-900/40 text-blue-400",
-    error: "bg-red-900/40 text-red-400",
-    inactive: "bg-yellow-900/40 text-yellow-400",
+    active: "bg-[var(--color-safe-bg)] text-[var(--color-safe)]",
+    backfilling: "bg-[var(--color-info-bg)] text-[var(--color-info)]",
+    error: "bg-[var(--color-danger-bg)] text-[var(--color-danger)]",
+    inactive: "bg-[var(--color-warning-bg)] text-[var(--color-warning)]",
   };
-  const cls = colorMap[status] ?? "bg-yellow-900/40 text-yellow-400";
+  const cls = colorMap[status] ?? "bg-[var(--color-warning-bg)] text-[var(--color-warning)]";
   return (
     <span
       className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${cls}`}
@@ -201,7 +201,7 @@ function UntrackConfirmModal({
           type="button"
           onClick={onConfirm}
           disabled={pending}
-          className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex-1 rounded-lg bg-[var(--color-danger)] px-4 py-2.5 text-sm font-semibold text-[var(--color-bg-card)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? "Untracking…" : `Untrack ${count}`}
         </button>
@@ -252,7 +252,7 @@ function TagModal({
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="payments"
-            className="w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+            className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
           />
         </div>
         <div className="flex gap-3 pt-1">
@@ -838,7 +838,7 @@ function ContractsPageInner() {
                 type="button"
                 onClick={() => setShowUntrackModal(true)}
                 disabled={bulkPending}
-                className="rounded-lg border border-red-500/40 bg-red-600/10 px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-600/20 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-bg)] px-3 py-1.5 text-sm font-medium text-[var(--color-danger)] transition-colors hover:bg-[var(--color-danger-bg)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Untrack {selected.size}{" "}
                 {selected.size === 1 ? "contract" : "contracts"}
@@ -892,11 +892,12 @@ function ContractsPageInner() {
             sortColumn={sortColumn}
             sortDirection={sortDirection}
             onSort={handleSort}
-            onRowClick={(c) => {
-              // The detail page doesn't exist until the API confirms it.
-              if (isPendingRow(c)) return;
-              window.location.href = `/contracts/${c.id}`;
-            }}
+            // Real link in the ID cell (issue #610): keyboard reachable and
+            // announced by screen readers. Pending rows get no link — the
+            // detail page doesn't exist until the API confirms the contract.
+            linkColumnKey="id"
+            linkComponent={Link}
+            rowHref={(c) => (isPendingRow(c) ? null : `/contracts/${c.id}`)}
             emptyState={
               <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-12 text-center text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)]">
                 No contracts match your search.
@@ -936,16 +937,6 @@ function ContractsPageInner() {
           </div>
         )}
 
-        {/* Shortcut link to contract detail (accessible) */}
-        <div className="sr-only">
-          {sorted
-            .filter((c) => !isPendingRow(c))
-            .map((c) => (
-              <Link key={c.id} href={`/contracts/${c.id}`}>
-                {c.label ?? c.id}
-              </Link>
-            ))}
-        </div>
       </div>
     </>
   );

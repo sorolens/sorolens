@@ -54,7 +54,7 @@ function StorageRow({
         : "bg-[var(--color-safe)]";
 
   return (
-    <tr className="border-b border-[var(--color-border)] transition-colors hover:bg-white/5">
+    <tr className="border-b border-[var(--color-border)] transition-colors hover:bg-[var(--color-bg-hover)]">
       <td className="max-w-[180px] truncate px-4 py-3 font-mono text-xs">
         {entry.key_decoded || truncateMiddle(entry.key_xdr, 24, 8)}
       </td>
@@ -62,10 +62,10 @@ function StorageRow({
         <span
           className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
             entry.durability === "persistent"
-              ? "bg-blue-900/40 text-blue-400"
+              ? "bg-[var(--color-info-bg)] text-[var(--color-info)]"
               : entry.durability === "temporary"
-                ? "bg-purple-900/40 text-purple-400"
-                : "bg-yellow-900/40 text-yellow-400"
+                ? "bg-[var(--color-accent-bg)] text-[var(--color-accent)]"
+                : "bg-[var(--color-warning-bg)] text-[var(--color-warning)]"
           }`}
         >
           {entry.durability}
@@ -73,7 +73,7 @@ function StorageRow({
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-bg-elevated)]">
             <div
               className={`h-full rounded-full transition-all ${barColor}`}
               style={{ width: `${Math.min(100, urgency.pct)}%` }}
@@ -182,7 +182,7 @@ export function StoragePanel({
             type="button"
             onClick={onLoadMore}
             disabled={loading}
-            className="rounded-md bg-white/10 px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-white/20 disabled:opacity-50"
+            className="rounded-md bg-[var(--color-bg-elevated)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
           >
             {loading ? "Loading..." : "Load More"}
           </button>

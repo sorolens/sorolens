@@ -192,17 +192,17 @@ export function tokenizeRule(
 export function classForToken(kind: RuleTokenKind): string {
   switch (kind) {
     case "keyword":
-      return "text-fuchsia-400";
+      return "text-[var(--color-accent)]";
     case "aggregation":
-      return "text-sky-400";
+      return "text-[var(--color-info)]";
     case "metric":
-      return "text-emerald-400";
+      return "text-[var(--color-safe)]";
     case "number":
-      return "text-amber-400";
+      return "text-[var(--color-warning)]";
     case "unit":
-      return "text-amber-300";
+      return "text-[var(--color-warning)]";
     case "operator":
-      return "text-rose-400";
+      return "text-[var(--color-danger)]";
     case "punctuation":
       return "text-[var(--color-text-secondary)]";
     default:

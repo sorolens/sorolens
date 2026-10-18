@@ -37,9 +37,9 @@ function formatPct(value: number): string {
  */
 function uptimeTone(uptime: number, hasData: boolean): string {
   if (!hasData) return "text-[var(--color-text-secondary)]";
-  if (uptime >= 99.9) return "text-green-400";
-  if (uptime >= 99.0) return "text-yellow-400";
-  return "text-red-400";
+  if (uptime >= 99.9) return "text-[var(--color-safe)]";
+  if (uptime >= 99.0) return "text-[var(--color-warning)]";
+  return "text-[var(--color-danger)]";
 }
 
 function verdict(m: MonthlySLA): string {
@@ -344,7 +344,7 @@ export default function SLAReportsPage() {
       </div>
 
       {error && (
-        <p className="mb-4 text-sm text-red-400" role="alert">
+        <p className="mb-4 text-sm text-[var(--color-danger)]" role="alert">
           {error}
         </p>
       )}
@@ -472,7 +472,7 @@ export default function SLAReportsPage() {
                 readOnly
                 rows={2}
                 value={`![SLA](${badgeUrl})`}
-                className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-black/30 p-2 font-mono text-xs text-[var(--color-text-primary)]"
+                className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-2 font-mono text-xs text-[var(--color-text-primary)]"
               />
               <p className="mt-3 border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-text-secondary)]">
                 Exports are signed with HMAC-SHA256; the signature is returned

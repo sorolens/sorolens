@@ -32,10 +32,10 @@ export function NetworkBadge({ network }: { network: string }) {
 function StatusBadge({ status }: { status: string }) {
   const tone =
     status === "active"
-      ? "bg-green-900/40 text-green-400"
+      ? "bg-[var(--color-safe-bg)] text-[var(--color-safe)]"
       : status === "error"
-        ? "bg-red-900/40 text-red-400"
-        : "bg-yellow-900/40 text-yellow-400";
+        ? "bg-[var(--color-danger-bg)] text-[var(--color-danger)]"
+        : "bg-[var(--color-warning-bg)] text-[var(--color-warning)]";
   return (
     <span
       className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${tone}`}
@@ -104,9 +104,9 @@ export function CompareColumn({ entry, entries }: CompareColumnProps) {
                 : "text-[var(--color-text-primary)]";
           const badgeClass =
             tone === "danger"
-              ? "bg-red-900/30"
+              ? "bg-[var(--color-danger-bg)]"
               : tone === "warning"
-                ? "bg-yellow-900/30"
+                ? "bg-[var(--color-warning-bg)]"
                 : "";
           return (
             <div

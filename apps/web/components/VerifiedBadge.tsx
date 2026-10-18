@@ -44,7 +44,7 @@ export function VerifiedBadge({ contractId }: VerifiedBadgeProps) {
       title={`Source verified: the rebuilt Wasm hash matches the on-chain hash${
         hash ? ` (${hash})` : ""
       }`}
-      className="inline-block rounded-full bg-emerald-900/40 px-2.5 py-0.5 text-xs font-medium text-emerald-400"
+      className="inline-block rounded-full bg-[var(--color-safe-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--color-safe)]"
     >
       Verified
     </span>

@@ -1,29 +1,102 @@
 @import "tailwindcss";
 
-:root[data-theme="light"],
-:root {
-  --color-warning: #d97706;
-  --color-danger: #e11d48;
-  --color-safe: #16a34a;
-  --color-bg-card: #ffffff;
+/*
+ * Semantic design tokens (issue #609).
+ *
+ * Every value below is a token — components must never reference raw palette
+ * colors. Both themes define the SAME set of keys; `design-tokens.test.ts`
+ * fails the build if a `var(--color-*)` used in source is missing from either
+ * theme, or if a foreground/background pair drops below WCAG AA (4.5:1).
+ */
+:root,
+:root[data-theme="light"] {
+  /* Surfaces */
   --color-bg-page: #f8fafc;
+  --color-bg: #f8fafc;
+  --color-bg-card: #ffffff;
+  --color-surface: #ffffff;
+  --color-bg-elevated: #f1f5f9;
+  --color-bg-hover: #f1f5f9;
+  --color-bg-active: #e2e8f0;
+
+  /* Borders */
   --color-border: #e2e8f0;
+  --color-border-hover: #cbd5e1;
+
+  /* Text (measured against #ffffff and #f8fafc) */
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
-  --color-accent: #3b82f6;
+  --color-text-muted: #64748b;
+
+  /* Accents & status */
+  --color-accent: #2563eb;
+  --color-info: #0369a1;
+  --color-warning: #b45309;
+  --color-danger: #be123c;
+  --color-safe: #15803d;
+
+  /* Tinted backgrounds for status chips and banners */
+  --color-accent-bg: #eff6ff;
+  --color-info-bg: #eff6ff;
+  --color-warning-bg: #fffbeb;
+  --color-danger-bg: #fef2f2;
+  --color-safe-bg: #f0fdf4;
+
+  /* Categorical chart / flame-graph palette (theme aware) */
+  --chart-1: #2563eb;
+  --chart-2: #15803d;
+  --chart-3: #b45309;
+  --chart-4: #7c3aed;
+  --chart-5: #db2777;
+  --chart-6: #0e7490;
+  /* Text drawn on top of chart colors */
+  --color-on-chart: #ffffff;
 }
 
 :root[data-theme="dark"] {
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
-  --color-safe: #22c55e;
-  --color-bg-card: #1e1e2e;
+  /* Surfaces */
   --color-bg-page: #11111b;
+  --color-bg: #11111b;
+  --color-bg-card: #1e1e2e;
+  --color-surface: #1e1e2e;
+  --color-bg-elevated: #26263a;
+  --color-bg-hover: #2c2c42;
+  --color-bg-active: #3b3b54;
+
+  /* Borders */
   --color-border: #313244;
+  --color-border-hover: #45475a;
+
+  /* Text (measured against #11111b and #1e1e2e) */
   --color-text-primary: #cdd6f4;
   --color-text-secondary: #a6adc8;
+  --color-text-muted: #9aa1bd;
+
+  /* Accents & status */
   --color-accent: #89b4fa;
+  --color-info: #74c7ec;
+  --color-warning: #f59e0b;
+  --color-danger: #f87171;
+  --color-safe: #22c55e;
+
+  /* Tinted backgrounds for status chips and banners */
+  --color-accent-bg: #1b2a4a;
+  --color-info-bg: #10263d;
+  --color-warning-bg: #3a2a0c;
+  --color-danger-bg: #3d1418;
+  --color-safe-bg: #11301f;
+
+  /* Categorical chart / flame-graph palette (theme aware) */
+  --chart-1: #60a5fa;
+  --chart-2: #4ade80;
+  --chart-3: #fbbf24;
+  --chart-4: #a78bfa;
+  --chart-5: #f472b6;
+  --chart-6: #22d3ee;
+  /* Text drawn on top of chart colors (dark on bright fills) */
+  --color-on-chart: #0b1220;
 }
+
 body {
   background-color: var(--color-bg-page);
   color: var(--color-text-primary);

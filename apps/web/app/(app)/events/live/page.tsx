@@ -38,19 +38,19 @@ export default function EventsPage() {
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
                 isConnected
-                  ? "bg-green-900/40 text-green-400"
+                  ? "bg-[var(--color-safe-bg)] text-[var(--color-safe)]"
                   : isPolling
-                    ? "bg-amber-900/40 text-amber-400"
-                    : "bg-blue-900/40 text-blue-400"
+                    ? "bg-[var(--color-warning-bg)] text-[var(--color-warning)]"
+                    : "bg-[var(--color-info-bg)] text-[var(--color-info)]"
               }`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
                   isConnected
-                    ? "bg-green-400 animate-pulse"
+                    ? "bg-[var(--color-safe)] animate-pulse"
                     : isPolling
-                      ? "bg-amber-400"
-                      : "bg-blue-400 animate-ping"
+                      ? "bg-[var(--color-warning)]"
+                      : "bg-[var(--color-info-bg)] animate-ping"
                 }`}
               />
               {isConnected

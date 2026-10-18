@@ -31,7 +31,7 @@ export function OfflineBanner({
       aria-atomic="true"
       className={[
         "sticky top-0 z-50 flex items-center justify-between gap-3",
-        "border-b border-amber-700 bg-amber-950/90 px-4 py-2 text-sm",
+        "border-b border-[var(--color-warning)] bg-[var(--color-warning-bg)] px-4 py-2 text-sm",
         "backdrop-blur-sm",
         className,
       ].join(" ")}
@@ -39,12 +39,12 @@ export function OfflineBanner({
       <div className="flex items-center gap-2">
         {/* Pulse dot */}
         <span className="relative flex h-2.5 w-2.5 shrink-0">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-warning)] opacity-75" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[var(--color-warning)]" />
         </span>
-        <span className="font-medium text-amber-200">You&apos;re offline</span>
+        <span className="font-medium text-[var(--color-warning)]">You&apos;re offline</span>
         {pendingCount > 0 && (
-          <span className="text-amber-300">
+          <span className="text-[var(--color-warning)]">
             &mdash; <strong className="font-semibold">{pendingCount}</strong>{" "}
             {pendingCount === 1 ? "alert" : "alerts"} queued
           </span>
@@ -53,7 +53,7 @@ export function OfflineBanner({
       {pendingCount > 0 && (
         <Link
           href="/offline-alerts"
-          className="shrink-0 rounded bg-amber-700 px-3 py-1 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-600"
+          className="shrink-0 rounded bg-[var(--color-warning)] px-3 py-1 text-xs font-semibold text-[var(--color-bg-page)] transition-colors hover:opacity-90"
         >
           View queue
         </Link>
@@ -75,15 +75,15 @@ interface PanelProps {
 }
 
 const SEVERITY_STYLES: Record<QueuedAlert["severity"], string> = {
-  Critical: "border-l-4 border-red-500 bg-red-950/40",
-  Warning: "border-l-4 border-amber-500 bg-amber-950/30",
-  Info: "border-l-4 border-sky-500 bg-sky-950/30",
+  Critical: "border-l-4 border-[var(--color-danger)] bg-[var(--color-danger-bg)]",
+  Warning: "border-l-4 border-[var(--color-warning)] bg-[var(--color-warning-bg)]",
+  Info: "border-l-4 border-[var(--color-info)] bg-[var(--color-info-bg)]",
 };
 
 const SEVERITY_BADGE: Record<QueuedAlert["severity"], string> = {
-  Critical: "bg-red-900 text-red-200",
-  Warning: "bg-amber-900 text-amber-200",
-  Info: "bg-sky-900 text-sky-200",
+  Critical: "bg-[var(--color-danger-bg)] text-[var(--color-danger)]",
+  Warning: "bg-[var(--color-warning-bg)] text-[var(--color-warning)]",
+  Info: "bg-[var(--color-info-bg)] text-[var(--color-info)]",
 };
 
 export function OfflineAlertPanel({

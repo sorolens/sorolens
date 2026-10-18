@@ -226,7 +226,7 @@ export default function NotificationsPage() {
             {saving ? "Saving…" : `Add ${meta.label} channel`}
           </button>
           {formError && (
-            <p role="alert" className="text-sm text-red-400">
+            <p role="alert" className="text-sm text-[var(--color-danger)]">
               {formError}
             </p>
           )}
@@ -238,7 +238,7 @@ export default function NotificationsPage() {
         {loadError ? (
           <p
             role="alert"
-            className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-300"
+            className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-bg)] p-4 text-sm text-[var(--color-danger)]"
           >
             {loadError}
           </p>
@@ -298,7 +298,7 @@ export default function NotificationsPage() {
                         type="button"
                         onClick={() => handleDelete(s.id)}
                         disabled={deleting === s.id}
-                        className="text-xs text-red-400 hover:underline disabled:opacity-50"
+                        className="text-xs text-[var(--color-danger)] hover:underline disabled:opacity-50"
                       >
                         {deleting === s.id ? "Removing…" : "Remove"}
                       </button>
@@ -320,7 +320,7 @@ export default function NotificationsPage() {
           secret as <code>SLACK_SIGNING_SECRET</code> on the API so requests are
           verified.
         </p>
-        <code className="mt-3 block overflow-x-auto rounded bg-black/30 p-3 font-mono text-xs">
+        <code className="mt-3 block overflow-x-auto rounded bg-[var(--color-bg-elevated)] p-3 font-mono text-xs">
           {API_URL}/integrations/slack/commands
         </code>
       </section>

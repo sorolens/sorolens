@@ -67,7 +67,7 @@ export function SnapshotPanel({
             placeholder={
               currentLedger > 0 ? String(currentLedger) : "e.g. 12345"
             }
-            className="w-48 rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2 font-mono text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+            className="w-48 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 font-mono text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
           />
         </div>
         <button
@@ -99,7 +99,7 @@ export function SnapshotPanel({
       {snapshot && (
         <div className="p-4">
           {snapshot.last_event ? (
-            <div className="mb-4 rounded-md border border-[var(--color-border)] bg-black/20 p-3 text-xs">
+            <div className="mb-4 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-3 text-xs">
               <div className="mb-1 font-medium text-[var(--color-text-secondary)]">
                 Last known event at or before ledger{" "}
                 {snapshot.ledger.toLocaleString()}

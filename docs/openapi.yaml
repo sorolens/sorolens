@@ -4057,6 +4057,94 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/integrations:
+    get:
+      tags: [Integrations]
+      summary: List notification integrations
+      description: |
+        Returns the catalog of notification integrations (Slack, Discord,
+        Telegram) with setup instructions and whether this deployment is
+        configured to deliver to each one (issue #612).
+      operationId: listIntegrations
+      security:
+        - ApiKeyAuth: [read:contracts]
+        - {}
+      responses:
+        "200":
+          description: Integration catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [integrations]
+                properties:
+                  integrations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Integration"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/integrations/{id}/test:
+    post:
+      tags: [Integrations]
+      summary: Send a test message through an integration
+      description: |
+        Sends a real test message through the integration's configured
+        channel so users can verify their setup end to end (issue #612).
+        Returns 409 when the integration is not configured and 502 when the
+        remote endpoint rejects the message.
+      operationId: testIntegration
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - {}
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [slack, discord, telegram]
+      responses:
+        "200":
+          description: Test message delivered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                  detail:
+                    type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Integration is not configured
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, error]
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+        "502":
+          description: Test message delivery failed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, error]
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+
   /api/v1/alerts:
     get:
       tags: [Alerts]
@@ -4887,6 +4975,28 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    Integration:
+      type: object
+      description: A notification integration surfaced on the web Integrations page (issue #612).
+      required: [id, name, description, install_url, setup_steps, configured]
+      properties:
+        id:
+          type: string
+          enum: [slack, discord, telegram]
+        name:
+          type: string
+        description:
+          type: string
+        install_url:
+          type: string
+          format: uri
+        setup_steps:
+          type: array
+          items:
+            type: string
+        configured:
+          type: boolean
+          description: Whether this deployment has the environment variables needed to deliver through the integration.
     ContractNote:
       type: object
       required: [id, contract_id, author, body, created_at, updated_at]

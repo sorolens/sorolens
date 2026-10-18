@@ -58,7 +58,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#7c3aed",
+  // Must match the app's page background in each theme (issue #609).
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
+    { media: "(prefers-color-scheme: dark)", color: "#11111b" },
+  ],
 };
 
 export default function RootLayout({

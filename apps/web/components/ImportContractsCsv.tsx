@@ -300,15 +300,15 @@ export default function ImportContractsCsv({
   const statusCell = (row: CsvRow) => {
     switch (row.status) {
       case "ok":
-        return <span className="text-green-400">Imported</span>;
+        return <span className="text-[var(--color-safe)]">Imported</span>;
       case "error":
-        return <span className="text-red-400">{row.message ?? "Failed"}</span>;
+        return <span className="text-[var(--color-danger)]">{row.message ?? "Failed"}</span>;
       case "importing":
         return (
           <span className="text-[var(--color-text-secondary)]">Importing…</span>
         );
       case "invalid":
-        return <span className="text-red-400">{row.error}</span>;
+        return <span className="text-[var(--color-danger)]">{row.error}</span>;
       default:
         return (
           <span className="text-[var(--color-text-secondary)]">Ready</span>
@@ -366,11 +366,11 @@ export default function ImportContractsCsv({
             const file = e.target.files?.[0];
             if (file) void handleFile(file);
           }}
-          className="mb-4 w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2 text-sm text-[var(--color-text-primary)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--color-accent)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--color-bg-page)] disabled:opacity-50"
+          className="mb-4 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-sm text-[var(--color-text-primary)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--color-accent)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--color-bg-page)] disabled:opacity-50"
         />
 
         {parseError && (
-          <p className="mb-4 text-sm text-red-400" role="alert">
+          <p className="mb-4 text-sm text-[var(--color-danger)]" role="alert">
             {parseError}
           </p>
         )}
@@ -379,9 +379,9 @@ export default function ImportContractsCsv({
           <>
             <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-text-secondary)]">
               <span>{rows.length} row(s)</span>
-              <span className="text-green-400">{okCount} imported</span>
+              <span className="text-[var(--color-safe)]">{okCount} imported</span>
               {invalidCount > 0 && (
-                <span className="text-red-400">
+                <span className="text-[var(--color-danger)]">
                   {invalidCount} with problems
                 </span>
               )}

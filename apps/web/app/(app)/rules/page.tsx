@@ -260,7 +260,7 @@ export default function RulesPage() {
             <button
               onClick={save}
               disabled={!canSave || saving}
-              className="rounded bg-[var(--color-accent,#3b82f6)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save rule"}
             </button>
@@ -296,7 +296,7 @@ export default function RulesPage() {
             <button
               key={entry.name}
               onClick={() => useExample(entry)}
-              className="rounded-lg border border-[var(--color-border)] p-3 text-left transition-colors hover:border-[var(--color-accent,#3b82f6)]"
+              className="rounded-lg border border-[var(--color-border)] p-3 text-left transition-colors hover:border-[var(--color-accent)]"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium">{entry.name}</span>
@@ -307,7 +307,7 @@ export default function RulesPage() {
               <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                 {entry.description}
               </p>
-              <code className="mt-2 block break-all text-xs text-emerald-400">
+              <code className="mt-2 block break-all text-xs text-[var(--color-safe)]">
                 {entry.source}
               </code>
             </button>
@@ -336,10 +336,10 @@ export default function RulesPage() {
                       {rule.severity}
                     </span>
                     {!rule.enabled && (
-                      <span className="text-xs text-amber-500">paused</span>
+                      <span className="text-xs text-[var(--color-warning)]">paused</span>
                     )}
                   </div>
-                  <code className="block break-all text-xs text-emerald-400">
+                  <code className="block break-all text-xs text-[var(--color-safe)]">
                     {rule.source}
                   </code>
                 </div>
@@ -351,7 +351,7 @@ export default function RulesPage() {
                 </button>
                 <button
                   onClick={() => remove(rule)}
-                  className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-rose-400"
+                  className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-danger)]"
                 >
                   Delete
                 </button>
@@ -372,7 +372,7 @@ export default function RulesPage() {
                 className="rounded border border-[var(--color-border)] p-2 text-sm"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <code className="text-emerald-400">{m.name}</code>
+                  <code className="text-[var(--color-safe)]">{m.name}</code>
                   <span className="text-xs text-[var(--color-text-secondary)]">
                     {m.unit}
                   </span>
@@ -398,7 +398,7 @@ function EditorFeedback({
 }) {
   if (validation?.valid) {
     return (
-      <div className="mt-2 text-xs text-emerald-400">
+      <div className="mt-2 text-xs text-[var(--color-safe)]">
         Valid
         {validation.window ? ` · window ${validation.window}` : ""}
         {validation.metrics?.length
@@ -415,7 +415,7 @@ function EditorFeedback({
     );
   }
   return (
-    <ul className="mt-2 space-y-1 text-xs text-rose-400">
+    <ul className="mt-2 space-y-1 text-xs text-[var(--color-danger)]">
       {errors.map((e, i) => (
         <li key={i}>
           <span className="font-mono">
@@ -444,7 +444,7 @@ function Preview({ preview }: { preview: RulePreview | null }) {
     );
   }
   if (!preview.valid) {
-    return <p className="text-sm text-rose-400">Fix the rule to preview it.</p>;
+    return <p className="text-sm text-[var(--color-danger)]">Fix the rule to preview it.</p>;
   }
   const points = preview.points ?? [];
   return (
@@ -483,7 +483,7 @@ function Sparkline({ points }: { points: (number | null)[] }) {
             key={i}
             title={v === null ? "no data" : String(v)}
             style={{ height: `${height}px` }}
-            className={`flex-1 rounded-sm ${v === null ? "bg-[var(--color-border)]" : "bg-[var(--color-accent,#3b82f6)]"}`}
+            className={`flex-1 rounded-sm ${v === null ? "bg-[var(--color-border)]" : "bg-[var(--color-accent)]"}`}
           />
         );
       })}

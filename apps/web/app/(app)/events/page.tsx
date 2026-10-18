@@ -51,12 +51,12 @@ function EventRow({ event }: { event: GlobalEvent }) {
 
   return (
     <>
-      <tr className="border-b border-[var(--color-border)] align-top transition-colors hover:bg-white/5">
+      <tr className="border-b border-[var(--color-border)] align-top transition-colors hover:bg-[var(--color-bg-hover)]">
         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
           <MonoId value={event.contract_id} headChars={6} tailChars={6} />
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-sm">
-          <span className="rounded bg-white/5 px-2 py-0.5 text-xs">
+          <span className="rounded bg-[var(--color-bg-elevated)] px-2 py-0.5 text-xs">
             {event.type}
           </span>
         </td>
@@ -89,7 +89,7 @@ function EventRow({ event }: { event: GlobalEvent }) {
                 <p className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
                   Topics
                 </p>
-                <pre className="max-h-64 overflow-auto rounded bg-black/30 p-3 font-mono text-xs">
+                <pre className="max-h-64 overflow-auto rounded bg-[var(--color-bg-elevated)] p-3 font-mono text-xs">
                   {formatEventData(event.topic_decoded ?? event.topic_xdr)}
                 </pre>
               </div>
@@ -97,7 +97,7 @@ function EventRow({ event }: { event: GlobalEvent }) {
                 <p className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
                   Value
                 </p>
-                <pre className="max-h-64 overflow-auto rounded bg-black/30 p-3 font-mono text-xs">
+                <pre className="max-h-64 overflow-auto rounded bg-[var(--color-bg-elevated)] p-3 font-mono text-xs">
                   {formatEventData(data)}
                 </pre>
               </div>
@@ -275,7 +275,7 @@ export default function EventsExplorerPage() {
           )}
         </div>
         {rangeError && (
-          <p role="alert" className="w-full text-xs text-red-400">
+          <p role="alert" className="w-full text-xs text-[var(--color-danger)]">
             {rangeError}
           </p>
         )}
@@ -284,9 +284,9 @@ export default function EventsExplorerPage() {
       {error ? (
         <div
           role="alert"
-          className="rounded-lg border border-red-900/60 bg-red-950/30 p-6 text-sm"
+          className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-bg)] p-6 text-sm"
         >
-          <p className="font-medium text-red-300">Couldn&apos;t load events.</p>
+          <p className="font-medium text-[var(--color-danger)]">Couldn&apos;t load events.</p>
           <p className="mt-1 text-[var(--color-text-secondary)]">{error}</p>
           <button
             type="button"

@@ -41,7 +41,7 @@ export function StarButton({
     >
       <span
         className={
-          inWatchlist ? "text-yellow-400" : "text-[var(--color-text-secondary)]"
+          inWatchlist ? "text-[var(--color-warning)]" : "text-[var(--color-text-secondary)]"
         }
       >
         ★
