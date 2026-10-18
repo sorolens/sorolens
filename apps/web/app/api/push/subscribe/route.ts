@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { sendPushNotification, type PushSubscriptionJSON } from "@/lib/vapid";
 
 /**
@@ -14,6 +15,21 @@ import { sendPushNotification, type PushSubscriptionJSON } from "@/lib/vapid";
 const subscriptions = new Map<string, PushSubscriptionJSON>();
 
 /**
+ * Constant-time comparison of the provided push secret against the
+ * configured PUSH_INTERNAL_SECRET.  Returns false when the secret is
+ * unset (fail closed) or when the provided value is missing/different.
+ */
+function verifyPushSecret(provided: string | null): boolean {
+  const expected = process.env.PUSH_INTERNAL_SECRET;
+  if (!expected) return false;
+  if (!provided) return false;
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+/**
  * POST /api/push/subscribe
  * Body: PushSubscription JSON (endpoint + keys)
  *
@@ -23,11 +39,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as PushSubscriptionJSON;
 
-    if (!body?.endpoint || !body?.keys?.auth || !body?.keys?.p256dh) {
-      return NextResponse.json(
-        { error: "Invalid subscription payload" },
-        { status: 400 }
-      );
+    if (!body?.endpoint || !body?.keys?.auth || !body?.keys?.p56dh) {
+      return NextResponse.json({ error: "Invalid subscription payload" }, { status: 400 });
     }
 
     subscriptions.set(body.endpoint, body);
@@ -57,7 +70,7 @@ export async function DELETE(request: NextRequest) {
 }
 
 /**
- * POST /api/push/send  (internal — called by the alerting pipeline, issue #127)
+ * PUT /api/push/subscribe  (internal — called by the alerting pipeline, issue #127)
  *
  * When issue #127 is fully merged, the server-side alert delivery service
  * should call this endpoint (or use the vapid.ts helper directly) to fan out
@@ -66,18 +79,36 @@ export async function DELETE(request: NextRequest) {
  * Accepts: { title, body, timestamp, contractId?, severity?, url? }
  * Returns: { sent: number, failed: number }
  *
- * This route is intentionally NOT public — protect it with an internal
- * shared secret (PUSH_INTERNAL_SECRET env var) before enabling in production.
+ * This route is intentionally NOT public. It requires the PUSH_INTERNAL_SECRET
+ * env var to be set and the matching value to be provided in the "x-push-secret"
+ * header. If the secret is unset, the route fails closed with 503.
  */
 export async function PUT(request: NextRequest) {
-  // Minimal internal auth guard
-  const secret = request.headers.get("x-push-secret");
   const expected = process.env.PUSH_INTERNAL_SECRET;
-  if (expected && secret !== expected) {
+  if (!expected) {
+    return NextResponse.json({ error: "Push secret not configured" }, { status: 503 });
+  }
+
+  const provided = request.headers.get("x-push-secret");
+  if (!verifyPushSecret(provided)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const payload = await request.json();
+  let payload: {
+    title?: string;
+    body?: string;
+    timestamp?: string;
+    contractId?: string;
+    severity?: string;
+    url?: string;
+    tag?: string;
+  };
+  try {
+    payload = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+  }
+
   let sent = 0;
   let failed = 0;
 
