@@ -6,6 +6,10 @@ on:
     tags: ["rust-sdk-v*"]
   pull_request:
     branches: [main]
+  schedule:
+    # Weekly security scan (Mondays 06:00 UTC)
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 jobs:
   # ------------------------------------------------------------
@@ -51,6 +55,29 @@ jobs:
       - name: cargo test --doc
         working-directory: packages/rust-sdk
         run: cargo test --doc
+
+  # ------------------------------------------------------------
+  # Security: cargo audit for Rust SDK dependencies.
+  # Fails on high/critical advisories. Documented exceptions live in
+  # packages/rust-sdk/.cargo/audit.toml (see docs/SECURITY.md).
+  # ------------------------------------------------------------
+  cargo-audit:
+    name: cargo audit (packages/rust-sdk)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo audit
+        working-directory: packages/rust-sdk
+        run: cargo audit --deny warnings
 
   # ------------------------------------------------------------
   # Publish sorolens-sdk to crates.io when a rust-sdk-v* tag is pushed.
