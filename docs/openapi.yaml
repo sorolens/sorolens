@@ -438,6 +438,12 @@ paths:
                   total_storage_entries:
                     type: integer
                     format: int64
+                  approximate:
+                    type: boolean
+                    description: |
+                      True when counts are estimates from pg_class.reltuples
+                      rather than exact COUNT(*), which is the case on large
+                      tables. Cached for a short TTL.
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":

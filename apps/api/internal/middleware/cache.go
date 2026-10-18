@@ -11,7 +11,7 @@ import (
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
-)
+	)
 
 // ResponseCache stores rendered JSON response bodies (issue #143).
 type ResponseCache interface {
@@ -28,6 +28,8 @@ const (
 	CacheNamespaceContracts = "contracts"
 	CacheNamespaceWatchdog  = "watchdog"
 	CacheNamespaceLabels    = "labels"
+	// CacheNamespaceStats caches the global stats response (issue #143).
+	CacheNamespaceStats = "stats"
 )
 
 // cacheKeyPrefix is the Redis key prefix for cached responses; keys are
