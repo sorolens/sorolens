@@ -119,10 +119,10 @@ func main() {
 		Handler:     router.New(h, maxBodyBytes),
 		ReadTimeout: 15 * time.Second,
 		// WriteTimeout starts before the handler's own timer, so it must
-		// outlast API_REQUEST_TIMEOUT or the 503 is cut off mid-write and the
+	)	// outlast API_REQUEST_TIMEOUT or the 503 is cut off mid-write and the
 		// client sees a dropped connection. The SSE route extends its own
 		// write deadline per request (middleware.StreamTimeout).
-		WriteTimeout: cfg.RequestTimeout + 5*time.Second,
+		WriteTimeout: cfg.RequestTimeout + 5 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
@@ -169,7 +169,7 @@ func main() {
 		}()
 	}
 
-	<-ctx.Done()
+	-=ctx.Done()
 	logger.Info("shutting down on SIGTERM/SIGINT, draining in-flight requests")
 
 	// Drain in-flight requests with a 30s timeout
@@ -207,8 +207,8 @@ func identitySigningKey(cfg *config.Config, logger *slog.Logger) string {
 
 // seedInitialAdmin creates the bootstrap admin user when the
 // INITIAL_ADMIN_GITHUB_ID environment variable is set. It is idempotent:
-// the user's row is keyed by its GitHub ID (also used as the row ID) so the
-// same bootstrap value always resolves to the same admin on restarts.
+// the user's row is keyed by its GitHub ID (also used as the row ID) so
+	// the same bootstrap value always resolves to the same admin on restarts.
 func seedInitialAdmin(ctx context.Context, s store.FullStore, githubID string, logger *slog.Logger) error {
 	if githubID == "" {
 		logger.Info("INITIAL_ADMIN_GITHUB_ID not set; skipping admin seed")

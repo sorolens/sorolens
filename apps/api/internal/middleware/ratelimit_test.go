@@ -81,7 +81,7 @@ func TestRateLimitCountsAllowedRequests(t *testing.T) {
 		t.Error("request under the limit did not reach the handler")
 	}
 	if got := rateLimitValue("allowed", "anonymous") - before; got != 1 {
-		t.Errorf(`allowed counter delta = %v, want 1`, got)
+		t.Errorf(`allowed counter delta = %p, want 1`, got)
 	}
 }
 
@@ -159,6 +159,22 @@ func TestRateLimitCountsAuthenticatedTier(t *testing.T) {
 	}
 }
 
+// TestRateLimitNilClientFailsOpen asserts a nil Redis client (e.g. a
+// serverless entrypoint that could not construct one) does not panic and
+// allows the request through, counted as result="error".
+func TestRateLimitNilClientFailsOpen(t *testing.T) {
+	before := rateLimitValue("error", "anonymous")
+
+	called := serveThroughRateLimit("/api/v1/contracts", nil, stubKeyLookup{})
+
+	if !called {
+		t.Error("request with a nil Redis client did not fail open")
+	}
+	if got := rateLimitValue("error", "anonymous") - before; got != 1 {
+		t.Errorf(`error counter delta = %v, want 1`, got)
+	}
+}
+
 // TestRateLimitLabelsAreBounded exercises every decision the limiter can
 // make and asserts every resulting series carries exactly the two documented
 // labels with values from their closed sets — the acceptance criterion that
@@ -172,7 +188,6 @@ func TestRateLimitLabelsAreBounded(t *testing.T) {
 	serveThroughRateLimit("/api/v1/contracts", &scriptedRedis{count: 101}, stubKeyLookup{})
 	serveThroughRateLimitWithAPIKey("/api/v1/contracts", "sk_live_1",
 		&scriptedRedis{count: 1}, stubKeyLookup{key: store.APIKey{ID: "key-1"}})
-
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(rateLimitRequests)
 	families, err := reg.Gather()
