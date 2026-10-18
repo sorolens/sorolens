@@ -5,11 +5,15 @@ import type {
   StatsResponse,
   WatchdogStats,
 } from "@/lib/types";
+import { API_URL as DEFAULT_API_URL } from "@/lib/config";
 
+// Server-side base: NEXT_PUBLIC_API_URL still wins over the server-only
+// API_URL override, then the shared default; a trailing slash is stripped so
+// `${API_URL}${path}` never produces a double slash.
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL ??
   process.env.API_URL ??
-  "http://localhost:8080"
+  DEFAULT_API_URL
 ).replace(/\/$/, "");
 
 async function fetchServerData<T>(path: string): Promise<T | null> {
