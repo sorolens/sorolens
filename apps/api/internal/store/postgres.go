@@ -1,6 +1,7 @@
 package store
 
 import (
+	"sync"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,8 @@ var ErrNotFound = errors.New("store: not found")
 type postgresStore struct {
 	pool *pgxpool.Pool
 }
+
+// ---- labels ---------------------------------------------------------------
 
 func (s *postgresStore) UpsertLabel(ctx context.Context, label Label) error {
 	if label.Public {
@@ -592,17 +595,51 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 
 // ---- global stats ---------------------------------------------------------
 
-// GetGlobalStats retrieves aggregated statistics about the tracked contracts, events, invocations, and storage entries.
+// globalStatsCacheTTL bounds how long a GetGlobalStats result is served from
+// memory. The /stats/global route is read-heavy and the underlying counts are
+// expensive on large tables, so a short TTL keeps the endpoint fast while
+// staying fresh enough for a dashboard.
+const globalStatsCacheTTL = 30 * time.Second
+
+// globalStatsCache memoizes GetGlobalStats for globalStatsCacheTTL. It is
+// guarded by a mutex so concurrent requests share a single refresh.
+type globalStatsCache struct {
+	mu      sync.Mutex
+	stats   GlobalStats
+	expires time.Time
+	valid   bool
+}
+
+// GetGlobalStats retrieves aggregated statistics about the tracked contracts,
+// events, invocations, and storage entries. Results are cached for
+// globalStatsCacheTTL. The per-table counts are read from pg_class.reltuples
+// estimates (approximate=true) rather than running full-table COUNT(*), which
+// is both slow on large tables and an easy denial-of-service vector.
 func (s *postgresStore) GetGlobalStats(ctx context.Context) (GlobalStats, error) {
+	s.statsCache.mu.Lock()
+	defer s.statsCache.mu.Unlock()
+
+	if s.statsCache.valid && time.Now().Before(s.statsCache.expires) {
+		return s.statsCache.stats, nil
+	}
+
 	row := s.pool.QueryRow(ctx, `
 		SELECT
-			(SELECT COUNT(*) FROM contracts)       AS tracked_contracts,
-			(SELECT COUNT(*) FROM events)          AS total_events,
-			(SELECT COUNT(*) FROM invocations)     AS total_invocations,
-			(SELECT COUNT(*) FROM storage_entries) AS total_storage_entries`)
+			COALESCE((SELECT reltuples::bigint FROM pg_class WHERE oid = 'contracts'::regclass), 0)       AS tracked_contracts,
+			COALESCE((SELECT reltuples::bigint FROM pg_class WHERE oid = 'events'::regclass), 0)          AS total_events,
+			COALESCE((SELECT reltuples::bigint FROM pg_class WHERE oid = 'invocations'::regclass), 0)     AS total_invocations,
+			COALESCE((SELECT reltuples::bigint FROM pg_class WHERE oid = 'storage_entries'::regclass), 0) AS total_storage_entries`)
 	var g GlobalStats
 	err := row.Scan(&g.TrackedContracts, &g.TotalEvents, &g.TotalInvocations, &g.TotalStorageEntries)
-	return g, err
+	if err != nil {
+		return g, err
+	}
+	g.Approximate = true
+
+	s.statsCache.stats = g
+	s.statsCache.expires = time.Now().Add(globalStatsCacheTTL)
+	s.statsCache.valid = true
+	return g, nil
 }
 
 // ---- partition management -------------------------------------------------
