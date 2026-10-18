@@ -6,6 +6,21 @@ on:
     branches: [main]
 jobs:
   # ------------------------------------------------------------
+  # Secret scanning (gitleaks): fail the PR if credentials are committed.
+  # ------------------------------------------------------------
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # ------------------------------------------------------------
   # Go: API, indexer, CLI
   # ------------------------------------------------------------
   go:
@@ -41,6 +56,14 @@ jobs:
       - name: go vet
         working-directory: ${{ matrix.module }}
         run: go vet ./...
+      - name: Run go-client examples (offline)
+        if: matrix.module == 'packages/go-client'
+        working-directory: ${{ matrix.module }}
+        run: |
+          for example in pagination errors sse webhooks; do
+            echo "==> examples/$example"
+            go run "./examples/$example"
+          done
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         continue-on-error: true
@@ -60,14 +83,21 @@ jobs:
         run: |
           echo "Waiting for PostgreSQL..."
           DB_CONTAINER=$(docker compose ps -q postgres)
-          until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
+          # Probe over TCP, not the unix socket: the postgres entrypoint first
+          # runs a temporary, socket-only init server, so a socket pg_isready
+          # can succeed and then that server shuts down before the real one is
+          # up (the cause of the intermittent "database system is shutting
+          # down" failure from pg_basebackup). The temp server listens on no
+          # TCP address, so 127.0.0.1 only answers once the final server is up.
+          until docker exec "$DB_CONTAINER" pg_isready -h 127.0.0.1 -p 5432 -U sorolens -d sorolens; do sleep 1; done
       - name: Run DB migrations
-        if: matrix.module == 'apps/api'
+        # services/indexer's pgstore tests write to the same schema the API reads.
+        if: matrix.module == 'apps/api' || matrix.module == 'services/indexer'
         env:
           PGPASSWORD: sorolens
         run: |
           for f in $(ls apps/api/internal/db/migrations/*.up.sql | sort); do
-            psql -h localhost -U sorolens -d sorolens -f "$f"
+            psql -h 127.0.0.1 -U sorolens -d sorolens -f "$f"
           done
       - name: go test
         working-directory: ${{ matrix.module }}
@@ -103,6 +133,25 @@ jobs:
       - name: Verify no diff
         run: git diff --exit-code -- packages/go-client/internal
   # ------------------------------------------------------------
+  # SDK coverage guard (issue #556): every operation declared in
+  # docs/openapi.yaml must be exposed by each SDK, or be documented as an
+  # intentional exclusion in scripts/sdk_coverage_allowlist.json. Fails when a
+  # new operation lands without SDK support, or when an allowlisted operation
+  # has since become covered (stale exemption).
+  # ------------------------------------------------------------
+  sdk-coverage:
+    name: SDK OpenAPI coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify SDK coverage against OpenAPI spec
+        run: python3 scripts/check_sdk_coverage.py
+  # ------------------------------------------------------------
   # Node: XDR decoder package and shared packages
   # ------------------------------------------------------------
   node:
@@ -134,6 +183,29 @@ jobs:
       - name: Lint
         run: pnpm --filter "./packages/**" lint
   # ------------------------------------------------------------
+  # Prettier formatting (issue #216). Runs the acceptance criterion
+  # verbatim: `pnpm prettier --check` must pass in CI.
+  # ------------------------------------------------------------
+  format:
+    name: Prettier format check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 11
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: prettier --check
+        run: pnpm exec prettier --check apps/web package.json eslint.config.mjs
+
+  # ------------------------------------------------------------
   # TypeScript type-check (fast, no build output needed)
   # ------------------------------------------------------------
   typecheck:
@@ -162,6 +234,9 @@ jobs:
             pnpm-node22-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify web OpenAPI playground catalog
+        working-directory: apps/web
+        run: pnpm openapi:check
       - name: Type-check dashboard
         working-directory: apps/web
         run: pnpm exec tsc --noEmit
@@ -259,7 +334,13 @@ jobs:
         run: |
           echo "Waiting for PostgreSQL..."
           DB_CONTAINER=$(docker compose ps -q postgres)
-          until docker exec $DB_CONTAINER pg_isready -U sorolens; do sleep 1; done
+          # Probe over TCP, not the unix socket: the postgres entrypoint first
+          # runs a temporary, socket-only init server, so a socket pg_isready
+          # can succeed and then that server shuts down before the real one is
+          # up (the cause of the intermittent "database system is shutting
+          # down" failure from pg_basebackup). The temp server listens on no
+          # TCP address, so 127.0.0.1 only answers once the final server is up.
+          until docker exec "$DB_CONTAINER" pg_isready -h 127.0.0.1 -p 5432 -U sorolens -d sorolens; do sleep 1; done
       - name: Setup Mock S3 Bucket
         run: |
           mkdir -p /tmp/s3/sorolens-backups/logical /tmp/s3/sorolens-backups/base /tmp/s3/sorolens-backups/wal
@@ -273,3 +354,45 @@ jobs:
           LATEST_BASE=$(ls /tmp/s3/sorolens-backups/base/base_*.tar.gz | head -n 1)
           LATEST_BASE_S3="s3://${LATEST_BASE/\/tmp\/s3\//}"
           ./scripts/restore.sh "$LATEST_BASE_S3" "2026-09-23 13:00:00"
+
+  # ------------------------------------------------------------
+  # SBOM generation (CycloneDX) on release: attach to the GitHub release.
+  # ------------------------------------------------------------
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Generate CycloneDX SBOM (source)
+        uses: anchore/sbom-action@v0
+        with:
+          format: cyclonedx-json
+          output-file: sbom-source.cdx.json
+          artifact-name: sbom-source
+      - name: Generate CycloneDX SBOM (filesystem)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom-filesystem.cdx.json
+          artifact-name: sbom-filesystem
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            sbom-source.cdx.json
+            sbom-filesystem.cdx.json
+      - name: Attach SBOMs to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sbom-source.cdx.json
+            sbom-filesystem.cdx.json
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

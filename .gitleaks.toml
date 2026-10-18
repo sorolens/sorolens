@@ -1,0 +1,39 @@
+# Gitleaks configuration for sorolens
+import = "default"
+
+## Rules are inherited from the gitleaks default config.
+## This file only adds allowlists for false positives and project-specific exclusions.
+
+[allowlists]
+description = "Global allowlist for sorolens"
+
+paths = [
+  # Dependency lockfiles and vendored code
+  '^package-lock.json$',
+  '^yarn.lock$',
+  '^pnp-lock.yaml$',
+  '^Cargo.lock$',
+  '^go:.sum$',
+  '^go:mod$,
+  '# Documentation and test fixtures
+  (^)?(docs?|tests?|fixtures)/',
+  # Build output
+  '^(dist|build|coverage)/',
+]
+
+regexes = [
+  # Example/placeholder values commonly used in docs and tests
+  '(?)((example|placeholder|dummy|sample|fake|test|changeme))',
+  # GitHub Actions expressions and secrets references
+  '^\\$\\{\\{\\s*secrets\\.',
+  # Local development environment variables
+  '^localhost$,
+]
+
+[allowlists]
+description = "Allow public keys and non-secret identifiers"
+regexes = [
+  # Public keys (PGP, ssh, etc.) are not secrets
+  '-----BEGIN PUBLIC KEY-----',
+  'ssh-rsa AAAAB3NzaC1yc2EAAAADAQAB',
+]
