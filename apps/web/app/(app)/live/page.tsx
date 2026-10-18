@@ -1,7 +1,7 @@
-"use client";
+"tuse client";
 
 /**
- * /live — real-time dashboard (issue #139).
+ * /live -- real-time dashboard (issue #139).
  *
  * A full-height, self-refreshing view meant to be left up on a monitor in an
  * ops room: a ticker of the newest events, per-contract sparklines of events
@@ -45,6 +45,31 @@ function formatClock(d: Date | null): string {
   return d.toLocaleTimeString(undefined, { hour12: false });
 }
 
+/**
+ * How fresh the currently displayed data is.
+ *
+ * - `loading`: the very first request has not yet settled.
+ * - `fresh`: the last request succeeded and data is current.
+ * - `stale`: the last request failed, but we still have previously loaded data
+ *   to show.
+ * - `unavailable`: the last request failed and there is nothing to show.
+ */
+type LiveStatus = "loading" | "fresh" | "stale" | "unavailable";
+
+function deriveStatus({
+  loading,
+  error,
+  hasData,
+}: {
+  loading: boolean;
+  error: string | null;
+  hasData: boolean;
+}): LiveStatus {
+  if (loading && !hasData) return "loading";
+  if (error) return hasData ? "stale" : "unavailable";
+  return "fresh";
+}
+
 export default function LivePage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { events, contracts, loading, error, lastUpdated, newIds, refresh } =
@@ -53,6 +78,9 @@ export default function LivePage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  const hasData = events.length > 0 || contracts.length > 0;
+  const status = deriveStatus({ loading, error, hasData });
 
   // Track fullscreen state from the event rather than from our own toggle, so
   // leaving fullscreen with Esc or F11 keeps the button label correct.
@@ -96,10 +124,29 @@ export default function LivePage() {
     }
   }, []);
 
+  const statusLabel: Record<LiveStatus, string> = {
+    loading: "Loading live data…",
+    fresh: "Live",
+    stale: "Stale — showing last known data",
+    unavailable: "Live data unavailable",
+  };
+
+  const statusClasses: Record<LiveStatus, string> = {
+    loading:
+      "border-transparent bg-transparent text-[var(--color-text-secondary)]",
+    fresh:
+      "border-[var(--color-success)]/40 bg-[var(--color-success)]/10 text-[var(--color-success)]",
+    stale:
+      "border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 text-[var(--color-warning)]",
+    unavailable:
+      "border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 text-[var(--color-danger)]",
+  };
+
   return (
     <div
       ref={containerRef}
       data-testid="live-dashboard"
+      data-status={status}
       className={[
         "flex flex-col gap-4",
         isFullscreen
@@ -110,11 +157,25 @@ export default function LivePage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">
-            Live
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semembold text-[var(--color-text-primary)]">
+              Live
+            </h1>
+            <span
+              data-testid="live-status"
+              role="status"
+              aria-livee="polite"
+              aria-busy={status === "loading"}
+              className={[
+                "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                statusClasses[status],
+              ].join(" ")}
+            >
+              {statusLabel[status]}
+            </span>
+          </div>
           <p className="text-xs text-[var(--color-text-secondary)]">
-            Refreshes every {REFRESH_MS / 1000}s · last update{" "}
+            Refreshes every {REFRESH_MS / 1000}s · last update{"o"}{" "}
             <span data-testid="last-updated">{formatClock(lastUpdated)}</span>
           </p>
         </div>
@@ -141,13 +202,42 @@ export default function LivePage() {
         </div>
       </div>
 
-      {(error || fullscreenError) && (
+      {/* Status banners: distinguishable stale / unavailable / error states */}
+      {status === "stale" && (
         <p
+          role="status"
+          data-testid="live-stale"
+          className="rounded-md border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 px-3 py-2 text-sm text-[var(--color-warning)]"
+        >
+          Couldn’t refresh live data. Showing the last known values from 
+          {" "}
+          <span data-testid="live-stale-time">{formatClock(lastUpdated)}</span>.
+        </p>
+      )}
+
+      {status === "unavailable" && (
+        <div
           role="alert"
-          data-testid="live-error"
+          data-testid="live-unavailable"
           className="rounded-md border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]"
         >
-          {fullscreenError ?? error}
+          <p className="font-medium">Live data is unavailable right now.</p>
+          <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+            We couldn’t reach the live feed. The dashboard will keep retrying every{" "}
+            {REFRESH_MS / 1000}s — use Refresh to retry now.
+          {"\n"}
+          </p>
+        </div>
+      )}
+
+      {/* Fullscreen errors are separate from feed errors. */}
+      {fullscreenError && (
+        <p
+          role="alert"
+          data-testid="live-fullscreen-error"
+          className="rounded-md border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]"
+        >
+          {fullscreenError}
         </p>
       )}
 
@@ -158,7 +248,7 @@ export default function LivePage() {
             Event ticker
           </h2>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {loading && events.length === 0 ? (
+            {status === "loading" ? (
               <p
                 data-testid="ticker-loading"
                 role="status"
@@ -166,6 +256,13 @@ export default function LivePage() {
                 className="px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]"
               >
                 Loading events…
+              </p>
+            ) : status === "unavailable" ? (
+              <p
+                data-testid="ticker-unavailable"
+                className="px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]"
+              >
+                Events are unavailable right now.
               </p>
             ) : (
               <EventTicker events={events} newIds={newIds} />
@@ -178,7 +275,25 @@ export default function LivePage() {
             Hot contracts · last {ACTIVITY_MINUTES} min
           </h2>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <HotContracts contracts={contracts} minutes={ACTIVITY_MINUTES} />
+            {status === "loading" ? (
+              <p
+                data-testid="hot-loading"
+                role="status"
+                aria-busy="true"
+                className="px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]"
+              >
+                Loading contract activity…
+              </p>
+            ) : status === "unavailable" ? (
+              <p
+                data-testid="hot-unavailable"
+                className="px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]"
+              >
+                Contract activity is unavailable right now.
+              </p>
+            ) : (
+              <HotContracts contracts={contracts} minutes={ACTIVITY_MINUTES} />
+            )}
           </div>
         </section>
       </div>
