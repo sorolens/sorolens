@@ -270,6 +270,30 @@ export function watchdogDetailHandlers(
   };
 }
 
+/** One saved bookmark row (GET /api/v1/watchlist). */
+export function watchlistItem(overrides: Record<string, unknown> = {}) {
+  return {
+    contract_id: CONTRACT_ID,
+    added_at: "2026-07-02T12:00:00Z",
+    ...overrides,
+  };
+}
+
+/** One alert-channel subscription (GET/POST /watchdog/subscriptions). */
+export function alertSubscription(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "sub_1",
+    contract_id: CONTRACT_ID,
+    channel_type: "slack",
+    webhook_url: "https://hooks.slack.com/services/T000/B000/xyz",
+    has_routing_key: false,
+    severity_filter: "Critical",
+    created_at: "2026-07-02T12:00:00Z",
+    updated_at: "2026-07-02T12:00:00Z",
+    ...overrides,
+  };
+}
+
 export function contractSummary() {
   return {
     id: CONTRACT_ID,

@@ -60,6 +60,7 @@ type MockStore struct {
 	ListEventsErr               error
 	ListInvocationsErr          error
 	GetInvocationErr            error
+	GetInvocationWithEventsErr  error
 	GetCallEdgesErr             error
 	ListStorageErr              error
 	GetContractStatsErr         error
@@ -537,6 +538,37 @@ func (m *MockStore) GetInvocation(_ context.Context, txHash string) (Invocation,
 		}
 	}
 	return Invocation{}, ErrNotFound
+}
+
+// GetInvocationWithEvents returns the invocation for the given contract and tx hash,
+// along with any associated events emitted by that transaction.
+func (m *MockStore) GetInvocationWithEvents(_ context.Context, contractID, txHash string) (Invocation, []Event, error) {
+	if m.GetInvocationWithEventsErr != nil {
+		return Invocation{}, nil, m.GetInvocationWithEventsErr
+	}
+	var targetInv *Invocation
+	for _, inv := range m.invocations {
+		if inv.ContractID == contractID && strings.EqualFold(inv.TxHash, txHash) {
+			targetInv = &inv
+			break
+		}
+	}
+	if targetInv == nil {
+		return Invocation{}, nil, ErrNotFound
+	}
+	events := make([]Event, 0)
+	for _, e := range m.events {
+		if strings.EqualFold(e.TxHash, txHash) {
+			events = append(events, e)
+		}
+	}
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].Ledger != events[j].Ledger {
+			return events[i].Ledger < events[j].Ledger
+		}
+		return events[i].ID < events[j].ID
+	})
+	return *targetInv, events, nil
 }
 
 // GetCallEdges returns the call graph edges of a transaction, ordered by span id

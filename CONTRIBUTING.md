@@ -2,6 +2,8 @@
 
 Thank you for your interest. This document covers everything you need to make a contribution: local setup, how to claim an issue, branch naming, commit format, PR requirements, and a full walkthrough of the most common first contribution (adding an XDR type decoder).
 
+Before you start, skim [MAINTAINER.md](MAINTAINER.md) to understand who reviews what and how decisions are made, and use the [new-decoder issue template](.github/ISSUE_TEMPLATE/new-decoder.yml) when proposing a new XDR type decoder.
+
 ## Quick Start: run Sorolens locally
 
 Postgres 16, Redis, and the database schema all come from Docker, so there is nothing to install or configure by hand.
@@ -112,6 +114,8 @@ Ask in the [Sorolens Discord](https://discord.gg/D9jATUezYX): setup and code que
 8. [Running tests](#running-tests)
 9. [Release process](#release-process)
 10. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
+
+See also: [MAINTAINER.md](MAINTAINER.md) for maintainer responsibilities and process, and the [new-decoder issue template](.github/ISSUE_TEMPLATE/new-decoder.yml) for proposing a new decoder.
 
 ---
 
@@ -226,6 +230,8 @@ cargo build --target wasm32v1-none --release
 3. If no response after 48 hours, go ahead and open a PR referencing the issue.
 4. Do not open a PR for an issue assigned to someone else without first checking with them.
    If you want to work on something not yet tracked as an issue, open an issue first and describe what you plan to do. This avoids duplicate work.
+
+To propose a new XDR type decoder, open an issue using the [new-decoder template](.github/ISSUE_TEMPLATE/new-decoder.yml). For how issues are triaged, assigned, and reviewed, see [MAINTAINER.md](MAINTAINER.md).
 
 ---
 
@@ -430,6 +436,8 @@ Maintainers cut a release with the following steps:
 
 This is the most common first contribution. The `packages/xdr` package exposes `decodeScVal(base64: string): unknown`, which converts a base64-encoded XDR `ScVal` into a plain JavaScript value. When the decoder encounters an unrecognized `ScVal` type, it returns the raw base64 string unchanged. Adding a new type means handling that case.
 
+Start by opening an issue with the [new-decoder template](.github/ISSUE_TEMPLATE/new-decoder.yml) so the type, motivation, and test plan are captured before you write code. Maintainer review expectations for decoder PRs are described in [MAINTAINER.md](MAINTAINER.md).
+
 ### Step 1: understand the ScVal type you are adding
 
 ScVal is defined in [stellar-xdr](https://github.com/stellar/stellar-xdr). Open the XDR source or the `@stellar/stellar-sdk` type definitions and find the `ScVal` union arm you want to handle. For this walkthrough we will add `scvMap` (a key-value map of `ScVal` to `ScVal`).
@@ -562,6 +570,8 @@ git push origin feat/xdr-decode-map-type
 
 Open a PR against `main`. Title: `feat(xdr): add decoder for scvMap type`. Body: `Closes #<issue-number>`.
 That is the full cycle. Most XDR decoder contributions follow exactly this pattern.
+
+For what happens after you open the PR — review turnaround, required approvals, and merge policy — see [MAINTAINER.md](MAINTAINER.md).
 ---
 
 ## Troubleshooting

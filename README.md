@@ -28,7 +28,7 @@ Soroban's public RPC retains events for 24 hours and transaction data for up to 
 - **Custom alert rules**: a small expression language lets each team encode its own SLOs without a code change — `fee_per_invocation > 0.5 XLM for 5m on network testnet`. Rules are validated on save, editable with syntax highlighting and a live preview in the dashboard, and evaluated by the indexer every pass. See [`docs/rule-language.md`](docs/rule-language.md).
 - **Multi-network**: track and query testnet, mainnet, and futurenet contracts side by side, with a network selector in the dashboard header and a `?network=` filter on every list endpoint.
 - **Snapshot / replay**: `GET /api/v1/contracts/:id/snapshot?ledger=N` replays a contract's storage state and last known event as of any ledger, with a ledger scrubber on the contract page for time-travel debugging.
-- **Scoped API keys**: per-key permissions (`read:contracts`, `write:contracts`, `read:watchdog`, `admin:*`) enforced by route metadata, so a monitoring bot can hold a read-only watchdog key.
+- **Scoped API keys**: per-key permissions (`read:contracts`, `write:contracts`, `read:watchdog`, `admin:*`) enforced by route metadata, so a monitoring bot can hold a read-only watchdog key. See [`docs/authentication.md`](docs/authentication.md) for the complete authentication guide, scopes, roles, and API key management.
 - **API playground**: an interactive `/playground` page to explore every endpoint, send requests, and copy them as curl.
 - **Build introspection**: `GET /api/version` returns the running API's `version`, `git_sha`, and `built_at` (injected at build time via `-ldflags`, falling back to `dev` locally). It is unauthenticated and does no database or Redis work, so deploy checks and uptime monitors can poll it cheaply.
 
@@ -149,6 +149,8 @@ The **watchdog contract** at `contracts/watchdog/` is the piece that makes Sorol
 ### API reference
 
 The REST API is described by an OpenAPI 3.0 spec at [`docs/openapi.yaml`](docs/openapi.yaml). Load it into Swagger UI, Redoc or Postman, or generate a client from it (the Go client in `packages/go-client` is generated this way). Run `make openapi` after changing a route: it fails if any route is undocumented, lints the spec with Redocly, and regenerates the Go client.
+
+For full details on authentication, scopes, roles, and how to create or rotate API keys with curl examples, see the [Authentication and API Keys Guide](docs/authentication.md).
 
 ---
 
@@ -282,6 +284,7 @@ sorolens/
     terraform/    Self-hosting Terraform modules (AWS; see docs/self-hosting/aws.md)
     pulumi/       Self-hosting Pulumi (TypeScript) components, mirroring terraform/
   docs/
+    authentication.md Authentication & API keys guide (scopes, roles, sessions, curl examples)
     deployment.md Deployment guide (Neon, Upstash, Vercel, Docker, Mainnet)
     runbook.md    Incident response & operations runbook (lag, DLQ, restore, key rotation)
     screenshots/  Screenshot placeholders

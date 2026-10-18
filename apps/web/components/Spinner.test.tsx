@@ -16,7 +16,9 @@ afterEach(() => {
 describe("Spinner", () => {
   it("renders an accessible loading indicator", () => {
     render(<Spinner />);
-    expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
+    const status = screen.getByRole("status", { name: "Loading" });
+    expect(status).toBeInTheDocument();
+    expect(status).toHaveAttribute("aria-busy", "true");
   });
 
   it("defaults to the medium size", () => {

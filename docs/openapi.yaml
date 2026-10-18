@@ -973,6 +973,33 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/contracts/{id}/invocations/{tx_hash}:
+    get:
+      tags: [Invocations]
+      summary: Get contract invocation details with associated events
+      operationId: getContractInvocation
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: tx_hash
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Hex-encoded transaction hash.
+      responses:
+        "200":
+          description: Invocation details with associated events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvocationDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/contracts/{id}/storage:
     get:
       tags: [Storage]
@@ -5250,6 +5277,17 @@ components:
           format: int64
         application_order:
           type: integer
+
+    InvocationDetail:
+      allOf:
+        - $ref: "#/components/schemas/Invocation"
+        - type: object
+          required: [events]
+          properties:
+            events:
+              type: array
+              items:
+                $ref: "#/components/schemas/Event"
 
     StorageEntry:
       type: object

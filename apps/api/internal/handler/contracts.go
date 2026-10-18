@@ -89,6 +89,11 @@ type invocationResponse struct {
 	ApplicationOrder   int            `json:"application_order"`
 }
 
+type invocationDetailResponse struct {
+	invocationResponse
+	Events []eventResponse `json:"events"`
+}
+
 type storageEntryResponse struct {
 	ContractID         string    `json:"contract_id"`
 	Network            string    `json:"network"`
@@ -319,8 +324,8 @@ type registerRequest struct {
 // cli/internal/presets.BuiltInPresets but lives here so the API can validate
 // without importing the CLI package.
 var validPresets = map[string]bool{
-	"dex":       true,
-	"lending":   true,
+	"dex":        true,
+	"lending":    true,
 	"stablecoin": true,
 }
 
@@ -349,12 +354,12 @@ func (h *Handler) RegisterContract(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := store.Contract{
-		ID:              req.ID,
-		Network:         req.Network,
-		Label:           req.Label,
-		TrackingPreset:  req.Preset,
-		Status:          "pending",
-		AddedAt:         time.Now().UTC(),
+		ID:             req.ID,
+		Network:        req.Network,
+		Label:          req.Label,
+		TrackingPreset: req.Preset,
+		Status:         "pending",
+		AddedAt:        time.Now().UTC(),
 	}
 	if err := h.Store.UpsertContract(r.Context(), c); err != nil {
 		h.Logger.Error("upsert contract", "err", err)
@@ -597,6 +602,37 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 		"invocations": resp,
 		"next_cursor": encodeCursor(nextRaw),
 	})
+}
+
+// GetInvocation handles GET /api/v1/contracts/{id}/invocations/{tx_hash}.
+func (h *Handler) GetInvocation(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	txHash := chi.URLParam(r, "tx_hash")
+
+	inv, events, err := h.Store.GetInvocationWithEvents(r.Context(), contractID, txHash)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "invocation not found")
+		return
+	}
+	if err != nil {
+		h.Logger.Error("get invocation", "err", err, "contract_id", contractID, "tx_hash", txHash)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to get invocation")
+		return
+	}
+
+	respEvents := make([]eventResponse, len(events))
+	for i, e := range events {
+		respEvents[i] = eventFromStore(e)
+	}
+	writeJSON(w, http.StatusOK, invocationDetailResponse{
+		invocationResponse: invocationFromStore(inv),
+		Events:             respEvents,
+	})
+}
+
+// GetContractInvocation aliases GetInvocation for compatibility with OpenAPI operation naming.
+func (h *Handler) GetContractInvocation(w http.ResponseWriter, r *http.Request) {
+	h.GetInvocation(w, r)
 }
 
 // ---- global invocations -----------------------------------------------------
