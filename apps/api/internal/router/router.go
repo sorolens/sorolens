@@ -90,6 +90,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// Global middleware
 	r.Use(OTelMiddleware)
 
+	// Standard security headers on every response (X-Content-Type-Options,
+	// Strict-Transport-Security, Referrer-Policy). Cache-Control: no-store is
+	// applied to key-management and admin routes below.
+	r.Use(middleware.SecurityHeaders)
+
 	r.Use(middleware.RequestID)
 	r.Use(corsMiddleware())
 	// Sentry must run before Recoverer: it reports a panic and re-panics so
@@ -192,6 +197,10 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
+
+		// Key-management responses must never be cached by browsers or
+		// intermediaries.
+		r.Use(middleware.NoStore("/api-keys", "/admin"))
 
 		// Liveness probe with dependency reachability. It always returns 200
 		// and carries no scope rule, so uptime monitors can poll it without a
