@@ -161,6 +161,9 @@ vi.mock("@/components/ContractChangelogPanel", () => ({
 vi.mock("@/components/ContractForecastChart", () => ({
   ContractForecastChart: () => <div />,
 }));
+vi.mock("@/components/ConfirmDialog", () => ({
+  ConfirmDialog: () => <div data-testid="confirm-dialog" />,
+}));
 
 expect.extend(matchers);
 
@@ -374,5 +377,18 @@ describe("ContractDetailPage failure states", () => {
     );
 
     expect(await screen.findByText("storage-2")).toBeInTheDocument();
+  });
+
+  it("calls notFound() for unknown contracts instead of rendering an in-page message", async () => {
+    const { ApiError } = await import("@/lib/api");
+    mockGetContract.mockRejectedValueOnce(new ApiError(404, "missing"));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await renderPage();
+      await vi.waitFor(() => expect(mockNotFound).toHaveBeenCalled());
+      expect(screen.queryByText("Contract not found")).toBeNull();
+    } finally {
+      errors.mockRestore();
+    }
   });
 });
