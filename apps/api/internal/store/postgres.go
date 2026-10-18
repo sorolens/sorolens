@@ -60,17 +60,18 @@ func (s *postgresStore) ResolveLabel(ctx context.Context, workspaceID, query str
 func (s *postgresStore) UpsertContract(ctx context.Context, c Contract) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO contracts
-			(id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			(id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at, tracking_preset)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		ON CONFLICT (id) DO UPDATE SET
 			network             = EXCLUDED.network,
 			label               = EXCLUDED.label,
 			wasm_hash           = EXCLUDED.wasm_hash,
 			created_at_ledger   = EXCLUDED.created_at_ledger,
 			backfill_complete_at = EXCLUDED.backfill_complete_at,
-			status              = EXCLUDED.status`,
+			status              = EXCLUDED.status,
+			tracking_preset     = EXCLUDED.tracking_preset`,
 		c.ID, c.Network, c.Label, c.WasmHash,
-		c.CreatedAtLedger, c.BackfillCompleteAt, c.Status, c.AddedAt,
+		c.CreatedAtLedger, c.BackfillCompleteAt, c.Status, c.AddedAt, c.TrackingPreset,
 	)
 	return err
 }
@@ -79,12 +80,12 @@ func (s *postgresStore) UpsertContract(ctx context.Context, c Contract) error {
 func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Contract, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT id, network, label, wasm_hash, created_at_ledger,
-		       backfill_complete_at, status, added_at
+		       backfill_complete_at, status, added_at, tracking_preset
 		FROM contracts WHERE id = $1`, contractID)
 	var c Contract
 	err := row.Scan(
 		&c.ID, &c.Network, &c.Label, &c.WasmHash, &c.CreatedAtLedger,
-		&c.BackfillCompleteAt, &c.Status, &c.AddedAt,
+		&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.TrackingPreset,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Contract{}, ErrNotFound
@@ -122,7 +123,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 	// appended as a stable tie-breaker.
 	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
 		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
-		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at
+		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at, c.tracking_preset
 		FROM contracts c
 		LEFT JOIN (
 			SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
@@ -148,7 +149,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 		var c Contract
 		if err := rows.Scan(
 			&c.ID, &c.Network, &c.Label, &c.WasmHash, &c.CreatedAtLedger,
-			&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.LastActivityAt,
+			&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.LastActivityAt, &c.TrackingPreset,
 		); err != nil {
 			return nil, "", err
 		}

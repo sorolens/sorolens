@@ -222,6 +222,23 @@ select this repo, and Railway will pick up `railway.toml` automatically.
 Set the required environment variables in the Variables panel before the first
 deploy.
 
+### Full Deployment Guide
+
+For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md).
+
+---
+
+## Operations
+
+For step-by-step incident response, troubleshooting, and maintenance procedures, see the [Operations Runbook](docs/runbook.md):
+
+- **[Indexer Lag](docs/runbook.md#1-indexer-lag)**: Diagnose RPC rate limits, worker bottlenecks, and lag recovery.
+- **[DLQ Drain](docs/runbook.md#2-dead-letter-queue-dlq-drain)**: Inspect and requeue dead-lettered events from `failed_events`.
+- **[Backup Restore](docs/runbook.md#3-backup-and-disaster-recovery-restore)**: Point-In-Time-Recovery (PITR) via WAL replay and logical restores (`scripts/restore.sh`, `scripts/backup.sh`).
+- **[Key Rotation](docs/runbook.md#4-key-and-secret-rotation)**: Zero-downtime rotation of API keys, webhook signing secrets, and server environment secrets.
+
+See also [`docs/metrics.md`](docs/metrics.md) for Prometheus metrics and alerting rules, [`docs/backups.md`](docs/backups.md) for backup configurations, and [`docs/indexer.md`](docs/indexer.md) for indexer options.
+
 ---
 
 ## Tech stack
@@ -265,6 +282,8 @@ sorolens/
     terraform/    Self-hosting Terraform modules (AWS; see docs/self-hosting/aws.md)
     pulumi/       Self-hosting Pulumi (TypeScript) components, mirroring terraform/
   docs/
+    deployment.md Deployment guide (Neon, Upstash, Vercel, Docker, Mainnet)
+    runbook.md    Incident response & operations runbook (lag, DLQ, restore, key rotation)
     screenshots/  Screenshot placeholders
 ```
 
@@ -293,7 +312,7 @@ and release process.
 | On-chain contract | `contracts/watchdog/src/lib.rs` (`register_contract`, `report_status`, `report_alert`, `get_all_monitored`, ...)     |
 | Deploy script     | `contracts/watchdog/scripts/deploy-testnet.sh`                                                                       |
 | Event classifier  | `services/indexer/internal/watchdog/classifier.go`                                                                   |
-| Postgres schema   | `apps/api/internal/db/migrations/000002_watchdog.up.sql` (`monitored_contracts`, `health_checks`, `contract_alerts`) |
+| Postgres schema   | `apps/api/internal/db/migrations/000003_watchdog.up.sql` (`monitored_contracts`, `health_checks`, `contract_alerts`) |
 | Store methods     | `apps/api/internal/store/watchdog.go`                                                                                |
 | REST endpoints    | `GET /api/v1/watchdog/{stats,contracts,alerts,contracts/{id}/{health,alerts}}`                                       |
 | Dashboard pages   | `apps/web/app/(app)/watchdog/*`                                                                                      |

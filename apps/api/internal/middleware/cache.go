@@ -52,14 +52,13 @@ func CacheCollectors() []prometheus.Collector {
 }
 
 // cacheKey identifies a response by method, path and canonical (sorted)
-// query string, so ?a=1&b=2 and ?b=2&a=1 share an entry.
+// query string, so ?a=1&b=2 and ?b=2&a=1 share an entry. Per-user namespaces
+// include the identity verified by the Identity middleware, never a raw
+// header (issue #518).
 func cacheKey(namespace string, r *http.Request) string {
 	identity := ""
 	if namespace == CacheNamespaceLabels {
-		identity = r.Header.Get("X-User-ID")
-		if identity == "" {
-			identity = r.Header.Get("X-GitHub-Login")
-		}
+		identity = VerifiedUserID(r)
 	}
 	key := cacheKeyPrefix + namespace + ":"
 	if identity != "" {

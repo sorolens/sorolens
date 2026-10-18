@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --environment jsdom",
+    "prebuild": "pnpm openapi:generate",
+    "test": "pnpm openapi:check && vitest run --environment jsdom",
+    "openapi:generate": "node scripts/generate-openapi.mjs",
+    "openapi:check": "node scripts/generate-openapi.mjs --check",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -16,6 +19,7 @@
     "@sentry/nextjs": "^11.0.0",
     "@sorolens/ui": "workspace:*",
     "@sorolens/xdr": "workspace:*",
+    "@tanstack/react-virtual": "^3.14.21",
     "cmdk": "^1.1.1",
     "idb": "^8.0.3",
     "next": "^15.3.1",
@@ -37,6 +41,7 @@
     "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^4.3.0",
     "fake-indexeddb": "^6.2.5",
+    "js-yaml": "^4.3.2",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.1.6",
     "typescript": "^5.5.0",

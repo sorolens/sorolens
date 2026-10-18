@@ -25,7 +25,7 @@ func doRuleRequest(t *testing.T, srv http.Handler, method, path string, body any
 	}
 	req := httptest.NewRequest(method, path, &buf)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", contributorUser)
+	req = withTestIdentity(req, contributorUser)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 

@@ -7,6 +7,7 @@ import { listInvocations } from "@/lib/api";
 import type { Invocation } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
 import { TableSkeleton } from "@/components/Skeleton";
+import { ErrorState, errorMessage } from "@/components/ErrorState";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -143,7 +144,7 @@ export default function InvocationsPage() {
   // Data state
   const [invocations, setInvocations] = useState<Invocation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Pagination: stack of cursors, index 0 is the first page.
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
@@ -178,14 +179,14 @@ export default function InvocationsPage() {
         if (seq !== loadSeq.current) return;
         setInvocations(data.invocations ?? []);
         setNextCursor(data.next_cursor || null);
-        setError(false);
-      } catch {
+        setError(null);
+      } catch (err) {
         if (seq !== loadSeq.current) return;
-        // Backend unreachable or erroring: show the empty state instead of a
-        // stuck spinner, and let the user retry with Apply.
+        // Backend unreachable or erroring: show an error with a retry instead
+        // of a stuck spinner or a misleading empty state.
         setInvocations([]);
         setNextCursor(null);
-        setError(true);
+        setError(errorMessage(err, "The invocations request failed."));
       } finally {
         if (seq === loadSeq.current) setLoading(false);
       }
@@ -396,22 +397,27 @@ export default function InvocationsPage() {
       {/* Loading skeleton */}
       {loading && <TableSkeleton rows={PAGE_SIZE} />}
 
+      {/* Failed request */}
+      {!loading && error && (
+        <ErrorState
+          title="Couldn't load invocations."
+          message={error}
+          onRetry={() => load(cursors[cursorIndex])}
+        />
+      )}
+
       {/* Empty state */}
-      {!loading && sorted.length === 0 && (
+      {!loading && !error && sorted.length === 0 && (
         <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
           <p className="text-lg font-medium text-[var(--color-text-primary)]">
             {filtersActive
               ? "No invocations match your filters"
-              : error
-                ? "Could not load invocations"
-                : "No invocations indexed yet"}
+              : "No invocations indexed yet"}
           </p>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
             {filtersActive
               ? "Try widening the date range or clearing the contract and function filters."
-              : error
-                ? "The API could not be reached. Check NEXT_PUBLIC_API_URL and try Apply again."
-                : "Invocations appear here once the indexer has traced activity for tracked contracts."}
+              : "Invocations appear here once the indexer has traced activity for tracked contracts."}
           </p>
         </div>
       )}
@@ -421,6 +427,7 @@ export default function InvocationsPage() {
         <DataTable<Invocation>
           columns={COLUMNS}
           data={sorted}
+          virtualized
           rowKey={(inv) => `${inv.ledger}:${inv.tx_hash}`}
           sortColumn={sortColumn}
           sortDirection={sortDirection}

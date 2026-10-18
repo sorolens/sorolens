@@ -11,3 +11,49 @@
  * fresh connection to a fresh database name (see alertQueue.test.ts).
  */
 import "fake-indexeddb/auto";
+import * as matchers from "@testing-library/jest-dom/matchers";
+import { expect } from "vitest";
+
+expect.extend(matchers);
+
+class MockStorage implements Storage {
+  private store = new Map<string, string>();
+  get length() {
+    return this.store.size;
+  }
+  clear() {
+    this.store.clear();
+  }
+  getItem(key: string) {
+    return this.store.has(key) ? this.store.get(key)! : null;
+  }
+  setItem(key: string, value: string) {
+    this.store.set(key, String(value));
+  }
+  removeItem(key: string) {
+    this.store.delete(key);
+  }
+  key(index: number) {
+    return Array.from(this.store.keys())[index] ?? null;
+  }
+}
+
+const storageInstance = new MockStorage();
+
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "localStorage", {
+    value: storageInstance,
+    writable: true,
+    configurable: true,
+  });
+}
+
+try {
+  delete (globalThis as any).localStorage;
+} catch {}
+
+Object.defineProperty(globalThis, "localStorage", {
+  value: storageInstance,
+  writable: true,
+  configurable: true,
+});

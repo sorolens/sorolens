@@ -1,14 +1,16 @@
 import { test, expect } from "@playwright/test";
 import { blockApi, CONTRACT_ID, expectHeading, mockApi } from "./helpers";
 
-test("/contracts shows the empty state when the API is unavailable", async ({
+test("/contracts shows an error with a retry when the API is unavailable", async ({
   page,
 }) => {
   await blockApi(page);
   await page.goto("/contracts");
 
   await expectHeading(page, "Contracts");
-  await expect(page.getByText("No contracts tracked yet")).toBeVisible();
+  await expect(page.getByText("Couldn't load contracts.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(page.getByText("No contracts tracked yet")).toBeHidden();
 });
 
 test("/contracts renders tracked contracts from the mocked API", async ({

@@ -8,16 +8,23 @@
 import * as matchers from "@testing-library/jest-dom/matchers";
 import {
   cleanup,
-  render,
+  render as renderWithoutLocale,
   screen,
   fireEvent,
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SETTINGS_STORAGE_KEY } from "@/lib/settings";
+import { LocaleProvider } from "@/lib/i18n";
+import type { ReactNode } from "react";
 
 import PlaygroundPage from "./page";
 
 expect.extend(matchers);
+
+function render(ui: ReactNode) {
+  return renderWithoutLocale(<LocaleProvider>{ui}</LocaleProvider>);
+}
 
 function mockResponse(
   status = 200,
@@ -40,11 +47,13 @@ describe("PlaygroundPage", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     fetchMock.mockResolvedValue(mockResponse());
+    localStorage.removeItem(SETTINGS_STORAGE_KEY);
     vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(() => {
     cleanup();
+    localStorage.removeItem(SETTINGS_STORAGE_KEY);
     vi.unstubAllGlobals();
   });
 
@@ -66,6 +75,21 @@ describe("PlaygroundPage", () => {
       "playground-api-key"
     ) as HTMLInputElement;
     expect(keyInput.value).toBe("");
+  });
+
+  it("pre-fills the API key saved in Settings", async () => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({ apiKey: "sl_saved_key" })
+    );
+    render(<PlaygroundPage />);
+
+    await waitFor(() => {
+      expect(
+        (document.getElementById("playground-api-key") as HTMLInputElement)
+          .value
+      ).toBe("sl_saved_key");
+    });
   });
 
   it("sends a request and renders status, headers, and body", async () => {

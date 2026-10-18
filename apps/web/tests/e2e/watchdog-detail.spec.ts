@@ -62,6 +62,12 @@ test("/watchdog/[id] renders a status timeline with a colour legend", async ({
   await page.goto(`/watchdog/${CONTRACT_ID}`);
 
   await expectHeading(page, "Escrow DEX");
+  await expect(
+    page.getByRole("link", { name: "SLA reports for this contract" })
+  ).toHaveAttribute(
+    "href",
+    `/watchdog/reports?contract=${encodeURIComponent(CONTRACT_ID)}`
+  );
   await expect(page.getByTestId("watchdog-timeline")).toBeVisible();
 
   // Consecutive same-status checks collapse into a single segment each.

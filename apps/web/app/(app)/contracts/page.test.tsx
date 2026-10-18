@@ -40,24 +40,13 @@ vi.mock("next/link", () => ({
 // router.replace() updates the shared search params, so the component re-reads
 // the new sort state on the next render just as a real navigation would.
 const nav = vi.hoisted(() => {
-  let query = new URLSearchParams("");
-  const replace = vi.fn((href: string) => {
-    query = new URLSearchParams(href.startsWith("?") ? href.slice(1) : href);
-  });
+  const replace = vi.fn();
   const push = vi.fn();
-  return {
-    replace,
-    push,
-    getQuery: () => query,
-    setQuery: (q: string | URLSearchParams) => {
-      query = new URLSearchParams(q);
-    },
-  };
+  return { replace, push };
 });
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: nav.replace, push: nav.push }),
-  useSearchParams: () => nav.getQuery(),
 }));
 
 // ── Mock @sorolens/ui so we don't need the built dist ───────────────────────
@@ -181,6 +170,10 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
+vi.mock("@/lib/useSession", () => ({
+  useSessionUserId: () => "user_1",
+}));
+
 // ── Mock @/components/Skeleton ───────────────────────────────────────────────
 vi.mock("@/components/Skeleton", () => ({
   TableSkeleton: ({ rows }: { rows?: number }) => (
@@ -225,7 +218,6 @@ function rowTexts(): string[] {
 describe("ContractsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    nav.setQuery("");
     mockBatchContracts.mockResolvedValue({
       action: "untrack",
       requested: 1,
@@ -245,9 +237,14 @@ describe("ContractsPage", () => {
   // Helper: dynamic import so mocks are in place before module loads.
   // Each render mounts a fresh SWR cache so tests stay independent, and
   // deduping is disabled so a revalidation is observable immediately.
-  async function renderPage() {
-    const { default: ContractsPage } =
-      await import("@/app/(app)/contracts/page");
+  async function renderPage(
+    props: {
+      initialSortColumn?: string;
+      initialSortDirection?: "asc" | "desc";
+    } = {}
+  ) {
+    const { default: ContractsClient } =
+      await import("@/app/(app)/contracts/ContractsClient");
     return render(
       <SWRConfig
         value={{
@@ -258,7 +255,7 @@ describe("ContractsPage", () => {
           shouldRetryOnError: false,
         }}
       >
-        <ContractsPage />
+        <ContractsClient {...props} />
       </SWRConfig>
     );
   }
@@ -455,7 +452,7 @@ describe("ContractsPage", () => {
     await waitFor(() => expect(mockBatchContracts).toHaveBeenCalledTimes(1));
     expect(mockBatchContracts).toHaveBeenCalledWith(
       { ids: [CONTRACT_A.id], action: "untrack", args: undefined },
-      ""
+      "user_1"
     );
 
     // Modal closes, selection clears and the list refetches without A.
@@ -503,7 +500,7 @@ describe("ContractsPage", () => {
 
     await waitFor(() => expect(mockBatchContracts).toHaveBeenCalledTimes(1));
     const [req, userId] = mockBatchContracts.mock.calls[0];
-    expect(userId).toBe("");
+    expect(userId).toBe("user_1");
     expect(req.action).toBe("tag");
     expect(req.args).toEqual({ label: "payments" });
     expect([...req.ids].sort()).toEqual([CONTRACT_A.id, CONTRACT_B.id].sort());
@@ -657,9 +654,10 @@ describe("ContractsPage", () => {
   });
 
   it("initializes the sort from the URL on load", async () => {
-    nav.setQuery("?sort=status&dir=asc");
-
-    await renderPage();
+    await renderPage({
+      initialSortColumn: "status",
+      initialSortDirection: "asc",
+    });
     await waitFor(() => screen.getByTestId("data-table"));
 
     // The first request already carries the URL sort params.
@@ -715,5 +713,45 @@ describe("ContractsPage", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  // ── Failed requests ────────────────────────────────────────────────────────
+
+  it("NEGATIVE: shows an error, not the empty state, when the API fails", async () => {
+    mockListContracts.mockRejectedValue(new Error("API down"));
+    await renderPage();
+
+    expect(
+      await screen.findByText("Couldn't load contracts.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("API down")).toBeInTheDocument();
+    expect(screen.queryByText("No contracts tracked yet")).toBeNull();
+    expect(screen.queryByTestId("data-table")).toBeNull();
+  });
+
+  it("retries the request and renders the list once the API recovers", async () => {
+    mockListContracts.mockRejectedValueOnce(new Error("API down"));
+    await renderPage();
+
+    await screen.findByText("Couldn't load contracts.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => screen.getByTestId("data-table"));
+    expect(screen.queryByText("Couldn't load contracts.")).toBeNull();
+    expect(mockListContracts).toHaveBeenCalledTimes(2);
+  });
+
+  it("still shows the empty state when the request succeeds with no contracts", async () => {
+    mockListContracts.mockResolvedValue({
+      contracts: [],
+      cursor: null,
+      has_more: false,
+    });
+    await renderPage();
+
+    expect(
+      await screen.findByText("No contracts tracked yet")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load contracts.")).toBeNull();
   });
 });

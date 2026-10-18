@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -110,13 +110,9 @@ class ContractVerification:
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.verification_diagnostic import (
-            VerificationDiagnostic,
-        )
+        from ..models.verification_diagnostic import VerificationDiagnostic
         from ..models.verification_source import VerificationSource
-        from ..models.verification_toolchain import (
-            VerificationToolchain,
-        )
+        from ..models.verification_toolchain import VerificationToolchain
 
         d = dict(src_dict)
         contract_id = d.pop("contract_id")

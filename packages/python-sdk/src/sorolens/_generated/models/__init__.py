@@ -191,6 +191,7 @@ from .rotate_api_key_admin_response_200 import RotateApiKeyAdminResponse200
 from .rotate_api_key_response_200 import RotateApiKeyResponse200
 from .rule_diagnostic import RuleDiagnostic
 from .scope_error import ScopeError
+from .session import Session
 from .set_alert_rule_enabled_body import SetAlertRuleEnabledBody
 from .slack_command_body import SlackCommandBody
 from .slack_message import SlackMessage
@@ -453,6 +454,7 @@ __all__ = (
     "RotateApiKeyResponse200",
     "RuleDiagnostic",
     "ScopeError",
+    "Session",
     "SetAlertRuleEnabledBody",
     "SlackCommandBody",
     "SlackMessage",

@@ -6,27 +6,38 @@ import { EventsTable } from "@/components/EventsTable";
 import { StatCard } from "@/components/StatCard";
 import { useEventStream } from "@/hooks/useEventStream";
 import { truncateMiddle } from "@/lib/format";
+import { useLocale } from "@/lib/i18n";
 import type { ContractEvent } from "@/lib/types";
 
 export default function EventsPage() {
+  const { formatNumber, formatDateTime } = useLocale();
   const [contractIdFilter, setContractIdFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState("");
+  const [paused, setPaused] = useState(false);
 
-  const { events, setEvents, status, isConnected, isPolling, lastEventAt } =
-    useEventStream({
-      contractId: activeFilter || undefined,
-    });
+  const {
+    events,
+    clearEvents,
+    droppedCount,
+    status,
+    isConnected,
+    isPolling,
+    lastEventAt,
+  } = useEventStream({
+    contractId: activeFilter || undefined,
+    enabled: !paused,
+  });
 
   const handleApplyFilter = (e: React.FormEvent) => {
     e.preventDefault();
     setActiveFilter(contractIdFilter.trim());
-    setEvents([]);
+    clearEvents();
   };
 
   const handleClearFilter = () => {
     setContractIdFilter("");
     setActiveFilter("");
-    setEvents([]);
+    clearEvents();
   };
 
   return (
@@ -37,27 +48,33 @@ export default function EventsPage() {
             <h1 className="text-3xl font-bold tracking-tight">Live Events</h1>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                isConnected
-                  ? "bg-green-900/40 text-green-400"
-                  : isPolling
-                    ? "bg-amber-900/40 text-amber-400"
-                    : "bg-blue-900/40 text-blue-400"
+                paused
+                  ? "bg-white/10 text-[var(--color-text-secondary)]"
+                  : isConnected
+                    ? "bg-green-900/40 text-green-400"
+                    : isPolling
+                      ? "bg-amber-900/40 text-amber-400"
+                      : "bg-blue-900/40 text-blue-400"
               }`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
-                  isConnected
-                    ? "bg-green-400 animate-pulse"
-                    : isPolling
-                      ? "bg-amber-400"
-                      : "bg-blue-400 animate-ping"
+                  paused
+                    ? "bg-white/60"
+                    : isConnected
+                      ? "bg-green-400 animate-pulse"
+                      : isPolling
+                        ? "bg-amber-400"
+                        : "bg-blue-400 animate-ping"
                 }`}
               />
-              {isConnected
-                ? "Live (SSE)"
-                : isPolling
-                  ? "Live (Polling Fallback)"
-                  : "Connecting..."}
+              {paused
+                ? "Paused"
+                : isConnected
+                  ? "Live (SSE)"
+                  : isPolling
+                    ? "Live (Polling Fallback)"
+                    : "Connecting..."}
             </span>
           </div>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
@@ -101,7 +118,7 @@ export default function EventsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="Streamed Events"
-          value={events.length.toLocaleString()}
+          value={formatNumber(events.length)}
           subtext={
             activeFilter
               ? `For ${truncateMiddle(activeFilter)}`
@@ -123,12 +140,12 @@ export default function EventsPage() {
           label="Last Event Received"
           value={
             lastEventAt
-              ? lastEventAt.toLocaleTimeString()
+              ? formatDateTime(lastEventAt, { timeStyle: "medium" })
               : "Waiting for events..."
           }
           subtext={
             lastEventAt
-              ? lastEventAt.toLocaleDateString()
+              ? formatDateTime(lastEventAt, { dateStyle: "medium" })
               : "New events appear in real-time"
           }
         />
@@ -137,15 +154,33 @@ export default function EventsPage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Incoming Event Feed</h2>
-          {events.length > 0 && (
+          <div className="flex items-center gap-4">
+            <p
+              data-testid="live-buffer-status"
+              className="text-xs text-[var(--color-text-secondary)]"
+            >
+              Showing latest {events.length} events
+              {droppedCount > 0 && ` · ${droppedCount} older events omitted`}
+            </p>
             <button
               type="button"
-              onClick={() => setEvents([])}
+              data-testid="live-stream-pause"
+              aria-pressed={paused}
+              onClick={() => setPaused((current) => !current)}
               className="text-xs text-[var(--color-text-secondary)] underline hover:text-[var(--color-text-primary)]"
             >
-              Clear feed
+              {paused ? "Resume" : "Pause"}
             </button>
-          )}
+            {events.length > 0 && (
+              <button
+                type="button"
+                onClick={clearEvents}
+                className="text-xs text-[var(--color-text-secondary)] underline hover:text-[var(--color-text-primary)]"
+              >
+                Clear feed
+              </button>
+            )}
+          </div>
         </div>
 
         <EventsTable events={events} />

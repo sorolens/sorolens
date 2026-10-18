@@ -386,4 +386,70 @@ describe("InvocationsPage", () => {
     ) as HTMLButtonElement;
     expect(next.disabled).toBe(true);
   });
+
+  // ── Failed requests ────────────────────────────────────────────────────────
+
+  it("NEGATIVE: shows an error, not the empty state, when the API fails", async () => {
+    mockListInvocations.mockRejectedValue(new Error("API down"));
+    await renderPage();
+
+    expect(
+      await screen.findByText("Couldn't load invocations.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("API down")).toBeInTheDocument();
+    expect(screen.queryByText("No invocations indexed yet")).toBeNull();
+    expect(screen.queryByTestId("data-table")).toBeNull();
+  });
+
+  it("retries the request and renders the rows once the API recovers", async () => {
+    mockListInvocations.mockRejectedValueOnce(new Error("API down"));
+    await renderPage();
+
+    await screen.findByText("Couldn't load invocations.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("data-table-row")).toHaveLength(3);
+    });
+    expect(screen.queryByText("Couldn't load invocations.")).toBeNull();
+    expect(mockListInvocations).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries the same page, not the first one", async () => {
+    mockListInvocations
+      .mockResolvedValueOnce({ invocations: INVOCATIONS, next_cursor: "c2" })
+      .mockRejectedValueOnce(new Error("page 2 down"))
+      .mockResolvedValueOnce({
+        invocations: [INVOCATIONS[0]],
+        next_cursor: null,
+      });
+    await renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByTestId("data-table-row")).toHaveLength(3);
+    });
+
+    fireEvent.click(document.getElementById("invocations-next-page")!);
+    await screen.findByText("Couldn't load invocations.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("data-table-row")).toHaveLength(1);
+    });
+    expect(mockListInvocations).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: "c2" })
+    );
+  });
+
+  it("still shows the empty state when the request succeeds with no rows", async () => {
+    mockListInvocations.mockResolvedValue({
+      invocations: [],
+      next_cursor: null,
+    });
+    await renderPage();
+
+    expect(
+      await screen.findByText("No invocations indexed yet")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load invocations.")).toBeNull();
+  });
 });

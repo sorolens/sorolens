@@ -17,6 +17,28 @@ export interface UseEventStreamOptions {
 export type StreamStatus =
   "connecting" | "connected" | "polling" | "disconnected";
 
+export const MAX_BUFFERED_EVENTS = 500;
+
+interface EventBuffer {
+  events: ContractEvent[];
+  droppedCount: number;
+}
+
+export function appendStreamEvent(
+  buffer: EventBuffer,
+  event: ContractEvent
+): EventBuffer {
+  if (buffer.events.some((existing) => existing.id === event.id)) return buffer;
+
+  const events = [event, ...buffer.events].slice(0, MAX_BUFFERED_EVENTS);
+  return {
+    events,
+    droppedCount:
+      buffer.droppedCount +
+      (buffer.events.length >= MAX_BUFFERED_EVENTS ? 1 : 0),
+  };
+}
+
 export function useEventStream(
   contractIdOrOptions?: string | UseEventStreamOptions
 ) {
@@ -33,7 +55,10 @@ export function useEventStream(
     onAlert,
   } = options;
 
-  const [events, setEvents] = useState<ContractEvent[]>([]);
+  const [buffer, setBuffer] = useState<EventBuffer>({
+    events: [],
+    droppedCount: 0,
+  });
   const [status, setStatus] = useState<StreamStatus>("disconnected");
   const [lastEventAt, setLastEventAt] = useState<Date | null>(null);
 
@@ -48,17 +73,15 @@ export function useEventStream(
   const lastEventIdRef = useRef<string | null>(null);
 
   const addEvent = useCallback((event: ContractEvent) => {
-    setEvents((prev) => {
-      // De-duplicate if event already in list
-      if (prev.some((e) => e.id === event.id)) {
-        return prev;
-      }
-      return [event, ...prev];
-    });
+    setBuffer((prev) => appendStreamEvent(prev, event));
     setLastEventAt(new Date());
     if (onEventRef.current) {
       onEventRef.current(event);
     }
+  }, []);
+
+  const clearEvents = useCallback(() => {
+    setBuffer({ events: [], droppedCount: 0 });
   }, []);
 
   useEffect(() => {
@@ -164,8 +187,9 @@ export function useEventStream(
   }, [contractId, enabled, pollFallbackInterval, addEvent]);
 
   return {
-    events,
-    setEvents,
+    events: buffer.events,
+    droppedCount: buffer.droppedCount,
+    clearEvents,
     status,
     isConnected: status === "connected",
     isPolling: status === "polling",

@@ -15,10 +15,16 @@ info:
     consistent `/api/v2` surface introduced in issue #144. v2 is additive; v1 is
     unchanged. See docs/api-v2.md for the field-by-field v1 -> v2 mapping.
 
-    Authentication: most read endpoints accept an optional API key via
-    `Authorization: Bearer <token>` or `X-API-Key: <token>`. API-key management
-    additionally requires an admin identity via role headers
-    (`X-User-ID`, `X-GitHub-Login`, `X-User-Sub`, or `X-GitHub-ID`).
+    Authentication: callers prove identity with a credential this service can
+    verify. A workspace session token from `POST /api/v1/auth/session`
+    (`Authorization: Bearer sls_...`, minted and HMAC-signed by the server) or
+    a user-bound API key establishes the caller's user and role. Unbound API
+    keys authenticate scopes only; an `admin:*` key satisfies admin role checks
+    so operators can bootstrap key rotation. Deployments behind a trusted
+    reverse proxy may instead set `X-Identity-User-ID`,
+    `X-Identity-Timestamp` and `X-Identity-Signature` (an HMAC over the
+    request). Bare `X-User-ID`, `X-GitHub-Login`, `X-User-Sub` and
+    `X-GitHub-ID` headers are ignored (issue #518).
   contact:
     name: Sorolens
 
@@ -29,6 +35,8 @@ servers:
 tags:
   - name: Health
     description: Liveness and readiness probes
+  - name: Auth
+    description: Workspace session tokens (issue #518)
   - name: Live
     description: Real-time dashboard feeds (newest events, per-minute activity)
   - name: API v2
@@ -1273,6 +1281,9 @@ paths:
                 name:
                   type: string
                   description: Human-friendly key name.
+                user_id:
+                  type: string
+                  description: Optional user the key acts as. The user must exist. Omit for a scope-only key.
                 scopes:
                   type: array
                   items:
@@ -3354,6 +3365,34 @@ paths:
                     format: date-time
                 required: [status, db, redis, timestamp]
 
+  /api/v1/auth/session:
+    post:
+      tags: [Auth]
+      summary: Mint a workspace session token
+      description: |
+        Creates an unguessable workspace user with the contributor role and
+        returns an HMAC-signed session token. Send it as
+        `Authorization: Bearer <token>` on routes that need a verified user
+        identity (watchlist, groups, notes, labels, write routes). The token is
+        stateless: it remains valid until `expires_at`.
+      operationId: createSession
+      security: []
+      responses:
+        "201":
+          description: Session created. The token is returned once.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: Session signing is not configured on this deployment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/version:
     get:
       tags: [Version]
@@ -4673,19 +4712,30 @@ components:
       type: http
       scheme: bearer
       description: "Scoped API key. Send as `Authorization: Bearer <token>` (or `X-API-Key`)."
+    SessionAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Workspace session token minted by POST /api/v1/auth/session
+        (`Authorization: Bearer sls_...`). Establishes the caller's user and
+        role; the token is HMAC-signed and expires at the returned
+        `expires_at`.
     RoleAuth:
       type: apiKey
       in: header
       name: X-User-ID
+      deprecated: true
       description: |
-        Role-based auth. Resolve a user identity from one of
-        X-User-ID, X-GitHub-Login, X-User-Sub, or X-GitHub-ID and enforce the
-        minimum role declared next to this security scheme.
+        Deprecated and ignored (issue #518). Role is derived from the verified
+        session token or user-bound API key instead of request headers.
     IdentityHeaderAuth:
       type: apiKey
       in: header
       name: X-User-ID
-      description: Watchlist and contract-group endpoints read the user ID from X-User-ID.
+      deprecated: true
+      description: |
+        Deprecated and ignored (issue #518). Watchlist, group, note and label
+        endpoints require a session token or user-bound API key.
 
   parameters:
     ContractID:
@@ -5319,6 +5369,20 @@ components:
           nullable: true
           type: object
 
+    Session:
+      type: object
+      required: [user_id, token, expires_at]
+      properties:
+        user_id:
+          type: string
+          description: Server-minted workspace user ID.
+        token:
+          type: string
+          description: HMAC-signed bearer token, valid until expires_at.
+        expires_at:
+          type: string
+          format: date-time
+
     APIKey:
       type: object
       required: [id, name, key_prefix, scopes, created_at, last_used_at, revoked_at]
@@ -5329,6 +5393,10 @@ components:
           type: string
         key_prefix:
           type: string
+        user_id:
+          type: string
+          nullable: true
+          description: User this key acts as. Null for scope-only keys.
         scopes:
           type: array
           items:

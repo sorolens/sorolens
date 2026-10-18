@@ -9,6 +9,8 @@ import { describe, expect, it } from "vitest";
 import {
   CONTRACT_ID_HEAD_CHARS,
   CONTRACT_ID_TAIL_CHARS,
+  formatDateTime,
+  formatNumber,
   truncateMiddle,
 } from "./format";
 
@@ -19,6 +21,39 @@ const SOROBAN_CONTRACT_ID =
 describe("truncateMiddle", () => {
   it("returns short values unchanged", () => {
     expect(truncateMiddle("CABC")).toBe("CABC");
+  });
+
+  describe("locale-aware formatting", () => {
+    it("formats numbers using the selected locale", () => {
+      expect(formatNumber(1234.5, "es")).toBe(
+        new Intl.NumberFormat("es").format(1234.5)
+      );
+    });
+
+    it("formats dates in UTC by default and supports local time", () => {
+      const timestamp = "2026-10-17T16:30:00.000Z";
+      const options = {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      } satisfies Intl.DateTimeFormatOptions;
+
+      expect(formatDateTime(timestamp, "en", "UTC", options)).toBe(
+        new Intl.DateTimeFormat("en", { ...options, timeZone: "UTC" }).format(
+          new Date(timestamp)
+        )
+      );
+      expect(formatDateTime(timestamp, "es", "local", options)).toBe(
+        new Intl.DateTimeFormat("es", options).format(new Date(timestamp))
+      );
+    });
+
+    it("returns a placeholder for invalid timestamps", () => {
+      expect(formatDateTime("not-a-date")).toBe("-");
+    });
   });
 
   it("returns empty values unchanged", () => {

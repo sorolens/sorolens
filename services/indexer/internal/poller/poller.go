@@ -80,6 +80,10 @@ type Poller struct {
 	// nil unless SetRuleEvaluator is called, so deployments without the rule
 	// store are unaffected.
 	ruleEval RuleEvaluator
+	// expiryAlerter raises storage expiry alerts after each indexing pass
+	// (issue #510). It is nil unless SetExpiryAlerter is called, so
+	// deployments without the feature enabled are unaffected.
+	expiryAlerter ExpiryAlerter
 }
 
 // RuleEvaluator is the rule engine the poller invokes at the end of a pass
@@ -87,6 +91,17 @@ type Poller struct {
 type RuleEvaluator interface {
 	EvaluatePass(ctx context.Context) error
 }
+
+// ExpiryAlerter is the storage expiry alerting job (issue #510, see the
+// expiryalert package) the poller invokes at the end of every pass, after
+// the freshly indexed sync-state and storage data is in the store.
+type ExpiryAlerter interface {
+	AlertExpiry(ctx context.Context) error
+}
+
+// SetExpiryAlerter attaches the storage expiry scanner. It must be called
+// before Run; a nil alerter disables the job.
+func (p *Poller) SetExpiryAlerter(a ExpiryAlerter) { p.expiryAlerter = a }
 
 // SetRuleEvaluator attaches the rule engine. It must be called before Run; a
 // nil evaluator disables rule evaluation.
@@ -256,6 +271,15 @@ func (p *Poller) processAll(ctx context.Context) error {
 		p.runAnomalyDetection(ctx)
 	}
 	p.runHealthScores(ctx)
+
+	// Storage expiry alerting (issue #510) runs on the freshly indexed sync
+	// state, before user rules, so a near-expiry summary reaches the existing
+	// notifier every pass.
+	if p.expiryAlerter != nil {
+		if err := p.expiryAlerter.AlertExpiry(ctx); err != nil {
+			p.log.Error("storage expiry alert pass", "err", err)
+		}
+	}
 
 	// User-defined alert rules run last, on the freshly indexed data.
 	if p.ruleEval != nil {

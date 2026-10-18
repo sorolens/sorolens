@@ -104,7 +104,7 @@ slow. 64 shards over 4 workers is 16 shards each.
 
 ## Schema
 
-`apps/api/internal/db/migrations/000011_indexer_shards.up.sql` creates
+`apps/api/internal/db/migrations/000030_indexer_shards.up.sql` creates
 `indexer_workers` and `indexer_shards` with the indexes the coordinator's hot
 paths need. Nothing else is required — the leader lock is an advisory lock, not
 a row.

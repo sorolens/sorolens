@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getGroup, getGroupStats, removeContractFromGroup } from "@/lib/api";
 import type { GroupContract, GroupDetail, GroupStats } from "@/lib/types";
-import { getUserId } from "@/lib/user";
+import { useSessionUserId } from "@/lib/useSession";
 import { StatCard } from "@/components/StatCard";
 import { CardSkeleton, TableSkeleton } from "@/components/Skeleton";
 
@@ -33,13 +33,17 @@ export default function GroupDetailPage({ params }: Props) {
 }
 
 function GroupDetailContent({ id }: { id: string }) {
-  const [userId] = useState<string>(getUserId);
+  const userId = useSessionUserId();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [stats, setStats] = useState<GroupStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [detail, aggregate] = await Promise.all([

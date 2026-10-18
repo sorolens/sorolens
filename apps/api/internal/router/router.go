@@ -98,6 +98,14 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(middleware.Recoverer(h.Logger))
 	r.Use(middleware.BodyLimit(maxBodyBytes))
 	r.Use(middleware.Logger(h.Logger))
+	// Verify the caller's credential once and attach the resulting identity
+	// to the request context (issue #518). Must run before Audit, which
+	// attributes writes to the verified caller, and before the per-route
+	// scope/role middleware. Bare identity headers are never trusted.
+	r.Use(middleware.Identity(h.Store, middleware.IdentityOptions{
+		Sessions:    h.SessionSigner,
+		ProxySecret: h.TrustedProxySecret,
+	}, h.Logger))
 	// Audit trail for every mutating /api/ request (issue #122). It sits
 	// outside rate limiting, content-type and auth checks so their
 	// rejections are audited too, and inside Recoverer so a panic is
@@ -143,7 +151,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	reg.MustRegister(metrics.HTTPRequestsInFlight, metrics.HTTPRequestsTotal, metrics.HTTPRequestDuration)
 	reg.MustRegister(metrics.PoolCollector())
 	r.Get("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP)
-	pprofAdmin := middleware.RequireRoleOrForbidden(h.Store, h.Logger, middleware.RoleAdmin)
+	pprofAdmin := middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)
 	r.With(pprofAdmin).Get("/debug/pprof", pprof.Index)
 	r.With(pprofAdmin).Get("/debug/pprof/", pprof.Index)
 	r.With(pprofAdmin).Get("/debug/pprof/cmdline", pprof.Cmdline)
@@ -162,7 +170,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 
 	// pprof (issue #157). Gated behind admin role so probing always gets 403
 	// rather than 401, avoiding path enumeration by unauthenticated callers.
-	adminOnly := middleware.RequireRoleOrForbidden(h.Store, h.Logger, middleware.RoleAdmin)
+	adminOnly := middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)
 	r.With(adminOnly).HandleFunc("/debug/pprof", pprof.Index)
 	r.With(adminOnly).HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	r.With(adminOnly).HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -179,7 +187,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// which is a build defect.
 		panic(fmt.Sprintf("graphql handler: %v", err))
 	}
-	r.With(middleware.RequireScopes(h.Store, h.Logger)).Post("/graphql", gql.ServeHTTP)
+	r.With(middleware.RequireScopes(h.Logger)).Post("/graphql", gql.ServeHTTP)
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
@@ -190,18 +198,24 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// credential.
 		r.Get("/health", h.HealthCheck)
 
+		// Workspace sessions (issue #518). Unauthenticated and unscoped by
+		// design: the server mints an unguessable identity and returns an
+		// HMAC-signed token the dashboard sends as a bearer credential.
+		// Global rate limiting still applies.
+		r.Post("/auth/session", h.CreateSession)
+
 		// Scoped API key auth. It is applied per route with r.With so chi has
 		// already resolved the leaf route pattern when the middleware runs; the
 		// required scope is looked up from the metadata table in
 		// middleware/scopes.go keyed by that pattern. Requests without a
 		// credential still pass on read/write routes (public v0.1 surface),
 		// while API key management always requires a credential.
-		scope := middleware.RequireScopes(h.Store, h.Logger)
+		scope := middleware.RequireScopes(h.Logger)
 		// RBAC: role enforcement on top of scope. Route wiring uses r.With
 		// (same pattern as scope) so the role middleware denies a request
 		// that lacks the minimum role regardless of API key scopes.
-		contributor := middleware.RequireRole(h.Store, h.Logger, middleware.RoleContributor)
-		admin := middleware.RequireRole(h.Store, h.Logger, middleware.RoleAdmin)
+		contributor := middleware.RequireRole(h.Logger, middleware.RoleContributor)
+		admin := middleware.RequireRole(h.Logger, middleware.RoleAdmin)
 
 		// Request timeouts (issue #154). The SSE stream is registered first
 		// with its own long deadline; r is then rebound so every route
@@ -421,9 +435,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Route("/api/v2", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
 
-		scope := middleware.RequireScopes(h.Store, h.Logger)
-		contributor := middleware.RequireRole(h.Store, h.Logger, middleware.RoleContributor)
-		admin := middleware.RequireRole(h.Store, h.Logger, middleware.RoleAdmin)
+		scope := middleware.RequireScopes(h.Logger)
+		contributor := middleware.RequireRole(h.Logger, middleware.RoleContributor)
+		admin := middleware.RequireRole(h.Logger, middleware.RoleAdmin)
 
 		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
 

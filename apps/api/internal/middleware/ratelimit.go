@@ -68,8 +68,12 @@ func RateLimit(rc RedisClient, lookup APIKeyLookup) func(http.Handler) http.Hand
 			ip := clientIP(r)
 			limit := 100
 
-			// Check if authenticated
-			if token != "" {
+			// Check if authenticated. The Identity middleware has already
+			// verified the credential when it ran; fall back to a lookup for
+			// direct callers/tests.
+			if _, ok := IdentityFromRequest(r); ok {
+				limit = 1000
+			} else if token != "" {
 				key, err := lookup.GetAPIKeyByHash(r.Context(), store.HashKey(token))
 				if err == nil && !key.Revoked() {
 					limit = 1000

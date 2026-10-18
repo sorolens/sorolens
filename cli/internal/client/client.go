@@ -54,7 +54,8 @@ type ListEventsOpts struct {
 
 // ListContractsOpts holds optional filters for listing contracts.
 type ListContractsOpts struct {
-	Status string
+	Network string
+	Status  string
 	Limit  int
 	Cursor string
 }
@@ -176,6 +177,9 @@ func (c *Client) GetStorage(ctx context.Context, contractID string) ([]StorageEn
 // ListContracts fetches a paginated list of tracked contracts.
 func (c *Client) ListContracts(ctx context.Context, opts ListContractsOpts) (ContractsResponse, error) {
 	q := url.Values{}
+	if opts.Network != "" {
+		q.Set("network", opts.Network)
+	}
 	if opts.Status != "" {
 		q.Set("status", opts.Status)
 	}
@@ -237,11 +241,15 @@ func (c *Client) ListAlerts(ctx context.Context, opts ListAlertsOpts) (AlertsRes
 }
 
 // TrackContract registers a contract for tracking.
-func (c *Client) TrackContract(ctx context.Context, contractID, alias, network string) (Contract, error) {
+// When preset is non-empty it must be a known preset type (e.g. "dex",
+// "lending", "stablecoin"). The API validates the preset against its built-in
+// registry and stores it on the contract row.
+func (c *Client) TrackContract(ctx context.Context, contractID, alias, network, preset string) (Contract, error) {
 	body := map[string]string{
 		"id":      contractID,
 		"network": network,
 		"label":   alias,
+		"preset":  preset,
 	}
 	var out Contract
 	err := c.do(ctx, http.MethodPost, "/api/v1/contracts", body, &out)
@@ -364,4 +372,33 @@ func (c *Client) StreamEvents(ctx context.Context, contractID string, onMessage 
 		return fmt.Errorf("read stream: %w", err)
 	}
 	return nil
+}
+
+// GetContractReport fetches a contract's monthly SLA report.
+func (c *Client) GetContractReport(ctx context.Context, contractID, month string) (ContractReport, error) {
+	q := url.Values{}
+	if month != "" {
+		q.Set("month", month)
+	}
+	q.Set("format", "json")
+	path := "/api/v1/reports/" + contractID + "?" + q.Encode()
+	var out ContractReport
+	err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return out, err
+}
+
+// GetContractSnapshot fetches the storage snapshot at a historical ledger.
+func (c *Client) GetContractSnapshot(ctx context.Context, contractID string, ledger uint32) (ContractSnapshot, error) {
+	path := fmt.Sprintf("/api/v1/contracts/%s/snapshot?ledger=%d", contractID, ledger)
+	var out ContractSnapshot
+	err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return out, err
+}
+
+// GetContractSnapshotExport fetches the portable current-state snapshot export.
+func (c *Client) GetContractSnapshotExport(ctx context.Context, contractID string) (ContractSnapshotExport, error) {
+	path := fmt.Sprintf("/api/v1/contracts/%s/snapshot.json", contractID)
+	var out ContractSnapshotExport
+	err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return out, err
 }

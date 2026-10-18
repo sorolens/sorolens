@@ -51,6 +51,28 @@ describe("DataTable", () => {
     expect(screen.getByText("Beta")).toBeDefined();
   });
 
+  it("virtualizes a 10k-row data set", () => {
+    const data = Array.from({ length: 10_000 }, (_, index) => ({
+      id: `row-${index}`,
+      name: `Item ${index}`,
+      count: index,
+    }));
+    const { container } = render(
+      <DataTable
+        columns={COLUMNS}
+        data={data}
+        rowKey={(item) => item.id}
+        virtualized
+        virtualizeAfter={100}
+      />
+    );
+
+    expect(
+      container.querySelectorAll('tbody tr:not([aria-hidden="true"])').length
+    ).toBeLessThan(100);
+    expect(screen.queryByText("Item 9999")).toBeNull();
+  });
+
   it("shows loading skeleton instead of rows when loading=true", () => {
     const { container } = render(
       <DataTable

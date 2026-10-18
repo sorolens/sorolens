@@ -33,17 +33,20 @@ vi.mock("next/link", () => ({
 const mockListMonitoredContracts = vi.fn();
 const mockListAlertGroups = vi.fn();
 const mockListAlerts = vi.fn();
+const mockGetWatchdogStats = vi.fn();
+
+const ZERO_STATS = {
+  total_monitored: 0,
+  healthy: 0,
+  degraded: 0,
+  unresponsive: 0,
+  total_alerts: 0,
+  critical_alerts: 0,
+};
+mockGetWatchdogStats.mockResolvedValue(ZERO_STATS);
 
 vi.mock("@/lib/api", () => ({
-  getWatchdogStats: () =>
-    Promise.resolve({
-      total_monitored: 0,
-      healthy: 0,
-      degraded: 0,
-      unresponsive: 0,
-      total_alerts: 0,
-      critical_alerts: 0,
-    }),
+  getWatchdogStats: (...args: unknown[]) => mockGetWatchdogStats(...args),
   listAlertGroups: (...args: unknown[]) => mockListAlertGroups(...args),
   listAlerts: (...args: unknown[]) => mockListAlerts(...args),
   listMonitoredContracts: (...args: unknown[]) =>
@@ -254,11 +257,13 @@ describe("WatchdogPage monitored contracts pagination", () => {
     expect(screen.queryByRole("button", { name: "Previous page" })).toBeNull();
   });
 
-  it("shows the empty state when the API is unavailable", async () => {
+  it("shows an error, not the empty state, when the API is unavailable", async () => {
     mockListMonitoredContracts.mockRejectedValue(new Error("network down"));
     await renderPage();
 
-    await screen.findByText("No monitored contracts yet");
+    await screen.findByText("Couldn't load monitored contracts.");
+    expect(screen.getByText("network down")).toBeDefined();
+    expect(screen.queryByText("No monitored contracts yet")).toBeNull();
     expect(screen.queryByRole("button", { name: "Next page" })).toBeNull();
   });
 });
@@ -453,5 +458,163 @@ describe("WatchdogPage grouped alerts feed", () => {
       cursor: "cursor-2",
       limit: 20,
     });
+  });
+});
+
+// ── Tests: failed requests ──────────────────────────────────────────────────
+
+describe("WatchdogPage failed requests", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetWatchdogStats.mockResolvedValue(ZERO_STATS);
+    mockListMonitoredContracts.mockResolvedValue({
+      contracts: [monitored("alpha")],
+      next_cursor: "",
+    });
+    mockListAlertGroups.mockResolvedValue({
+      groups: [alertGroup()],
+      next_cursor: "",
+    });
+    mockListAlerts.mockResolvedValue({ alerts: [], next_cursor: "" });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows an error instead of zeros when the stats request fails, and retries", async () => {
+    mockGetWatchdogStats.mockRejectedValueOnce(new Error("stats down"));
+    mockGetWatchdogStats.mockResolvedValue({
+      ...ZERO_STATS,
+      total_monitored: 42,
+    });
+    await renderPage();
+
+    await screen.findByText("Couldn't load watchdog stats.");
+    expect(screen.getByText("stats down")).toBeDefined();
+    expect(screen.queryByText("Monitored")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await screen.findByText("42");
+    expect(screen.queryByText("Couldn't load watchdog stats.")).toBeNull();
+    expect(mockGetWatchdogStats).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries the monitored contracts list after a failure", async () => {
+    mockListMonitoredContracts.mockRejectedValueOnce(new Error("boom"));
+    await renderPage();
+
+    await screen.findByText("Couldn't load monitored contracts.");
+    expect(screen.queryByText("No monitored contracts yet")).toBeNull();
+
+    const section = screen
+      .getByText("Couldn't load monitored contracts.")
+      .closest("[role=alert]") as HTMLElement;
+    fireEvent.click(within(section).getByRole("button", { name: "Try again" }));
+
+    // The alerts feed also renders a table, so look for the contract's own
+    // link (the filter dropdown option is not a link).
+    await screen.findByRole("link", { name: "alpha" });
+    expect(screen.queryByText("Couldn't load monitored contracts.")).toBeNull();
+    expect(mockListMonitoredContracts).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows an error instead of 'No alerts yet' when the grouped feed fails, and retries", async () => {
+    mockListAlertGroups.mockRejectedValueOnce(new Error("groups down"));
+    await renderPage();
+
+    await screen.findByText("Couldn't load alerts.");
+    expect(screen.getByText("groups down")).toBeDefined();
+    expect(screen.queryByText("No alerts yet")).toBeNull();
+
+    const section = screen
+      .getByText("Couldn't load alerts.")
+      .closest("[role=alert]") as HTMLElement;
+    fireEvent.click(within(section).getByRole("button", { name: "Try again" }));
+
+    await screen.findByText("7");
+    expect(screen.queryByText("Couldn't load alerts.")).toBeNull();
+    expect(mockListAlertGroups).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows an error and retries when the flat feed fails", async () => {
+    mockListAlerts.mockRejectedValueOnce(new Error("flat down"));
+    mockListAlerts.mockResolvedValue({
+      alerts: [memberAlert("member one", 120_400)],
+      next_cursor: "",
+    });
+    await renderPage();
+    await screen.findByText("7");
+
+    fireEvent.click(screen.getByRole("button", { name: "Flat feed" }));
+
+    await screen.findByText("Couldn't load alerts.");
+    expect(screen.queryByText("No alerts yet")).toBeNull();
+
+    const section = screen
+      .getByText("Couldn't load alerts.")
+      .closest("[role=alert]") as HTMLElement;
+    fireEvent.click(within(section).getByRole("button", { name: "Try again" }));
+
+    await screen.findByText("member one");
+  });
+
+  it("keeps the loaded groups and reports a failed 'load more'", async () => {
+    mockListAlertGroups
+      .mockResolvedValueOnce({
+        groups: [alertGroup()],
+        next_cursor: "cursor-2",
+      })
+      .mockRejectedValueOnce(new Error("page 2 down"))
+      .mockResolvedValueOnce({
+        groups: [
+          alertGroup({
+            id: 2,
+            group_key: `${GROUP_CONTRACT_ID}|Info|`,
+            severity: "Info",
+            count: 5,
+          }),
+        ],
+        next_cursor: "",
+      });
+    await renderPage();
+    await screen.findByText("7");
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more groups" }));
+
+    await screen.findByText("Couldn't load more alerts.");
+    expect(screen.getByText("page 2 down")).toBeDefined();
+    // The first page is still on screen and the button can be pressed again.
+    expect(screen.getByText("7")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more groups" }));
+
+    await screen.findByText("5");
+    expect(screen.queryByText("Couldn't load more alerts.")).toBeNull();
+  });
+
+  it("shows an error, not 'No raw alerts', when a group's members fail to load, and retries", async () => {
+    mockListAlerts.mockRejectedValueOnce(new Error("members down"));
+    mockListAlerts.mockResolvedValue({
+      alerts: [memberAlert("member one", 120_400)],
+      next_cursor: "",
+    });
+    await renderPage();
+    await screen.findByText("7");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand alert group 1" })
+    );
+
+    await screen.findByText("Couldn't load the raw alerts.");
+    expect(
+      screen.queryByText("No raw alerts available for this group.")
+    ).toBeNull();
+
+    const members = screen.getByTestId("alert-group-members");
+    fireEvent.click(within(members).getByRole("button", { name: "Try again" }));
+
+    await screen.findByText("member one");
   });
 });

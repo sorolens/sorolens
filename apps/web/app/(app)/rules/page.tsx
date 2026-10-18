@@ -22,7 +22,7 @@ import type {
   RuleValidation,
 } from "@/lib/types";
 import { classForToken, tokenizeRule } from "@/lib/ruleSyntax";
-import { getUserId } from "@/lib/user";
+import { useSessionUserId } from "@/lib/useSession";
 import { StatCard } from "@/components/StatCard";
 
 const SEVERITIES: RuleSeverity[] = ["Info", "Warning", "Critical"];
@@ -36,7 +36,7 @@ const DEFAULT_RULE = "fee_per_invocation > 0.5 XLM for 5m";
  * indexer will decide.
  */
 export default function RulesPage() {
-  const [userId] = useState<string>(getUserId);
+  const userId = useSessionUserId();
   const [source, setSource] = useState(DEFAULT_RULE);
   const [name, setName] = useState("Expensive invocation");
   const [severity, setSeverity] = useState<RuleSeverity>("Warning");
