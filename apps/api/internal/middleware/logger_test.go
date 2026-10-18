@@ -1,11 +1,15 @@
 package middleware
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
@@ -44,4 +48,43 @@ func TestLogger_UnwrapsForResponseController(t *testing.T) {
 		}
 	}))
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+}
+
+func TestLogger_EnrichesRequestLog(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	r := chi.NewRouter()
+	r.Use(RequestID)
+	r.Use(Logger(logger))
+	r.Get("/api/v1/contracts/{id}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, "abc")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/contracts/contract-123", nil)
+	req.RemoteAddr = "192.0.2.10:4321"
+	req.Header.Set("User-Agent", "sorolens-test/1.0")
+	req.Header.Set("X-Request-ID", "request-123")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	var record map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &record); err != nil {
+		t.Fatalf("decode request log %q: %v", logs.String(), err)
+	}
+	want := map[string]any{
+		"route_pattern":  "/api/v1/contracts/{id}",
+		"client_ip":      "192.0.2.10",
+		"user_agent":     "sorolens-test/1.0",
+		"response_bytes": float64(3),
+		"request_id":     "request-123",
+	}
+	for key, value := range want {
+		if got := record[key]; got != value {
+			t.Errorf("log field %q = %#v, want %#v", key, got, value)
+		}
+	}
+	if _, ok := record["path"]; ok {
+		t.Error("request log contains raw path instead of the chi route pattern")
+	}
 }
