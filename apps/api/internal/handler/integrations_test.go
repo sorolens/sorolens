@@ -24,7 +24,7 @@ func newIntegrationsHandler(env map[string]string, client *http.Client) http.Han
 		Redis:  &store.MockPinger{Healthy: true},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Getenv: func(k string) string { return env[k] },
-		Client: client,
+		IntegrationHTTPClient: client,
 	}
 	return router.New(h, config.DefaultRequestMaxBodyBytes)
 }
@@ -159,20 +159,39 @@ func TestTestIntegrationEndpointFailure(t *testing.T) {
 	}))
 	defer ts.Close()
 	srv := newIntegrationsHandler(map[string]string{"DISCORD_WEBHOOK_URL": ts.URL}, ts.Client())
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/integrations/discord/test", nil)
-		w := httptest.NewRecorder()
-		srv.ServeHTTP(w, req)			if w.Code != http.StatusBadGateway {
-				t.Fatalf("want 502 when the remote rejects the message, got %d", w.Code)
-			}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/integrations/discord/test", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("want 502 when the remote rejects the message, got %d", w.Code)
+	}
 
-			// Smoke test: the handler compiles and the two catalog endpoints respond.
-			func TestIntegrationCatalogSmoke(t *testing.T) {
-			srv := newIntegrationsHandler(map[string]string{
-				"SLACK_WEBHOOK_URL":   "https://hooks.slack.ok/s",
-				"DISCORD_WEBHOOK_URL": "https://discord.ok/d",
-				"TELEGRAM_BOT_TOKEN":  "tok",
-				"TELEGRAM_CHAT_ID":    "42",
-	}, nil)
+	var body struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.OK || !strings.Contains(body.Error, "404") {
+		t.Errorf("want ok=false mentioning the remote status, got %+v", body)
+	}
+}
+
+// TestIntegrationCatalogSmoke: the handler compiles and the two catalog
+// endpoints respond with every integration configured.
+func TestIntegrationCatalogSmoke(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	srv := newIntegrationsHandler(map[string]string{
+		"SLACK_WEBHOOK_URL":   ts.URL,
+		"DISCORD_WEBHOOK_URL": ts.URL,
+		"TELEGRAM_BOT_TOKEN":  "tok",
+		"TELEGRAM_CHAT_ID":    "42",
+	}, ts.Client())
 
 	// List endpoint
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/integrations", nil)
@@ -192,7 +211,7 @@ func TestTestIntegrationEndpointFailure(t *testing.T) {
 	if len(bodyList.Integrations) != 3 {
 		t.Fatalf("want 3 integrations, got %d", len(bodyList.Integrations))
 	}
-	
+
 	// Smoke test-send endpoint with configured integration
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/integrations/slack/test", nil)
 	w2 := httptest.NewRecorder()
@@ -209,14 +228,6 @@ func TestTestIntegrationEndpointFailure(t *testing.T) {
 	}
 	if !body2.OK || body2.Detail == "" {
 		t.Fatalf("want ok=true with detail for slack integration, got %+v", body2)
-	}
-}		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if body.OK || !strings.Contains(body.Error, "404") {
-		t.Errorf("want ok=false mentioning the remote status, got %+v", body)
 	}
 }
 

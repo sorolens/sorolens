@@ -193,8 +193,6 @@ func (h *Handler) TestIntegration(w http.ResponseWriter, r *http.Request) {
 	
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "detail": detail})
 }
-	return endpoint, payload, contentType, nil
-}
 
 // postTestMessage delivers the payload and reads a bounded response so the
 // connection can be reused and error bodies can be surfaced to the user.
