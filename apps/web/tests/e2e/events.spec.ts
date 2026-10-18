@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { CONTRACT_ID, contractEvent, newerContractEvent, mockApi } from "./helpers";
+import {
+  CONTRACT_ID,
+  contractEvent,
+  newerContractEvent,
+  mockApi,
+} from "./helpers";
 
 type MockEventSource = {
   url: string;
@@ -74,7 +79,9 @@ test("filters events and pages through cursor results", async ({ page }) => {
   await pagination.getByRole("button", { name: "Next →" }).click();
   await expect(pagination.getByText("Page 2")).toBeVisible();
   await expect
-    .poll(() => requests.some((url) => url.searchParams.get("cursor") === "cursor-2"))
+    .poll(() =>
+      requests.some((url) => url.searchParams.get("cursor") === "cursor-2")
+    )
     .toBe(true);
 
   await pagination.getByRole("button", { name: "Previous" }).click();
@@ -110,7 +117,9 @@ test("connects to the live SSE stream", async ({ page }) => {
     .toBeGreaterThan(0);
 });
 
-test("falls back to polling after repeated stream failures", async ({ page }) => {
+test("falls back to polling after repeated stream failures", async ({
+  page,
+}) => {
   await installMockEventSource(page);
   await mockApi(page);
 
@@ -128,5 +137,7 @@ test("falls back to polling after repeated stream failures", async ({ page }) =>
   await expect(
     page.getByText("Live (Polling Fallback)", { exact: true })
   ).toBeVisible();
-  await expect(page.getByText("transfer", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "transfer" }).first()
+  ).toBeVisible();
 });
