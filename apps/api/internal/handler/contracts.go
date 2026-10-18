@@ -29,6 +29,9 @@ type contractResponse struct {
 	Status             string     `json:"status"`
 	AddedAt            time.Time  `json:"added_at"`
 	Tags               []string   `json:"tags"`
+	// TrackingPreset is the preset type applied when the contract was tracked
+	// (e.g. "dex", "lending", "stablecoin"). Empty when no preset was selected.
+	TrackingPreset string `json:"tracking_preset,omitempty"`
 }
 
 type contractTagsResponse struct {
@@ -47,6 +50,9 @@ type contractListResponse struct {
 	// Always present, empty when the contract carries no tags, so a client
 	// can render the list without a null check.
 	Tags []string `json:"tags"`
+	// TrackingPreset is the preset type applied when the contract was tracked.
+	// Empty when no preset was selected.
+	TrackingPreset string `json:"tracking_preset,omitempty"`
 }
 
 type eventResponse struct {
@@ -81,6 +87,11 @@ type invocationResponse struct {
 	LedgerReadByte     int64          `json:"ledger_read_byte"`
 	LedgerWriteByte    int64          `json:"ledger_write_byte"`
 	ApplicationOrder   int            `json:"application_order"`
+}
+
+type invocationDetailResponse struct {
+	invocationResponse
+	Events []eventResponse `json:"events"`
 }
 
 type storageEntryResponse struct {
@@ -192,6 +203,7 @@ func contractFromStore(c store.Contract) contractResponse {
 		Status:             c.Status,
 		AddedAt:            c.AddedAt,
 		Tags:               tags,
+		TrackingPreset:     c.TrackingPreset,
 	}
 }
 
@@ -209,6 +221,7 @@ func contractListFromStore(c store.Contract) contractListResponse {
 		AddedAt:        c.AddedAt,
 		LastActivityAt: c.LastActivityAt,
 		Tags:           tags,
+		TrackingPreset: c.TrackingPreset,
 	}
 }
 
@@ -304,9 +317,23 @@ type registerRequest struct {
 	ID      string `json:"id"`
 	Network string `json:"network"`
 	Label   string `json:"label"`
+	Preset  string `json:"preset,omitempty"`
+}
+
+// validPresets is the set of preset types the API accepts. It mirrors
+// cli/internal/presets.BuiltInPresets but lives here so the API can validate
+// without importing the CLI package.
+var validPresets = map[string]bool{
+	"dex":        true,
+	"lending":    true,
+	"stablecoin": true,
 }
 
 // RegisterContract handles POST /api/v1/contracts.
+// When preset is non-empty it must be one of the built-in preset types
+// (dex, lending, stablecoin). The preset is stored on the contract row and
+// returned in the response so the dashboard and CLI can render type-specific
+// filters, function-name chips, and labels.
 func (h *Handler) RegisterContract(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -321,13 +348,18 @@ func (h *Handler) RegisterContract(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	if req.Preset != "" && !validPresets[req.Preset] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "preset must be one of: dex, lending, stablecoin")
+		return
+	}
 
 	c := store.Contract{
-		ID:      req.ID,
-		Network: req.Network,
-		Label:   req.Label,
-		Status:  "pending",
-		AddedAt: time.Now().UTC(),
+		ID:             req.ID,
+		Network:        req.Network,
+		Label:          req.Label,
+		TrackingPreset: req.Preset,
+		Status:         "pending",
+		AddedAt:        time.Now().UTC(),
 	}
 	if err := h.Store.UpsertContract(r.Context(), c); err != nil {
 		h.Logger.Error("upsert contract", "err", err)
@@ -570,6 +602,37 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 		"invocations": resp,
 		"next_cursor": encodeCursor(nextRaw),
 	})
+}
+
+// GetInvocation handles GET /api/v1/contracts/{id}/invocations/{tx_hash}.
+func (h *Handler) GetInvocation(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	txHash := chi.URLParam(r, "tx_hash")
+
+	inv, events, err := h.Store.GetInvocationWithEvents(r.Context(), contractID, txHash)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "invocation not found")
+		return
+	}
+	if err != nil {
+		h.Logger.Error("get invocation", "err", err, "contract_id", contractID, "tx_hash", txHash)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to get invocation")
+		return
+	}
+
+	respEvents := make([]eventResponse, len(events))
+	for i, e := range events {
+		respEvents[i] = eventFromStore(e)
+	}
+	writeJSON(w, http.StatusOK, invocationDetailResponse{
+		invocationResponse: invocationFromStore(inv),
+		Events:             respEvents,
+	})
+}
+
+// GetContractInvocation aliases GetInvocation for compatibility with OpenAPI operation naming.
+func (h *Handler) GetContractInvocation(w http.ResponseWriter, r *http.Request) {
+	h.GetInvocation(w, r)
 }
 
 // ---- global invocations -----------------------------------------------------
@@ -965,6 +1028,7 @@ func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
 			BackfillCompleteAt: c.BackfillCompleteAt,
 			Status:             c.Status,
 			AddedAt:            c.AddedAt,
+			TrackingPreset:     c.TrackingPreset,
 		}
 	}
 

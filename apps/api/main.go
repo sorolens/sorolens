@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -91,6 +93,8 @@ func main() {
 		Cache:              &middleware.RedisCache{Client: redisClient},
 		CacheTTL:           cfg.CacheTTL,
 		SlackSigningSecret: cfg.SlackSigningSecret,
+		SessionSigner:      middleware.NewSessionSigner(identitySigningKey(cfg, logger), cfg.IdentitySessionTTL),
+		TrustedProxySecret: cfg.TrustedIdentityProxySecret,
 		RequestTimeout:     cfg.RequestTimeout,
 		StreamTimeout:      cfg.StreamTimeout,
 		GraphQL: graph.Options{
@@ -181,6 +185,24 @@ func main() {
 		}
 	}
 	logger.Info("shutdown complete")
+}
+
+// identitySigningKey returns the configured session signing key, or a fresh
+// ephemeral key when the operator did not set IDENTITY_SIGNING_KEY. The
+// ephemeral fallback keeps local development working without shipping a
+// hard-coded secret; sessions then reset on restart and do not work across
+// replicas, so production must configure the variable.
+func identitySigningKey(cfg *config.Config, logger *slog.Logger) string {
+	if cfg.IdentitySigningKey != "" {
+		return cfg.IdentitySigningKey
+	}
+	var buf [32]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		logger.Error("generate ephemeral identity signing key", "err", err)
+		os.Exit(1)
+	}
+	logger.Warn("IDENTITY_SIGNING_KEY not set; generated an ephemeral key (sessions reset on restart)")
+	return hex.EncodeToString(buf[:])
 }
 
 // seedInitialAdmin creates the bootstrap admin user when the

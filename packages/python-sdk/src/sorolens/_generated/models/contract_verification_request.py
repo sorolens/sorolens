@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -57,12 +57,8 @@ class ContractVerificationRequest:
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.verification_expected_input import (
-            VerificationExpectedInput,
-        )
-        from ..models.verification_source_input import (
-            VerificationSourceInput,
-        )
+        from ..models.verification_expected_input import VerificationExpectedInput
+        from ..models.verification_source_input import VerificationSourceInput
 
         d = dict(src_dict)
         source = VerificationSourceInput.from_dict(d.pop("source"))

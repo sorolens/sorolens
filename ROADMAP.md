@@ -142,7 +142,7 @@
 - API and indexer support `network = "mainnet"` as a first-class option.
 - Default mainnet RPC endpoint configurable via environment variable.
 - Dashboard network selector (testnet / mainnet).
-- Documentation updated with mainnet setup instructions.
+- Documentation updated with mainnet setup instructions: see [`docs/deployment.md#5-mainnet-configuration`](docs/deployment.md#5-mainnet-configuration).
 
 **Retention policy:**
 

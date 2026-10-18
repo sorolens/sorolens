@@ -1,11 +1,9 @@
 package middleware
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
@@ -18,29 +16,23 @@ const (
 	RoleAdmin       = store.RoleAdmin
 )
 
-// UserLookup is the subset of the store the role middleware needs.
-type UserLookup interface {
-	GetUserByID(ctx context.Context, id string) (store.User, error)
-	GetUserByGitHubID(ctx context.Context, githubID string) (store.User, error)
-}
-
-// identityFromRequest resolves the calling user from the request. Role
-// enforcement is GitHub-ID based (the credential the dashboard and CLI hold):
-// the X-User-ID header, or a GitHub login in the X-GitHub-Login header, else
-// an API key hash owner lookup via the middleware chain.
-type identityFromRequest func(r *http.Request) (store.User, bool)
-
 // RequireRole returns middleware that denies the request unless the
 // authenticated caller holds at least minRole. It is the RBAC counterpart to
 // RequireScopes; routes that need role enforcement apply it with r.With so
 // chi has already resolved the leaf route.
 //
+// The identity comes exclusively from the context populated by Identity: a
+// session token, an API key bound to a user, or trusted-proxy signed headers.
+// Raw identity headers are ignored (issue #518).
+//
 // Role semantics: viewer < contributor < admin.
 //
 //   - No identity resolvable: 401.
 //   - Caller not found or role below the requirement: 403.
-func RequireRole(lookup UserLookup, logger *slog.Logger, minRole string) func(http.Handler) http.Handler {
-	return requireRole(lookup, logger, minRole, http.StatusUnauthorized)
+//   - An admin:* API key satisfies every role even when it is not bound to a
+//     user row, so operators can bootstrap and rotate admin keys.
+func RequireRole(logger *slog.Logger, minRole string) func(http.Handler) http.Handler {
+	return requireRole(logger, minRole, http.StatusUnauthorized)
 }
 
 // RequireRoleOrForbidden is RequireRole with the unauthenticated rejection
@@ -48,17 +40,17 @@ func RequireRole(lookup UserLookup, logger *slog.Logger, minRole string) func(ht
 // an anonymous caller receives the same answer as a signed-in caller who lacks
 // the role. The admin-gated pprof endpoints use it so probing /debug/pprof/*
 // always answers 403 unless the caller is an admin.
-func RequireRoleOrForbidden(lookup UserLookup, logger *slog.Logger, minRole string) func(http.Handler) http.Handler {
-	return requireRole(lookup, logger, minRole, http.StatusForbidden)
+func RequireRoleOrForbidden(logger *slog.Logger, minRole string) func(http.Handler) http.Handler {
+	return requireRole(logger, minRole, http.StatusForbidden)
 }
 
 // requireRole is the shared implementation behind RequireRole and
 // RequireRoleOrForbidden. unauthStatus is the response used when no identity
 // can be resolved; an identified caller below minRole always gets 403.
-func requireRole(lookup UserLookup, logger *slog.Logger, minRole string, unauthStatus int) func(http.Handler) http.Handler {
+func requireRole(logger *slog.Logger, minRole string, unauthStatus int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, ok := resolveUser(r, lookup)
+			id, ok := IdentityFromRequest(r)
 			if !ok {
 				if logger != nil {
 					logger.Debug("role middleware: no identity", "path", r.URL.Path)
@@ -68,53 +60,34 @@ func requireRole(lookup UserLookup, logger *slog.Logger, minRole string, unauthS
 				})
 				return
 			}
-			if store.RoleRank(user.Role) < store.RoleRank(minRole) {
-				writeRoleError(w, http.StatusForbidden, map[string]string{
-					"error":    "insufficient role",
-					"required": minRole,
-					"role":     user.Role,
-				})
+
+			if id.UserID != "" {
+				if store.RoleRank(id.Role) < store.RoleRank(minRole) {
+					writeRoleError(w, http.StatusForbidden, map[string]string{
+						"error":    "insufficient role",
+						"required": minRole,
+						"role":     id.Role,
+					})
+					return
+				}
+				next.ServeHTTP(w, r)
 				return
 			}
-			next.ServeHTTP(w, r)
+
+			// An admin:* key carries its own grant. This is what allows an
+			// operator to manage API keys before any user row is bound.
+			if id.IsAdminKey() {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// A valid credential that is not tied to a user cannot act as one.
+			writeRoleError(w, http.StatusForbidden, map[string]string{
+				"error":    "insufficient role",
+				"required": minRole,
+			})
 		})
 	}
-}
-
-// resolveUser tries, in order: the X-User-ID header (a stored sorolens user
-// id), the X-GitHub-Login header (a GitHub login mapped via github_id), and
-// finally GitHub OAuth-style sub claim in the X-User-Sub header if present.
-func resolveUser(r *http.Request, lookup UserLookup) (store.User, bool) {
-	if id := strings.TrimSpace(r.Header.Get("X-User-ID")); id != "" {
-		u, err := lookup.GetUserByID(r.Context(), id)
-		if err == nil {
-			return u, true
-		}
-	}
-	if login := strings.TrimSpace(r.Header.Get("X-GitHub-Login")); login != "" {
-		u, err := lookup.GetUserByGitHubID(r.Context(), login)
-		if err == nil {
-			return u, true
-		}
-	}
-	if sub := strings.TrimSpace(r.Header.Get("X-User-Sub")); sub != "" {
-		u, err := lookup.GetUserByID(r.Context(), sub)
-		if err == nil {
-			return u, true
-		}
-	}
-	if login := strings.TrimSpace(r.Header.Get("X-GitHub-ID")); login != "" {
-		u, err := lookup.GetUserByID(r.Context(), login)
-		if err == nil {
-			if u.GitHubID != nil && *u.GitHubID == login {
-				return u, true
-			}
-		}
-		if u2, err := lookup.GetUserByGitHubID(r.Context(), login); err == nil {
-			return u2, true
-		}
-	}
-	return store.User{}, false
 }
 
 func writeRoleError(w http.ResponseWriter, status int, body map[string]string) {

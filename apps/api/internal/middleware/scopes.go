@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -10,12 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
-
-// APIKeyLookup is the subset of the store the scope middleware needs.
-type APIKeyLookup interface {
-	GetAPIKeyByHash(ctx context.Context, hash string) (store.APIKey, error)
-	TouchAPIKey(ctx context.Context, id string) error
-}
 
 // Scope strings. Kept here so the route table and middleware share one
 // vocabulary with the store.
@@ -37,29 +30,30 @@ var routeScopes = map[string]string{
 	"GET /api/v1/events/recent":  ScopeReadContracts,
 	"GET /api/v1/compare":        ScopeReadContracts,
 
-	"GET /api/v1/contracts":                    ScopeReadContracts,
-	"POST /api/v1/contracts":                   ScopeWriteContracts,
-	"POST /api/v1/contracts/batch":             ScopeWriteContracts,
-	"POST /api/v1/contracts/validate":          ScopeReadContracts,
-	"GET /api/v1/contracts/{id}":               ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/events":        ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/events.csv":    ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/invocations":   ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/storage":       ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/stats":         ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/summary":       ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/forecast":      ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/snapshot":      ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/spec":          ScopeReadContracts,
-	"POST /api/v1/contracts/{id}/tags":         ScopeWriteContracts,
-	"DELETE /api/v1/contracts/{id}/tags/{tag}": ScopeWriteContracts,
-	"GET /api/v1/contracts/{id}/snapshot.json": ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/stream":        ScopeReadContracts,
-	"GET /api/v1/contracts/{id}/wasm":          ScopeReadContracts,
-	"GET /api/v1/stream/events":                ScopeReadContracts,
-	"GET /api/v1/subscribe":                    ScopeReadContracts,
-	"POST /api/v1/contracts/{id}/verify":       ScopeWriteContracts,
-	"GET /api/v1/contracts/{id}/verification":  ScopeReadContracts,
+	"GET /api/v1/contracts":                            ScopeReadContracts,
+	"POST /api/v1/contracts":                           ScopeWriteContracts,
+	"POST /api/v1/contracts/batch":                     ScopeWriteContracts,
+	"POST /api/v1/contracts/validate":                  ScopeReadContracts,
+	"GET /api/v1/contracts/{id}":                       ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/events":                ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/events.csv":            ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/invocations":           ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/invocations/{tx_hash}": ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/storage":               ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/stats":                 ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/summary":               ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/forecast":              ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/snapshot":              ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/spec":                  ScopeReadContracts,
+	"POST /api/v1/contracts/{id}/tags":                 ScopeWriteContracts,
+	"DELETE /api/v1/contracts/{id}/tags/{tag}":         ScopeWriteContracts,
+	"GET /api/v1/contracts/{id}/snapshot.json":         ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/stream":                ScopeReadContracts,
+	"GET /api/v1/contracts/{id}/wasm":                  ScopeReadContracts,
+	"GET /api/v1/stream/events":                        ScopeReadContracts,
+	"GET /api/v1/subscribe":                            ScopeReadContracts,
+	"POST /api/v1/contracts/{id}/verify":               ScopeWriteContracts,
+	"GET /api/v1/contracts/{id}/verification":          ScopeReadContracts,
 
 	"GET /api/v1/events": ScopeReadContracts,
 
@@ -165,24 +159,41 @@ func normalizePattern(pattern string) string {
 	return trimmed
 }
 
-// RequireScopes authenticates requests that carry an API key and enforces the
-// per-route scope from the metadata table.
+// RequireScopes enforces the per-route scope from the metadata table for
+// callers that presented a scoped API key.
+//
+// Credentials are verified once by the Identity middleware, which also
+// resolves a key's optional user binding. This middleware never trusts raw
+// identity headers (issue #518).
 //
 // Behavior:
 //   - No credential presented: the request is allowed through unchanged on
 //     read/write routes. This keeps the public v0.1 surface open for anonymous
-//     dashboard traffic and matches the pre-scopes behavior. Admin routes
-//     (API key management) always require a credential, so keys cannot be
-//     minted anonymously.
-//   - Credential presented but unknown or revoked: 401.
-//   - Credential valid but missing the required scope: 403 with
+//     dashboard traffic. Admin routes (API key management) always require a
+//     credential, so keys cannot be minted anonymously.
+//   - Credential presented but unknown, revoked or expired: 401.
+//   - API key valid but missing the required scope: 403 with
 //     {"error":"missing scope","required":"<scope>"}.
-func RequireScopes(lookup APIKeyLookup, logger *slog.Logger) func(http.Handler) http.Handler {
+//   - Session or trusted-proxy identity: allowed; scopes are a property of
+//     API keys only, and role middleware still applies where wired.
+func RequireScopes(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			required, hasScopeRule := lookupRequiredScope(r)
 			token := extractAPIKey(r)
-			if token == "" {
+			id, hasIdentity := IdentityFromRequest(r)
+
+			if !hasIdentity {
+				if token != "" {
+					// Presented but not verifiable as an API key or session.
+					if logger != nil {
+						logger.Debug("scope middleware: invalid credential", "path", r.URL.Path)
+					}
+					writeScopeError(w, http.StatusUnauthorized, map[string]string{
+						"error": "invalid API key",
+					})
+					return
+				}
 				if hasScopeRule && required == ScopeAdmin {
 					writeScopeError(w, http.StatusUnauthorized, map[string]string{
 						"error": "authentication required",
@@ -193,18 +204,11 @@ func RequireScopes(lookup APIKeyLookup, logger *slog.Logger) func(http.Handler) 
 				return
 			}
 
-			key, err := lookup.GetAPIKeyByHash(r.Context(), store.HashKey(token))
-			if err != nil || key.Revoked() {
-				writeScopeError(w, http.StatusUnauthorized, map[string]string{
-					"error": "invalid API key",
-				})
+			if id.APIKey == nil {
+				next.ServeHTTP(w, r)
 				return
 			}
-			if err := lookup.TouchAPIKey(r.Context(), key.ID); err != nil && logger != nil {
-				logger.Warn("touch api key", "err", err, "key_id", key.ID)
-			}
-
-			if !hasScopeRule || key.HasScope(required) {
+			if !hasScopeRule || id.APIKey.HasScope(required) {
 				next.ServeHTTP(w, r)
 				return
 			}

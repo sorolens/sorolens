@@ -811,7 +811,7 @@ func (h *Handler) V2ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) V2ListWatchlist(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "authentication required: present a session token or user-bound API key")
 		return
 	}
 	contractIDs, err := h.Store.ListWatchlist(r.Context(), userID)
@@ -831,7 +831,7 @@ func (h *Handler) V2ListWatchlist(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) V2AddToWatchlist(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "authentication required: present a session token or user-bound API key")
 		return
 	}
 	var req struct {
@@ -857,7 +857,7 @@ func (h *Handler) V2AddToWatchlist(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) V2RemoveFromWatchlist(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "authentication required: present a session token or user-bound API key")
 		return
 	}
 	if err := h.Store.RemoveFromWatchlist(r.Context(), userID, chi.URLParam(r, "contractId")); err != nil {
@@ -872,7 +872,7 @@ func (h *Handler) V2RemoveFromWatchlist(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) V2WatchlistStatus(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "authentication required: present a session token or user-bound API key")
 		return
 	}
 	inWatchlist, err := h.Store.IsInWatchlist(r.Context(), userID, chi.URLParam(r, "contractId"))

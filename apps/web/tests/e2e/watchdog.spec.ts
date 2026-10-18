@@ -20,14 +20,18 @@ test("/watchdog shows empty states when there is no data yet", async ({
   await expect(page.getByText("No alerts yet")).toBeVisible();
 });
 
-test("/watchdog shows the empty state when the API is unavailable", async ({
+test("/watchdog shows errors with a retry when the API is unavailable", async ({
   page,
 }) => {
   await blockApi(page);
   await page.goto("/watchdog");
 
   await expectHeading(page, "Watchdog");
-  await expect(page.getByText("No monitored contracts yet")).toBeVisible();
+  await expect(
+    page.getByText("Couldn't load monitored contracts.")
+  ).toBeVisible();
+  await expect(page.getByText("Couldn't load watchdog stats.")).toBeVisible();
+  await expect(page.getByText("No monitored contracts yet")).toBeHidden();
 });
 
 test("/watchdog renders monitored contracts when the API returns data", async ({

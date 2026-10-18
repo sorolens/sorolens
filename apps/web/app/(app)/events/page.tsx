@@ -6,6 +6,7 @@ import { MonoId } from "@sorolens/ui";
 import { listAllEvents } from "@/lib/api";
 import { networkFilter, useNetwork } from "@/lib/network";
 import { TableSkeleton } from "@/components/Skeleton";
+import { ErrorState } from "@/components/ErrorState";
 import {
   FIRST_PAGE,
   currentCursor,
@@ -19,6 +20,7 @@ import {
   type CursorHistory,
 } from "@/lib/eventsExplorer";
 import type { EventType, GlobalEvent } from "@/lib/types";
+import { useLocale } from "@/lib/i18n";
 
 const PAGE_SIZE = 25;
 
@@ -45,9 +47,9 @@ const buttonClass =
   "rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40";
 
 function EventRow({ event }: { event: GlobalEvent }) {
+  const { formatNumber, formatDateTime } = useLocale();
   const [expanded, setExpanded] = useState(false);
   const data = event.value_decoded ?? event.value_xdr;
-  const closedAt = new Date(event.ledger_closed_at);
 
   return (
     <>
@@ -72,13 +74,13 @@ function EventRow({ event }: { event: GlobalEvent }) {
           </button>
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-right font-mono text-xs text-[var(--color-text-secondary)]">
-          {event.ledger.toLocaleString()}
+          {formatNumber(event.ledger)}
         </td>
         <td
           className="whitespace-nowrap px-4 py-3 text-xs text-[var(--color-text-secondary)]"
           title={event.ledger_closed_at}
         >
-          {Number.isNaN(closedAt.getTime()) ? "-" : closedAt.toLocaleString()}
+          {formatDateTime(event.ledger_closed_at)}
         </td>
       </tr>
       {expanded && (
@@ -282,20 +284,11 @@ export default function EventsExplorerPage() {
       </form>
 
       {error ? (
-        <div
-          role="alert"
-          className="rounded-lg border border-red-900/60 bg-red-950/30 p-6 text-sm"
-        >
-          <p className="font-medium text-red-300">Couldn&apos;t load events.</p>
-          <p className="mt-1 text-[var(--color-text-secondary)]">{error}</p>
-          <button
-            type="button"
-            onClick={() => setReloadKey((k) => k + 1)}
-            className={`${buttonClass} mt-4`}
-          >
-            Try again
-          </button>
-        </div>
+        <ErrorState
+          title="Couldn't load events."
+          message={error}
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
       ) : loading && events.length === 0 ? (
         <TableSkeleton rows={8} />
       ) : events.length === 0 ? (

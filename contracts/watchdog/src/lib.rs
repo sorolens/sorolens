@@ -175,6 +175,17 @@ pub struct WatchdogContract;
 const MAX_ALERTS_PER_CONTRACT: u32 = 100;
 const MAX_BATCH_SIZE: u32 = 20;
 
+// TTL management (issue #573). Every entry this contract writes is durable
+// state: losing the admin, registry, health record or alert history means the
+// watchdog can no longer be operated or audited. Ledger TTLs on Stellar are
+// finite, so reads and writes bump the entries they touch back to
+// `TTL_EXTEND_TO` whenever the remaining lifetime falls below `TTL_THRESHOLD`.
+//
+// At ~5 second ledgers: 17,280 ledgers is ~1 day and 518,400 is ~30 days, so a
+// contract that is read at least once a day never lets its state archive.
+const TTL_THRESHOLD: u32 = 17_280;
+const TTL_EXTEND_TO: u32 = 518_400;
+
 #[contractimpl]
 impl WatchdogContract {
     /// Initialise the watchdog with a single administrator. Must be called
@@ -188,6 +199,7 @@ impl WatchdogContract {
         env.storage()
             .instance()
             .set(&DataKey::Registry, &Vec::<Address>::new(&env));
+        Self::bump_instance_ttl(&env);
     }
 
     /// Register a contract for monitoring. Only the admin, or the account
@@ -301,6 +313,7 @@ impl WatchdogContract {
             }
         }
         env.storage().instance().set(&DataKey::Registry, &updated);
+        Self::bump_instance_ttl(&env);
 
         ContractDeregistered {
             contract_id,
@@ -336,6 +349,8 @@ impl WatchdogContract {
         record.status = status.clone();
         record.last_check = now;
         env.storage().persistent().set(&health_key, &record);
+        Self::bump_persistent_ttl(&env, &health_key);
+        Self::bump_instance_ttl(&env);
 
         HealthCheckEvent {
             contract_id,
@@ -388,6 +403,9 @@ impl WatchdogContract {
             alerts.pop_front();
         }
         env.storage().persistent().set(&alerts_key, &alerts);
+        Self::bump_persistent_ttl(&env, &alerts_key);
+        Self::bump_persistent_ttl(&env, &health_key);
+        Self::bump_instance_ttl(&env);
 
         ContractAlert {
             contract_id,
@@ -408,6 +426,7 @@ impl WatchdogContract {
         admin.require_auth();
         Self::require_admin_only(&env, &admin);
         env.storage().instance().set(&DataKey::Paused, &true);
+        Self::bump_instance_ttl(&env);
     }
 
     /// Lift a pause set by `pause`. Admin only. Unpausing a contract that is
@@ -416,6 +435,7 @@ impl WatchdogContract {
         admin.require_auth();
         Self::require_admin_only(&env, &admin);
         env.storage().instance().remove(&DataKey::Paused);
+        Self::bump_instance_ttl(&env);
     }
 
     // ---- admin: two-step transfer ------------------------------------------
@@ -442,6 +462,7 @@ impl WatchdogContract {
         env.storage()
             .instance()
             .set(&DataKey::PendingAdmin, &new_admin);
+        Self::bump_instance_ttl(&env);
 
         AdminTransferProposed {
             current_admin,
@@ -471,6 +492,7 @@ impl WatchdogContract {
 
         env.storage().instance().set(&DataKey::Admin, &pending);
         env.storage().instance().remove(&DataKey::PendingAdmin);
+        Self::bump_instance_ttl(&env);
 
         AdminTransferAccepted { new_admin }.publish(&env);
     }
@@ -488,6 +510,7 @@ impl WatchdogContract {
             .unwrap_or_else(|| panic!("no admin transfer proposed"));
 
         env.storage().instance().remove(&DataKey::PendingAdmin);
+        Self::bump_instance_ttl(&env);
 
         AdminTransferCancelled {
             current_admin,
@@ -499,14 +522,20 @@ impl WatchdogContract {
     // ---- read-only queries -------------------------------------------------
 
     pub fn get_status(env: Env, contract_id: Address) -> ContractHealth {
-        env.storage()
+        let key = DataKey::Health(contract_id);
+        let record = env
+            .storage()
             .persistent()
-            .get(&DataKey::Health(contract_id))
-            .unwrap_or_else(|| panic!("contract not registered"))
+            .get(&key)
+            .unwrap_or_else(|| panic!("contract not registered"));
+        Self::bump_persistent_ttl(&env, &key);
+        Self::bump_instance_ttl(&env);
+        record
     }
 
     /// Gets a page of monitored contracts.
     pub fn get_monitored_page(env: Env, start: u32, limit: u32) -> (Vec<ContractHealth>, u32) {
+        Self::bump_instance_ttl(&env);
         let registry: Vec<Address> = env
             .storage()
             .instance()
@@ -517,11 +546,13 @@ impl WatchdogContract {
         if start < total {
             for i in start..core::cmp::min(start + limit, total) {
                 if let Some(id) = registry.get(i) {
+                    let key = DataKey::Health(id.clone());
                     if let Some(record) = env
                         .storage()
                         .persistent()
-                        .get::<_, ContractHealth>(&DataKey::Health(id.clone()))
+                        .get::<_, ContractHealth>(&key)
                     {
+                        Self::bump_persistent_ttl(&env, &key);
                         page.push_back(record);
                     }
                 }
@@ -531,6 +562,7 @@ impl WatchdogContract {
     }
 
     pub fn get_all_monitored(env: Env) -> Vec<ContractHealth> {
+        Self::bump_instance_ttl(&env);
         let registry: Vec<Address> = env
             .storage()
             .instance()
@@ -538,7 +570,9 @@ impl WatchdogContract {
             .unwrap_or_else(|| Vec::new(&env));
         let mut out: Vec<ContractHealth> = Vec::new(&env);
         for id in registry.iter() {
-            if let Some(record) = env.storage().persistent().get(&DataKey::Health(id)) {
+            let key = DataKey::Health(id);
+            if let Some(record) = env.storage().persistent().get(&key) {
+                Self::bump_persistent_ttl(&env, &key);
                 out.push_back(record);
             }
         }
@@ -546,10 +580,15 @@ impl WatchdogContract {
     }
 
     pub fn get_alerts(env: Env, contract_id: Address) -> Vec<Alert> {
-        env.storage()
+        Self::bump_instance_ttl(&env);
+        let key = DataKey::Alerts(contract_id);
+        let alerts = env
+            .storage()
             .persistent()
-            .get(&DataKey::Alerts(contract_id))
-            .unwrap_or_else(|| Vec::new(&env))
+            .get(&key)
+            .unwrap_or_else(|| Vec::new(&env));
+        Self::bump_persistent_ttl(&env, &key);
+        alerts
     }
 
     /// Returns only the alerts for `contract_id` whose timestamp is strictly
@@ -560,11 +599,14 @@ impl WatchdogContract {
     /// Alerts are appended in ledger-timestamp order, so the scan walks back
     /// from the newest alert and stops at the first one that is not newer.
     pub fn get_alerts_since(env: Env, contract_id: Address, since_timestamp: u64) -> Vec<Alert> {
+        Self::bump_instance_ttl(&env);
+        let key = DataKey::Alerts(contract_id);
         let alerts: Vec<Alert> = env
             .storage()
             .persistent()
-            .get(&DataKey::Alerts(contract_id))
+            .get(&key)
             .unwrap_or_else(|| Vec::new(&env));
+        Self::bump_persistent_ttl(&env, &key);
 
         let mut first_new = alerts.len();
         while first_new > 0 {
@@ -577,6 +619,7 @@ impl WatchdogContract {
     }
 
     pub fn get_monitored_count(env: Env) -> u32 {
+        Self::bump_instance_ttl(&env);
         let registry: Vec<Address> = env
             .storage()
             .instance()
@@ -586,6 +629,7 @@ impl WatchdogContract {
     }
 
     pub fn admin(env: Env) -> Address {
+        Self::bump_instance_ttl(&env);
         env.storage()
             .instance()
             .get(&DataKey::Admin)
@@ -593,6 +637,7 @@ impl WatchdogContract {
     }
 
     pub fn is_paused(env: Env) -> bool {
+        Self::bump_instance_ttl(&env);
         env.storage()
             .instance()
             .get(&DataKey::Paused)
@@ -602,12 +647,32 @@ impl WatchdogContract {
     /// The address currently nominated to become admin, if a hand-off is in
     /// progress.
     pub fn pending_admin(env: Env) -> Option<Address> {
+        Self::bump_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, Address>(&DataKey::PendingAdmin)
     }
 
     // ---- helpers -----------------------------------------------------------
+
+    /// Top up the contract instance's TTL (Admin, Registry, Paused and
+    /// PendingAdmin all live in instance storage).
+    fn bump_instance_ttl(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+
+    /// Top up a persistent entry's TTL. Missing keys are skipped: the host
+    /// rejects `extend_ttl` for an entry that does not exist, and read paths
+    /// such as `get_alerts_since` serve unknown contracts with an empty list.
+    fn bump_persistent_ttl(env: &Env, key: &DataKey) {
+        if env.storage().persistent().has(key) {
+            env.storage()
+                .persistent()
+                .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+        }
+    }
 
     fn ensure_not_paused(env: &Env) {
         if Self::is_paused(env.clone()) {
@@ -641,6 +706,10 @@ impl WatchdogContract {
             .unwrap_or_else(|| Vec::new(env));
         registry.push_back(registration.contract_id.clone());
         env.storage().instance().set(&DataKey::Registry, &registry);
+
+        Self::bump_instance_ttl(env);
+        Self::bump_persistent_ttl(env, &DataKey::Health(registration.contract_id.clone()));
+        Self::bump_persistent_ttl(env, &DataKey::Alerts(registration.contract_id.clone()));
 
         ContractRegistered {
             contract_id: registration.contract_id.clone(),
@@ -1500,5 +1569,79 @@ mod test {
         assert!(client.try_accept_admin(&new_admin).is_err());
         assert_eq!(client.admin(), admin);
         assert_eq!(client.pending_admin(), Some(new_admin));
+    }
+
+    #[test]
+    fn reads_extend_ttl_past_the_original_expiry() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.report_alert(
+            &owner,
+            &monitored,
+            &AlertSeverity::Critical,
+            &SString::from_str(&env, "down"),
+        );
+
+        // Just inside the extension threshold, so the next read must renew.
+        env.ledger().with_mut(|li| {
+            li.sequence_number = TTL_EXTEND_TO - TTL_THRESHOLD + 1;
+        });
+
+        assert_eq!(client.get_monitored_count(), 1);
+        assert_eq!(client.get_status(&monitored).owner, owner);
+        assert_eq!(client.get_alerts(&monitored).len(), 1);
+
+        // Past the expiry the entries had at registration, but inside the
+        // window renewed by the reads above.
+        env.ledger().with_mut(|li| {
+            li.sequence_number += TTL_EXTEND_TO / 2;
+        });
+
+        assert_eq!(client.admin(), admin);
+        assert_eq!(client.get_monitored_count(), 1);
+        assert_eq!(client.get_status(&monitored).owner, owner);
+        assert_eq!(client.get_alerts(&monitored).len(), 1);
+        assert_eq!(client.pending_admin(), None);
+    }
+
+    #[test]
+    fn writes_extend_ttl_past_the_original_expiry() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        // Near expiry again, then renew through the mutating entry points.
+        env.ledger().with_mut(|li| {
+            li.sequence_number = TTL_EXTEND_TO - TTL_THRESHOLD + 1;
+        });
+        client.report_status(
+            &owner,
+            &monitored,
+            &HealthStatus::Degraded,
+            &SString::from_str(&env, "slow"),
+        );
+        client.report_alert(
+            &owner,
+            &monitored,
+            &AlertSeverity::Warning,
+            &SString::from_str(&env, "latency"),
+        );
+
+        env.ledger().with_mut(|li| {
+            li.sequence_number += TTL_EXTEND_TO / 2;
+        });
+
+        let record = client.get_status(&monitored);
+        assert_eq!(record.status, HealthStatus::Degraded);
+        assert_eq!(client.get_alerts(&monitored).len(), 1);
+        client.deregister_contract(&owner, &monitored);
+        assert_eq!(client.get_monitored_count(), 0);
     }
 }

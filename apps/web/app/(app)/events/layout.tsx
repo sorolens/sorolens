@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Event Stream — Sorolens",
     description: "Real-time feed of Soroban contract events streamed via SSE.",
-    url: "https://sorolens.dev/events",
+    url: "/events",
   },
   alternates: {
     canonical: "/events",

@@ -117,20 +117,26 @@ func TestAuditHashesUnreadBody(t *testing.T) {
 
 func TestActor(t *testing.T) {
 	cases := []struct {
-		name   string
-		header map[string]string
-		want   string
+		name     string
+		header   map[string]string
+		identity *VerifiedIdentity
+		want     string
 	}{
-		{"user id", map[string]string{"X-User-ID": "u1"}, "u1"},
-		{"github login", map[string]string{"X-GitHub-Login": "octo"}, "github:octo"},
-		{"api key", map[string]string{"Authorization": "Bearer secret-token"}, "apikey:" + store.HashKey("secret-token")[:12]},
-		{"anonymous", nil, "anonymous"},
+		{"session user", nil, &VerifiedIdentity{UserID: "u1", Role: "contributor", Source: IdentitySourceSession}, "u1"},
+		{"bound key user", nil, &VerifiedIdentity{UserID: "u2", Role: "viewer", Source: IdentitySourceAPIKey}, "u2"},
+		{"api key identity", nil, &VerifiedIdentity{Source: IdentitySourceAPIKey, APIKey: &store.APIKey{KeyPrefix: "sl_abc"}}, "apikey:sl_abc"},
+		{"raw token fallback", map[string]string{"Authorization": "Bearer secret-token"}, nil, "apikey:" + store.HashKey("secret-token")[:12]},
+		{"spoofed identity headers", map[string]string{"X-User-ID": "u1", "X-GitHub-Login": "octo"}, nil, "anonymous"},
+		{"anonymous", nil, nil, "anonymous"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/", nil)
 			for k, v := range tc.header {
 				r.Header.Set(k, v)
+			}
+			if tc.identity != nil {
+				r = r.WithContext(WithIdentity(r.Context(), *tc.identity))
 			}
 			if got := Actor(r); got != tc.want {
 				t.Fatalf("want %q, got %q", tc.want, got)

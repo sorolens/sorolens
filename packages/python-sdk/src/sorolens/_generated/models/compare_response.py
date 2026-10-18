@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -49,9 +49,7 @@ class CompareResponse:
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.compare_contract_entry import (
-            CompareContractEntry,
-        )
+        from ..models.compare_contract_entry import CompareContractEntry
 
         d = dict(src_dict)
         window = CompareResponseWindow(d.pop("window"))

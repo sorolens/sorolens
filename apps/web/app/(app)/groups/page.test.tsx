@@ -29,6 +29,11 @@ vi.mock("@/components/Skeleton", () => ({
   CardSkeleton: () => <div data-testid="card-skeleton">skeleton</div>,
 }));
 
+// The page mints a workspace session (issue #518); tests inject a fixed user.
+vi.mock("@/lib/useSession", () => ({
+  useSessionUserId: () => "user_1",
+}));
+
 const mockListGroups = vi.fn();
 const mockCreateGroup = vi.fn();
 const mockDeleteGroup = vi.fn();

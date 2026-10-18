@@ -34,7 +34,7 @@ func labelFromStore(label store.Label) labelResponse {
 func (h *Handler) CreateLabel(w http.ResponseWriter, r *http.Request) {
 	workspaceID := strings.TrimSpace(getUserID(r))
 	if workspaceID == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "authentication required: present a session token or user-bound API key")
 		return
 	}
 	var req labelRequest

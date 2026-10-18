@@ -222,6 +222,18 @@ type Alert struct {
 	Timestamp  time.Time
 }
 
+// ExpiringStorageEntry is one live storage entry whose TTL is within the
+// expiry-alert threshold (issue #510). It mirrors the columns the indexer's
+// expiry scan reads from storage_entries, so the scan package never needs to
+// import the store implementation.
+type ExpiringStorageEntry struct {
+	KeyXDR string
+	// Durability is temporary | persistent | instance.
+	Durability string
+	// LiveUntilLedger is the ledger at which the entry expires.
+	LiveUntilLedger int64
+}
+
 // HealthInputs mirrors store.HealthScoreInputs (issue #137). It carries the
 // raw aggregates an implementation gathers so the pure healthscore package can
 // compute the composite score without importing apps/api.

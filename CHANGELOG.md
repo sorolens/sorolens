@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Automated GitHub Actions release workflow (`release.yml`) for publishing container images to GHCR and creating GitHub Releases with SHA256 checksums on semver tag push (#544).
+- Release process documentation in `CONTRIBUTING.md`.
+
 ## [0.1.0] - 2026-09-25
 
 ### Added

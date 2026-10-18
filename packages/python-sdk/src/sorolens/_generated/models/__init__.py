@@ -116,6 +116,7 @@ from .health_score_components import HealthScoreComponents
 from .in_watchlist import InWatchlist
 from .invocation import Invocation
 from .invocation_args_decoded import InvocationArgsDecoded
+from .invocation_detail import InvocationDetail
 from .list_alert_rules_response_200 import ListAlertRulesResponse200
 from .list_alert_subscriptions_response_200 import ListAlertSubscriptionsResponse200
 from .list_alerts_network import ListAlertsNetwork
@@ -191,6 +192,7 @@ from .rotate_api_key_admin_response_200 import RotateApiKeyAdminResponse200
 from .rotate_api_key_response_200 import RotateApiKeyResponse200
 from .rule_diagnostic import RuleDiagnostic
 from .scope_error import ScopeError
+from .session import Session
 from .set_alert_rule_enabled_body import SetAlertRuleEnabledBody
 from .slack_command_body import SlackCommandBody
 from .slack_message import SlackMessage
@@ -386,6 +388,7 @@ __all__ = (
     "InWatchlist",
     "Invocation",
     "InvocationArgsDecoded",
+    "InvocationDetail",
     "ListAlertRulesResponse200",
     "ListAlertSubscriptionsResponse200",
     "ListAlertsNetwork",
@@ -453,6 +456,7 @@ __all__ = (
     "RotateApiKeyResponse200",
     "RuleDiagnostic",
     "ScopeError",
+    "Session",
     "SetAlertRuleEnabledBody",
     "SlackCommandBody",
     "SlackMessage",

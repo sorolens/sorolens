@@ -17,6 +17,7 @@ import type {
 } from "@/lib/types";
 import { StatCard } from "@/components/StatCard";
 import { TableSkeleton } from "@/components/Skeleton";
+import { ErrorState, errorMessage } from "@/components/ErrorState";
 import { HealthBadge, SeverityBadge } from "@/components/WatchdogBadges";
 import { networkFilter, useNetwork } from "@/lib/network";
 import { truncateMiddle } from "@/lib/format";
@@ -49,8 +50,11 @@ function viewToggleClass(active: boolean): string {
 export default function WatchdogPage() {
   const { network } = useNetwork();
   const [stats, setStats] = useState<WatchdogStats>(ZERO_STATS);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [statsReload, setStatsReload] = useState(0);
   const [contracts, setContracts] = useState<MonitoredContract[]>([]);
   const [contractsLoading, setContractsLoading] = useState(true);
+  const [contractsError, setContractsError] = useState<string | null>(null);
 
   // Alerts feed: "grouped" (default) shows the deduplicated /api/v1/alerts
   // view, "flat" the raw per-event /api/v1/watchdog/alerts feed.
@@ -63,11 +67,18 @@ export default function WatchdogPage() {
   const [alerts, setAlerts] = useState<ContractAlert[] | null>(null);
   const [alertsCursor, setAlertsCursor] = useState("");
   const [alertsLoading, setAlertsLoading] = useState(false);
+  // A failed first-page load of the active feed (null = no failure), and a
+  // counter that re-runs the load for the retry button.
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const [feedReload, setFeedReload] = useState(0);
+  // A failed "load more" keeps the rows already shown and offers a retry.
+  const [moreError, setMoreError] = useState<string | null>(null);
 
   // Expandable group members: group_key -> raw alerts fetched on first expand.
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [members, setMembers] = useState<Record<string, ContractAlert[]>>({});
   const [membersLoading, setMembersLoading] = useState<string | null>(null);
+  const [membersError, setMembersError] = useState<Record<string, string>>({});
 
   // Pagination state: stack of cursors, index 0 = first page. nextCursor is
   // the API's next_cursor for the current page ("" on the last page).
@@ -77,17 +88,20 @@ export default function WatchdogPage() {
 
   useEffect(() => {
     let cancelled = false;
+    setStatsError(null);
     getWatchdogStats(networkFilter(network))
       .then((s) => {
         if (!cancelled) setStats(s);
       })
-      .catch(() => {
-        // Backend not reachable yet: render zeros, not an error.
+      .catch((err: unknown) => {
+        // Zeros would read as "nothing monitored", so surface the failure.
+        if (!cancelled)
+          setStatsError(errorMessage(err, "The stats request failed."));
       });
     return () => {
       cancelled = true;
     };
-  }, [network]);
+  }, [network, statsReload]);
 
   // Load the first page of the active alerts feed whenever the network or a
   // filter changes. A sequence counter ensures only the newest request may
@@ -102,7 +116,10 @@ export default function WatchdogPage() {
     // Collapse members and reset paging: a new filter means a new feed.
     setExpandedKey(null);
     setMembers({});
+    setMembersError({});
     setAlertsLoading(false);
+    setFeedError(null);
+    setMoreError(null);
 
     if (view === "grouped") {
       setGroups(null);
@@ -118,11 +135,11 @@ export default function WatchdogPage() {
           setGroups(res.groups ?? []);
           setGroupsCursor(res.next_cursor ?? "");
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           if (seq !== feedSeq.current) return;
-          // Backend not reachable yet: show the empty state, not an error.
           setGroups([]);
           setGroupsCursor("");
+          setFeedError(errorMessage(err, "The alerts request failed."));
         });
       return;
     }
@@ -135,12 +152,13 @@ export default function WatchdogPage() {
         setAlerts(res.alerts ?? []);
         setAlertsCursor(res.next_cursor ?? "");
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (seq !== feedSeq.current) return;
         setAlerts([]);
         setAlertsCursor("");
+        setFeedError(errorMessage(err, "The alerts request failed."));
       });
-  }, [network, severityFilter, contractFilter, view]);
+  }, [network, severityFilter, contractFilter, view, feedReload]);
 
   // Only the most recent loadContracts() may write to state, so a slow
   // response can't overwrite a newer page.
@@ -150,6 +168,7 @@ export default function WatchdogPage() {
     async (cursor: string | null) => {
       const seq = ++loadSeq.current;
       setContractsLoading(true);
+      setContractsError(null);
       try {
         const data = await listMonitoredContracts({
           cursor: cursor ?? undefined,
@@ -159,11 +178,13 @@ export default function WatchdogPage() {
         if (seq !== loadSeq.current) return;
         setContracts(data.contracts ?? []);
         setNextCursor(data.next_cursor ?? "");
-      } catch {
+      } catch (err) {
         if (seq !== loadSeq.current) return;
-        // Backend not reachable yet: show the empty state, not an error.
         setContracts([]);
         setNextCursor("");
+        setContractsError(
+          errorMessage(err, "The monitored contracts request failed.")
+        );
       } finally {
         if (seq === loadSeq.current) setContractsLoading(false);
       }
@@ -201,6 +222,7 @@ export default function WatchdogPage() {
   async function loadMoreGroups() {
     if (!groupsCursor || alertsLoading) return;
     setAlertsLoading(true);
+    setMoreError(null);
     try {
       const res = await listAlertGroups({
         contractId: contractFilter || undefined,
@@ -211,8 +233,9 @@ export default function WatchdogPage() {
       });
       setGroups((prev) => [...(prev ?? []), ...(res.groups ?? [])]);
       setGroupsCursor(res.next_cursor ?? "");
-    } catch {
+    } catch (err) {
       // Keep the current feed on failure; the button stays available.
+      setMoreError(errorMessage(err, "The next page failed to load."));
     } finally {
       setAlertsLoading(false);
     }
@@ -222,6 +245,7 @@ export default function WatchdogPage() {
   async function loadMoreAlerts() {
     if (!alertsCursor || alertsLoading) return;
     setAlertsLoading(true);
+    setMoreError(null);
     try {
       const a = await listAlerts(contractFilter || undefined, {
         severity: severityFilter || undefined,
@@ -231,8 +255,9 @@ export default function WatchdogPage() {
       });
       setAlerts((prev) => [...(prev ?? []), ...(a.alerts ?? [])]);
       setAlertsCursor(a.next_cursor ?? "");
-    } catch {
+    } catch (err) {
       // Keep the current feed on failure; the button stays available.
+      setMoreError(errorMessage(err, "The next page failed to load."));
     } finally {
       setAlertsLoading(false);
     }
@@ -248,7 +273,16 @@ export default function WatchdogPage() {
     }
     setExpandedKey(group.group_key);
     if (members[group.group_key]) return;
+    await loadMembers(group);
+  }
+
+  async function loadMembers(group: AlertGroup) {
     setMembersLoading(group.group_key);
+    setMembersError((prev) => {
+      const next = { ...prev };
+      delete next[group.group_key];
+      return next;
+    });
     try {
       const res = await listAlerts(group.contract_id, {
         severity: group.severity,
@@ -256,8 +290,14 @@ export default function WatchdogPage() {
         limit: PAGE_SIZE,
       });
       setMembers((prev) => ({ ...prev, [group.group_key]: res.alerts ?? [] }));
-    } catch {
-      // Leave the members list empty; the row shows a fallback message.
+    } catch (err) {
+      setMembersError((prev) => ({
+        ...prev,
+        [group.group_key]: errorMessage(
+          err,
+          "The member alerts failed to load."
+        ),
+      }));
     } finally {
       setMembersLoading(null);
     }
@@ -282,20 +322,34 @@ export default function WatchdogPage() {
         >
           Notification channels (Slack, Discord, PagerDuty) →
         </Link>
+        <Link
+          href="/watchdog/reports"
+          className="ml-4 inline-block text-sm text-[var(--color-accent)] hover:underline"
+        >
+          SLA reports →
+        </Link>
       </div>
 
-      {/* Summary cards: always render values, defaulting to 0 when the
-          backend has nothing to report yet. */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Monitored" value={stats.total_monitored} />
-        <StatCard label="Healthy" value={stats.healthy} tone="safe" />
-        <StatCard label="Degraded" value={stats.degraded} tone="warning" />
-        <StatCard
-          label="Critical alerts"
-          value={stats.critical_alerts}
-          tone="danger"
+      {/* Summary cards: values default to 0 while loading, but a failed
+          request shows an error instead of zeros. */}
+      {statsError ? (
+        <ErrorState
+          title="Couldn't load watchdog stats."
+          message={statsError}
+          onRetry={() => setStatsReload((n) => n + 1)}
         />
-      </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard label="Monitored" value={stats.total_monitored} />
+          <StatCard label="Healthy" value={stats.healthy} tone="safe" />
+          <StatCard label="Degraded" value={stats.degraded} tone="warning" />
+          <StatCard
+            label="Critical alerts"
+            value={stats.critical_alerts}
+            tone="danger"
+          />
+        </div>
+      )}
 
       {/* Monitored contracts */}
       <section>
@@ -304,6 +358,12 @@ export default function WatchdogPage() {
         </div>
         {contractsLoading ? (
           <TableSkeleton />
+        ) : contractsError ? (
+          <ErrorState
+            title="Couldn't load monitored contracts."
+            message={contractsError}
+            onRetry={() => loadContracts(cursors[cursorIndex])}
+          />
         ) : contracts.length === 0 ? (
           <EmptyState
             title="No monitored contracts yet"
@@ -454,7 +514,13 @@ export default function WatchdogPage() {
           </div>
         </div>
 
-        {view === "grouped" ? (
+        {feedError ? (
+          <ErrorState
+            title="Couldn't load alerts."
+            message={feedError}
+            onRetry={() => setFeedReload((n) => n + 1)}
+          />
+        ) : view === "grouped" ? (
           groups === null ? (
             <TableSkeleton />
           ) : groups.length === 0 ? (
@@ -538,9 +604,20 @@ export default function WatchdogPage() {
                                   Raw alerts for this contract and severity.
                                 </p>
                                 {membersLoading === g.group_key ? (
-                                  <p className="text-sm text-[var(--color-text-secondary)]">
+                                  <p
+                                    role="status"
+                                    aria-busy="true"
+                                    className="text-sm text-[var(--color-text-secondary)]"
+                                  >
                                     Loading members…
                                   </p>
+                                ) : membersError[g.group_key] ? (
+                                  <ErrorState
+                                    compact
+                                    title="Couldn't load the raw alerts."
+                                    message={membersError[g.group_key]}
+                                    onRetry={() => loadMembers(g)}
+                                  />
                                 ) : !groupMembers ||
                                   groupMembers.length === 0 ? (
                                   <p className="text-sm text-[var(--color-text-secondary)]">
@@ -651,7 +728,16 @@ export default function WatchdogPage() {
         )}
 
         {/* Load more (per view) */}
-        {view === "grouped" &&
+        {moreError && !feedError && (
+          <ErrorState
+            compact
+            className="mt-4"
+            title="Couldn't load more alerts."
+            message={moreError}
+          />
+        )}
+        {!feedError &&
+          view === "grouped" &&
           groups !== null &&
           groups.length > 0 &&
           groupsCursor !== "" && (
@@ -660,24 +746,29 @@ export default function WatchdogPage() {
                 type="button"
                 onClick={loadMoreGroups}
                 disabled={alertsLoading}
+                aria-busy={alertsLoading}
                 className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm transition-colors hover:bg-[var(--color-bg-card)] disabled:opacity-50"
               >
                 {alertsLoading ? "Loading…" : "Load more groups"}
               </button>
             </div>
           )}
-        {view === "flat" && alerts !== null && alertsCursor !== "" && (
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={loadMoreAlerts}
-              disabled={alertsLoading}
-              className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm transition-colors hover:bg-[var(--color-bg-card)] disabled:opacity-50"
-            >
-              {alertsLoading ? "Loading…" : "Load more alerts"}
-            </button>
-          </div>
-        )}
+        {!feedError &&
+          view === "flat" &&
+          alerts !== null &&
+          alertsCursor !== "" && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={loadMoreAlerts}
+                disabled={alertsLoading}
+                aria-busy={alertsLoading}
+                className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm transition-colors hover:bg-[var(--color-bg-card)] disabled:opacity-50"
+              >
+                {alertsLoading ? "Loading…" : "Load more alerts"}
+              </button>
+            </div>
+          )}
       </section>
     </div>
   );

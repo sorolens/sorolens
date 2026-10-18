@@ -94,6 +94,9 @@ describe("ContractChangelog", () => {
       "href",
       "https://github.com/example/contract/tree/v2"
     );
+    expect(
+      screen.getByRole("status", { name: "Source verified" })
+    ).toHaveTextContent("Verified");
   });
 
   it("does not render verified source section when absent", () => {

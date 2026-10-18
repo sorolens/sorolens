@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, cast
+from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -24,6 +24,7 @@ class APIKey:
         created_at (datetime.datetime):
         last_used_at (datetime.datetime | None):
         revoked_at (datetime.datetime | None):
+        user_id (None | str | Unset): User this key acts as. Null for scope-only keys.
         rotated_at (datetime.datetime | None | Unset): When the key's secret was last rotated in place.
     """
 
@@ -34,6 +35,7 @@ class APIKey:
     created_at: datetime.datetime
     last_used_at: datetime.datetime | None
     revoked_at: datetime.datetime | None
+    user_id: None | str | Unset = UNSET
     rotated_at: datetime.datetime | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -60,6 +62,12 @@ class APIKey:
         else:
             revoked_at = self.revoked_at
 
+        user_id: None | str | Unset
+        if isinstance(self.user_id, Unset):
+            user_id = UNSET
+        else:
+            user_id = self.user_id
+
         rotated_at: None | str | Unset
         if isinstance(self.rotated_at, Unset):
             rotated_at = UNSET
@@ -81,6 +89,8 @@ class APIKey:
                 "revoked_at": revoked_at,
             }
         )
+        if user_id is not UNSET:
+            field_dict["user_id"] = user_id
         if rotated_at is not UNSET:
             field_dict["rotated_at"] = rotated_at
 
@@ -129,6 +139,15 @@ class APIKey:
 
         revoked_at = _parse_revoked_at(d.pop("revoked_at"))
 
+        def _parse_user_id(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        user_id = _parse_user_id(d.pop("user_id", UNSET))
+
         def _parse_rotated_at(data: object) -> datetime.datetime | None | Unset:
             if data is None:
                 return data
@@ -154,6 +173,7 @@ class APIKey:
             created_at=created_at,
             last_used_at=last_used_at,
             revoked_at=revoked_at,
+            user_id=user_id,
             rotated_at=rotated_at,
         )
 

@@ -41,6 +41,14 @@ jobs:
       - name: go vet
         working-directory: ${{ matrix.module }}
         run: go vet ./...
+      - name: Run go-client examples (offline)
+        if: matrix.module == 'packages/go-client'
+        working-directory: ${{ matrix.module }}
+        run: |
+          for example in pagination errors sse webhooks; do
+            echo "==> examples/$example"
+            go run "./examples/$example"
+          done
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         continue-on-error: true
@@ -109,6 +117,25 @@ jobs:
         run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
       - name: Verify no diff
         run: git diff --exit-code -- packages/go-client/internal
+  # ------------------------------------------------------------
+  # SDK coverage guard (issue #556): every operation declared in
+  # docs/openapi.yaml must be exposed by each SDK, or be documented as an
+  # intentional exclusion in scripts/sdk_coverage_allowlist.json. Fails when a
+  # new operation lands without SDK support, or when an allowlisted operation
+  # has since become covered (stale exemption).
+  # ------------------------------------------------------------
+  sdk-coverage:
+    name: SDK OpenAPI coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify SDK coverage against OpenAPI spec
+        run: python3 scripts/check_sdk_coverage.py
   # ------------------------------------------------------------
   # Node: XDR decoder package and shared packages
   # ------------------------------------------------------------
@@ -192,6 +219,9 @@ jobs:
             pnpm-node22-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify web OpenAPI playground catalog
+        working-directory: apps/web
+        run: pnpm openapi:check
       - name: Type-check dashboard
         working-directory: apps/web
         run: pnpm exec tsc --noEmit

@@ -76,10 +76,8 @@ const detailFixture: ContractDetail = {
   label: contractA.label,
   status: contractA.status,
   wasm_hash: null,
+  created_at_ledger: 0,
   backfill_complete_at: null,
-  sync: null,
-  storage_entry_count: 0,
-  expiring_entry_count: 0,
   tags: [],
   added_at: contractA.added_at,
 };

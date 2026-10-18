@@ -29,6 +29,20 @@ import (
 // within this many ledgers (~1 day) counts against the TTL health component.
 const storageHealthyHorizonLedgers int64 = 17_280
 
+// expiryAlertDefaultThresholdLedgers mirrors
+// expiryalert.DefaultThresholdLedgers (issue #510). The runner always passes
+// its configured threshold explicitly; this is the defensive fallback so a
+// zero threshold can never degrade into "everything is expiring".
+const expiryAlertDefaultThresholdLedgers int64 = 5_000
+
+// defaultExpiringStorageEntries and maxExpiringStorageEntries bound the
+// per-contract expiry scan, mirroring snapshotStorageLimit's intent in
+// apps/api/internal/handler/snapshot_export.go.
+const (
+	defaultExpiringStorageEntries = 200
+	maxExpiringStorageEntries     = 1000
+)
+
 // connectTimeout bounds the startup connectivity check.
 const connectTimeout = 10 * time.Second
 
@@ -388,6 +402,127 @@ func (s *Store) InsertAlert(ctx context.Context, a poller.Alert) error {
 		return fmt.Errorf("insert alert: %w", err)
 	}
 	return nil
+}
+
+// AlertExists reports whether an alert row with this synthetic de-duplication
+// key was already recorded for the contract (issue #510). The jobs that raise
+// synthetic alerts (anomaly, expiry) use it to skip re-dispatching to the
+// webhooks when the underlying state has not changed since the last pass;
+// InsertAlert's ON CONFLICT clause keeps the row itself idempotent.
+func (s *Store) AlertExists(ctx context.Context, txHash, contractID string) (bool, error) {
+	if txHash == "" {
+		return false, errors.New("alert exists: tx_hash is required")
+	}
+	var exists bool
+	if err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM contract_alerts
+			WHERE tx_hash = $1 AND contract_id = $2
+		)`, txHash, contractID,
+	).Scan(&exists); err != nil {
+		return false, fmt.Errorf("alert exists: %w", err)
+	}
+	return exists, nil
+}
+
+// ExpiringStorageEntries returns up to limit live storage entries of
+// contractID whose TTL runs out within thresholdLedgers ledgers of the
+// contract's last indexed ledger, soonest expiry first (issue #510).
+//
+// The reference ledger is sync_state.last_ledger for the contract, exactly as
+// the TTL component of the health score computes it, so the scan measures the
+// same horizon the API reports. Entries already past their
+// live_until_ledger still count — they need attention even more urgently — and
+// entries with a NULL TTL (unbounded/deleted bookkeeping rows) never do.
+//
+// limit bounds the scan so a contract with a huge storage footprint cannot turn
+// every pass into an unbounded query.
+func (s *Store) ExpiringStorageEntries(ctx context.Context, contractID string, thresholdLedgers int64, limit int) ([]poller.ExpiringStorageEntry, error) {
+	if thresholdLedgers <= 0 {
+		thresholdLedgers = expiryAlertDefaultThresholdLedgers
+	}
+	if limit <= 0 || limit > maxExpiringStorageEntries {
+		limit = defaultExpiringStorageEntries
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT key_xdr, durability, live_until_ledger
+		FROM storage_entries
+		WHERE contract_id = $1
+		  AND status = 'live'
+		  AND live_until_ledger IS NOT NULL
+		  AND live_until_ledger <= COALESCE((SELECT MAX(last_ledger) FROM sync_state WHERE contract_id = $1), 0) + $2
+		ORDER BY live_until_ledger ASC, key_xdr ASC
+		LIMIT $3`,
+		contractID, thresholdLedgers, limit+1,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("expiring storage entries: %w", err)
+	}
+	defer rows.Close()
+
+	var out []poller.ExpiringStorageEntry
+	for rows.Next() {
+		var e poller.ExpiringStorageEntry
+		if err := rows.Scan(&e.KeyXDR, &e.Durability, &e.LiveUntilLedger); err != nil {
+			return nil, fmt.Errorf("expiring storage entries scan: %w", err)
+		}
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("expiring storage entries: %w", err)
+	}
+	// Fetch limit+1 so the caller's own truncation notice stays honest: never
+	// hand back a full page that is silently exactly the cap.
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// AlertSubscription mirrors store.AlertSubscription from
+// apps/api/internal/store (and watchdog.AlertSubscription): the indexer cannot
+// import either package across module boundaries, so the notification
+// surface it dispatches through is carried here as a local type.
+type AlertSubscription struct {
+	ID             string
+	ContractID     string
+	WebhookURL     string
+	SeverityFilter string
+	// ChannelType selects the payload format; empty means webhook.
+	ChannelType string
+	// RoutingKey is the PagerDuty integration key (pagerduty only).
+	RoutingKey string
+}
+
+// ListAlertSubscriptions returns the alert subscriptions configured for a
+// contract. The indexer's expiry alerting uses it to reach the webhooks the
+// user registered through the API (issue #510); a contract with no
+// subscriptions yields no rows and no error.
+//
+// alert_subscriptions references monitored_contracts, so contracts that were
+// never registered with the watchdog simply have nothing to list.
+func (s *Store) ListAlertSubscriptions(ctx context.Context, contractID string) ([]AlertSubscription, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, contract_id, webhook_url, severity_filter, channel_type, routing_key
+		FROM alert_subscriptions
+		WHERE contract_id = $1
+		ORDER BY created_at ASC`, contractID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list alert subscriptions: %w", err)
+	}
+	defer rows.Close()
+
+	var out []AlertSubscription
+	for rows.Next() {
+		var sub AlertSubscription
+		if err := rows.Scan(&sub.ID, &sub.ContractID, &sub.WebhookURL,
+			&sub.SeverityFilter, &sub.ChannelType, &sub.RoutingKey); err != nil {
+			return nil, fmt.Errorf("list alert subscriptions scan: %w", err)
+		}
+		out = append(out, sub)
+	}
+	return out, rows.Err()
 }
 
 // ContractHealthInputs gathers the raw signals behind the health score.

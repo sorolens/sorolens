@@ -1,0 +1,399 @@
+{
+  "_note": "Intentional per-SDK OpenAPI coverage exclusions. Each section documents why an SDK does not (yet) expose the listed operations. Remove an entry once the SDK implements it - the CI guard fails on stale entries. See scripts/check_sdk_coverage.py.",
+  "exclusions": {
+    "rust": [
+      {
+        "reason": "The versioned v2 surface is intentionally not mirrored by the hand-written SDKs; the v1 operations carry the same data.",
+        "operations": [
+          "v2AddToWatchlist",
+          "v2AdminCreateKey",
+          "v2AdminGetKey",
+          "v2AdminListKeys",
+          "v2AdminRevokeKey",
+          "v2AdminRotateKey",
+          "v2ContractForecast",
+          "v2ContractGraph",
+          "v2ContractSnapshot",
+          "v2ContractStats",
+          "v2CreateAPIKey",
+          "v2GetAPIKey",
+          "v2GetContract",
+          "v2GetContractHealthScore",
+          "v2GetMonitoredContract",
+          "v2GlobalStats",
+          "v2ListAPIKeys",
+          "v2ListContractAlerts",
+          "v2ListContractUpgrades",
+          "v2ListContracts",
+          "v2ListEvents",
+          "v2ListHealthChecks",
+          "v2ListInvocations",
+          "v2ListMonitoredContracts",
+          "v2ListStorageEntries",
+          "v2ListWatchdogAlerts",
+          "v2ListWatchlist",
+          "v2LiveActivity",
+          "v2RecentEvents",
+          "v2RegisterContract",
+          "v2RemoveFromWatchlist",
+          "v2RevokeAPIKey",
+          "v2RotateAPIKey",
+          "v2StreamEvents",
+          "v2ValidateContract",
+          "v2WatchdogStats",
+          "v2WatchlistStatus"
+        ]
+      },
+      {
+        "reason": "Scoped/admin API-key management is a control-plane concern not yet exposed by this SDK.",
+        "operations": [
+          "createApiKey",
+          "createApiKeyAdmin",
+          "getApiKey",
+          "getApiKeyAdmin",
+          "listApiKeys",
+          "listApiKeysAdmin",
+          "revokeApiKey",
+          "revokeApiKeyAdmin",
+          "rotateApiKey",
+          "rotateApiKeyAdmin"
+        ]
+      },
+      {
+        "reason": "Alert rules and alert subscriptions are surfaced through the webhooks/notifications product, not this SDK yet.",
+        "operations": [
+          "createAlertRule",
+          "createAlertSubscription",
+          "deleteAlertRule",
+          "deleteAlertSubscription",
+          "listAlertRules",
+          "listAlertSubscriptions",
+          "listAlerts",
+          "previewAlertRule",
+          "setAlertRuleEnabled",
+          "validateAlertRule"
+        ]
+      },
+      {
+        "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
+        "operations": [
+          "createReportSubscription",
+          "deleteReportSubscription",
+          "getContractGraph",
+          "getContractHealthScore",
+          "getContractReport",
+          "getContractReportHistory",
+          "getContractSLABadge",
+          "getContractSpec",
+          "getContractSummary",
+          "getContractUptime",
+          "listReportSubscriptions",
+          "unsubscribeReport"
+        ]
+      },
+      {
+        "reason": "Contract groups / portfolio endpoints are not part of this SDK's scope yet.",
+        "operations": [
+          "addGroupContract",
+          "createGroup",
+          "deleteGroup",
+          "getGroup",
+          "getGroupStats",
+          "listGroups",
+          "removeGroupContract",
+          "removeGroupContractByPath",
+          "updateGroup"
+        ]
+      },
+      {
+        "reason": "Contract markdown notes are not part of this SDK's scope yet.",
+        "operations": [
+          "createContractNote",
+          "deleteContractNote",
+          "listContractNotes",
+          "updateContractNote"
+        ]
+      },
+      {
+        "reason": "Contract tag mutation is not part of this SDK's scope yet.",
+        "operations": [
+          "addContractTag",
+          "removeContractTag"
+        ]
+      },
+      {
+        "reason": "Watchlist / watched-account endpoints are not part of this SDK's scope yet.",
+        "operations": [
+          "addToWatchlist",
+          "addWatchedAccount",
+          "deleteWatchedAccount",
+          "getWatchlistStatus",
+          "listWatchedAccounts",
+          "listWatchlist",
+          "removeFromWatchlist"
+        ]
+      },
+      {
+        "reason": "Interactive auth/session endpoints are not relevant to server-to-server SDK usage.",
+        "operations": [
+          "createSession"
+        ]
+      },
+      {
+        "reason": "Integration endpoints (GraphQL, Slack, live activity, metrics, version, health probe alias, subscription signing secrets) are wired for the web app, not the SDK surface.",
+        "operations": [
+          "apiHealth",
+          "getMetrics",
+          "getSubscriptionSigningSecret",
+          "getVersion",
+          "graphql",
+          "listRuleMetrics",
+          "liveActivity",
+          "rotateSubscriptionSigningSecret",
+          "slackCommand"
+        ]
+      },
+      {
+        "reason": "Bulk export endpoints (CSV, snapshot export) are not part of this SDK's scope yet.",
+        "operations": [
+          "exportContractEventsCSV",
+          "exportContractSnapshot"
+        ]
+      },
+      {
+        "reason": "Extra event endpoints (all-events feed, recent events, DLQ/requeue, WS subscribe) are not part of this SDK's scope yet.",
+        "operations": [
+          "listAllEvents",
+          "listAuditEvents",
+          "listFailedEvents",
+          "recentEvents",
+          "requeueFailedEvent",
+          "streamAllEvents",
+          "subscribeEventsWS"
+        ]
+      },
+      {
+        "reason": "Cross-contract invocation listing and invocation trace are not part of this SDK's scope yet.",
+        "operations": [
+          "getContractInvocation",
+          "getInvocationTrace",
+          "listAllInvocations"
+        ]
+      },
+      {
+        "reason": "Source-verification / upgrade / validate / wasm endpoints are not part of this SDK's scope yet.",
+        "operations": [
+          "getContractVerification",
+          "getContractWasm",
+          "listContractUpgrades",
+          "validateContract",
+          "verifyContractSource"
+        ]
+      },
+      {
+        "reason": "Not part of this SDK's implemented surface yet.",
+        "operations": [
+          "batchContracts",
+          "compareContracts",
+          "listRuleLibrary"
+        ]
+      }
+    ],
+    "python": [
+      {
+        "reason": "The versioned v2 surface is intentionally not mirrored by the hand-written SDKs; the v1 operations carry the same data.",
+        "operations": [
+          "v2AddToWatchlist",
+          "v2AdminCreateKey",
+          "v2AdminGetKey",
+          "v2AdminListKeys",
+          "v2AdminRevokeKey",
+          "v2AdminRotateKey",
+          "v2ContractForecast",
+          "v2ContractGraph",
+          "v2ContractSnapshot",
+          "v2ContractStats",
+          "v2CreateAPIKey",
+          "v2GetAPIKey",
+          "v2GetContract",
+          "v2GetContractHealthScore",
+          "v2GetMonitoredContract",
+          "v2GlobalStats",
+          "v2ListAPIKeys",
+          "v2ListContractAlerts",
+          "v2ListContractUpgrades",
+          "v2ListContracts",
+          "v2ListEvents",
+          "v2ListHealthChecks",
+          "v2ListInvocations",
+          "v2ListMonitoredContracts",
+          "v2ListStorageEntries",
+          "v2ListWatchdogAlerts",
+          "v2ListWatchlist",
+          "v2LiveActivity",
+          "v2RecentEvents",
+          "v2RegisterContract",
+          "v2RemoveFromWatchlist",
+          "v2RevokeAPIKey",
+          "v2RotateAPIKey",
+          "v2StreamEvents",
+          "v2ValidateContract",
+          "v2WatchdogStats",
+          "v2WatchlistStatus"
+        ]
+      },
+      {
+        "reason": "Scoped/admin API-key management is a control-plane concern not yet exposed by this SDK.",
+        "operations": [
+          "getApiKey",
+          "getApiKeyAdmin",
+          "rotateApiKey",
+          "rotateApiKeyAdmin"
+        ]
+      },
+      {
+        "reason": "Alert rules and alert subscriptions are surfaced through the webhooks/notifications product, not this SDK yet.",
+        "operations": [
+          "createAlertRule",
+          "createAlertSubscription",
+          "deleteAlertRule",
+          "deleteAlertSubscription",
+          "listAlertRules",
+          "listAlertSubscriptions",
+          "listAlerts",
+          "previewAlertRule",
+          "setAlertRuleEnabled",
+          "validateAlertRule"
+        ]
+      },
+      {
+        "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
+        "operations": [
+          "createReportSubscription",
+          "deleteReportSubscription",
+          "getContractGraph",
+          "getContractHealthScore",
+          "getContractReport",
+          "getContractReportHistory",
+          "getContractSLABadge",
+          "getContractSpec",
+          "getContractSummary",
+          "getContractUptime",
+          "listReportSubscriptions",
+          "unsubscribeReport"
+        ]
+      },
+      {
+        "reason": "Contract groups / portfolio endpoints are not part of this SDK's scope yet.",
+        "operations": [
+          "addGroupContract",
+          "createGroup",
+          "deleteGroup",
+          "getGroup",
+          "getGroupStats",
+          "listGroups",
+          "removeGroupContract",
+          "removeGroupContractByPath",
+          "updateGroup"
+        ]
+      },
+      {
+        "reason": "Contract markdown notes are not part of this SDK's scope yet.",
+        "operations": [
+          "createContractNote",
+          "deleteContractNote",
+          "listContractNotes",
+          "updateContractNote"
+        ]
+      },
+      {
+        "reason": "Contract tag mutation is not part of this SDK's scope yet.",
+        "operations": [
+          "addContractTag",
+          "removeContractTag"
+        ]
+      },
+      {
+        "reason": "Watchlist / watched-account endpoints are not part of this SDK's scope yet.",
+        "operations": [
+          "addWatchedAccount",
+          "deleteWatchedAccount",
+          "listWatchedAccounts"
+        ]
+      },
+      {
+        "reason": "Interactive auth/session endpoints are not relevant to server-to-server SDK usage.",
+        "operations": [
+          "createSession"
+        ]
+      },
+      {
+        "reason": "Integration endpoints (GraphQL, Slack, live activity, metrics, version, health probe alias, subscription signing secrets) are wired for the web app, not the SDK surface.",
+        "operations": [
+          "apiHealth",
+          "getMetrics",
+          "getSubscriptionSigningSecret",
+          "getVersion",
+          "graphql",
+          "listRuleMetrics",
+          "liveActivity",
+          "rotateSubscriptionSigningSecret",
+          "slackCommand"
+        ]
+      },
+      {
+        "reason": "Bulk export endpoints (CSV, snapshot export) are not part of this SDK's scope yet.",
+        "operations": [
+          "exportContractEventsCSV",
+          "exportContractSnapshot"
+        ]
+      },
+      {
+        "reason": "Extra event endpoints (all-events feed, recent events, DLQ/requeue, WS subscribe) are not part of this SDK's scope yet.",
+        "operations": [
+          "listAllEvents",
+          "listAuditEvents",
+          "listFailedEvents",
+          "recentEvents",
+          "requeueFailedEvent",
+          "streamAllEvents",
+          "subscribeEventsWS"
+        ]
+      },
+      {
+        "reason": "Cross-contract invocation listing and invocation trace are not part of this SDK's scope yet.",
+        "operations": [
+          "getContractInvocation",
+          "getInvocationTrace",
+          "listAllInvocations"
+        ]
+      },
+      {
+        "reason": "Source-verification / upgrade / validate / wasm endpoints are not part of this SDK's scope yet.",
+        "operations": [
+          "getContractVerification",
+          "getContractWasm",
+          "listContractUpgrades",
+          "validateContract",
+          "verifyContractSource"
+        ]
+      },
+      {
+        "reason": "Not part of this SDK's implemented surface yet.",
+        "operations": [
+          "batchContracts",
+          "compareContracts",
+          "listRuleLibrary"
+        ]
+      }
+    ],
+    "go": [
+      {
+        "reason": "Integration endpoints (GraphQL, Slack, live activity, metrics, version, health probe alias, subscription signing secrets) are wired for the web app, not the SDK surface.",
+        "operations": [
+          "slackCommand"
+        ]
+      }
+    ]
+  }
+}

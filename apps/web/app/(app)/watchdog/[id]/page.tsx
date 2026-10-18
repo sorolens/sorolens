@@ -106,12 +106,18 @@ function Content({ id }: { id: string }) {
 
   return (
     <div className="space-y-8">
-      <div>
+      <div className="flex flex-wrap items-center gap-4">
         <Link
           href="/watchdog"
           className="text-sm text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
         >
           ← Back to watchdog
+        </Link>
+        <Link
+          href={`/watchdog/reports?contract=${encodeURIComponent(id)}`}
+          className="text-sm text-[var(--color-accent)] hover:underline"
+        >
+          SLA reports for this contract
         </Link>
       </div>
 

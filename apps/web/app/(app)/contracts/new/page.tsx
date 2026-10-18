@@ -19,7 +19,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError, trackContract, validateContract } from "@/lib/api";
 import { ALL_NETWORKS, NETWORKS } from "@/lib/network";
-import { getUserId } from "@/lib/user";
+import { ensureSession } from "@/lib/user";
 
 /** Networks a contract can actually live on. */
 const CONCRETE_NETWORKS = NETWORKS.filter((n) => n !== ALL_NETWORKS);
@@ -139,9 +139,10 @@ export default function NewContractPage() {
     setSubmitting(true);
     setError(null);
     try {
+      const session = await ensureSession();
       await trackContract(
         { id: trimmedId, label: label.trim() || undefined, network },
-        getUserId()
+        session.user_id
       );
       // Watchdog enrollment is recorded by the on-chain sorolens-watchdog
       // contract, so when the user asked for it we land them on the Watchdog

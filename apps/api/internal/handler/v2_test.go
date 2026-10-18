@@ -257,20 +257,21 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 	// envelope. Keeping the list explicit means a *new* v1 route without a v2
 	// twin still fails this test.
 	v2NotPorted := map[string]bool{
-		"GET /api/v1/health":                       true,
-		"GET /api/v1/events":                       true,
-		"GET /api/v1/invocations":                  true,
-		"GET /api/v1/search":                       true,
-		"GET /api/v1/compare":                      true,
-		"GET /api/v1/labels":                       true,
-		"POST /api/v1/labels":                      true,
-		"GET /api/v1/resolve":                      true,
-		"GET /api/v1/alerts":                       true,
-		"GET /api/v1/dlq":                          true,
-		"POST /api/v1/dlq/{id}/requeue":            true,
-		"GET /api/v1/contracts/{id}/summary":       true,
-		"GET /api/v1/contracts/{id}/snapshot.json": true,
-		"GET /api/v1/stream/events":                true,
+		"GET /api/v1/health":                               true,
+		"GET /api/v1/events":                               true,
+		"GET /api/v1/invocations":                          true,
+		"GET /api/v1/contracts/{id}/invocations/{tx_hash}": true,
+		"GET /api/v1/search":                               true,
+		"GET /api/v1/compare":                              true,
+		"GET /api/v1/labels":                               true,
+		"POST /api/v1/labels":                              true,
+		"GET /api/v1/resolve":                              true,
+		"GET /api/v1/alerts":                               true,
+		"GET /api/v1/dlq":                                  true,
+		"POST /api/v1/dlq/{id}/requeue":                    true,
+		"GET /api/v1/contracts/{id}/summary":               true,
+		"GET /api/v1/contracts/{id}/snapshot.json":         true,
+		"GET /api/v1/stream/events":                        true,
 		// WebSocket stream (issue #126): no v2 twin yet.
 		"GET /api/v1/subscribe":              true,
 		"GET /api/v1/watchdog/subscriptions": true,
@@ -337,6 +338,9 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		"POST /api/v1/groups/{id}/contracts":                true,
 		"DELETE /api/v1/groups/{id}/contracts":              true,
 		"DELETE /api/v1/groups/{id}/contracts/{contractId}": true,
+		// Workspace sessions (issue #518): the session mint endpoint has no v2
+		// envelope; v2 clients use the same bearer token returned by v1.
+		"POST /api/v1/auth/session": true,
 		// Watched accounts (issue #123): contract-discovery administration
 		// with no v2 envelope yet.
 		"POST /api/v1/watched-accounts":        true,
