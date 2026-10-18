@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -15,15 +16,32 @@ import (
 // the postgres backend and the in-memory MockStore.
 type FullStore interface {
 	Store
+	ContractBulkStore
 	QueryStore
+	LiveStore
+	ArchiveStore
 	WatchdogStore
 	ContractUpgradeStore
+	ContractSpecStore
+	ContractTagStore
+	ContractNoteStore
 	HealthScoreStore
 	APIKeyStore
+	ReportSubscriptionStore
 	AlertSubscriptionStore
+	AlertGroupStore
 	WatchlistStore
 	UserStore
 	PerformanceStore
+	GroupStore
+	ContractWasmStore
+	GlobalEventStore
+	ContractVerificationStore
+	LabelStore
+	FailedEventStore
+	AlertRuleStore
+	WatchedAccountStore
+	AuditStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
@@ -35,17 +53,30 @@ func NewFullStore(pool *pgxpool.Pool) FullStore {
 type EventFilters struct {
 	Type    string
 	Network string
-	From    uint32
-	To      uint32
+	// Topic matches events whose decoded topic list contains the given value
+	// (JSONB containment). See topicFilterJSON for the accepted encodings.
+	Topic            string
+	From             uint32
+	To               uint32
+	InSuccessfulCall *bool
 }
 
 // InvocationFilters holds optional query filters for listing invocations.
 type InvocationFilters struct {
+	// ContractID restricts a cross-contract listing to one contract. The
+	// per-contract listing passes the id as a separate argument and leaves
+	// this empty.
+	ContractID   string
 	Status       string
 	FunctionName string
 	Network      string
 	From         uint32
 	To           uint32
+	// Since and Until are inclusive bounds on ledger_closed_at. The
+	// per-contract listing ignores them; the global listing uses them for its
+	// date-range filter.
+	Since *time.Time
+	Until *time.Time
 }
 
 // StorageFilters holds optional query filters for listing storage entries.
@@ -91,9 +122,33 @@ type DailyAggregate struct {
 type QueryStore interface {
 	ListEvents(ctx context.Context, contractID, cursor string, limit int, f EventFilters) ([]Event, string, error)
 	ListInvocations(ctx context.Context, contractID, cursor string, limit int, f InvocationFilters) ([]Invocation, string, error)
+
+	// GetInvocation returns the single invocation row identified by its tx
+	// hash (the table's primary key), or ErrNotFound. It is the root row of a
+	// transaction's call graph.
+	GetInvocation(ctx context.Context, txHash string) (Invocation, error)
+	// GetCallEdges returns every cross-contract call edge recorded for a
+	// transaction, parent before child (which is the order of the
+	// deterministic span ids).
+	GetCallEdges(ctx context.Context, txHash string) ([]CallEdge, error)
+	// ListAllInvocations lists invocations across every tracked contract,
+	// newest first (ledger DESC, tx_hash DESC). cursorLedger/cursorTxHash carry
+	// the keyset position from a previous page; a zero ledger starts at the
+	// newest row. It returns the next page's cursor components, which are zero
+	// and empty when the page returned is the last one.
+	ListAllInvocations(ctx context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error)
 	ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error)
 	GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error)
 	RecentEvents(ctx context.Context, contractID string, limit int) ([]Event, error)
+	// RecentInvocations returns the most recent invocations for a contract,
+	// newest first, capped at limit. Like RecentEvents it backs single-call
+	// "latest invocation" lookups (e.g. the dashboard summary) without walking
+	// the ascending paginated list.
+	RecentInvocations(ctx context.Context, contractID string, limit int) ([]Invocation, error)
+
+	// StreamEventsCSV streams contract events as CSV without buffering all rows.
+	// The caller is responsible for setting appropriate HTTP headers.
+	StreamEventsCSV(ctx context.Context, contractID string, f EventFilters, w io.Writer) error
 
 	// ContractFirstLedger returns the earliest ledger for which the contract
 	// has indexed data (events or invocations). It returns 0 when nothing has
@@ -125,6 +180,22 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
+	// The topic filter is appended only when set so the planner always sees a
+	// plain `topic_decoded @> $n::jsonb` predicate and can use the GIN index
+	// added in migration 000009. Wrapping it in a `($n = '' OR ...)` guard
+	// like the other filters would hide the containment operator behind a
+	// disjunction and force a sequential scan.
+	args := []any{contractID, cursor, f.Network, f.Type, f.From, f.To, limit + 1}
+	dynamicClauses := ""
+	if f.Topic != "" {
+		args = append(args, topicFilterJSON(f.Topic))
+		dynamicClauses += fmt.Sprintf("  AND topic_decoded @> $%d::jsonb\n", len(args))
+	}
+	if f.InSuccessfulCall != nil {
+		args = append(args, *f.InSuccessfulCall)
+		dynamicClauses += fmt.Sprintf("  AND in_successful_call = $%d\n", len(args))
+	}
+
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
@@ -136,9 +207,9 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 		  AND ($4 = '' OR type = $4)
 		  AND ($5 = 0   OR ledger >= $5)
 		  AND ($6 = 0   OR ledger <= $6)
-		ORDER BY ledger ASC, id ASC
+`+dynamicClauses+`		ORDER BY ledger ASC, id ASC
 		LIMIT $7`,
-		contractID, cursor, f.Network, f.Type, f.From, f.To, limit+1,
+		args...,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("list events: %w", err)
@@ -171,6 +242,79 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+// topicFilterJSON encodes a ?topic= value as a JSONB array for the containment
+// operator used by ListEvents (`topic_decoded @> $n::jsonb`).
+//
+// The value is treated as JSON when it parses, so `123` matches the number 123
+// and `"transfer"` matches the string "transfer". Anything that is not valid
+// JSON is treated as a bare string, so `transfer` also matches "transfer".
+// Decoded topics are stored as a JSON array, hence the array wrapper.
+func topicFilterValue(topic string) any {
+	var v any
+	if err := json.Unmarshal([]byte(topic), &v); err != nil {
+		return topic
+	}
+	return v
+}
+
+func topicFilterJSON(topic string) string {
+	b, err := json.Marshal([]any{topicFilterValue(topic)})
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+func (s *postgresStore) StreamEventsCSV(ctx context.Context, contractID string, f EventFilters, w io.Writer) (err error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+		       topic_xdr, value_xdr, topic_decoded, value_decoded,
+		       in_successful_call, inserted_at
+		FROM events
+		WHERE contract_id = $1
+		  AND ($2 = '' OR network = $2)
+		  AND ($3 = '' OR type = $3)
+		  AND ($4 = 0   OR ledger >= $4)
+		  AND ($5 = 0   OR ledger <= $5)
+		ORDER BY ledger ASC, id ASC`,
+		contractID, f.Network, f.Type, f.From, f.To,
+	)
+	if err != nil {
+		return fmt.Errorf("stream events csv: %w", err)
+	}
+	defer rows.Close()
+
+	csvWriter, err := newEventsCSVWriter(w)
+	if err != nil {
+		return fmt.Errorf("stream events csv: %w", err)
+	}
+	defer flushEventsCSV(csvWriter, &err)
+
+	// The JSON columns are passed through as stored: re-encoding them here
+	// would reorder object keys and could disagree with the stored text.
+	var row []string
+	for rows.Next() {
+		var e Event
+		var topicXDR, topicDec, valDec []byte
+		if err := rows.Scan(
+			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
+			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
+			&e.InSuccessfulCall, &e.InsertedAt,
+		); err != nil {
+			return err
+		}
+		row = eventCSVRecord(e, string(topicXDR), string(topicDec), string(valDec))
+		if err := csvWriter.Write(row); err != nil {
+			return err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	// flushEventsCSV reports any buffered or flush-time write failure.
+	return nil
 }
 
 // ---- RecentEvents -----------------------------------------------------------
@@ -213,7 +357,57 @@ func (s *postgresStore) RecentEvents(ctx context.Context, contractID string, lim
 	return out, rows.Err()
 }
 
-// ---- ListInvocations --------------------------------------------------------
+// ---- RecentInvocations ------------------------------------------------------
+
+// RecentInvocations returns the newest invocations for one contract, ordered
+// by ledger and tx hash descending. It mirrors RecentEvents and is the
+// single-row lookup the dashboard summary uses for "latest invocation".
+func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string, limit int) ([]Invocation, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
+		       COALESCE(function_name, ''),
+		       COALESCE(args_decoded, '{}'::jsonb),
+		       COALESCE(result_decoded, 'null'::jsonb),
+		       COALESCE(result_xdr, ''),
+		       COALESCE(resource_fee_charged, 0),
+		       COALESCE(cpu_insn, 0),
+		       COALESCE(mem_byte, 0),
+		       COALESCE(ledger_read_byte, 0),
+		       COALESCE(ledger_write_byte, 0),
+		       COALESCE(application_order, 0),
+		       inserted_at
+		FROM invocations
+		WHERE contract_id = $1
+		ORDER BY ledger DESC, tx_hash DESC
+		LIMIT $2`,
+		contractID, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("recent invocations: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Invocation
+	for rows.Next() {
+		var inv Invocation
+		var argsDec, resultDec []byte
+		if err := rows.Scan(
+			&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
+			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
+			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
+			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+		); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(argsDec, &inv.ArgsDecoded)
+		_ = json.Unmarshal(resultDec, &inv.ResultDecoded)
+		out = append(out, inv)
+	}
+	return out, rows.Err()
+}
 
 func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor string, limit int, f InvocationFilters) ([]Invocation, string, error) {
 	if limit <= 0 || limit > 200 {
@@ -221,9 +415,17 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
-		       function_name, args_decoded, result_decoded, result_xdr,
-		       resource_fee_charged, cpu_insn, mem_byte,
-		       ledger_read_byte, ledger_write_byte, application_order, inserted_at
+		       COALESCE(function_name, ''),
+		       COALESCE(args_decoded, '{}'::jsonb),
+		       COALESCE(result_decoded, 'null'::jsonb),
+		       COALESCE(result_xdr, ''),
+		       COALESCE(resource_fee_charged, 0),
+		       COALESCE(cpu_insn, 0),
+		       COALESCE(mem_byte, 0),
+		       COALESCE(ledger_read_byte, 0),
+		       COALESCE(ledger_write_byte, 0),
+		       COALESCE(application_order, 0),
+		       inserted_at
 		FROM invocations
 		WHERE contract_id = $1
 		  AND ($2 = '' OR tx_hash > $2)
@@ -267,6 +469,168 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+// ---- GetInvocation ----------------------------------------------------------
+
+func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invocation, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
+		       COALESCE(function_name, ''),
+		       COALESCE(args_decoded, '{}'::jsonb),
+		       COALESCE(result_decoded, 'null'::jsonb),
+		       COALESCE(result_xdr, ''),
+		       COALESCE(resource_fee_charged, 0),
+		       COALESCE(cpu_insn, 0),
+		       COALESCE(mem_byte, 0),
+		       COALESCE(ledger_read_byte, 0),
+		       COALESCE(ledger_write_byte, 0),
+		       COALESCE(application_order, 0),
+		       inserted_at
+		FROM invocations
+		WHERE tx_hash = $1`, txHash)
+
+	var inv Invocation
+	var argsDec, resultDec []byte
+	err := row.Scan(
+		&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
+		&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
+		&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
+		&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Invocation{}, ErrNotFound
+	}
+	if err != nil {
+		return Invocation{}, fmt.Errorf("get invocation: %w", err)
+	}
+	_ = json.Unmarshal(argsDec, &inv.ArgsDecoded)
+	_ = json.Unmarshal(resultDec, &inv.ResultDecoded)
+	return inv, nil
+}
+
+// ---- GetCallEdges -----------------------------------------------------------
+
+// maxCallEdges caps a single trace read. The indexer caps a transaction's tree
+// at 1024 edges, so this bound only ever trips on pathological data.
+const maxCallEdges = 5000
+
+func (s *postgresStore) GetCallEdges(ctx context.Context, txHash string) ([]CallEdge, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT tx_hash, parent_span_id, child_span_id, callee_contract_id, function_name,
+		       cpu, mem, fee_share, depth, network, ledger, ledger_closed_at, inserted_at
+		FROM call_edges
+		WHERE tx_hash = $1
+		ORDER BY child_span_id ASC
+		LIMIT $2`, txHash, maxCallEdges)
+	if err != nil {
+		return nil, fmt.Errorf("get call edges: %w", err)
+	}
+	defer rows.Close()
+
+	var out []CallEdge
+	for rows.Next() {
+		var e CallEdge
+		// callee_contract_id, function_name, ledger and ledger_closed_at are
+		// nullable: a host frame may have no callee contract, and the backfill
+		// path may not know the ledger.
+		var callee, fn *string
+		var ledger *int64
+		var closedAt *time.Time
+		if err := rows.Scan(
+			&e.TxHash, &e.ParentSpanID, &e.ChildSpanID, &callee, &fn,
+			&e.CPU, &e.Mem, &e.FeeShare, &e.Depth, &e.Network, &ledger, &closedAt, &e.InsertedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan call edge: %w", err)
+		}
+		if callee != nil {
+			e.CalleeContractID = *callee
+		}
+		if fn != nil {
+			e.FunctionName = *fn
+		}
+		if ledger != nil {
+			e.Ledger = uint32(*ledger)
+		}
+		if closedAt != nil {
+			e.LedgerClosedAt = *closedAt
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// ---- ListAllInvocations -----------------------------------------------------
+
+// ListAllInvocations pages through invocations for every contract. The keyset
+// cursor is (ledger, tx_hash), which is exactly the ORDER BY tuple, so pages
+// stay stable while the indexer appends newer rows.
+func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
+		       COALESCE(function_name, ''),
+		       COALESCE(args_decoded, '{}'::jsonb),
+		       COALESCE(result_decoded, 'null'::jsonb),
+		       COALESCE(result_xdr, ''),
+		       COALESCE(resource_fee_charged, 0),
+		       COALESCE(cpu_insn, 0),
+		       COALESCE(mem_byte, 0),
+		       COALESCE(ledger_read_byte, 0),
+		       COALESCE(ledger_write_byte, 0),
+		       COALESCE(application_order, 0),
+		       inserted_at
+		FROM invocations
+		WHERE ($1 = '' OR contract_id = $1)
+		  AND ($2 = '' OR network = $2)
+		  AND ($3 = '' OR status = $3)
+		  AND ($4 = '' OR function_name = $4)
+		  AND ($5 = 0   OR ledger >= $5)
+		  AND ($6 = 0   OR ledger <= $6)
+		  AND ($7::timestamptz IS NULL OR ledger_closed_at >= $7)
+		  AND ($8::timestamptz IS NULL OR ledger_closed_at <= $8)
+		  AND ($9 = 0   OR (ledger, tx_hash) < ($9, $10))
+		ORDER BY ledger DESC, tx_hash DESC
+		LIMIT $11`,
+		f.ContractID, f.Network, f.Status, f.FunctionName, f.From, f.To,
+		f.Since, f.Until, cursorLedger, cursorTxHash, limit+1,
+	)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("list all invocations: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Invocation
+	for rows.Next() {
+		var inv Invocation
+		var argsDec, resultDec []byte
+		if err := rows.Scan(
+			&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
+			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
+			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
+			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+		); err != nil {
+			return nil, 0, "", err
+		}
+		_ = json.Unmarshal(argsDec, &inv.ArgsDecoded)
+		_ = json.Unmarshal(resultDec, &inv.ResultDecoded)
+		out = append(out, inv)
+	}
+	if rows.Err() != nil {
+		return nil, 0, "", rows.Err()
+	}
+
+	var nextLedger uint32
+	var nextTxHash string
+	if len(out) > limit {
+		last := out[limit-1]
+		nextLedger = last.Ledger
+		nextTxHash = last.TxHash
+		out = out[:limit]
+	}
+	return out, nextLedger, nextTxHash, nil
 }
 
 // ---- ListStorageEntries -----------------------------------------------------

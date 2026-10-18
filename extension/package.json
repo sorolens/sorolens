@@ -1,0 +1,19 @@
+{
+  "name": "@sorolens/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome/Firefox Manifest V3 extension that adds a \"Track on Sorolens\" button to Stellar explorers.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node --test \"tests/*.test.mjs\"",
+    "build": "node scripts/build.mjs chrome && node scripts/build.mjs firefox",
+    "build:chrome": "node scripts/build.mjs chrome",
+    "build:firefox": "node scripts/build.mjs firefox",
+    "icons": "python3 tools/generate-icons.py"
+  }
+}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 )
 
 // ---- response types ---------------------------------------------------------
@@ -25,12 +26,11 @@ type watchlistStatusResponse struct {
 
 // ---- helpers ----------------------------------------------------------------
 
-// getUserID extracts the user ID from the X-User-ID header.
-// Auth uses secure cookies with SameSite=Lax in production;
-// this header-based approach is used for simplicity in this
-// initial implementation.
+// getUserID returns the identity verified by the Identity middleware: a
+// signed session token, a user-bound API key, or trusted-proxy signed headers.
+// Raw X-User-ID headers are ignored (issue #518).
 func getUserID(r *http.Request) string {
-	return r.Header.Get("X-User-ID")
+	return middleware.VerifiedUserID(r)
 }
 
 // ---- handlers ---------------------------------------------------------------
@@ -40,7 +40,7 @@ func getUserID(r *http.Request) string {
 func (h *Handler) AddToWatchlist(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "authentication required: present a session token or user-bound API key")
 		return
 	}
 
@@ -68,7 +68,7 @@ func (h *Handler) AddToWatchlist(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RemoveFromWatchlist(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "authentication required: present a session token or user-bound API key")
 		return
 	}
 
@@ -85,7 +85,7 @@ func (h *Handler) RemoveFromWatchlist(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListWatchlist(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "authentication required: present a session token or user-bound API key")
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *Handler) ListWatchlist(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WatchlistStatus(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "X-User-ID header is required")
+		writeError(w, r, http.StatusUnauthorized, CodeInvalidInput, "authentication required: present a session token or user-bound API key")
 		return
 	}
 

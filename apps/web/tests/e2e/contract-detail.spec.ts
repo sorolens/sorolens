@@ -11,9 +11,23 @@ test("contract detail renders header, stats and activity sections", async ({
   await expect(page.getByText("Escrow DEX")).toBeVisible();
   await expect(page.getByText("active", { exact: true })).toBeVisible();
 
+  // Stat cards read the documented stats payload (issue #586).
+  await expect(page.getByText("5,041")).toBeVisible();
+  await expect(page.getByText("390", { exact: true })).toBeVisible();
+  await expect(page.getByText("Storage Entries")).toBeVisible();
+  await expect(page.getByText("128", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Last Synced Ledger", { exact: true })
+  ).toBeVisible();
+  await expect(page.getByText("120,400", { exact: true })).toBeVisible();
+  await expect(page.getByText("1,200 in 7d")).toBeVisible();
+
   await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
   await expect(page.getByText("Event Volume")).toBeVisible();
   await expect(page.getByText("Invocations").first()).toBeVisible();
+
+  // Both charts are derived from paged events/invocations and rendered.
+  await expect(page.locator(".recharts-wrapper")).toHaveCount(2);
 });
 
 test("contract detail renders Events and Storage TTL sections", async ({
@@ -47,4 +61,21 @@ test("contract detail links back to the contracts list", async ({ page }) => {
     .click();
   await expect(page).toHaveURL(/\/contracts$/);
   await expectHeading(page, "Contracts");
+});
+
+test("contract detail renders the cross-contract call trace", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.goto(`/contracts/${CONTRACT_ID}`);
+
+  await expect(page.getByRole("heading", { name: "Call trace" })).toBeVisible();
+
+  // The newest event's transaction hash is preloaded, so the flame graph
+  // renders without the user typing one.
+  const flame = page.getByTestId("trace-flamegraph");
+  await expect(flame).toBeVisible();
+  await expect(flame.getByText("swap")).toBeVisible();
+  await expect(flame.getByText("transfer")).toBeVisible();
+  await expect(page.getByText("1 cross-contract call")).toBeVisible();
 });

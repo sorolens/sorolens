@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "Sorolens — Track Soroban contracts",
+  "version": "0.1.0",
+  "description": "Adds a \"Track on Sorolens\" button next to Soroban contract IDs on Stellar Expert, Stellar Lab and stellar.org, and tracks them from the popup.",
+  "icons": {
+    "16": "src/icons/icon-16.png",
+    "32": "src/icons/icon-32.png",
+    "48": "src/icons/icon-48.png",
+    "128": "src/icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Sorolens",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "src/icons/icon-16.png",
+      "32": "src/icons/icon-32.png",
+      "48": "src/icons/icon-48.png"
+    }
+  },
+  "background": {
+    "scripts": ["src/background/service-worker.js"],
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["storage", "contextMenus"],
+  "host_permissions": [
+    "https://api.sorolens.xyz/*",
+    "https://stellar.expert/*",
+    "https://lab.stellar.org/*",
+    "https://stellar.org/*"
+  ],
+  "optional_host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://stellar.expert/*",
+        "https://lab.stellar.org/*",
+        "https://stellar.org/*"
+      ],
+      "js": ["src/content/loader.js"],
+      "css": ["src/content/content.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/content/*.js", "src/shared/*.js"],
+      "matches": [
+        "https://stellar.expert/*",
+        "https://lab.stellar.org/*",
+        "https://stellar.org/*"
+      ]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "extension@sorolens.xyz",
+      "strict_min_version": "121.0"
+    }
+  }
+}

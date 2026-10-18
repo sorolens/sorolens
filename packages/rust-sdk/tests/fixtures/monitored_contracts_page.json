@@ -1,0 +1,16 @@
+{
+  "contracts": [
+    {
+      "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      "network": "testnet",
+      "name": "fixture-counter",
+      "owner": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      "status": "healthy",
+      "last_check": "2026-01-15T11:05:00Z",
+      "check_interval": 300,
+      "registered_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-15T11:05:00Z"
+    }
+  ],
+  "next_cursor": ""
+}

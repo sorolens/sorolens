@@ -12,6 +12,16 @@ type Contract struct {
 	BackfillCompleteAt *time.Time `json:"backfill_complete_at"`
 	Status             string     `json:"status"`
 	AddedAt            time.Time  `json:"added_at"`
+	// TrackingPreset is the preset type applied when the contract was tracked
+	// (e.g. "dex", "lending", "stablecoin"). Empty when no preset was selected.
+	TrackingPreset string `json:"tracking_preset,omitempty"`
+}
+
+// Label mirrors the API label response.
+type Label struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+	Scope string `json:"scope"`
 }
 
 // Event mirrors the API event response.
@@ -93,6 +103,57 @@ type StorageResponse struct {
 	NextCursor string         `json:"next_cursor"`
 }
 
+// ContractsResponse wraps the paginated contracts API response.
+type ContractsResponse struct {
+	Contracts  []Contract `json:"contracts"`
+	NextCursor string     `json:"next_cursor"`
+}
+
+// InvocationsResponse wraps the paginated invocations API response.
+type InvocationsResponse struct {
+	Invocations []Invocation `json:"invocations"`
+	NextCursor  string       `json:"next_cursor"`
+}
+
+// ContractAlert mirrors the watchdog alert response.
+type ContractAlert struct {
+	ContractID string    `json:"contract_id"`
+	Severity   string    `json:"severity"`
+	Message    string    `json:"message"`
+	Ledger     int64     `json:"ledger"`
+	TxHash     string    `json:"tx_hash"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
+// AlertsResponse wraps the watchdog alerts API response.
+type AlertsResponse struct {
+	Alerts []ContractAlert `json:"alerts"`
+}
+
+// MonitoredContract mirrors the API watchdog monitored-contract response.
+type MonitoredContract struct {
+	ContractID    string     `json:"contract_id"`
+	Network       string     `json:"network"`
+	Name          string     `json:"name"`
+	Owner         string     `json:"owner"`
+	Status        string     `json:"status"`
+	LastCheck     *time.Time `json:"last_check"`
+	CheckInterval int64      `json:"check_interval"`
+	RegisteredAt  time.Time  `json:"registered_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// StreamMessage mirrors a single server-sent event emitted by the
+// /api/v1/stream/events endpoint. Type is one of "connected", "event" or
+// "alert"; exactly one of Event or Alert is populated for those cases.
+type StreamMessage struct {
+	Type       string `json:"type"`
+	ContractID string `json:"contract_id,omitempty"`
+	Event      *Event `json:"event,omitempty"`
+	Alert      any    `json:"alert,omitempty"`
+	Message    string `json:"message,omitempty"`
+}
+
 // SorolensError carries the error envelope returned by the API on non-2xx responses.
 type SorolensError struct {
 	Code      string
@@ -103,4 +164,50 @@ type SorolensError struct {
 
 func (e *SorolensError) Error() string {
 	return e.Message
+}
+
+// ContractReport mirrors the API report response for a contract's monthly SLA.
+type ContractReport struct {
+	ContractID           string     `json:"contract_id"`
+	Month                string     `json:"month"`
+	UptimePct            float64    `json:"uptime_pct"`
+	TotalChecks          int64      `json:"total_checks"`
+	HealthyChecks        int64      `json:"healthy_checks"`
+	Incidents            int64      `json:"incidents"`
+	MTTRSeconds          float64    `json:"mttr_seconds"`
+	TotalDowntimeSeconds float64    `json:"total_downtime_seconds"`
+	LongestOutageSeconds float64    `json:"longest_outage_seconds"`
+	OngoingOutage        bool       `json:"ongoing_outage"`
+	CriticalAlerts       int64      `json:"critical_alerts"`
+	WarningAlerts        int64      `json:"warning_alerts"`
+	InfoAlerts           int64      `json:"info_alerts"`
+	TotalAlerts          int64      `json:"total_alerts"`
+	FirstCheck           *time.Time `json:"first_check"`
+	LastCheck            *time.Time `json:"last_check"`
+	Signed               bool       `json:"signed"`
+	Signature            string     `json:"signature,omitempty"`
+	SignatureAlgorithm   string     `json:"signature_algorithm,omitempty"`
+	SamplingNote         string     `json:"sampling_note,omitempty"`
+}
+
+// ContractSnapshot mirrors the API contract storage snapshot at a historical ledger.
+type ContractSnapshot struct {
+	ContractID         string         `json:"contract_id"`
+	Network            string         `json:"network"`
+	Ledger             uint32         `json:"ledger"`
+	FirstTrackedLedger uint32         `json:"first_tracked_ledger"`
+	Storage            []StorageEntry `json:"storage"`
+	LastEvent          *Event         `json:"last_event"`
+}
+
+// ContractSnapshotExport mirrors the portable contract snapshot export document.
+type ContractSnapshotExport struct {
+	SchemaVersion int            `json:"schema_version"`
+	ContractID    string         `json:"contract_id"`
+	Network       string         `json:"network"`
+	Ledger        uint32         `json:"ledger"`
+	Metadata      Contract       `json:"metadata"`
+	Storage       []StorageEntry `json:"storage"`
+	Events        []Event        `json:"events"`
+	Summary       any            `json:"summary"`
 }

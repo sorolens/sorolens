@@ -65,11 +65,11 @@ type pagination struct {
 type RPCEvent struct {
 	Type string `json:"type"`
 	// Ledger is the sequence number of the ledger that closed this event.
-	Ledger          uint32 `json:"ledger"`
-	LedgerClosedAt  string `json:"ledgerClosedAt"`
-	ContractID      string `json:"contractId"`
-	ID              string `json:"id"`
-	PagingToken     string `json:"pagingToken"`
+	Ledger         uint32 `json:"ledger"`
+	LedgerClosedAt string `json:"ledgerClosedAt"`
+	ContractID     string `json:"contractId"`
+	ID             string `json:"id"`
+	PagingToken    string `json:"pagingToken"`
 	// InSuccessfulContractCall is deprecated in recent protocol versions;
 	// failed-invocation events are excluded at the protocol level.
 	InSuccessfulContractCall bool     `json:"inSuccessfulContractCall"`
@@ -82,9 +82,9 @@ type RPCEvent struct {
 
 // GetEventsResult is the result of getEvents.
 type GetEventsResult struct {
-	Events        []RPCEvent `json:"events"`
-	LatestLedger  uint32     `json:"latestLedger"`
-	Cursor        string     `json:"cursor"`
+	Events       []RPCEvent `json:"events"`
+	LatestLedger uint32     `json:"latestLedger"`
+	Cursor       string     `json:"cursor"`
 }
 
 // ---- getLedgerEntries -----------------------------------------------------
@@ -125,7 +125,7 @@ type TransactionResult struct {
 	ResultMetaXDR    string `json:"resultMetaXdr"`
 	// DiagnosticEventsXDR is only populated when the RPC node has
 	// ENABLE_SOROBAN_DIAGNOSTIC_EVENTS=true. Most public nodes do not.
-	DiagnosticEventsXDR []string          `json:"diagnosticEventsXdr"`
+	DiagnosticEventsXDR []string           `json:"diagnosticEventsXdr"`
 	Events              *TransactionEvents `json:"events"`
 }
 
@@ -133,6 +133,40 @@ type TransactionResult struct {
 type TransactionEvents struct {
 	TransactionEventsXDR []string   `json:"transactionEventsXdr"`
 	ContractEventsXDR    [][]string `json:"contractEventsXdr"`
+}
+
+// ---- getTransactions ------------------------------------------------------
+
+// getTransactionsParams is the request for getTransactions. StartLedger and
+// a pagination cursor are mutually exclusive.
+type getTransactionsParams struct {
+	StartLedger uint32      `json:"startLedger,omitempty"`
+	Pagination  *pagination `json:"pagination,omitempty"`
+}
+
+// LedgerTransaction is one transaction in a getTransactions page.
+type LedgerTransaction struct {
+	// Status is "SUCCESS" or "FAILED".
+	Status           string `json:"status"`
+	TxHash           string `json:"txHash"`
+	ApplicationOrder int    `json:"applicationOrder"`
+	FeeBump          bool   `json:"feeBump"`
+	EnvelopeXDR      string `json:"envelopeXdr"`
+	ResultXDR        string `json:"resultXdr"`
+	ResultMetaXDR    string `json:"resultMetaXdr"`
+	Ledger           uint32 `json:"ledger"`
+	CreatedAt        int64  `json:"createdAt"`
+}
+
+// GetTransactionsResult is the result of getTransactions.
+type GetTransactionsResult struct {
+	Transactions          []LedgerTransaction `json:"transactions"`
+	LatestLedger          uint32              `json:"latestLedger"`
+	LatestLedgerCloseTime int64               `json:"latestLedgerCloseTimestamp"`
+	OldestLedger          uint32              `json:"oldestLedger"`
+	OldestLedgerCloseTime int64               `json:"oldestLedgerCloseTimestamp"`
+	// Cursor continues pagination after the last returned transaction.
+	Cursor string `json:"cursor"`
 }
 
 // ---- getNetwork -----------------------------------------------------------

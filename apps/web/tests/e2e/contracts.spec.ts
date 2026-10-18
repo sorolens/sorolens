@@ -1,14 +1,16 @@
 import { test, expect } from "@playwright/test";
 import { blockApi, CONTRACT_ID, expectHeading, mockApi } from "./helpers";
 
-test("/contracts shows the empty state when the API is unavailable", async ({
+test("/contracts shows an error with a retry when the API is unavailable", async ({
   page,
 }) => {
   await blockApi(page);
   await page.goto("/contracts");
 
   await expectHeading(page, "Contracts");
-  await expect(page.getByText("No contracts tracked yet")).toBeVisible();
+  await expect(page.getByText("Couldn't load contracts.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(page.getByText("No contracts tracked yet")).toBeHidden();
 });
 
 test("/contracts renders tracked contracts from the mocked API", async ({
@@ -19,7 +21,9 @@ test("/contracts renders tracked contracts from the mocked API", async ({
 
   await expectHeading(page, "Contracts");
   const table = page.getByRole("table");
-  await expect(table.getByText("Escrow DEX")).toBeVisible();
+  // The label appears both in the Label column and in the ID cell's
+  // LabelledId, so match the Label column exactly.
+  await expect(table.getByText("Escrow DEX", { exact: true })).toBeVisible();
   await expect(table.getByText("testnet", { exact: true })).toBeVisible();
   await expect(table.getByText("active", { exact: true })).toBeVisible();
   // The contract ID is rendered truncated (mono id), so locate by substring.
@@ -39,5 +43,5 @@ test("/contracts search filters the client-side list", async ({ page }) => {
   await expect(page.getByText("No contracts match your search")).toBeVisible();
 
   await search.fill("Escrow");
-  await expect(table.getByText("Escrow DEX")).toBeVisible();
+  await expect(table.getByText("Escrow DEX", { exact: true })).toBeVisible();
 });

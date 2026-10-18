@@ -182,6 +182,10 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
+vi.mock("@/lib/useSession", () => ({
+  useSessionUserId: () => "user_1",
+}));
+
 // ── Mock @/components/Skeleton ───────────────────────────────────────────────
 vi.mock("@/components/Skeleton", () => ({
   TableSkeleton: ({ rows }: { rows?: number }) => (
@@ -717,5 +721,45 @@ describe("ContractsPage", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  // ── Failed requests ────────────────────────────────────────────────────────
+
+  it("NEGATIVE: shows an error, not the empty state, when the API fails", async () => {
+    mockListContracts.mockRejectedValue(new Error("API down"));
+    await renderPage();
+
+    expect(
+      await screen.findByText("Couldn't load contracts.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("API down")).toBeInTheDocument();
+    expect(screen.queryByText("No contracts tracked yet")).toBeNull();
+    expect(screen.queryByTestId("data-table")).toBeNull();
+  });
+
+  it("retries the request and renders the list once the API recovers", async () => {
+    mockListContracts.mockRejectedValueOnce(new Error("API down"));
+    await renderPage();
+
+    await screen.findByText("Couldn't load contracts.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => screen.getByTestId("data-table"));
+    expect(screen.queryByText("Couldn't load contracts.")).toBeNull();
+    expect(mockListContracts).toHaveBeenCalledTimes(2);
+  });
+
+  it("still shows the empty state when the request succeeds with no contracts", async () => {
+    mockListContracts.mockResolvedValue({
+      contracts: [],
+      cursor: null,
+      has_more: false,
+    });
+    await renderPage();
+
+    expect(
+      await screen.findByText("No contracts tracked yet")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load contracts.")).toBeNull();
   });
 });

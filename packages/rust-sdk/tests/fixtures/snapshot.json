@@ -1,0 +1,33 @@
+{
+  "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+  "network": "testnet",
+  "ledger": 1234600,
+  "first_tracked_ledger": 1234000,
+  "storage": [
+    {
+      "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      "network": "testnet",
+      "key_xdr": "AAAABg==",
+      "value_xdr": "AAAABw==",
+      "durability": "instance",
+      "live_until_ledger": 2000000,
+      "last_modified_ledger": 1234580,
+      "status": "archived",
+      "last_seen_at": "2026-01-15T10:59:00Z"
+    }
+  ],
+  "last_event": {
+    "id": "evt_01HQZ8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8",
+    "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+    "network": "testnet",
+    "ledger": 1234590,
+    "ledger_closed_at": "2026-01-15T10:59:30Z",
+    "tx_hash": "9c1f4e7b0d3c6a9f2e5b8d1c4a7f0e3b6d9c2a5f8e1b4d7c0a3f6e9b2d5c8a1f",
+    "type": "diagnostic",
+    "topic_xdr": [],
+    "value_xdr": "AAAAAg==",
+    "topic_decoded": [],
+    "value_decoded": null,
+    "in_successful_call": false
+  }
+}

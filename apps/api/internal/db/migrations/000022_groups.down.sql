@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS group_contracts;
+DROP TABLE IF EXISTS groups;

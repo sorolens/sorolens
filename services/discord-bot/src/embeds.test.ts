@@ -47,7 +47,9 @@ describe("contractTitle / shortId", () => {
   });
 
   it("falls back to a shortened id", () => {
-    expect(contractTitle({ id: CONTRACT, label: null })).toBe(shortId(CONTRACT));
+    expect(contractTitle({ id: CONTRACT, label: null })).toBe(
+      shortId(CONTRACT)
+    );
   });
 
   it("does not shorten short values", () => {
@@ -63,12 +65,19 @@ describe("statusEmbed", () => {
     const fields = json.fields ?? [];
     expect(fields.find((f) => f.name === "Status")?.value).toBe("`active`");
     expect(fields.find((f) => f.name === "Network")?.value).toBe("testnet");
-    expect(fields.find((f) => f.name === "Contract")?.value).toBe(`\`${CONTRACT}\``);
+    expect(fields.find((f) => f.name === "Contract")?.value).toBe(
+      `\`${CONTRACT}\``
+    );
     expect(fields.find((f) => f.name === "Wasm hash")).toBeDefined();
   });
 
   it("degrades gracefully for an unknown status, and omits wasm when absent", () => {
-    const json = statusEmbed({ ...status, status: "", wasmHash: null, label: null }).toJSON();
+    const json = statusEmbed({
+      ...status,
+      status: "",
+      wasmHash: null,
+      label: null,
+    }).toJSON();
     expect(json.color).toBe(BRAND_COLOR);
     const fields = json.fields ?? [];
     expect(fields.find((f) => f.name === "Status")?.value).toBe("`unknown`");
@@ -117,7 +126,9 @@ describe("watchlistEmbed", () => {
     expect(json.color).toBe(0x22c55e);
     const fields = json.fields ?? [];
     expect(fields.find((f) => f.name === "In watchlist")?.value).toBe("yes");
-    expect(fields.find((f) => f.name === "Watching")?.value).toBe("3 contracts");
+    expect(fields.find((f) => f.name === "Watching")?.value).toBe(
+      "3 contracts"
+    );
   });
 
   it("confirms a removal without a count", () => {

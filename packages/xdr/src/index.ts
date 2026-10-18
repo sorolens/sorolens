@@ -140,71 +140,71 @@ function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
     case 12: // SCV_I256
       return readI256(bytes, off);
 
-    case 13: // SCV_BYTES
-      {
-        const [data, newOff] = readBytes(bytes, off);
-        return ["0x" + bytesToHex(data), newOff];
-      }
+    case 13: {
+      // SCV_BYTES
+      const [data, newOff] = readBytes(bytes, off);
+      return ["0x" + bytesToHex(data), newOff];
+    }
 
     case 14: // SCV_STRING
     case 15: // SCV_SYMBOL
       return readString(bytes, off);
 
     case 16: // SCV_VEC
-    case 17: // SCV_MAP
-      {
-        const [len, off1] = readU32(bytes, off);
-        if (discriminant === 16) {
-          // Vec
-          const vec: unknown[] = [];
-          let currentOff = off1;
-          for (let i = 0; i < len; i++) {
-            const [val, newOff] = readScVal(bytes, currentOff);
-            vec.push(val);
-            currentOff = newOff;
-          }
-          return [vec, currentOff];
-        } else {
-          // Map
-          const map: Record<string, unknown> = {};
-          let currentOff = off1;
-          for (let i = 0; i < len; i++) {
-            const [key, offKey] = readScVal(bytes, currentOff);
-            const [val, offVal] = readScVal(bytes, offKey);
-            map[String(key)] = val;
-            currentOff = offVal;
-          }
-          return [map, currentOff];
+    case 17: {
+      // SCV_MAP
+      const [len, off1] = readU32(bytes, off);
+      if (discriminant === 16) {
+        // Vec
+        const vec: unknown[] = [];
+        let currentOff = off1;
+        for (let i = 0; i < len; i++) {
+          const [val, newOff] = readScVal(bytes, currentOff);
+          vec.push(val);
+          currentOff = newOff;
         }
-      }
-
-    case 18: // SCV_ADDRESS
-      {
-        // XDR union SCAddress: 4-byte ScAddressType discriminant + 32-byte payload.
-        const [addrType, typeOff] = readI32(bytes, off);
-        const addrBytes = bytes.slice(typeOff, typeOff + 32);
-        if (addrType === 0) {
-          // ScAddressType::SC_ADDRESS_TYPE_ACCOUNT - G... address
-          return ["<account:" + bytesToHex(addrBytes) + ">", typeOff + 32];
+        return [vec, currentOff];
+      } else {
+        // Map
+        const map: Record<string, unknown> = {};
+        let currentOff = off1;
+        for (let i = 0; i < len; i++) {
+          const [key, offKey] = readScVal(bytes, currentOff);
+          const [val, offVal] = readScVal(bytes, offKey);
+          map[String(key)] = val;
+          currentOff = offVal;
         }
-        // ScAddressType::SC_ADDRESS_TYPE_CONTRACT - C... address
-        return ["<contract:" + bytesToHex(addrBytes) + ">", typeOff + 32];
+        return [map, currentOff];
       }
+    }
 
-    case 19: // SCV_CONTRACT_INSTANCE
-      {
-        // Skip contract instance for now
-        return ["<contract_instance>", bytes.length];
+    case 18: {
+      // SCV_ADDRESS
+      // XDR union SCAddress: 4-byte ScAddressType discriminant + 32-byte payload.
+      const [addrType, typeOff] = readI32(bytes, off);
+      const addrBytes = bytes.slice(typeOff, typeOff + 32);
+      if (addrType === 0) {
+        // ScAddressType::SC_ADDRESS_TYPE_ACCOUNT - G... address
+        return ["<account:" + bytesToHex(addrBytes) + ">", typeOff + 32];
       }
+      // ScAddressType::SC_ADDRESS_TYPE_CONTRACT - C... address
+      return ["<contract:" + bytesToHex(addrBytes) + ">", typeOff + 32];
+    }
+
+    case 19: {
+      // SCV_CONTRACT_INSTANCE
+      // Skip contract instance for now
+      return ["<contract_instance>", bytes.length];
+    }
 
     case 20: // SCV_LEDGER_KEY_CONTRACT_INSTANCE
       return ["<ledger_key_instance>", bytes.length];
 
-    case 21: // SCV_LEDGER_KEY_NONCE
-      {
-        const [val, newOff] = readI64(bytes, off);
-        return [val, newOff];
-      }
+    case 21: {
+      // SCV_LEDGER_KEY_NONCE
+      const [val, newOff] = readI64(bytes, off);
+      return [val, newOff];
+    }
 
     default:
       return [`<unknown_type:${discriminant}>`, bytes.length];

@@ -1,0 +1,30 @@
+{
+  "name": "Sorolens — Indexed Observability for Soroban",
+  "short_name": "Sorolens",
+  "description": "Indexed observability for Soroban smart contracts — events, invocations, storage, and anomaly detection on Stellar.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#11111b",
+  "theme_color": "#06b6d4",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

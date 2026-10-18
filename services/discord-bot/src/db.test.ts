@@ -2,7 +2,16 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { rmSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openDb, upsertLink, unlink, getByDiscord, getByGithub, setApiKey, getApiKey, clearApiKey } from "./db.js";
+import {
+  openDb,
+  upsertLink,
+  unlink,
+  getByDiscord,
+  getByGithub,
+  setApiKey,
+  getApiKey,
+  clearApiKey,
+} from "./db.js";
 
 describe("db mapping store", () => {
   let dir: string;

@@ -21,9 +21,11 @@ type apiKeyResponse struct {
 	Name       string     `json:"name"`
 	KeyPrefix  string     `json:"key_prefix"`
 	Scopes     []string   `json:"scopes"`
+	UserID     *string    `json:"user_id"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastUsedAt *time.Time `json:"last_used_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
+	RotatedAt  *time.Time `json:"rotated_at"`
 }
 
 // createAPIKeyResponse includes the plaintext token exactly once, at creation.
@@ -35,6 +37,10 @@ type createAPIKeyResponse struct {
 type createAPIKeyRequest struct {
 	Name   string   `json:"name"`
 	Scopes []string `json:"scopes"`
+	// UserID optionally binds the key to an existing user (issue #518).
+	// A bound key carries that user's identity; an unbound key only
+	// authenticates scopes.
+	UserID *string `json:"user_id,omitempty"`
 }
 
 func apiKeyFromStore(k store.APIKey) apiKeyResponse {
@@ -47,9 +53,11 @@ func apiKeyFromStore(k store.APIKey) apiKeyResponse {
 		Name:       k.Name,
 		KeyPrefix:  k.KeyPrefix,
 		Scopes:     scopes,
+		UserID:     k.UserID,
 		CreatedAt:  k.CreatedAt,
 		LastUsedAt: k.LastUsedAt,
 		RevokedAt:  k.RevokedAt,
+		RotatedAt:  k.RotatedAt,
 	}
 }
 
@@ -83,6 +91,19 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var boundUser *string
+	if req.UserID != nil {
+		userID := strings.TrimSpace(*req.UserID)
+		if userID != "" {
+			if _, err := h.Store.GetUserByID(r.Context(), userID); err != nil {
+				writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput,
+					"user_id does not match an existing user")
+				return
+			}
+			boundUser = &userID
+		}
+	}
+
 	token, err := newAPIToken()
 	if err != nil {
 		h.Logger.Error("generate api key", "err", err)
@@ -96,6 +117,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		KeyHash:   store.HashKey(token),
 		Scopes:    req.Scopes,
 		CreatedAt: time.Now().UTC(),
+		UserID:    boundUser,
 	}
 	if err := h.Store.CreateAPIKey(r.Context(), key); err != nil {
 		if errors.Is(err, store.ErrInvalidScope) {
@@ -150,6 +172,63 @@ func (h *Handler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetAPIKey handles GET /api/v1/api-keys/{id}. Key material is never returned,
+// but metadata including rotated_at is, so callers can confirm a rotation.
+func (h *Handler) GetAPIKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	key, err := h.Store.GetAPIKey(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "API key not found")
+		return
+	}
+	if err != nil {
+		h.Logger.Error("get api key", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch API key")
+		return
+	}
+	writeJSON(w, http.StatusOK, apiKeyFromStore(key))
+}
+
+// RotateAPIKey handles POST /api/v1/api-keys/{id}/rotate.
+//
+// It regenerates the key's secret in place: a fresh plaintext token is
+// returned once, the old secret is invalidated immediately, and the key's id,
+// name, scopes and created_at are left unchanged. rotated_at is stamped so the
+// rotation is observable via GetAPIKey. A revoked key cannot be rotated.
+func (h *Handler) RotateAPIKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	token, err := newAPIToken()
+	if err != nil {
+		h.Logger.Error("generate rotated api key", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to rotate API key")
+		return
+	}
+
+	err = h.Store.RotateAPIKey(r.Context(), id, store.HashKey(token), token[:11])
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "API key not found")
+		return
+	}
+	if err != nil {
+		h.Logger.Error("rotate api key", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to rotate API key")
+		return
+	}
+
+	key, err := h.Store.GetAPIKey(r.Context(), id)
+	if err != nil {
+		h.Logger.Error("load rotated api key", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to rotate API key")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, createAPIKeyResponse{
+		apiKeyResponse: apiKeyFromStore(key),
+		Key:            token,
+	})
 }
 
 // ---- helpers ----------------------------------------------------------------

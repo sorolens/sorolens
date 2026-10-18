@@ -1,10 +1,10 @@
 package router
 
 import (
-	"testing"
+	"context"
 	"net/http"
 	"net/http/httptest"
-	"context"
+	"testing"
 )
 
 func TestOTelMiddleware(t *testing.T) {

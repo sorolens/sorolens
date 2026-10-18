@@ -1,0 +1,20 @@
+{
+  "alerts": [
+    {
+      "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      "severity": "Critical",
+      "message": "storage TTL below 1000 ledgers",
+      "ledger": 1234600,
+      "tx_hash": "9c1f4e7b0d3c6a9f2e5b8d1c4a7f0e3b6d9c2a5f8e1b4d7c0a3f6e9b2d5c8a1f",
+      "timestamp": "2026-01-15T11:05:00Z"
+    },
+    {
+      "contract_id": "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "severity": "Info",
+      "message": "health check recovered",
+      "ledger": 1234590,
+      "tx_hash": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
+      "timestamp": "2026-01-15T10:55:00Z"
+    }
+  ]
+}
