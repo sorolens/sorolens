@@ -1,22 +1,35 @@
 package main
 
 import (
+	"crypto/rand"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/sorolens/sorolens/services/indexer/internal/coordinator"
+	"github.com/sorolens/sorolens/services/indexer/internal/expiryalert"
+	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
+	"github.com/sorolens/sorolens/services/indexer/internal/pgstore"
 	"github.com/sorolens/sorolens/services/indexer/internal/poller"
+	"github.com/sorolens/sorolens/services/indexer/internal/rulesengine"
 	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
+	defer reportPanic()
+
 	tp, _ := poller.InitTracer()
 	if tp != nil {
 		defer tp.Shutdown(context.Background())
@@ -26,13 +39,36 @@ func main() {
 	maxDuration := flag.Duration("max-duration", 270*time.Second, "Maximum duration for a single pass (once mode)")
 	pollInterval := flag.Duration("poll-interval", 5*time.Minute, "Sleep between passes (continuous mode)")
 	ledgerWindow := flag.Uint("ledger-window", 120960, "Ledger window per getEvents call")
+	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics HTTP server (empty disables it)")
+	workers := envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))
+	// Sharded topology (issue #272). The default role preserves the original
+	// single-process behaviour: index every contract in this process.
+	role := flag.String("role", envString("INDEXER_ROLE", "all"), "Role: all, coordinator, or worker")
+	shardCount := flag.Int("shard-count", envInt("INDEXER_SHARD_COUNT", coordinator.DefaultShardCount), "Number of shards contracts are spread across")
+	workerID := flag.String("worker-id", envString("INDEXER_WORKER_ID", ""), "Unique id for this process (required for coordinator and worker roles)")
+	shardStoreKind := flag.String("shard-store", envString("INDEXER_SHARD_STORE", ""), "Shard store backend: memory (single node only)")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
+	// Error reporting is disabled entirely when SENTRY_DSN is unset:
+	// sentry-go falls back to a no-op transport, so reportPanic below still
+	// runs safely but delivers nothing.
+	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:         dsn,
+			Environment: envString("SENTRY_ENVIRONMENT", "production"),
+		}); err != nil {
+			log.Error("sentry init", "err", err)
+		} else {
+			defer sentry.Flush(2 * time.Second)
+		}
+	}
+
 	cfg := poller.Config{
+		Workers:              workers,
 		LedgerWindow:         uint32(*ledgerWindow),
 		PollInterval:         *pollInterval,
 		MaxDuration:          *maxDuration,
@@ -42,26 +78,42 @@ func main() {
 		AnomalyMinHistory:    envInt("INDEXER_ANOMALY_MIN_HISTORY", 12),
 	}
 
-	// Wire up real dependencies.
-	// In production, substitute the real RPC client, store, and Redis client here.
-	// See apps/api/internal/soroban and apps/api/internal/store for implementations.
-	clients := make(map[string]poller.RPCClient)
-	for _, network := range []string{"testnet", "mainnet", "futurenet"} {
-		url := os.Getenv("SOROBAN_RPC_URL_" + strings.ToUpper(network))
-		if url == "" {
-			continue
-		}
-		clients[network] = &stubRPC{endpoint: url}
+	// Soroban RPC: one client per configured network (issue #499).
+	clients, err := buildRPCClients(os.Getenv)
+	if err != nil {
+		log.Error("indexer: RPC configuration", "err", err)
+		os.Exit(1)
 	}
-	if len(clients) == 0 {
-		clients[""] = &stubRPC{}
+	for network, c := range clients {
+		log.Info("indexer: soroban rpc configured", "network", networkLabel(network), "endpoint", c.Endpoint())
 	}
-	st := &stubStore{}
-	redis := &stubRedis{}
+	rpcClients := make(map[string]poller.RPCClient, len(clients))
+	for network, c := range clients {
+		rpcClients[network] = c
+	}
 
-	// Wire watchdog interceptor. The stub store implements no watchdog
+	// Postgres: the same schema the API reads (issue #500). A missing or
+	// unreachable database stops the indexer at startup.
+	st, err := pgstore.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Error("indexer: database unavailable", "err", err)
+		os.Exit(1)
+	}
+	defer st.Close()
+
+	// Redis: the global run lock (issue #501). A missing or unreachable
+	// Redis stops the indexer at startup so two runs never race on the
+	// sync cursor.
+	redis, err := newRedisLock(os.Getenv)
+	if err != nil {
+		log.Error("indexer: redis configuration", "err", err)
+		os.Exit(1)
+	}
+	defer redis.Close()
+
+	// Wire watchdog interceptor. pgstore does not implement the watchdog
 	// surface yet, so wdStore stays nil and the interceptor no-ops; the
-	// any-assertion lights up once the real FullStore is wired here.
+	// any-assertion lights up once the store grows those methods.
 	var storeAny any = st
 	var wdStore watchdogStore
 	if ws, ok := storeAny.(watchdogStore); ok {
@@ -70,8 +122,8 @@ func main() {
 	watchdogEnabled := os.Getenv("WATCHDOG_ENABLED") == "true"
 	watchdogContractID := os.Getenv("WATCHDOG_CONTRACT_ID")
 
-	for k, c := range clients {
-		clients[k] = &watchdogInterceptor{
+	for k, c := range rpcClients {
+		rpcClients[k] = &watchdogInterceptor{
 			RPCClient: c,
 			store:     wdStore,
 			enabled:   watchdogEnabled,
@@ -80,13 +132,57 @@ func main() {
 		}
 	}
 
-	p := poller.NewWithRPCClients(clients, st, redis, cfg, log)
+	p := poller.NewWithRPCClients(rpcClients, st, redis, cfg, log)
+
+	// User-defined alert rules. pgstore does not implement the rule surface
+	// yet, so this stays inert until it does; a store that implements it gets
+	// rule evaluation at the end of every pass.
+	if rs, ok := any(st).(rulesengine.Store); ok {
+		p.SetRuleEvaluator(rulesengine.New(rs, log))
+	}
+
+	// Storage expiry alerting (issue #510): after every pass the indexer scans
+	// the tracked storage entries whose TTL falls within
+	// INDEXER_STORAGE_EXPIRY_THRESHOLD_LEDGERS (default 5000) of the contract's
+	// last indexed ledger and raises one Critical summary per contract whose
+	// near-expiry set changed. Delivery reuses the watchdog notifier, so the
+	// summary lands on the webhook/Slack/Discord/PagerDuty subscriptions the
+	// user registered. Set INDEXER_STORAGE_EXPIRY_ALERT_ENABLED=false to opt out.
+	if expiryalert.Enabled(os.Getenv) {
+		if es, ok := any(st).(expiryalert.Store); ok {
+			ecfg := expiryalert.ConfigFromEnv(os.Getenv)
+			p.SetExpiryAlerter(expiryalert.New(es, newExpiryNotifier(st, log), ecfg, log))
+			log.Info("indexer: storage expiry alerting enabled",
+				"threshold_ledgers", ecfg.ThresholdLedgers,
+				"max_entries", ecfg.MaxEntries,
+			)
+		}
+	}
+
+	// Prometheus metrics (issue #198): the indexer exposes per-network lag on
+	// /metrics. The server is best-effort — a bind failure is logged but does
+	// not stop indexing.
+	recorder := metrics.New()
+	p.SetMetrics(recorder)
+	metricsSrv := startMetricsServer(*metricsAddr, recorder.Handler(), log)
+	defer func() {
+		if metricsSrv == nil {
+			return
+		}
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+			log.Warn("indexer metrics shutdown", "err", err)
+		}
+	}()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	// Start nightly performance job
 	go func() {
+		defer reportPanic()
+
 		type perfStore interface {
 			ComputeAndStoreBaselines(ctx context.Context, snapshotDate time.Time) error
 			CheckAndEmitRegressions(ctx context.Context, snapshotDate time.Time) (int, error)
@@ -114,9 +210,58 @@ func main() {
 		}
 	}()
 
-	log.Info("sorolens/indexer starting", "mode", *mode)
-	if err := p.Run(ctx, *mode); err != nil {
-		log.Error("indexer error", "err", err)
+	switch *role {
+	case "", "all":
+		log.Info("sorolens/indexer starting", "mode", *mode, "role", "all")
+		if err := p.Run(ctx, *mode); err != nil {
+			log.Error("indexer error", "err", err)
+			os.Exit(1)
+		}
+
+	case "coordinator", "worker":
+		shardStore, err := buildShardStore(*shardStoreKind)
+		if err != nil {
+			log.Error("indexer: shard store unavailable", "role", *role, "err", err)
+			os.Exit(1)
+		}
+		if *workerID == "" {
+			log.Error("indexer: --worker-id is required for the coordinator and worker roles")
+			os.Exit(1)
+		}
+
+		shardCfg := coordinator.Config{
+			ShardCount:        *shardCount,
+			WorkerID:          *workerID,
+			HeartbeatInterval: envDuration("INDEXER_HEARTBEAT_INTERVAL", coordinator.DefaultHeartbeatInterval),
+			StaleAfter:        envDuration("INDEXER_WORKER_STALE_AFTER", coordinator.DefaultStaleAfter),
+			RebalanceInterval: envDuration("INDEXER_REBALANCE_INTERVAL", coordinator.DefaultRebalanceInterval),
+		}
+
+		if *role == "coordinator" {
+			log.Info("sorolens/indexer starting", "role", "coordinator", "worker_id", *workerID, "shards", *shardCount)
+			if err := coordinator.New(shardStore, log, shardCfg).Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Error("indexer coordinator error", "err", err)
+				os.Exit(1)
+			}
+		} else {
+			// The poller is wrapped so it only ever sees the contracts this
+			// worker's shards cover; every other store call passes through.
+			scoped := newScopedStore(st)
+			wp := poller.NewWithRPCClients(rpcClients, scoped, redis, cfg, log)
+			wp.SetMetrics(recorder)
+			run := func(passCtx context.Context, contractIDs []string) error {
+				scoped.SetScope(contractIDs)
+				return wp.Run(passCtx, "once")
+			}
+			log.Info("sorolens/indexer starting", "role", "worker", "worker_id", *workerID, "shards", *shardCount)
+			if err := coordinator.NewWorker(shardStore, log, shardCfg).Run(ctx, run); err != nil && !errors.Is(err, context.Canceled) {
+				log.Error("indexer worker error", "err", err)
+				os.Exit(1)
+			}
+		}
+
+	default:
+		log.Error("indexer: unknown --role", "role", *role, "want", "all, coordinator, or worker")
 		os.Exit(1)
 	}
 	log.Info("sorolens/indexer done")
@@ -151,6 +296,10 @@ type watchdogInterceptor struct {
 	contract string
 	log      *slog.Logger
 }
+
+// Unwrap exposes the wrapped client so the poller can reach its optional
+// capabilities (getTransactions for contract discovery).
+func (w *watchdogInterceptor) Unwrap() poller.RPCClient { return w.RPCClient }
 
 func (w *watchdogInterceptor) GetEvents(ctx context.Context, start, end uint32, filters []poller.EventFilter) (*poller.GetEventsResult, error) {
 	res, err := w.RPCClient.GetEvents(ctx, start, end, filters)
@@ -217,81 +366,52 @@ func (w *watchdogInterceptor) GetEvents(ctx context.Context, start, end uint32, 
 	return res, nil
 }
 
-// ---- stub adapters (replaced in a future session when apps/api is wired) --
+// ---- stub adapters ---------------------------------------------------------
 
-type stubRPC struct {
-	endpoint string
-}
-
-func (s *stubRPC) GetLatestLedger(ctx context.Context) (*poller.LatestLedger, error) {
-	if s.endpoint == "" {
-		return nil, fmt.Errorf("stub: RPC not wired; set up apps/api soroban.Client")
+// reportPanic reports a recovered panic to Sentry (a no-op when Sentry was
+// not initialized), flushes, then re-panics so the process still crashes and
+// exits with the same non-zero status it always has. Every goroutine that
+// can panic needs its own deferred call: recover only ever catches a panic
+// on the same goroutine's call stack.
+func reportPanic() {
+	if err := recover(); err != nil {
+		sentry.CurrentHub().Recover(err)
+		sentry.Flush(2 * time.Second)
+		panic(err)
 	}
-	return &poller.LatestLedger{Sequence: 1, ProtocolVersion: 22}, nil
 }
-func (s *stubRPC) GetEvents(ctx context.Context, start, end uint32, filters []poller.EventFilter) (*poller.GetEventsResult, error) {
-	if s.endpoint == "" {
-		return nil, fmt.Errorf("stub: RPC not wired")
+
+// startMetricsServer serves the Prometheus /metrics endpoint on addr and
+// returns the server so the caller can shut it down. It returns nil when addr
+// is empty, which disables the endpoint. Startup errors are logged rather than
+// fatal so a port clash never takes the indexer down.
+func startMetricsServer(addr string, h http.Handler, log *slog.Logger) *http.Server {
+	if addr == "" {
+		return nil
 	}
-	return &poller.GetEventsResult{}, nil
-}
-func (s *stubRPC) GetTransaction(ctx context.Context, hash string) (*poller.TransactionResult, error) {
-	if s.endpoint == "" {
-		return nil, fmt.Errorf("stub: RPC not wired")
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", h)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
-	return &poller.TransactionResult{}, nil
+	go func() {
+		log.Info("indexer metrics listening", "addr", addr, "path", "/metrics")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("indexer metrics server", "addr", addr, "err", err)
+		}
+	}()
+	return srv
 }
-func (s *stubRPC) GetLedgerEntries(ctx context.Context, keys []string) (*poller.GetLedgerEntriesResult, error) {
-	if s.endpoint == "" {
-		return nil, fmt.Errorf("stub: RPC not wired")
+
+// envString reads a string env var with a default.
+func envString(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
-	return &poller.GetLedgerEntriesResult{}, nil
+	return def
 }
-
-type stubStore struct{}
-
-func (s *stubStore) ListContracts(ctx context.Context, cursor string, limit int) ([]poller.Contract, string, error) {
-	return nil, "", nil
-}
-func (s *stubStore) BatchInsertEvents(ctx context.Context, events []poller.Event) error {
-	return nil
-}
-func (s *stubStore) BatchInsertInvocations(ctx context.Context, invocations []poller.Invocation) error {
-	return nil
-}
-func (s *stubStore) GetSyncState(ctx context.Context, contractID string) (poller.SyncState, error) {
-	return poller.SyncState{ContractID: contractID}, nil
-}
-func (s *stubStore) UpsertSyncState(ctx context.Context, state poller.SyncState) error {
-	return nil
-}
-func (s *stubStore) CreateNextMonthPartition(_ context.Context) error { return nil }
-func (s *stubStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error {
-	return nil
-}
-func (s *stubStore) RecentHourlyActivity(ctx context.Context, contractID string, hours int) ([]poller.HourlyActivity, error) {
-	return nil, nil
-}
-func (s *stubStore) InsertAlert(ctx context.Context, a poller.Alert) error { return nil }
-func (s *stubStore) InsertContractUpgrade(_ context.Context, _ poller.ContractUpgrade) error {
-	return nil
-}
-func (s *stubStore) UpdateContractWasmHash(_ context.Context, _ string, _ string) error {
-	return nil
-}
-func (s *stubStore) ContractHealthInputs(_ context.Context, _ string) (poller.HealthInputs, error) {
-	return poller.HealthInputs{}, nil
-}
-func (s *stubStore) UpsertContractHealthScore(_ context.Context, _ poller.ContractHealthScore) error {
-	return nil
-}
-
-type stubRedis struct{}
-
-func (r *stubRedis) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
-	return true, nil
-}
-func (r *stubRedis) Del(ctx context.Context, key string) error { return nil }
 
 // envBool reads a boolean env var with a default.
 func envBool(key string, def bool) bool {
@@ -330,4 +450,162 @@ func envFloat(key string, def float64) float64 {
 		return def
 	}
 	return f
+}
+
+// envDuration reads a duration env var with a default. Values use Go duration
+// syntax, e.g. "30s" or "2m".
+func envDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return def
+	}
+	return d
+}
+
+// buildShardStore resolves the store the coordinator and workers share.
+//
+// Only the in-memory backend is wired today. It keeps the shard table inside
+// one process, which is enough to exercise the topology on a single node but is
+// NOT safe for replicas: each process would hold its own table and believe it
+// owned every shard. Real horizontal scaling needs a coordinator.Store backed
+// by Postgres; the schema it must write is
+// apps/api/internal/db/migrations/000030_indexer_shards.up.sql. It fails fast
+// rather than silently degrading to per-process ownership.
+func buildShardStore(kind string) (coordinator.Store, error) {
+	switch kind {
+	case "memory":
+		return coordinator.NewMemStore(), nil
+	default:
+		return nil, fmt.Errorf(
+			"set --shard-store=memory for a single-node run; multi-replica sharding requires a shared coordinator.Store (see docs/indexer-sharding.md), got %q",
+			kind,
+		)
+	}
+}
+
+// ---- redis run lock --------------------------------------------------------
+
+// redisLock is the poller's advisory run lock backed by Redis. Acquire uses
+// SET key value NX PX <ttl> so only one process can hold the lock at a time;
+// Release uses a compare-and-delete Lua script so a process whose lock has
+// already expired (and been re-acquired by someone else) never deletes the
+// new holder's lock.
+type redisLock struct {
+	client *redis.Client
+	key    string
+	token  string
+	ttl    time.Duration
+}
+
+// redisReleaseScript deletes key only when it still holds our token.
+var redisReleaseScript = redis.NewScript(`
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	return redis.call("DEL", KEYS[1])
+end
+return 0
+`)
+
+// newRedisLock parses REDIS_URL, verifies connectivity and returns a lock
+// implementation. It fails fast with a clear error when REDIS_URL is missing,
+// malformed, or unreachable.
+func newRedisLock(getenv func(string) string) (*redisLock, error) {
+	raw := strings.TrimSpace(getenv("REDIS_URL"))
+	if raw == "" {
+		return nil, errors.New("REDIS_URL is required (e.g. redis://localhost:6379/0)")
+	}
+	opts, err := redis.ParseURL(raw)
+	if err != nil {
+		return nil, fmt.Errorf("REDIS_URL is invalid: %w", err)
+	}
+	client := redis.NewClient(opts)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("REDIS_URL unreachable: %w", err)
+	}
+
+	ttl := envDuration("INDEXER_LOCK_TTL", 60*time.Second)
+	if ttl <= 0 {
+		_ = client.Close()
+		return nil, fmt.Errorf("INDEXER_LOCK_TTL must be positive, got %s", ttl)
+	}
+	key := envString("INDEXER_LOCK_KEY", "sorolens:indexer:run-lock")
+
+	token, err := randomToken()
+	if err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("generate lock token: %w", err)
+	}
+
+	return &redisLock{client: client, key: key, token: token, ttl: ttl}, nil
+}
+
+// SetNX attempts to acquire the lock. It returns true when this process now
+// holds the lock, false when another process holds it.
+func (r *redisLock) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
+	if key == "" {
+		key = r.key
+	}
+	if value == "" {
+		value = r.token
+	}
+	if ttl <= 0 {
+		ttl = r.ttl
+	}
+	ok, err := r.client.SetNX(ctx, key, value, ttl).Result()
+	if err != nil {
+		return false, fmt.Errorf("redis setnx %q: %w", key, err)
+	}
+	return ok, nil
+}
+
+// Del releases the lock only if this process still holds it.
+func (r *redisLock) Del(ctx context.Context, key string) error {
+	if key == "" {
+		key = r.key
+	}
+	if err := redisReleaseScript.Run(ctx, r.client, []string{key}, r.token).Err(); err != nil && !errors.Is(err, redis.Nil) {
+		return fmt.Errorf("redis release %q: %w", key, err)
+	}
+	return nil
+}
+
+// Renew extends the lock TTL while a run is active, but only if this process
+// still holds the lock. It returns false when the lock was lost.
+func (r *redisLock) Renew(ctx context.Context) (bool, error) {
+	const renewScript = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+end
+return 0
+`
+	res, err := r.client.Eval(ctx, renewScript, []string{r.key}, r.token, r.ttl.Milliseconds()).Int64()
+	if err != nil {
+		return false, fmt.Errorf("redis renew %q: %w", r.key, err)
+	}
+	return res == 1, nil
+}
+
+// Close releases the client connection pool.
+func (r *redisLock) Close() error {
+	if r == nil || r.client == nil {
+		return nil
+	}
+	return r.client.Close()
+}
+
+// randomToken returns a hex-encoded 128-bit random token used to identify the
+// lock holder.
+func randomToken() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", b[:]), nil
 }
