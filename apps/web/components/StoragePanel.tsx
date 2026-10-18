@@ -182,6 +182,7 @@ export function StoragePanel({
             type="button"
             onClick={onLoadMore}
             disabled={loading}
+            aria-busy={loading}
             className="rounded-md bg-white/10 px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-white/20 disabled:opacity-50"
           >
             {loading ? "Loading..." : "Load More"}

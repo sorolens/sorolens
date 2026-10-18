@@ -538,6 +538,29 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/contracts/{id}/invocations/{tx_hash}": {
+      get: {
+        operationId: "getContractInvocation",
+        summary: "Get contract invocation details with associated events",
+        tags: ["Invocations"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "tx_hash",
+            in: "path",
+            required: true,
+            description: "Hex-encoded transaction hash.",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/contracts/{id}/storage": {
       get: {
         operationId: "listContractStorage",

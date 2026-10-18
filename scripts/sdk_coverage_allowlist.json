@@ -175,6 +175,7 @@
       {
         "reason": "Cross-contract invocation listing and invocation trace are not part of this SDK's scope yet.",
         "operations": [
+          "getContractInvocation",
           "getInvocationTrace",
           "listAllInvocations"
         ]
@@ -362,6 +363,7 @@
       {
         "reason": "Cross-contract invocation listing and invocation trace are not part of this SDK's scope yet.",
         "operations": [
+          "getContractInvocation",
           "getInvocationTrace",
           "listAllInvocations"
         ]

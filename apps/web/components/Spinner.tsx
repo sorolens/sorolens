@@ -27,6 +27,7 @@ export function Spinner({
     <div
       role="status"
       aria-label="Loading"
+      aria-busy="true"
       className={[
         "animate-spin rounded-full border-2 border-current border-t-transparent",
         sizeClasses[size],
