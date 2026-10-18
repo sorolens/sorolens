@@ -231,7 +231,6 @@ jobs:
   next-build:
     name: Next.js build
     runs-on: ubuntu-latest
-    if: ${{ false }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -255,6 +254,8 @@ jobs:
             pnpm-node22-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Lint
+        run: pnpm lint
       - name: Build dashboard
         working-directory: apps/web
         env:
