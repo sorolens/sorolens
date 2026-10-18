@@ -110,7 +110,8 @@ Ask in the [Sorolens Discord](https://discord.gg/D9jATUezYX): setup and code que
 6. [Commit format](#commit-format)
 7. [PR checklist](#pr-checklist)
 8. [Running tests](#running-tests)
-9. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
+9. [Release process](#release-process)
+10. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
 
 ---
 
@@ -378,6 +379,50 @@ cd contracts/counter
 cargo test
 cargo check --target wasm32v1-none
 ```
+
+---
+
+## Release process
+
+Sorolens publishes container images to GitHub Packages (GHCR) and creates GitHub Releases automatically when a semantic version tag is pushed.
+
+### Automated Release Workflow
+
+When a tag following `v*.*.*` (e.g., `v0.2.0`) is pushed to GitHub, `.github/workflows/release.yml` triggers automatically and performs:
+
+1. **Build and push container images to GHCR**:
+   - `ghcr.io/<org>/sorolens-api:<tag>`
+   - `ghcr.io/<org>/sorolens-indexer:<tag>`
+   - Semver tag aliases (`X.Y.Z`, `X.Y`, `X`) and `latest` are published to GHCR.
+   - Build metadata (`VERSION`, `GIT_SHA`) is injected into the binary build info.
+2. **Artifact & Checksums generation**:
+   - Computes SHA256 checksums (`checksums.txt`) for release archives.
+3. **GitHub Release creation**:
+   - Publishes the GitHub Release corresponding to the semver tag with release notes, source archives, and `checksums.txt`.
+
+### Step-by-step Release Guide
+
+Maintainers cut a release with the following steps:
+
+1. **Verify CI**: Ensure all checks on `main` are passing.
+2. **Update CHANGELOG.md**:
+   - Move relevant items from `## [Unreleased]` to a new version section (e.g., `## [0.2.0] - YYYY-MM-DD`).
+   - Update the comparison links at the bottom of `CHANGELOG.md`.
+   - Commit and push the updated changelog to `main`:
+     ```bash
+     git checkout main && git pull
+     git add CHANGELOG.md
+     git commit -m "docs: prepare release v0.2.0"
+     git push origin main
+     ```
+3. **Create and push the semver tag**:
+   ```bash
+   git tag -a v0.2.0 -m "Release v0.2.0"
+   git push origin v0.2.0
+   ```
+4. **Monitor Release Workflow**:
+   - Watch `.github/workflows/release.yml` under GitHub Actions.
+   - Verify that container images appear on GitHub Packages (`ghcr.io`) and that the GitHub Release is published with `checksums.txt`.
 
 ---
 

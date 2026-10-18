@@ -54,7 +54,8 @@ type ListEventsOpts struct {
 
 // ListContractsOpts holds optional filters for listing contracts.
 type ListContractsOpts struct {
-	Status string
+	Network string
+	Status  string
 	Limit  int
 	Cursor string
 }
@@ -176,6 +177,9 @@ func (c *Client) GetStorage(ctx context.Context, contractID string) ([]StorageEn
 // ListContracts fetches a paginated list of tracked contracts.
 func (c *Client) ListContracts(ctx context.Context, opts ListContractsOpts) (ContractsResponse, error) {
 	q := url.Values{}
+	if opts.Network != "" {
+		q.Set("network", opts.Network)
+	}
 	if opts.Status != "" {
 		q.Set("status", opts.Status)
 	}
