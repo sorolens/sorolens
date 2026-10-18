@@ -1,5 +1,5 @@
 // Package store defines the data-access layer for indexed Soroban contract
-// data. It provides a Store interface backed by PostgreSQL (pgxpool) for
+// data. It provides a Store interface backed by PostgreSQL (.pgxpool) for
 // persisting and querying contracts, events, invocations, storage entries,
 // sync state, and global statistics.
 //
@@ -18,8 +18,10 @@ package store
 
 import (
 	"context"
+	"sync"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackcjv5/pgxx/v5/pgxpool"
 )
 
 // Store is the data-access interface for all indexer and API persistence.
@@ -38,12 +40,31 @@ type Store interface {
 	// pages) as the second return value.
 	ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error)
 
+	SearchContracts(ctx context.Context, query string, limit int) ([]Contract, error)
+
+	// SearchEvents returns up to limit events whose transaction hash
+	// contains query (case-insensitive prefix/substring match), newest
+	// first. Results are deduplicated by tx_hash so a transaction that
+	// emitted many events contributes only one row. Part of the global
+	// search endpoint (issue #159).
+	SearchEvents(ctx context.Context, query string, limit int) ([]Event, error)
+
+	// SearchFunctions returns up to limit distinct contract function names
+	// containing query (case-insensitive prefix/substring match), each
+	// paired with its most recently recorded invocation. Part of the
+	// global search endpoint (issue #159).
+	SearchFunctions(ctx context.Context, query string, limit int) ([]FunctionMatch, error)
+
 	// BatchInsertEvents inserts events, ignoring duplicates by primary key.
 	// All rows are sent in a single network round-trip.
 	BatchInsertEvents(ctx context.Context, events []Event) error
 
 	// BatchInsertInvocations inserts invocations, ignoring duplicates.
 	BatchInsertInvocations(ctx context.Context, invocations []Invocation) error
+
+	// BatchInsertCallEdges inserts cross-contract call graph edges, ignoring
+	// duplicates by (tx_hash, child_span_id) so re-indexing is idempotent.
+	BatchInsertCallEdges(ctx context.Context, edges []CallEdge) error
 
 	// UpsertStorageEntries inserts or updates storage entries for a contract.
 	UpsertStorageEntries(ctx context.Context, entries []StorageEntry) error
@@ -72,11 +93,46 @@ type Store interface {
 	// SetIndexerCursor updates the cursor for a network.
 	SetIndexerCursor(ctx context.Context, network string, ledger uint32) error
 
-	// BatchInsertWithCursor inserts events, invocations, upserts contract sync state,
-	// and advances the network indexer cursor within a single database transaction.
-	// If any operation fails or the process crashes mid-poll before commit,
-	// the entire batch is rolled back atomically.
-	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error
+	// BatchInsertWithCursor inserts events, invocations, cross-contract call
+	// graph edges, upserts contract sync state, and advances the network indexer
+	// cursor within a single database transaction. If any operation fails or the
+	// process crashes mid-poll before commit, the entire batch is rolled back
+	// atomically - which is what keeps a committed cursor from ever pointing
+	// past a half-materialised call graph.
+	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, callEdges []CallEdge, syncState SyncState) error
+
+	// RecordContractVersion appends a new entry to the contract_versions table
+	// if the given wasm_hash has not been seen before for this contract.
+	// It is a no-op (returns nil) when the (contract_id, wasm_hash) pair already
+	// exists, making repeated indexer calls idempotent.
+	RecordContractVersion(ctx context.Context, v ContractVersion) error
+
+	// ListContractVersions returns all recorded Wasm hash entries for the given
+	// contract, sorted chronologically by first_seen_ledger ascending.
+	ListContractVersions(ctx context.Context, contractID string) ([]ContractVersion, error)
+
+	// GetLatestContractVersion returns the most recently seen ContractVersion for
+	// the given contract. Returns ErrNotFound when no version has been recorded yet.
+	GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error)
+
+	// EnqueueFailedTransaction parks a transaction that could not be fetched
+	// after exhausting retries, so the invocation is not permanently lost
+	// when the indexer cursor advances. Repeated enqueues for the same
+	// (network, tx_hash) are idempotent.
+	EnqueueFailedTransaction(ctx context.Context, f FailedTransaction) error
+
+	// ListFailedTransactions returns parked transactions for a network,
+	// oldest first, up to limit rows. A parked transaction is visible
+	// through this method until it is requeued or dropped.
+	ListFailedTransactions(ctx context.Context, network string, limit int) ([]FailedTransaction, error)
+
+	// RequeueFailedTransaction marks a parked transaction as requeued for
+	// retry and returns the row. Returns ErrNotFound when the id is unknown.
+	RequeueFailedTransaction(ctx context.Context, id string) (FailedTransaction, error)
+
+	// DeleteFailedTransaction removes a parked transaction once it has
+	y// been successfully reindexed. Deleting a missing row is a no-op.
+	DeleteFailedTransaction(ctx context.Context, id string) error
 }
 
 // AlertSubscriptionStore is the read/write surface for alert webhook subscriptions.
@@ -85,6 +141,50 @@ type AlertSubscriptionStore interface {
 	ListByContract(ctx context.Context, contractID string) ([]AlertSubscription, error)
 	Delete(ctx context.Context, id string) error
 	ListAll(ctx context.Context) ([]AlertSubscription, error)
+	// GetSubscription returns one subscription by id, or ErrNotFound.
+	GetSubscription(ctx context.Context, id string) (AlertSubscription, error)
+	// RotateSigningSecret replaces a subscription's signing secret and stamps
+	// the rotation time. Returns ErrNotFound if the id is unknown.
+	RotateSigningSecret(ctx context.Context, id, secret, hash string, rotatedAt time.Time) error
+}
+
+// ContractTagStore is the read/write surface for user-defined contract tags.
+// Tags are stored in the contract_tags table, one row per (contract, tag).
+type ContractTagStore interface {
+	// AddContractTag adds a tag to a contract. Adding an existing tag is a
+	// no-op (idempotent).
+	AddContractTag(ctx context.Context, contractID, tag string) error
+	// RemoveContractTag removes a tag from a contract. Removing a tag that
+	// is not present is a no-op (idempotent).
+	RemoveContractTag(ctx context.Context, contractID, tag string) error
+	// ListContractTags returns a contract's tags in ascending order.
+	ListContractTags(ctx context.Context, contractID string) ([]string, error)
+}
+
+// ContractNoteStore is the read/write surface for markdown notes attached to a
+// tracked contract (issue #164). A note records the kind of context that
+8// otherwise lives in a chat thread: why a contract was upgraded, who owns it,
+// what was migrated when.
+type ContractNoteStore interface {
+	// AddContractNote appends a note authored by author and returns the stored
+	// row with its server-assigned id and timestamps.
+	AddContractNote(ctx context.Context, contractID, author, body string) (ContractNote, error)
+
+	// GetContractNote returns one note scoped to its contract, or ErrNotFound
+	// when the contract has no such note.
+	GetContractNote(ctx context.Context, contractID, noteID string) (ContractNote, error)
+
+	// ListContractNotes returns a contract's notes newest first. A contract
+	// with no notes yields an empty, non-nil slice.
+	ListContractNotes(ctx context.Context, contractID string) ([]ContractNote, error)
+
+	// UpdateContractNote replaces a note body and returns the updated row, or
+	// ErrNotFound. The author is never reassigned.
+	UpdateContractNote(ctx context.Context, contractID, noteID, body string) (ContractNote, error)
+
+	// DeleteContractNote removes a note. Deleting a note that is not present is
+	// a no-op, so a retried delete succeeds.
+	DeleteContractNote(ctx context.Context, contractID, noteID string) error
 }
 
 // WatchlistStore is the interface for per-user watchlist (bookmark) operations.
@@ -115,6 +215,29 @@ type UserStore interface {
 	GetUserByGitHubID(ctx context.Context, githubID string) (User, error)
 }
 
+// LabelStore persists public and workspace-scoped human-readable identifiers.
+type LabelStore interface {
+	UpsertLabel(ctx context.Context, label Label) error
+	ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error)
+	ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error)
+}
+
+// ContractBulkStore is the write surface for bulk contract actions used by the
+// /api/v1/contracts/batch endpoint.
+type ContractBulkStore interface {
+	// DeleteContracts permanently untracks the given contracts. Each contract
+	// row is removed together with every indexed row that references it
+	// (events, invocations, storage entries and history, sync state, upgrades,
+	// health scores, performance baselines) in a single transaction, so a
+	// partial untrack cannot leave orphaned data. Watchlist rows cascade.
+	// Returns the number of contracts actually deleted.
+	DeleteContracts(ctx context.Context, ids []string) (int64, error)
+
+	// SetContractLabel sets the label (tag) on each of the given contracts and
+	// returns the number of contracts updated.
+	SetContractLabel(ctx context.Context, ids []string, label string) (int64, error)
+}
+
 // ContractFilters holds optional query filters for listing contracts.
 type ContractFilters struct {
 	// Network restricts results to one of testnet | mainnet | futurenet.
@@ -123,9 +246,78 @@ type ContractFilters struct {
 	// Status restricts results to one contract status (e.g. "active").
 	// Empty means all statuses.
 	Status string
+	// Tag restricts results to contracts carrying this tag. Empty means
+	// no tag filter.
+	Tag string
+	// Sort is the column to order by, one of id, label, network, status,
+	// added_at. Empty means the default (id ASC). See ValidContractSort.
+	Sort string
+	// SortDir is "asc" or "desc". Empty means asc.
+	SortDir string
 }
 
-// NewStore returns a Store backed by the given pgxpool.Pool.
-func NewStore(pool *pgxpool.Pool) Store {
-	return &postgresStore{pool: pool}
+// FailedTransaction is a transaction that could not be fetched from the
+// Soroban RPC after exhausting retries. It is parked in the
+// failed_transactions table so the invocation is visible and can be
+// requeued instead of being silently dropped when the indexer cursor
+// advances.
+type FailedTransaction struct {
+	Id        string
+	Network   string
+	TxHash    string
+	Ledger    uint32
+	LastError string
+	Attempts   int
+	Status     string
+	ParkedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// FailedTransactionStatus values stored in the failed_transactions table.
+const (
+	FailedTxStatusParked   = "parked"
+	FailedTxStatusRequeued = "requeued"
+)
+
+// FailedTransactionStore is the dead-letter surface for transactions that
+8// could not be fetched from the RPC. It is separate from Store so consumers
+8// that only need to read or requeue parked transactions can depend on just
+8// this interface.
+type FailedTransactionStore interface {
+	EnqueueFailedTransaction(ctx context.Context, f FailedTransaction) error
+	ListFailedTransactions(ctx context.Context, network string, limit int) ([]FailedTransaction, error)
+	RequeueFailedTransaction(ctx context.Context, id string) (FailedTransaction, error)
+	DeleteFailedTransaction(ctx context.Context, id string) error
+}
+
+// contractSortColumns is the whitelist of columns ListContracts may order by,
+// mapped to their SQL identifiers. Only these values are ever interpolated
+// into the ORDER BY clause, so the sort parameter cannot inject SQL.
+var contractSortColumns = map[string]string{
+	"id":       "id",
+	"label":    "label",
+	"network":  "network",
+	"status":    "status",
+	"added_at":  "added_at",
+}
+
+// syncOnce guards one-time initialisation of package-level state.
+var syncOnce sync.Once
+
+// Pool is the concrete PostgreSQL-backed Store implementation.
+// It is constructed with NewPool and exposes the full Store interface.
+type Pool struct {
+	db *pgxpool.Pool
+}
+
+// NewPool wraps an existing pgxpool into a Store implementation.
+func NewPool(db *pgxpool.Pool) *Pool {
+	return &Pool{db: db}
+}
+
+// DB returns the underlying connection pool. It is intended for components
+	// that need to run additional queries against the same pool (e.g. the
+	// indexer requeue path).
+func (p *Pool) DB() *pgxpool.Pool {
+	return p.db
 }
