@@ -1,6 +1,7 @@
 # Security Policy
 
 Sorolens takes the security of its API, indexer, dashboard, CLI, and on-chain contracts seriously. This document explains how to report a vulnerability, what to expect from us in return, and how coordinated disclosure works.
+It also describes the automated dependency and code scanning that runs in CI, and how to triage findings.
 
 ## Table of contents
 
@@ -13,6 +14,7 @@ Sorolens takes the security of its API, indexer, dashboard, CLI, and on-chain co
 - [Researcher and maintainer responsibilities](#researcher-and-maintainer-responsibilities)
 - [Bounty program](#bounty-program)
 - [Scope](#scope)
+- [Automated security scanning](#automated-security-scanning)
 - [Questions](#questions)
 
 ## Supported versions
@@ -122,6 +124,38 @@ Out of scope:
 - Vulnerabilities in third-party dependencies (please report those to the upstream project). You are welcome to notify us as well so we can track the upstream fix.
 - The Stellar network or Soroban protocol itself.
 - Infrastructure operated by Neon, Upstash, or Vercel.
+
+## Automated security scanning
+
+CI runs the following scanners on every pull request and on a weekly schedule:
+
+| Scanner        | Ecosystem / target          | Workflow job      |
+| -------------- | --------------------------- | ----------------- |
+| CodeQL         | Go and TypeScript           | `codeql`          |
+| govulncheck    | Go modules (`apps/api`, `services/indexer`, `cli/`) | `govulncheck` |
+| cargo audit    | Rust (`contracts/counter`)  | `cargo-audit`     |
+| pip-audit      | Python tooling and scripts  | `pip-audit`       |
+
+Findings at **high** or **critical** severity fail the job and block the pull request. Lower severities are reported but do not fail CI.
+
+### Documented exceptions
+
+If a finding cannot be fixed immediately (for example, no patched release exists upstream), add an entry to `.github/security-exceptions.yaml` with:
+
+- the scanner (`codeql`, `govulncheck`, `cargo-audit`, or `pip-audit`),
+- the advisory or rule identifier,
+- the affected package or path,
+- a justification and an expiry date (no more than 90 days out).
+
+Exceptions are reviewed at expiry and must be renewed or removed. Do not silence a finding without an entry in that file.
+
+### Triaging a finding
+
+1. Open the failing job from the pull request or the weekly run and read the advisory details.
+2. Confirm whether the vulnerable code path is reachable in Sorolens. If it is not, document why in the exception file.
+3. If it is reachable, upgrade the dependency or patch the code, then re-run the job.
+4. If a fix is not yet available, add a time-boxed exception and link the upstream issue.
+5. For findings that look like a vulnerability in Sorolens itself, follow the private reporting process above instead of opening a public issue.
 
 ## Questions
 
