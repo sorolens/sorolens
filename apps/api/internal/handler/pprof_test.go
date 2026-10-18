@@ -30,14 +30,29 @@ func TestPprofEndpointsRequireAdminAuth(t *testing.T) {
 
 		{"anonymous denied cmdline", "/debug/pprof/cmdline", "", http.StatusForbidden},
 		{"admin allowed cmdline", "/debug/pprof/cmdline", adminUser, http.StatusOK},
+
+		{"anonymous denied bare index", "/debug/pprof", "", http.StatusForbidden},
+		{"admin allowed bare index", "/debug/pprof", adminUser, http.StatusOK},
+
+		{"anonymous denied symbol", "/debug/pprof/symbol", "", http.StatusForbidden},
+		{"admin allowed symbol", "/debug/pprof/symbol", adminUser, http.StatusOK},
+		{"anonymous denied symbol POST", "/debug/pprof/symbol", "", http.StatusForbidden},
+		{"admin allowed symbol POST", "/debug/pprof/symbol", adminUser, http.StatusOK},
+
+		// Unknown names are still gated, so probing cannot enumerate paths.
+		{"anonymous denied unknown profile", "/debug/pprof/nope", "", http.StatusForbidden},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := doRequestAsUser(srv, http.MethodGet, tc.path, "", tc.userID, "")
+			method := http.MethodGet
+			if strings.HasSuffix(tc.name, " POST") {
+				method = http.MethodPost
+			}
+			w := doRequestAsUser(srv, method, tc.path, "", tc.userID, "")
 			if w.Code != tc.want {
-				t.Fatalf("GET %s as %q: want %d, got %d (%s)",
-					tc.path, tc.userID, tc.want, w.Code, w.Body.String())
+				t.Fatalf("%s %s as %q: want %d, got %d (%s)",
+					method, tc.path, tc.userID, tc.want, w.Code, w.Body.String())
 			}
 		})
 	}
