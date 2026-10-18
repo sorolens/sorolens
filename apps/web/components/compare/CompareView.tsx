@@ -82,7 +82,9 @@ export function CompareView({
     const comparison =
       timeWindow === "all"
         ? getCompareAllEntries(selectedIds)
-        : getCompare(selectedIds, timeWindow).then((data) => data.contracts ?? []);
+        : getCompare(selectedIds, timeWindow).then(
+            (data) => data.contracts ?? []
+          );
     comparison
       .then((entries) => {
         if (cancelled) return;

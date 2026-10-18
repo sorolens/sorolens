@@ -179,15 +179,18 @@ describe("CompareView", () => {
   it("offers every time window, including All", () => {
     render(<CompareView initialIds={[ID_A]} initialWindow="7d" />);
     for (const label of ["24h", "7d", "30d", "All"]) {
-      expect(
-        screen.getByRole("button", { name: label })
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
   });
 
   it("assembles the All window client-side instead of asking the API for it", async () => {
     mockGetCompareAllEntries.mockResolvedValue([
-      entry({ event_count: 9000, invocation_count: 4000, avg_cpu: null, avg_fee: null }),
+      entry({
+        event_count: 9000,
+        invocation_count: 4000,
+        avg_cpu: null,
+        avg_fee: null,
+      }),
       entry({
         id: ID_B,
         network: "mainnet",
@@ -221,9 +224,7 @@ describe("CompareView", () => {
       />
     );
     const note = screen.getByTestId("compare-url-note");
-    expect(note).toHaveTextContent(
-      "2 invalid contract IDs were ignored"
-    );
+    expect(note).toHaveTextContent("2 invalid contract IDs were ignored");
   });
 
   it("notes when more than four contracts were requested", () => {

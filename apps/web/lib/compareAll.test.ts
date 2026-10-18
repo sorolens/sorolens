@@ -23,8 +23,7 @@ const mockGetContractEvents = vi.fn();
 const mockGetContractInvocations = vi.fn();
 
 vi.mock("@/lib/api", async (importActual) => {
-  const actual =
-    await importActual<typeof import("@/lib/api")>();
+  const actual = await importActual<typeof import("@/lib/api")>();
   return {
     ...actual,
     getContract: (...args: unknown[]) => mockGetContract(...args),
@@ -81,7 +80,10 @@ beforeEach(() => {
     score: 88,
   } as unknown as HealthScoreResponse);
   mockGetContractEvents.mockResolvedValue({
-    events: [dayEvent(100, "2026-01-05T10:00:00Z"), dayEvent(101, "2026-01-05T11:00:00Z")],
+    events: [
+      dayEvent(100, "2026-01-05T10:00:00Z"),
+      dayEvent(101, "2026-01-05T11:00:00Z"),
+    ],
     next_cursor: null,
   });
   mockGetContractInvocations.mockResolvedValue({
@@ -113,9 +115,7 @@ describe("getCompareAllEntries", () => {
     expect(entry.avg_cpu).toBeNull();
     expect(entry.avg_fee).toBeNull();
     // The sparkline comes from the day-bucketed "all" series.
-    expect(entry.event_volume).toEqual([
-      { timestamp: "2026-01-05", count: 2 },
-    ]);
+    expect(entry.event_volume).toEqual([{ timestamp: "2026-01-05", count: 2 }]);
   });
 
   it("returns a zeroed untracked entry (mirroring the API) without more calls", async () => {
