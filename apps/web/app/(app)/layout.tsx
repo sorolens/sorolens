@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * App-shell layout for all dashboard routes (/(app)/...).
+ * App-shell layout for all dashboard routes (/(app)/...)
  *
  * - Mounts useOfflineAlertQueue so alerts can be captured while offline.
  * - Renders OfflineBanner at the top when offline.

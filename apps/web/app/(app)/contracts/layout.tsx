@@ -4,12 +4,6 @@ export const metadata: Metadata = {
   title: "Contracts",
   description:
     "Browse, search, and track Soroban smart contracts indexed by Sorolens. View event counts, invocation stats, and storage health at a glance.",
-  openGraph: {
-    title: "Contracts — Sorolens",
-    description:
-      "Browse, search, and track Soroban smart contracts indexed by Sorolens.",
-    url: "/contracts",
-  },
   alternates: {
     canonical: "/contracts",
   },
