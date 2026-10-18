@@ -429,6 +429,15 @@ function ContractDetailContent({ id }: { id: string }) {
           </span>
           <AddToGroup contractId={id} />
           <VerifiedBadge contractId={id} />
+          {/* Compare entry point (#607): pre-selects this contract in the
+              shared /compare?ids= URL; the picker fills the remaining slots. */}
+          <Link
+            data-testid="compare-entry-link"
+            href={`/compare?ids=${encodeURIComponent(id)}`}
+            className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]"
+          >
+            Compare
+          </Link>
         </div>
         <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-secondary)]">
           <span>Network: {contract?.network}</span>

@@ -419,6 +419,34 @@ describe("ContractsPage", () => {
     expect(screen.getByText(/2 selected/i)).toBeDefined();
   });
 
+  // ── Compare entry point (#607) ───────────────────────────────────────────
+
+  it("links a two-contract selection to the shared /compare URL", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    // One selected: the Compare action is visible but inert.
+    selectRow(CONTRACT_A.id);
+    const inert = document.getElementById(
+      "bulk-compare-btn"
+    ) as HTMLButtonElement;
+    expect(inert.tagName).toBe("BUTTON");
+    expect(inert.disabled).toBe(true);
+
+    // Two selected: it becomes a real link carrying the whole selection.
+    selectRow(CONTRACT_B.id);
+    const link = document.getElementById(
+      "bulk-compare-btn"
+    ) as HTMLAnchorElement;
+    expect(link.tagName).toBe("A");
+    const href = decodeURIComponent(link.getAttribute("href") ?? "");
+    expect(href.startsWith("/compare?ids=")).toBe(true);
+    const ids = href.replace("/compare?ids=", "").split(",");
+    expect(ids).toContain(CONTRACT_A.id);
+    expect(ids).toContain(CONTRACT_B.id);
+    expect(ids).toHaveLength(2);
+  });
+
   it("untracks selected contracts after confirmation and refreshes the list", async () => {
     mockListContracts
       .mockResolvedValueOnce({
