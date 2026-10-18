@@ -1,5 +1,7 @@
 // Package db has no Go code of its own: migrations/ holds only SQL. This
-// package exists to hold the guard that keeps that directory loadable.
+// package exists to hold the guards that keep that directory loadable and to
+// verify that the trigram indexes backing label and contract search are
+// actually used by the query planner.
 //
 // Every deployment path in this repository (CI, docker-compose dev and prod,
 // the integration compose file) applies migrations by looping over
@@ -15,6 +17,7 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"regexp"
@@ -22,12 +25,26 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	_ "github.com/lib/pq"
 )
 
 // migrationFile is "<six digits>_<snake_case_name>.(up|down).sql".
 var migrationFile = regexp.MustCompile(`^(\d{6})_([a-z0-9][a-z0-9_]*)\.(up|down)\.sql$`)
 
 const migrationsDir = "migrations"
+
+// trigramIndexes lists the GIN trigram indexes that must exist for the ILIKE
+// substring searches in store/postgres.go to avoid full table scans. Each entry
+// maps a table to the index name and the column it covers.
+var trigramIndexes = []struct {
+	table  string
+	index  string
+	column string
+}{
+	{"labels", "idx_labels_name_trgm", "name"},
+	{"contracts", "idx_contracts_name_trgm", "name"},
+}
 
 // TestMigrationVersionsAreUniqueAndContiguous fails when two migrations share a
 // version, when a version is missing from the sequence, or when an up/down pair
@@ -98,6 +115,97 @@ func TestMigrationVersionsAreUniqueAndContiguous(t *testing.T) {
 		}
 		if got, want := len(versions), versions[len(versions)-1]; got != want {
 			t.Errorf("%d distinct versions but the highest is %06d; the sequence is not contiguous", got, want)
+		}
+	}
+}
+
+// TestTrigramIndexesExist fails when the pg_trgm extension or one of the GIN
+// trigram indexes backing label and contract search is missing from the
+// migrations. Without them the ILIKE '%term%' queries in store/postgres.go do
+// full table scans.
+func TestTrigramIndexesExist(t *testing.T) {
+	entries, err := os.ReadDir(migrationsDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", migrationsDir, err)
+	}
+
+	var upSQL strings.Builder
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".up.sql") {
+			continue
+		}
+		body, err := os.ReadFile(migrationsDir + "/" + entry.Name())
+		if err != nil {
+			t.Fatalf("read %s: %v", entry.Name(), err)
+		}
+		upSQL.Write(body)
+		upSQL.WriteByte('\n')
+	}
+
+	all := strings.ToLower(upSQL.String())
+	if !strings.Contains(all, "create extension if not exists pg_trgm") &&
+		!strings.Contains(all, "create extension pg_trgm") {
+		t.Errorf("no migration enables the pg_trgm extension; substring search cannot use a trigram index")
+	}
+
+	for _, idx := range trigramIndexes {
+		if !strings.Contains(all, idx.index) {
+			t.Errorf("no migration creates trigram index %q on %s(%s)", idx.index, idx.table, idx.column)
+		}
+	}
+}
+
+// TestTrigramIndexesUsedByPlanner is an EXPLAIN-based check that the planner
+// picks the trigram index for the ILIKE substring searches. It needs a live
+// Postgres with the migrations applied and is skipped unless
+// SOROLENS_TEST_DATABASE_URL is set (CI sets it for the integration job).
+func TestTrigramIndexesUsedByPlanner(t *testing.T) {
+	dsn := os.Getenv("SOROLENS_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("SOROLENS_TEST_DATABASE_URL not set; skipping EXPLAIN-based index check")
+	}
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		t.Fatalf("ping database: %v", err)
+	}
+
+	for _, idx := range trigramIndexes {
+		// Seed enough rows that the planner prefers the index over a seq scan.
+		seed := fmt.Sprintf(
+			"INSERT INTO %s (%s) SELECT 'seed-' || g FROM generate_series(1, 5000) g ON CONFLICT DO NOTHING",
+			idx.table, idx.column)
+		if _, err := db.Exec(seed); err != nil {
+			t.Fatalf("seed %s: %v", idx.table, err)
+		}
+
+		query := fmt.Sprintf("EXPLAIN SELECT * FROM %s WHERE %s ILIKE '%%seed-42%%'", idx.table, idx.column)
+		rows, err := db.Query(query)
+		if err != nil {
+			t.Fatalf("explain %s: %v", idx.table, err)
+		}
+		var plan strings.Builder
+		for rows.Next() {
+			var line string
+			if err := rows.Scan(&line); err != nil {
+				rows.Close()
+				t.Fatalf("scan plan: %v", err)
+			}
+			plan.WriteString(line)
+			plan.WriteByte('\n')
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			t.Fatalf("explain rows: %v", err)
+		}
+
+		if !strings.Contains(plan.String(), idx.index) {
+			t.Errorf("query plan for %s(%s) does not use %s:\n%s", idx.table, idx.column, idx.index, plan.String())
 		}
 	}
 }
