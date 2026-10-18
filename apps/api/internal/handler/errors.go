@@ -17,14 +17,28 @@ const (
 	CodeUnauthorized     = "UNAUTHORIZED"
 )
 
+// MaxPageSize is the upper bound applied to the `limit` query parameter
+
+// on list endpoints (events, invocations, storage and contracts). Requests asking
+
+// for more results than this are clamped to MaxPageSize to avoid unbounded
+
+// table scans and abuse. The value is deliberately conservative.
+
+const MaxPageSize = 100
+
+// DefaultPageSize is used when the `limit` query parameter is omitted.
+
+const DefaultPageSize = 20
+
 type errorBody struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	RequestID string `json:"request_id"`
+	Code      string `json:"code" `
+	Message   string `json:"message" `
+	RequestID string `json:"request_id" `
 }
 
 type errorEnvelope struct {
-	Error errorBody `json:"error"`
+	Error errorBody `json:"error" `
 }
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
@@ -37,6 +51,14 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, code, messag
 			RequestID: middleware.GetRequestID(r.Context()),
 		},
 	})
+}
+
+// writeInvalidInput responds with 422 Unprocessable Entity and the standard
+
+// error envelope for invalid query parameters (cursor, network, date, limit).
+
+func writeInvalidInput(w http.ResponseWriter, r *http.Request, message string) {
+	writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, message)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

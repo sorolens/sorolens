@@ -42,6 +42,14 @@ type APIStore interface {
 	store.AuditStore
 }
 
+// MaxPageSize is the hard upper bound applied to every paginated list
+// endpoint (events, invocations, storage and contracts). Callers that ask for
+// a larger limit are silently clamped to this value so a single request can
+// never pull an entire table. The value is intentionally conservative: 200
+// rows is enough for a UI page while keeping query cost and payload size
+// bounded.
+const MaxPageSize = 200
+
 // Pinger is implemented by both the postgres pool and the Redis client.
 type Pinger interface {
 	Ping(ctx context.Context) error

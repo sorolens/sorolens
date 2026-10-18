@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -237,5 +238,158 @@ func TestWatchdogFiltersByNetwork(t *testing.T) {
 	}
 	if stats["total_monitored"] != 1 || stats["healthy"] != 1 {
 		t.Fatalf("want 1 healthy testnet contract, got %+v", stats)
+	}
+}
+
+// assertUnprocessable asserts a 422 response with a non-empty error message.
+func assertUnprocessable(t *testing.T, w *httptest.ResponseRecorder, endpoint string) {
+	t.Helper()
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("%s: want 422, got %d (body: %s)", endpoint, w.Code, w.Body.String())
+	}
+	var parsed struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("%s: decode error envelope: %v", endpoint, err)
+	}
+	if strings.TrimSpace(parsed.Error) == "" {
+		t.Fatalf("%s: want non-empty error message, got %q", endpoint, w.Body.String())
+	}
+}
+
+func TestListContractsClampsLargeLimit(t *testing.T) {
+	srv := newTestHandler(seedMultiNetworkStore(t), true, true)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/contracts?limit=10000000", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	// The request must succeed and return the (small) seeded set rather than
+	// erroring or attempting to honour the unbounded limit.
+	if got := len(decodeContracts(t, w.Body.Bytes())); got != 3 {
+		t.Fatalf("want 3 contracts, got %d", got)
+	}
+}
+
+func TestListContractsRejectsInvalidParams(t *testing.T) {
+	srv := newTestHandler(seedMultiNetworkStore(t), true, true)
+
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{"bad cursor", "/api/v1/contracts?cursor=not-a-cursor"},
+		{"bad network", "/api/v1/contracts?network=devnet"},
+		{"bad date", "/api/v1/contracts?from=not-a-date"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+			assertUnprocessable(t, w, tc.url)
+		})
+	}
+}
+
+func TestListEventsClampsLargeLimit(t *testing.T) {
+	srv := newTestHandler(seedMultiNetworkStore(t), true, true)
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/contracts/"+netContractA+"/events?limit=10000000", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+func TestListEventsRejectsInvalidParams(t *testing.T) {
+	srv := newTestHandler(seedMultiNetworkStore(t), true, true)
+
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{"bad cursor", "/api/v1/contracts/" + netContractA + "/events?cursor=not-a-cursor"},
+		{"bad network", "/api/v1/contracts/" + netContractA + "/events?network=devnet"},
+		{"bad date", "/api/v1/contracts/" + netContractA + "/events?from=not-a-date"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+			assertUnprocessable(t, w, tc.url)
+		})
+	}
+}
+
+func TestListInvocationsClampsLargeLimit(t *testing.T) {
+	srv := newTestHandler(seedMultiNetworkStore(t), true, true)
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/contracts/"+netContractA+"/invocations?limit=10000000", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+func TestListInvocationsRejectsInvalidParams(t *testing.T) {
+	srv := newTestHandler(seedMultiNetworkStore(t), true, true)
+
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{"bad cursor", "/api/v1/contracts/" + netContractA + "/invocations?cursor=not-a-cursor"},
+		{"bad network", "/api/v1/contracts/" + netContractA + "/invocations?network=devnet"},
+		{"bad date", "/api/v1/contracts/" + netContractA + "/invocations?from=not-a-date"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+			assertUnprocessable(t, w, tc.url)
+		})
+	}
+}
+
+func TestListStorageClampsLargeLimit(t *testing.T) {
+	srv := newTestHandler(seedMultiNetworkStore(t), true, true)
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/contracts/"+netContractA+"/storage?limit=10000000", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+func TestListStorageRejectsInvalidParams(t *testing.T) {
+	srv := newTestHandler(seedMultiNetworkStore(t), true, true)
+
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{"bad cursor", "/api/v1/contracts/" + netContractA + "/storage?cursor=not-a-cursor"},
+		{"bad network", "/api/v1/contracts/" + netContractA + "/storage?network=devnet"},
+		{"bad date", "/api/v1/contracts/" + netContractA + "/storage?from=not-a-date"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+			assertUnprocessable(t, w, tc.url)
+		})
 	}
 }

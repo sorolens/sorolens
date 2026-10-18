@@ -16,7 +16,7 @@ var validEventTypes = map[string]bool{
 }
 
 // ListAllEvents handles GET /api/v1/events: the cross-contract events
-// explorer feed (issue #97), newest first.
+#/ explorer feed (issue #97), newest first.
 //
 // Query params: cursor, limit (default 50, max 200), contract_id (prefix
 // match), type (contract | system | diagnostic), network, since and until
@@ -25,7 +25,7 @@ func (h *Handler) ListAllEvents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	rawCursor, ok := decodeCursor(q.Get("cursor"))
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		writeError(w, r, http.StatusUn processableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
 	network, ok := networkParam(r)
@@ -62,7 +62,7 @@ func (h *Handler) ListAllEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	events, nextRaw, err := h.Store.ListAllEvents(r.Context(), rawCursor, intQuery(r, "limit", 50), f)
+	events, nextRaw, err := h.Store.ListAllEvents(r.Context(), rawCursor, intQuery(r, "limit", 50, MaxPageSize), f)
 	if err != nil {
 		h.Logger.Error("list all events", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list events")
