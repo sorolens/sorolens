@@ -604,7 +604,11 @@ export default function WatchdogPage() {
                                   Raw alerts for this contract and severity.
                                 </p>
                                 {membersLoading === g.group_key ? (
-                                  <p className="text-sm text-[var(--color-text-secondary)]">
+                                  <p
+                                    role="status"
+                                    aria-busy="true"
+                                    className="text-sm text-[var(--color-text-secondary)]"
+                                  >
                                     Loading members…
                                   </p>
                                 ) : membersError[g.group_key] ? (
@@ -742,6 +746,7 @@ export default function WatchdogPage() {
                 type="button"
                 onClick={loadMoreGroups}
                 disabled={alertsLoading}
+                aria-busy={alertsLoading}
                 className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm transition-colors hover:bg-[var(--color-bg-card)] disabled:opacity-50"
               >
                 {alertsLoading ? "Loading…" : "Load more groups"}
@@ -757,6 +762,7 @@ export default function WatchdogPage() {
                 type="button"
                 onClick={loadMoreAlerts}
                 disabled={alertsLoading}
+                aria-busy={alertsLoading}
                 className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm transition-colors hover:bg-[var(--color-bg-card)] disabled:opacity-50"
               >
                 {alertsLoading ? "Loading…" : "Load more alerts"}

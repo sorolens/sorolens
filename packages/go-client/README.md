@@ -186,6 +186,27 @@ it := c.IterateContracts(ctx, &client.ListContractsParams{
 - **Watchlist**: `ListWatchlist`, `AddToWatchlist`, `RemoveFromWatchlist`, `GetWatchlistStatus`
 - **Advanced / Raw Access**: `c.Generated()` exposes the full underlying `*ClientWithResponses` for any route.
 
+## Examples
+
+Four runnable examples live in [`examples/`](examples). Each one runs offline
+out of the box (`httptest` servers) and against a live API when
+`SOROLENS_API_URL` is set:
+
+| Example                                                          | Shows                                                                        |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [`examples/pagination`](examples/pagination/main.go)             | Walking every page with `IterateContracts` and the cursor helpers.           |
+| [`examples/errors`](examples/errors/main.go)                     | 404 handling plus automatic retry/backoff recovery from a 429.               |
+| [`examples/sse`](examples/sse/main.go)                           | Streaming `GET /api/v1/stream/events` line by line.                          |
+| [`examples/webhooks`](examples/webhooks/main.go)                 | Verifying `X-Sorolens-Signature` HMAC-SHA256 webhook deliveries.            |
+
+```sh
+cd packages/go-client
+go run ./examples/pagination
+SOROLENS_API_URL=https://api.sorolens.xyz go run ./examples/errors
+```
+
+CI runs every example, so they are always compilable and executable.
+
 ## Regenerating
 
 ```sh

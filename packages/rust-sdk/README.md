@@ -120,6 +120,29 @@ Every operation returns `Result<T, Error>`. Non-2xx responses become
 Local validation failures (an empty contract ID, an out-of-range `horizon` or
 `limit`) are rejected with `Error::InvalidRequest` **before** any network call.
 
+## Examples
+
+Four runnable examples live in [`examples/`](examples). Each one runs offline
+out of the box (a local `httpmock` server) and against a live API when
+`SOROLENS_API_URL` is set:
+
+| Example                                              | Shows                                                                        |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [`examples/pagination.rs`](examples/pagination.rs)   | Walking every page with `ListContractsParams::cursor` and `next_cursor`.     |
+| [`examples/errors.rs`](examples/errors.rs)           | `Error::Api` (404, structured body) and `Error::InvalidRequest`.             |
+| [`examples/sse.rs`](examples/sse.rs)                 | Streaming `GET /api/v1/stream/events` with `reqwest::Response::chunk`.      |
+| [`examples/webhooks.rs`](examples/webhooks.rs)       | Verifying `X-Sorolens-Signature` HMAC-SHA256 webhook deliveries.            |
+
+```sh
+cd packages/rust-sdk
+cargo run --example pagination
+SOROLENS_API_URL=https://api.sorolens.xyz cargo run --example errors
+```
+
+The webhook example carries a minimal SHA-256/HMAC implementation (the crate has
+no crypto dependency) whose vectors are checked against FIPS 180-4 and RFC 4231
+at runtime. CI runs every example, so they are always executable.
+
 ## Testing
 
 The suite runs entirely offline: recorded responses shaped like the schemas in

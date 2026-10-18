@@ -1,0 +1,100 @@
+name: CLI Release
+
+# Pushes a `cli-v*` tag build binaries with GoReleaser, publish them to a GitHub
+# release together with checksums and per-archive SBOMs, and update the Homebrew
+# tap. Pull requests and manual runs exercise the exact same pipeline as a
+# snapshot: `goreleaser check` plus `goreleaser release --snapshot --clean`,
+# which builds every target and generates the checksums/SBOMs but publishes
+# nothing.
+#
+# Required secrets:
+#   GITHUB_TOKEN                  - provided by GitHub automatically.
+#   HOMEBREW_TAP_GITHUB_TOKEN     - PAT with write access to the
+#                                   `sorolens/homebrew-tap` repository.
+on:
+  push:
+    tags:
+      - "cli-v*"
+  pull_request:
+    paths:
+      - "cli/**"
+      - ".github/workflows/cli-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: cli
+
+jobs:
+  dry-run:
+    name: GoReleaser dry-run
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go 1.26
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: false
+      - name: Install syft (SBOM generator)
+        uses: anchore/sbom-action/download-syft@v0
+      - name: Validate configuration
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          workdir: cli
+          args: check
+      - name: Build a snapshot release
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          workdir: cli
+          args: release --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify checksums and SBOMs were produced
+        run: |
+          test -f dist/checksums.txt
+          ls dist/*.sbom.json > /dev/null
+      - name: Upload snapshot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-snapshot
+          path: cli/dist/*
+          if-no-files-found: error
+
+  release:
+    name: GoReleaser release
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go 1.26
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: false
+      - name: Install syft (SBOM generator)
+        uses: anchore/sbom-action/download-syft@v0
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          workdir: cli
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

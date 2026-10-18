@@ -2,6 +2,8 @@
 
 Thank you for your interest. This document covers everything you need to make a contribution: local setup, how to claim an issue, branch naming, commit format, PR requirements, and a full walkthrough of the most common first contribution (adding an XDR type decoder).
 
+Before you start, skim [MAINTAINER.md](MAINTAINER.md) to understand who reviews what and how decisions are made, and use the [new-decoder issue template](.github/ISSUE_TEMPLATE/new-decoder.yml) when proposing a new XDR type decoder.
+
 ## Quick Start: run Sorolens locally
 
 Postgres 16, Redis, and the database schema all come from Docker, so there is nothing to install or configure by hand.
@@ -110,7 +112,10 @@ Ask in the [Sorolens Discord](https://discord.gg/D9jATUezYX): setup and code que
 6. [Commit format](#commit-format)
 7. [PR checklist](#pr-checklist)
 8. [Running tests](#running-tests)
-9. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
+9. [Release process](#release-process)
+10. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
+
+See also: [MAINTAINER.md](MAINTAINER.md) for maintainer responsibilities and process, and the [new-decoder issue template](.github/ISSUE_TEMPLATE/new-decoder.yml) for proposing a new decoder.
 
 ---
 
@@ -180,9 +185,11 @@ go run . --mode continuous --poll-interval 5m
 
 ### `apps/web` - Next.js dashboard
 
+For comprehensive frontend architecture, route maps, environment variables, scripts, and E2E mock guides, see [`apps/web/README.md`](apps/web/README.md).
+
 ```bash
 cd apps/web
-cp .env.local.example .env.local   # set NEXT_PUBLIC_API_URL=http://localhost:8080
+cp .env.example .env.local   # configure NEXT_PUBLIC_API_URL, etc.
 pnpm install
 pnpm dev     # starts on :3000
 ```
@@ -223,6 +230,8 @@ cargo build --target wasm32v1-none --release
 3. If no response after 48 hours, go ahead and open a PR referencing the issue.
 4. Do not open a PR for an issue assigned to someone else without first checking with them.
    If you want to work on something not yet tracked as an issue, open an issue first and describe what you plan to do. This avoids duplicate work.
+
+To propose a new XDR type decoder, open an issue using the [new-decoder template](.github/ISSUE_TEMPLATE/new-decoder.yml). For how issues are triaged, assigned, and reviewed, see [MAINTAINER.md](MAINTAINER.md).
 
 ---
 
@@ -379,9 +388,55 @@ cargo check --target wasm32v1-none
 
 ---
 
+## Release process
+
+Sorolens publishes container images to GitHub Packages (GHCR) and creates GitHub Releases automatically when a semantic version tag is pushed.
+
+### Automated Release Workflow
+
+When a tag following `v*.*.*` (e.g., `v0.2.0`) is pushed to GitHub, `.github/workflows/release.yml` triggers automatically and performs:
+
+1. **Build and push container images to GHCR**:
+   - `ghcr.io/<org>/sorolens-api:<tag>`
+   - `ghcr.io/<org>/sorolens-indexer:<tag>`
+   - Semver tag aliases (`X.Y.Z`, `X.Y`, `X`) and `latest` are published to GHCR.
+   - Build metadata (`VERSION`, `GIT_SHA`) is injected into the binary build info.
+2. **Artifact & Checksums generation**:
+   - Computes SHA256 checksums (`checksums.txt`) for release archives.
+3. **GitHub Release creation**:
+   - Publishes the GitHub Release corresponding to the semver tag with release notes, source archives, and `checksums.txt`.
+
+### Step-by-step Release Guide
+
+Maintainers cut a release with the following steps:
+
+1. **Verify CI**: Ensure all checks on `main` are passing.
+2. **Update CHANGELOG.md**:
+   - Move relevant items from `## [Unreleased]` to a new version section (e.g., `## [0.2.0] - YYYY-MM-DD`).
+   - Update the comparison links at the bottom of `CHANGELOG.md`.
+   - Commit and push the updated changelog to `main`:
+     ```bash
+     git checkout main && git pull
+     git add CHANGELOG.md
+     git commit -m "docs: prepare release v0.2.0"
+     git push origin main
+     ```
+3. **Create and push the semver tag**:
+   ```bash
+   git tag -a v0.2.0 -m "Release v0.2.0"
+   git push origin v0.2.0
+   ```
+4. **Monitor Release Workflow**:
+   - Watch `.github/workflows/release.yml` under GitHub Actions.
+   - Verify that container images appear on GitHub Packages (`ghcr.io`) and that the GitHub Release is published with `checksums.txt`.
+
+---
+
 ## Walkthrough: adding a new XDR type decoder
 
 This is the most common first contribution. The `packages/xdr` package exposes `decodeScVal(base64: string): unknown`, which converts a base64-encoded XDR `ScVal` into a plain JavaScript value. When the decoder encounters an unrecognized `ScVal` type, it returns the raw base64 string unchanged. Adding a new type means handling that case.
+
+Start by opening an issue with the [new-decoder template](.github/ISSUE_TEMPLATE/new-decoder.yml) so the type, motivation, and test plan are captured before you write code. Maintainer review expectations for decoder PRs are described in [MAINTAINER.md](MAINTAINER.md).
 
 ### Step 1: understand the ScVal type you are adding
 
@@ -515,6 +570,8 @@ git push origin feat/xdr-decode-map-type
 
 Open a PR against `main`. Title: `feat(xdr): add decoder for scvMap type`. Body: `Closes #<issue-number>`.
 That is the full cycle. Most XDR decoder contributions follow exactly this pattern.
+
+For what happens after you open the PR — review turnaround, required approvals, and merge policy — see [MAINTAINER.md](MAINTAINER.md).
 ---
 
 ## Troubleshooting

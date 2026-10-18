@@ -41,6 +41,13 @@ jobs:
       - name: cargo test --all-features
         working-directory: packages/rust-sdk
         run: cargo test --all-features
+      - name: Run examples (offline)
+        working-directory: packages/rust-sdk
+        run: |
+          for example in pagination errors sse webhooks; do
+            echo "==> examples/$example"
+            cargo run --quiet --example "$example"
+          done
       - name: cargo test --doc
         working-directory: packages/rust-sdk
         run: cargo test --doc

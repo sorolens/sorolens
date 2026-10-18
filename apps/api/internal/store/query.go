@@ -127,6 +127,12 @@ type QueryStore interface {
 	// hash (the table's primary key), or ErrNotFound. It is the root row of a
 	// transaction's call graph.
 	GetInvocation(ctx context.Context, txHash string) (Invocation, error)
+
+	// GetInvocationWithEvents returns the invocation for the given contract and
+	// transaction hash, paired with all events emitted in that transaction.
+	// Returns ErrNotFound when the invocation does not exist or does not belong
+	// to the contract.
+	GetInvocationWithEvents(ctx context.Context, contractID, txHash string) (Invocation, []Event, error)
 	// GetCallEdges returns every cross-contract call edge recorded for a
 	// transaction, parent before child (which is the order of the
 	// deterministic span ids).
@@ -507,6 +513,112 @@ func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invoc
 	_ = json.Unmarshal(argsDec, &inv.ArgsDecoded)
 	_ = json.Unmarshal(resultDec, &inv.ResultDecoded)
 	return inv, nil
+}
+
+// ---- GetInvocationWithEvents ------------------------------------------------
+
+func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID, txHash string) (Invocation, []Event, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT i.tx_hash, i.contract_id, i.network, i.ledger, i.ledger_closed_at, i.status,
+		       COALESCE(i.function_name, ''),
+		       COALESCE(i.args_decoded, '{}'::jsonb),
+		       COALESCE(i.result_decoded, 'null'::jsonb),
+		       COALESCE(i.result_xdr, ''),
+		       COALESCE(i.resource_fee_charged, 0),
+		       COALESCE(i.cpu_insn, 0),
+		       COALESCE(i.mem_byte, 0),
+		       COALESCE(i.ledger_read_byte, 0),
+		       COALESCE(i.ledger_write_byte, 0),
+		       COALESCE(i.application_order, 0),
+		       i.inserted_at,
+		       e.id, e.contract_id, e.network, e.ledger, e.ledger_closed_at, e.tx_hash, e.type,
+		       e.topic_xdr, e.value_xdr, e.topic_decoded, e.value_decoded,
+		       e.in_successful_call, e.inserted_at
+		FROM invocations i
+		LEFT JOIN events e ON e.tx_hash = i.tx_hash
+		WHERE i.contract_id = $1 AND i.tx_hash = $2
+		ORDER BY e.ledger ASC, e.id ASC`,
+		contractID, txHash,
+	)
+	if err != nil {
+		return Invocation{}, nil, fmt.Errorf("get invocation with events: %w", err)
+	}
+	defer rows.Close()
+
+	var inv Invocation
+	var events []Event
+	found := false
+
+	for rows.Next() {
+		var argsDec, resultDec []byte
+		var evID, evContractID, evNetwork, evType, evTxHash, evValueXDR *string
+		var evLedger *uint32
+		var evLedgerClosedAt, evInsertedAt *time.Time
+		var evTopicXDR, evTopicDec, evValDec []byte
+		var evInSuccessfulCall *bool
+
+		if err := rows.Scan(
+			&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
+			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
+			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
+			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&evID, &evContractID, &evNetwork, &evLedger, &evLedgerClosedAt, &evTxHash, &evType,
+			&evTopicXDR, &evValueXDR, &evTopicDec, &evValDec,
+			&evInSuccessfulCall, &evInsertedAt,
+		); err != nil {
+			return Invocation{}, nil, fmt.Errorf("scan invocation with events: %w", err)
+		}
+
+		if !found {
+			found = true
+			_ = json.Unmarshal(argsDec, &inv.ArgsDecoded)
+			_ = json.Unmarshal(resultDec, &inv.ResultDecoded)
+		}
+
+		if evID != nil {
+			e := Event{
+				ID:         *evID,
+				ContractID: *evContractID,
+				Network:    *evNetwork,
+				Ledger:     *evLedger,
+				Type:       *evType,
+				TxHash:     *evTxHash,
+			}
+			if evLedgerClosedAt != nil {
+				e.LedgerClosedAt = *evLedgerClosedAt
+			}
+			if evValueXDR != nil {
+				e.ValueXDR = *evValueXDR
+			}
+			if evInSuccessfulCall != nil {
+				e.InSuccessfulCall = *evInSuccessfulCall
+			}
+			if evInsertedAt != nil {
+				e.InsertedAt = *evInsertedAt
+			}
+			if len(evTopicXDR) > 0 {
+				_ = json.Unmarshal(evTopicXDR, &e.TopicXDR)
+			}
+			if len(evTopicDec) > 0 {
+				_ = json.Unmarshal(evTopicDec, &e.TopicDecoded)
+			}
+			if len(evValDec) > 0 {
+				_ = json.Unmarshal(evValDec, &e.ValueDecoded)
+			}
+			events = append(events, e)
+		}
+	}
+
+	if rows.Err() != nil {
+		return Invocation{}, nil, rows.Err()
+	}
+	if !found {
+		return Invocation{}, nil, ErrNotFound
+	}
+	if events == nil {
+		events = []Event{}
+	}
+	return inv, events, nil
 }
 
 // ---- GetCallEdges -----------------------------------------------------------

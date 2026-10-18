@@ -129,13 +129,19 @@ export function CompareView({ initialIds, initialWindow }: CompareViewProps) {
       )}
 
       {loading && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-72 animate-pulse rounded-xl bg-[var(--color-border)]"
-            />
-          ))}
+        <div role="status" aria-busy="true" aria-label="Loading comparison">
+          <span className="sr-only">Loading comparison</span>
+          <div
+            aria-hidden="true"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="h-72 animate-pulse rounded-xl bg-[var(--color-border)]"
+              />
+            ))}
+          </div>
         </div>
       )}
 

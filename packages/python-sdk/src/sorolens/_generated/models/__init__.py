@@ -116,6 +116,7 @@ from .health_score_components import HealthScoreComponents
 from .in_watchlist import InWatchlist
 from .invocation import Invocation
 from .invocation_args_decoded import InvocationArgsDecoded
+from .invocation_detail import InvocationDetail
 from .list_alert_rules_response_200 import ListAlertRulesResponse200
 from .list_alert_subscriptions_response_200 import ListAlertSubscriptionsResponse200
 from .list_alerts_network import ListAlertsNetwork
@@ -387,6 +388,7 @@ __all__ = (
     "InWatchlist",
     "Invocation",
     "InvocationArgsDecoded",
+    "InvocationDetail",
     "ListAlertRulesResponse200",
     "ListAlertSubscriptionsResponse200",
     "ListAlertsNetwork",

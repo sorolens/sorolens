@@ -2,6 +2,7 @@ import type {
   ContractDetail,
   ContractsListResponse,
   GlobalStats,
+  StatsResponse,
   WatchdogStats,
 } from "@/lib/types";
 
@@ -53,5 +54,13 @@ export function getContractForMetadata(
 ): Promise<ContractDetail | null> {
   return fetchServerData<ContractDetail>(
     `/api/v1/contracts/${encodeURIComponent(id)}`
+  );
+}
+
+export function getContractStatsForMetadata(
+  id: string
+): Promise<StatsResponse | null> {
+  return fetchServerData<StatsResponse>(
+    `/api/v1/contracts/${encodeURIComponent(id)}/stats?window=7d`
   );
 }

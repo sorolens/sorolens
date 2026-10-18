@@ -58,13 +58,16 @@ export default function WatchlistPage() {
       </div>
 
       {loading && (
-        <div className="space-y-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-16 rounded-lg bg-[var(--color-bg-card)] animate-pulse"
-            />
-          ))}
+        <div role="status" aria-busy="true" aria-label="Loading watchlist">
+          <span className="sr-only">Loading watchlist</span>
+          <div aria-hidden="true" className="space-y-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-16 rounded-lg bg-[var(--color-bg-card)] animate-pulse"
+              />
+            ))}
+          </div>
         </div>
       )}
 

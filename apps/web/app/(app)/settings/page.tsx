@@ -133,13 +133,18 @@ export default function SettingsPage() {
         ) : (
           // Placeholder while stored preferences load; never a flash of the
           // default values, which would be wrong for a returning user.
-          Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={index}
-              data-testid="settings-loading"
-              className="h-48 animate-pulse rounded-lg bg-[var(--color-bg-card)]"
-            />
-          ))
+          <div role="status" aria-busy="true" aria-label="Loading settings">
+            <span className="sr-only">Loading settings</span>
+            <div aria-hidden="true" className="space-y-6">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  data-testid="settings-loading"
+                  className="h-48 animate-pulse rounded-lg bg-[var(--color-bg-card)]"
+                />
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

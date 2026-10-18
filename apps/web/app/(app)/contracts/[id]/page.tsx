@@ -640,16 +640,19 @@ function ContractDetailContent({ id }: { id: string }) {
 
 function SkeletonHeader() {
   return (
-    <div className="animate-pulse space-y-3">
-      <div className="h-3 w-16 rounded bg-[var(--color-border)]" />
-      <div className="flex items-center gap-3">
-        <div className="h-8 w-48 rounded bg-[var(--color-border)]" />
-        <div className="h-5 w-16 rounded-full bg-[var(--color-border)]" />
-      </div>
-      <div className="flex gap-4">
-        <div className="h-3 w-32 rounded bg-[var(--color-border)]" />
-        <div className="h-3 w-28 rounded bg-[var(--color-border)]" />
-        <div className="h-3 w-36 rounded bg-[var(--color-border)]" />
+    <div role="status" aria-busy="true" aria-label="Loading contract details">
+      <span className="sr-only">Loading contract details</span>
+      <div aria-hidden="true" className="animate-pulse space-y-3">
+        <div className="h-3 w-16 rounded bg-[var(--color-border)]" />
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-48 rounded bg-[var(--color-border)]" />
+          <div className="h-5 w-16 rounded-full bg-[var(--color-border)]" />
+        </div>
+        <div className="flex gap-4">
+          <div className="h-3 w-32 rounded bg-[var(--color-border)]" />
+          <div className="h-3 w-28 rounded bg-[var(--color-border)]" />
+          <div className="h-3 w-36 rounded bg-[var(--color-border)]" />
+        </div>
       </div>
     </div>
   );
