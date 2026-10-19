@@ -40,24 +40,13 @@ vi.mock("next/link", () => ({
 // router.replace() updates the shared search params, so the component re-reads
 // the new sort state on the next render just as a real navigation would.
 const nav = vi.hoisted(() => {
-  let query = new URLSearchParams("");
-  const replace = vi.fn((href: string) => {
-    query = new URLSearchParams(href.startsWith("?") ? href.slice(1) : href);
-  });
+  const replace = vi.fn();
   const push = vi.fn();
-  return {
-    replace,
-    push,
-    getQuery: () => query,
-    setQuery: (q: string | URLSearchParams) => {
-      query = new URLSearchParams(q);
-    },
-  };
+  return { replace, push };
 });
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: nav.replace, push: nav.push }),
-  useSearchParams: () => nav.getQuery(),
 }));
 
 // ── Mock @sorolens/ui so we don't need the built dist ───────────────────────
@@ -165,7 +154,6 @@ vi.mock("@/components/ImportContractsCsv", () => ({
 // ── Mock @/lib/api ───────────────────────────────────────────────────────────
 const mockListContracts = vi.fn();
 const mockBatchContracts = vi.fn();
-const mockGetContractSummary = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   listContracts: (...args: unknown[]) => mockListContracts(...args),
@@ -230,13 +218,11 @@ function rowTexts(): string[] {
 describe("ContractsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    nav.setQuery("");
     mockBatchContracts.mockResolvedValue({
       action: "untrack",
       requested: 1,
       affected: 1,
     });
-    mockGetContractSummary.mockResolvedValue(null);
     mockListContracts.mockResolvedValue({
       contracts: [CONTRACT_A, CONTRACT_B],
       cursor: null,
@@ -251,9 +237,14 @@ describe("ContractsPage", () => {
   // Helper: dynamic import so mocks are in place before module loads.
   // Each render mounts a fresh SWR cache so tests stay independent, and
   // deduping is disabled so a revalidation is observable immediately.
-  async function renderPage() {
-    const { default: ContractsPage } =
-      await import("@/app/(app)/contracts/page");
+  async function renderPage(
+    props: {
+      initialSortColumn?: string;
+      initialSortDirection?: "asc" | "desc";
+    } = {}
+  ) {
+    const { default: ContractsClient } =
+      await import("@/app/(app)/contracts/ContractsClient");
     return render(
       <SWRConfig
         value={{
@@ -264,7 +255,7 @@ describe("ContractsPage", () => {
           shouldRetryOnError: false,
         }}
       >
-        <ContractsPage />
+        <ContractsClient {...props} />
       </SWRConfig>
     );
   }
@@ -489,7 +480,7 @@ describe("ContractsPage", () => {
     await waitFor(() => expect(mockBatchContracts).toHaveBeenCalledTimes(1));
     expect(mockBatchContracts).toHaveBeenCalledWith(
       { ids: [CONTRACT_A.id], action: "untrack", args: undefined },
-      ""
+      "user_1"
     );
 
     // Modal closes, selection clears and the list refetches without A.
@@ -537,7 +528,7 @@ describe("ContractsPage", () => {
 
     await waitFor(() => expect(mockBatchContracts).toHaveBeenCalledTimes(1));
     const [req, userId] = mockBatchContracts.mock.calls[0];
-    expect(userId).toBe("");
+    expect(userId).toBe("user_1");
     expect(req.action).toBe("tag");
     expect(req.args).toEqual({ label: "payments" });
     expect([...req.ids].sort()).toEqual([CONTRACT_A.id, CONTRACT_B.id].sort());
@@ -691,9 +682,10 @@ describe("ContractsPage", () => {
   });
 
   it("initializes the sort from the URL on load", async () => {
-    nav.setQuery("?sort=status&dir=asc");
-
-    await renderPage();
+    await renderPage({
+      initialSortColumn: "status",
+      initialSortDirection: "asc",
+    });
     await waitFor(() => screen.getByTestId("data-table"));
 
     // The first request already carries the URL sort params.
