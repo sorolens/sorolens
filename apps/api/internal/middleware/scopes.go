@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -174,7 +173,7 @@ func normalizePattern(pattern string) string {
 //     credential, so keys cannot be minted anonymously.
 //   - Credential presented but unknown, revoked or expired: 401.
 //   - API key valid but missing the required scope: 403 with
-//     {"error":"missing scope","required":"<scope>"}.
+//     the standard JSON error envelope including the required scope.
 //   - Session or trusted-proxy identity: allowed; scopes are a property of
 //     API keys only, and role middleware still applies where wired.
 func RequireScopes(logger *slog.Logger) func(http.Handler) http.Handler {
@@ -190,15 +189,11 @@ func RequireScopes(logger *slog.Logger) func(http.Handler) http.Handler {
 					if logger != nil {
 						logger.Debug("scope middleware: invalid credential", "path", r.URL.Path)
 					}
-					writeScopeError(w, http.StatusUnauthorized, map[string]string{
-						"error": "invalid API key",
-					})
+					writeScopeError(w, r, http.StatusUnauthorized, "invalid_api_key", "invalid API key", nil)
 					return
 				}
 				if hasScopeRule && required == ScopeAdmin {
-					writeScopeError(w, http.StatusUnauthorized, map[string]string{
-						"error": "authentication required",
-					})
+					writeScopeError(w, r, http.StatusUnauthorized, "authentication_required", "authentication required", nil)
 					return
 				}
 				next.ServeHTTP(w, r)
@@ -214,10 +209,7 @@ func RequireScopes(logger *slog.Logger) func(http.Handler) http.Handler {
 				return
 			}
 
-			writeScopeError(w, http.StatusForbidden, map[string]string{
-				"error":    "missing scope",
-				"required": required,
-			})
+			writeScopeError(w, r, http.StatusForbidden, "missing_scope", "missing scope", map[string]string{"required": required})
 		})
 	}
 }
@@ -241,8 +233,8 @@ func extractAPIKey(r *http.Request) string {
 	return strings.TrimSpace(r.URL.Query().Get("api_key"))
 }
 
-func writeScopeError(w http.ResponseWriter, status int, body map[string]string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+// writeScopeError routes middleware errors through the shared handler error
+// helpers so every response uses the same JSON error envelope.
+func writeScopeError(w http.ResponseWriter, r *http.Request, status int, code, message string, extra map[string]string) {
+	handler.WriteError(w, r, status, code, message, extra)
 }
