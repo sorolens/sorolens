@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { getContractForMetadata } from "@/lib/serverData";
 
 type Props = {
@@ -7,7 +8,8 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const shortId = id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
+  const shortId = id.length > 12 ? `${id.slice(0, 6)}…
+${id.slice(-4)}` : id;
   const contract = await getContractForMetadata(id);
   const label = contract?.label?.trim() || `Contract ${shortId}`;
   const network = contract?.network;
@@ -30,10 +32,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default function ContractDetailLayout({
+export default async function ContractDetailLayout({
   children,
+  params,
 }: {
   children: React.ReactNode;
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
+  const contract = await getContractForMetadata(id);
+
+  if (!contract) {
+    notFound();
+  }
+
   return children;
 }

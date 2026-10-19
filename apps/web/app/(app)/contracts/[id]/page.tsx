@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import { MonoId } from "@sorolens/ui";
 import {
   getContract,
@@ -60,6 +60,7 @@ export default function ContractDetailPage({ params }: Props) {
 }
 
 function ContractDetailContent({ id }: { id: string }) {
+  const router = useRouter();
   const [contract, setContract] = useState<ContractDetail | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
   const [contractLoading, setContractLoading] = useState(true);
@@ -82,6 +83,9 @@ function ContractDetailContent({ id }: { id: string }) {
   const [tags, setTags] = useState<string[]>([]);
   const [tagError, setTagError] = useState<string | null>(null);
   const [tagSaving, setTagSaving] = useState(false);
+
+  // Pending destructive action awaiting confirmation.
+  const [pendingRemoveTag, setPendingRemoveTag] = useState<string | null>(null);
 
   const [window, setWindow] = useState<TimeWindow>("7d");
   const [stats, setStats] = useState<ContractStats | null>(null);
@@ -126,7 +130,10 @@ function ContractDetailContent({ id }: { id: string }) {
       } catch (err) {
         if (!cancelled) {
           if (err instanceof ApiError && err.status === 404) {
+            // Render the route's not-found boundary so the response is a
+            // real 404 rather than an in-page "not found" string.
             notFound();
+            return;
           }
           // Anything but a 404 is an outage or server error, not a missing
           // contract: say so and let the user retry.
@@ -349,6 +356,17 @@ function ContractDetailContent({ id }: { id: string }) {
     [id]
   );
 
+  const handleConfirmRemoveTag = useCallback(async () => {
+    if (!pendingRemoveTag) return;
+    const tag = pendingRemoveTag;
+    setPendingRemoveTag(null);
+    await handleRemoveTag(tag);
+  }, [pendingRemoveTag, handleRemoveTag]);
+
+  const handleCancelRemoveTag = useCallback(() => {
+    setPendingRemoveTag(null);
+  }, []);
+
   if (contractLoading) {
     return (
       <div>
@@ -451,7 +469,7 @@ function ContractDetailContent({ id }: { id: string }) {
           <TagInput
             tags={tags}
             onAdd={handleAddTag}
-            onRemove={handleRemoveTag}
+            onRemove={(tag) => setPendingRemoveTag(tag)}
             disabled={tagSaving}
             error={tagError}
             placeholder="Add a tag (prod, staging…)"
@@ -643,6 +661,20 @@ function ContractDetailContent({ id }: { id: string }) {
       <section className="mb-8">
         <HealthScoreCard contractId={id} />
       </section>
+
+      <ConfirmDialog
+        open={pendingRemoveTag !== null}
+        title="Remove this tag?"
+        description={
+          pendingRemoveTag
+            ? `The tag "${pendingRemoveTag}" will be removed from this contract.`
+            : undefined
+        }
+        confirmLabel="Remove tag"
+        destructive
+        onConfirm={handleConfirmRemoveTag}
+        onCancel={handleCancelRemoveTag}
+      />
     </div>
   );
 }
@@ -661,6 +693,115 @@ function SkeletonHeader() {
           <div className="h-3 w-32 rounded bg-[var(--color-border)]" />
           <div className="h-3 w-28 rounded bg-[var(--color-border)]" />
           <div className="h-3 w-36 rounded bg-[var(--color-border)]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ConfirmDialogProps {
+  open: boolean;
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  destructive?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+/**
+ * Shared, accessible confirmation dialog for destructive actions.
+ *
+ * Renders as a modal dialog with proper ARIA roles, traps focus on the
+ * cancel button when opened, closes on Escape, and restores focus to the
+ * previously focused element when dismissed.
+ */
+function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  destructive = false,
+  onConfirm,
+  onCancel,
+}: ConfirmDialogProps) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    previouslyFocused.current =
+      typeof document !== "undefined"
+        ? (document.activeElement as HTMLElement | null)
+        : null;
+    // Move focus into the dialog once it is mounted.
+    cancelRef.current?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previouslyFocused.current?.focus?.();
+    };
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onCancel}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby={description ? "confirm-dialog-description" : undefined}
+        className="w-full max-w-md rounded-lg bg-[var(--color-bg-card)] p-6 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2
+          id="confirm-dialog-title"
+          className="text-lg font-semibold text-[var(--color-text-primary)]"
+        >
+          {title}
+        </h2>
+        {description && (
+          <p
+            id="confirm-dialog-description"
+            className="mt-2 text-sm text-[var(--color-text-secondary)]"
+          >
+            {description}
+          </p>
+        )}
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            ref={cancelRef}
+            type="button"
+            onClick={onCancel}
+            className="rounded-md bg-[var(--color-bg-card)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] hover:text-[var(--color-text-primary)]"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`rounded-md px-4 py-2 text-sm font-medium text-white ${
+              destructive
+                ? "bg-red-600 hover:bg-red-500"
+                : "bg-[var(--color-accent)] hover:opacity-80"
+            }`}
+          >
+            {confirmLabel}
+          </button>
         </div>
       </div>
     </div>
