@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MonoId } from "@sorolens/ui";
@@ -10,20 +10,20 @@ import {
   getContractStorage,
   getContractStats,
   getContractSnapshot,
-  getContractSummary,
   addContractTag,
   removeContractTag,
+  getContractSummary,
   ApiError,
 } from "@/lib/api";
 import type {
   ContractDetail,
   ContractEvent,
   ContractStats,
-  ContractSummary,
   StorageEntry,
   VolumePoint,
   ResourceTrendPoint,
   TimeWindow,
+  ContractSummary,
 } from "@/lib/types";
 import { getActivitySeries } from "@/lib/activitySeries";
 import { ensureSession } from "@/lib/user";
@@ -44,7 +44,6 @@ import { ErrorState, errorMessage } from "@/components/ErrorState";
 import { StoragePanel } from "@/components/StoragePanel";
 import { ContractNotesPanel } from "@/components/ContractNotesPanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
-import { ContractSummaryCard } from "@/components/ContractSummaryCard";
 import { HealthScoreCard } from "@/components/HealthScoreCard";
 import { AddToGroup } from "@/components/AddToGroup";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
@@ -72,6 +71,9 @@ function ContractDetailContent({ id }: { id: string }) {
   const [seriesReload, setSeriesReload] = useState(0);
   const [eventsReload, setEventsReload] = useState(0);
   const [storageReload, setStorageReload] = useState(0);
+  const [summaryReload, setSummaryReload] = useState(0);
+  const [summary, setSummary] = useState<ContractSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
   // A failed section shows an error with a retry instead of looking empty.
   const [statsError, setStatsError] = useState<string | null>(null);
   const [seriesError, setSeriesError] = useState<string | null>(null);
@@ -80,6 +82,7 @@ function ContractDetailContent({ id }: { id: string }) {
   // Failed "load more" requests keep the rows already shown.
   const [eventsMoreError, setEventsMoreError] = useState<string | null>(null);
   const [storageMoreError, setStorageMoreError] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   // User-defined tags are edited inline on this page.
   const [tags, setTags] = useState<string[]>([]);
@@ -100,10 +103,6 @@ function ContractDetailContent({ id }: { id: string }) {
   const [eventsCursor, setEventsCursor] = useState<string | null>(null);
   const [eventsHasMore, setEventsHasMore] = useState(false);
   const [showFailedOnly, setShowFailedOnly] = useState(false);
-
-  const [summary, setSummary] = useState<ContractSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(true);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   const [storage, setStorage] = useState<StorageEntry[]>([]);
   const [storageLoading, setStorageLoading] = useState(true);
@@ -153,6 +152,29 @@ function ContractDetailContent({ id }: { id: string }) {
   useEffect(() => {
     let cancelled = false;
 
+    async function loadSummary() {
+      setSummaryLoading(true);
+      setSummaryError(null);
+      try {
+        const data = await getContractSummary(id);
+        if (!cancelled) setSummary(data);
+      } catch (err) {
+        if (!cancelled)
+          setSummaryError(errorMessage(err, "The summary request failed."));
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
+      }
+    }
+
+    loadSummary();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, summaryReload]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function loadStats() {
       setStatsError(null);
       try {
@@ -174,6 +196,16 @@ function ContractDetailContent({ id }: { id: string }) {
       cancelled = true;
     };
   }, [id, window, statsReload]);
+
+  const snapshotExportUrl = useMemo(
+    () => `/api/contracts/${encodeURIComponent(id)}/snapshot.json`,
+    [id]
+  );
+
+  const summaryExportUrl = useMemo(
+    () => `/api/contracts/${encodeURIComponent(id)}/summary`,
+    [id]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -252,28 +284,6 @@ function ContractDetailContent({ id }: { id: string }) {
       cancelled = true;
     };
   }, [id, showFailedOnly, eventsReload]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadSummary() {
-      setSummaryLoading(true);
-      setSummaryError(null);
-      try {
-        const data = await getContractSummary(id);
-        if (!cancelled) setSummary(data);
-      } catch {
-        if (!cancelled) setSummaryError("Failed to load contract summary.");
-      } finally {
-        if (!cancelled) setSummaryLoading(false);
-      }
-    }
-
-    loadSummary();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -458,14 +468,15 @@ function ContractDetailContent({ id }: { id: string }) {
           </span>
           <AddToGroup contractId={id} />
           <VerifiedBadge contractId={id} />
-        </div>
-        <div className="mt-6">
-          <ContractSummaryCard
-            contractId={id}
-            summary={summary}
-            loading={summaryLoading}
-            error={summaryError}
-          />
+          {/* Compare entry point (#607): pre-selects this contract in the
+              shared /compare?ids= URL; the picker fills the remaining slots. */}
+          <Link
+            data-testid="compare-entry-link"
+            href={`/compare?ids=${encodeURIComponent(id)}`}
+            className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]"
+          >
+            Compare
+          </Link>
         </div>
         <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-secondary)]">
           <span>Network: {contract?.network}</span>
@@ -486,6 +497,16 @@ function ContractDetailContent({ id }: { id: string }) {
           />
         </div>
       </header>
+
+      <section className="mb-8">
+        <ContractSummaryCard
+          summary={summary}
+          loading={summaryLoading}
+          error={summaryError}
+          onRetry={() => setSummaryReload((n) => n + 1)}
+          exportUrl={summaryExportUrl}
+        />
+      </section>
 
       {statsError && (
         <ErrorState
@@ -665,6 +686,7 @@ function ContractDetailContent({ id }: { id: string }) {
         <SnapshotPanel
           contractId={id}
           currentLedger={stats?.last_synced_ledger ?? 0}
+          exportUrl={snapshotExportUrl}
         />
       </section>
 
@@ -675,18 +697,114 @@ function ContractDetailContent({ id }: { id: string }) {
   );
 }
 
+interface ContractSummaryCardProps {
+  summary: ContractSummary | null;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  exportUrl: string;
+}
+
+function ContractSummaryCard({
+  summary,
+  loading,
+  error,
+  onRetry,
+  exportUrl,
+}: ContractSummaryCardProps) {
+  return (
+    <div
+      data-testid="contract-summary-card"
+      className="rounded-lg bg-[var(--color-bg-card)] p-4"
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Summary</h2>
+        <a
+          data-testid="summary-export-link"
+          href={exportUrl}
+          download={`contract-${summary?.contract_id ?? "summary"}.json`}
+          className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]"
+        >
+          Export JSON
+        </a>
+      </div>
+      {loading ? (
+        <div
+          role="status"
+          aria-busy="true"
+          aria-label="Loading contract summary"
+        >
+          <span className="sr-only">Loading contract summary</span>
+          <div aria-hidden="true" className="animate-pulse space-y-2">
+            <div className="h-3 w-40 rounded bg-[var(--color-border)]" />
+            <div className="h-3 w-56 rounded bg-[var(--color-border)]" />
+            <div className="h-3 w-32 rounded bg-[var(--color-border)]" />
+          </div>
+        </div>
+      ) : error ? (
+        <ErrorState
+          compact
+          title="Couldn't load contract summary."
+          message={error}
+          onRetry={onRetry}
+        />
+      ) : !summary ? (
+        <p className="text-sm text-[var(--color-text-secondary)]">
+          No summary available for this contract yet.
+        </p>
+      ) : (
+        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-xs text-[var(--color-text-secondary)]">
+              Contract
+            </dt>
+            <dd className="mt-0.5 font-medium">
+              <MonoId value={summary.contract_id} headChars={8} tailChars={8} />
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[var(--color-text-secondary)]">
+              Network
+            </dt>
+            <dd className="mt-0.5 font-medium capitalize">
+              {summary.network}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[var(--color-text-secondary)]">
+              Status
+            </dt>
+            <dd className="mt-0.5 font-medium capitalize">{summary.status}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[var(--color-text-secondary)]">
+              Last Synced Ledger
+            </dt>
+            <dd className="mt-0.5 font-medium">
+              {summary.last_synced_ledger.toLocaleString()}
+            </dd>
+          </div>
+        </dl>
+      )}
+    </div>
+  );
+}
+
 function SkeletonHeader() {
   return (
-    <div className="animate-pulse space-y-3">
-      <div className="h-3 w-16 rounded bg-[var(--color-border)]" />
-      <div className="flex items-center gap-3">
-        <div className="h-8 w-48 rounded bg-[var(--color-border)]" />
-        <div className="h-5 w-16 rounded-full bg-[var(--color-border)]" />
-      </div>
-      <div className="flex gap-4">
-        <div className="h-3 w-32 rounded bg-[var(--color-border)]" />
-        <div className="h-3 w-28 rounded bg-[var(--color-border)]" />
-        <div className="h-3 w-36 rounded bg-[var(--color-border)]" />
+    <div role="status" aria-busy="true" aria-label="Loading contract details">
+      <span className="sr-only">Loading contract details</span>
+      <div aria-hidden="true" className="animate-pulse space-y-3">
+        <div className="h-3 w-16 rounded bg-[var(--color-border)]" />
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-48 rounded bg-[var(--color-border)]" />
+          <div className="h-5 w-16 rounded-full bg-[var(--color-border)]" />
+        </div>
+        <div className="flex gap-4">
+          <div className="h-3 w-32 rounded bg-[var(--color-border)]" />
+          <div className="h-3 w-28 rounded bg-[var(--color-border)]" />
+          <div className="h-3 w-36 rounded bg-[var(--color-border)]" />
+        </div>
       </div>
     </div>
   );
