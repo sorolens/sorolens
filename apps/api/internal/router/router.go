@@ -125,6 +125,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// compression decision, so limiter headers written later are unaffected).
 	r.Use(middleware.Compression)
 
+	// RateLimit fails open (with a log and metric) when h.RedisClient is nil,
+	// so a serverless entrypoint that does not construct a Redis client still
+	// serves requests instead of panicking.
 	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
 
 	// Health (not rate-limited)

@@ -4,7 +4,7 @@
 package handler
 
 import (
-	"context"
+	context
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/exaring/otelpgx"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jack/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	apiconfig "github.com/sorolens/sorolens/apps/api/internal/config"
 	sorohandler "github.com/sorolens/sorolens/apps/api/internal/handler"
@@ -20,6 +20,7 @@ import (
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/router"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
+	
 )
 
 var (
@@ -29,7 +30,7 @@ var (
 
 // Handler is the Vercel Go serverless function entrypoint.
 func Handler(w http.ResponseWriter, r *http.Request) {
-	once.Do(func() {
+	once.Do(func
 		logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 			Level: slog.LevelInfo,
 		}))

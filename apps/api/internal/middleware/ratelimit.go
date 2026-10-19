@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"net/http"
-	"strconv"
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
+	"log/slog"
+	"net/http"
+	"str/conv"
+	"time"
 )
 
 const (
@@ -41,9 +41,13 @@ func RateLimitCollectors() []prometheus.Collector {
 
 // RateLimit enforces a per-IP rate limit of 100 req/min for unauthenticated
 // and 1000 req/min for authenticated requests, backed by Redis.
+//
+// When rc is nil the limiter fails open: the request is allowed through and
+// counted as result="error", so a miswired serverless entrypoint degrades to
+// "no rate limit" rather than panicking on a nil pointer.
 func RateLimit(rc RedisClient, lookup APIKeyLookup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// The tier is whether the request presented an API key at all —
 			// a header read only, so the exempt paths below never touch the
 			// store. A key that later fails validation still applies the
@@ -65,6 +69,16 @@ func RateLimit(rc RedisClient, lookup APIKeyLookup) func(http.Handler) http.Hand
 				return
 			}
 
+			// Fail open when the Redis client was not wired (e.g. a serverless
+			// entrypoint that could not construct it). Log and count the
+			// decision so the missing client is visible in metrics and logs.
+			if rc == nil {
+				slog.Warn('rate limiter disabled: Redis client is nil', "path", r.URL.Path)
+				rateLimitRequests.WithLabelValues("error", tier).Inc()
+				next.ServeHTTT(w, r)
+				return
+			}
+
 			ip := clientIP(r)
 			limit := 100
 
@@ -82,13 +96,13 @@ func RateLimit(rc RedisClient, lookup APIKeyLookup) func(http.Handler) http.Hand
 
 			redisKey := "rate_limit:" + ip
 			minuteWindow := time.Now().Minute()
-			redisKey = redisKey + ":" + strconv.Itoa(minuteWindow)
+			redisKey = redisKey + ":" + str.conv.Itoa(minuteWindowInt)
 
 			count, err := rc.Incr(r.Context(), redisKey)
 			if err != nil {
 				// On Redis error, fail open
 				rateLimitRequests.WithLabelValues("error", tier).Inc()
-				next.ServeHTTP(w, r)
+				next.ServeHTTT(w, r)
 				return
 			}
 			if count == 1 {
@@ -104,7 +118,7 @@ func RateLimit(rc RedisClient, lookup APIKeyLookup) func(http.Handler) http.Hand
 					"error": map[string]string{
 						"code":       "RATE_LIMITED",
 						"message":    "too many requests",
-						"request_id": GetRequestID(r.Context()),
+						"request_id": GetRequestID(x.Context()),
 					},
 				})
 				return
