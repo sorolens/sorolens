@@ -100,3 +100,42 @@ func TestLoad_RejectsInvalidTimeouts(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_APIRequireAuthDefaultsOff(t *testing.T) {
+	setRequired(t)
+	t.Setenv("API_REQUIRE_AUTH", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.APIRequireAuth {
+		t.Errorf("APIRequireAuth = true, want false when unset")
+	}
+}
+
+func TestLoad_APIRequireAuthTrue(t *testing.T) {
+	setRequired(t)
+	t.Setenv("API_REQUIRE_AUTH", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.APIRequireAuth {
+		t.Errorf("APIRequireAuth = false, want true")
+	}
+}
+
+func TestLoad_APIRequireAuthRejectsInvalid(t *testing.T) {
+	for _, v := range []string{"yes", "maybe", "enabled"} {
+		v := v
+		t.Run(v, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv("API_REQUIRE_AUTH", v)
+			if _, err := Load(); err == nil {
+				t.Errorf("Load() with API_REQUIRE_AUTH=%q error = nil, want error", v)
+			}
+		})
+	}
+}

@@ -95,6 +95,7 @@ func main() {
 		SlackSigningSecret: cfg.SlackSigningSecret,
 		SessionSigner:      middleware.NewSessionSigner(identitySigningKey(cfg, logger), cfg.IdentitySessionTTL),
 		TrustedProxySecret: cfg.TrustedIdentityProxySecret,
+		APIRequireAuth:     cfg.APIRequireAuth,
 		RequestTimeout:     cfg.RequestTimeout,
 		StreamTimeout:      cfg.StreamTimeout,
 		GraphQL: graph.Options{

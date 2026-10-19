@@ -94,6 +94,10 @@ type Handler struct {
 	// TrustedProxySecret enables identity headers signed by a reverse proxy.
 	// Empty disables that identity source.
 	TrustedProxySecret string
+	// APIRequireAuth, when true, makes the router reject every unauthenticated
+	// request except health checks, the version endpoint, metrics and the
+	// session bootstrap endpoint. Off by default (API_REQUIRE_AUTH).
+	APIRequireAuth bool
 	// RequestTimeout caps handling of every /api/v1 route except the SSE
 	// stream (issue #154). Zero means middleware.DefaultRequestTimeout.
 	RequestTimeout time.Duration

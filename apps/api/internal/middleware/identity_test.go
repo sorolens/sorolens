@@ -163,6 +163,27 @@ func TestAdminScopedKeySatisfiesAdminRole(t *testing.T) {
 	}
 }
 
+func TestExpiredAPIKeyRejected(t *testing.T) {
+	m := testLookup()
+	const token = "sl_test_expired"
+	m.AddAPIKey(store.APIKey{
+		ID:        "key-expired",
+		Name:      "key-expired",
+		KeyHash:   store.HashKey(token),
+		Scopes:    []string{store.ScopeAdmin},
+		CreatedAt: time.Now(),
+		ExpiresAt: &[]time.Time{time.Now().Add(-time.Hour)}[0],
+	})
+
+	req := newRequest(http.MethodPost, "/api/v1/api-keys")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	// An expired key resolves to no identity, so the admin role check 401s.
+	if got := serveRole(t, m, IdentityOptions{}, RoleAdmin, req); got != http.StatusUnauthorized {
+		t.Fatalf("expired key: got %d, want 401", got)
+	}
+}
+
 func TestTrustedProxyIdentityRequiresValidSignature(t *testing.T) {
 	const secret = "proxy-secret"
 	m := testLookup()

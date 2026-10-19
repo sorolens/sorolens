@@ -43,10 +43,20 @@ type APIKey struct {
 	// RotatedAt is when the key's secret was last regenerated in place,
 	// or nil if it has never been rotated.
 	RotatedAt *time.Time
+	// ExpiresAt, when set, is the instant after which the key no longer
+	// authenticates requests. NULL means the key never expires.
+	ExpiresAt *time.Time
 }
 
 // Revoked reports whether the key has been revoked.
 func (k APIKey) Revoked() bool { return k.RevokedAt != nil }
+
+// Expired reports whether the key's expiry has passed. Revocation is
+// reported separately by Revoked(); an expired key is rejected for
+// authentication even when it has not been revoked.
+func (k APIKey) Expired() bool {
+	return k.ExpiresAt != nil && k.ExpiresAt.Before(time.Now())
+}
 
 // HasScope reports whether the key grants the required scope. admin:*
 // always grants access; a trailing ":*" wildcard grants every scope in

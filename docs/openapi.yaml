@@ -25,6 +25,10 @@ info:
     `X-Identity-Timestamp` and `X-Identity-Signature` (an HMAC over the
     request). Bare `X-User-ID`, `X-GitHub-Login`, `X-User-Sub` and
     `X-GitHub-ID` headers are ignored (issue #518).
+
+    Set `API_REQUIRE_AUTH=true` to reject every unauthenticated request except
+    health checks (`/health`, `/readyz`, `/api/v1/health`), `GET /api/version`,
+    `GET /metrics` and `POST /api/v1/auth/session`. The mode is off by default.
   contact:
     name: Sorolens
 
@@ -1337,6 +1341,10 @@ paths:
                     enum: [read:contracts, write:contracts, read:watchdog, admin:*]
                   minItems: 1
                   description: Scopes granted to the key.
+                expires_at:
+                  type: string
+                  format: date-time
+                  description: Optional RFC 3339 instant after which the key stops authenticating requests. Omit for a key that never expires.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -5518,6 +5526,11 @@ components:
           format: date-time
           nullable: true
           description: When the key's secret was last rotated in place.
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the key stops authenticating requests. Null means the key never expires.
 
     ReportSubscription:
       type: object

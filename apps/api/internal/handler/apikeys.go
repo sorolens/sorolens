@@ -26,6 +26,7 @@ type apiKeyResponse struct {
 	LastUsedAt *time.Time `json:"last_used_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
 	RotatedAt  *time.Time `json:"rotated_at"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 }
 
 // createAPIKeyResponse includes the plaintext token exactly once, at creation.
@@ -41,6 +42,10 @@ type createAPIKeyRequest struct {
 	// A bound key carries that user's identity; an unbound key only
 	// authenticates scopes.
 	UserID *string `json:"user_id,omitempty"`
+	// ExpiresAt, when set, is the RFC 3339 instant after which the key no
+	// longer authenticates requests. Omit or null for a key that never
+	// expires.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 func apiKeyFromStore(k store.APIKey) apiKeyResponse {
@@ -58,6 +63,7 @@ func apiKeyFromStore(k store.APIKey) apiKeyResponse {
 		LastUsedAt: k.LastUsedAt,
 		RevokedAt:  k.RevokedAt,
 		RotatedAt:  k.RotatedAt,
+		ExpiresAt:  k.ExpiresAt,
 	}
 }
 
@@ -91,6 +97,12 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.ExpiresAt != nil && !req.ExpiresAt.After(time.Now().UTC()) {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput,
+			"expires_at must be in the future")
+		return
+	}
+
 	var boundUser *string
 	if req.UserID != nil {
 		userID := strings.TrimSpace(*req.UserID)
@@ -117,6 +129,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		KeyHash:   store.HashKey(token),
 		Scopes:    req.Scopes,
 		CreatedAt: time.Now().UTC(),
+		ExpiresAt: req.ExpiresAt,
 		UserID:    boundUser,
 	}
 	if err := h.Store.CreateAPIKey(r.Context(), key); err != nil {

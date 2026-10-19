@@ -111,6 +111,15 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// rejections are audited too, and inside Recoverer so a panic is
 	// recorded as 500 before being recovered.
 	r.Use(middleware.Audit(h.Store, h.Logger, "/api/"))
+	// When API_REQUIRE_AUTH is on, reject every request without a verified
+	// identity except health checks, the version endpoint, metrics and the
+	// session bootstrap endpoint. It runs after Identity so a verified
+	// caller always passes, and before rate limiting so unauthenticated
+	// traffic never consumes a rate-limit bucket.
+	r.Use(middleware.RequireAuth(h.APIRequireAuth,
+		"/health", "/readyz", "/api/version", "/api/v1/health",
+		"/api/v1/auth/session", "/metrics", "/integrations/slack/commands",
+	))
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(middleware.Metrics)
 
