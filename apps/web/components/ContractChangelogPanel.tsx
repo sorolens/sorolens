@@ -65,7 +65,11 @@ export function ContractChangelogPanel({
   return (
     <div className="space-y-4">
       {state.status === "loading" && (
-        <p className="text-sm text-[var(--color-text-secondary)]" role="status">
+        <p
+          role="status"
+          aria-busy="true"
+          className="text-sm text-[var(--color-text-secondary)]"
+        >
           Loading changelog…
         </p>
       )}

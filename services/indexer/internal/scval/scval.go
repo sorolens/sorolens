@@ -1,4 +1,4 @@
-package main
+package scval
 
 import (
 	"encoding/base64"
@@ -26,6 +26,9 @@ const (
 	scvBytes  = 13
 	scvString = 14
 	scvSymbol = 15
+	scvVec    = 16
+	scvMap    = 17
+	scvAddress = 18
 )
 
 var scvTypeNames = map[uint32]string{
@@ -36,12 +39,12 @@ var scvTypeNames = map[uint32]string{
 	scvU128: "scvU128", scvI128: "scvI128",
 	11: "scvU256", 12: "scvI256",
 	scvBytes: "scvBytes", scvString: "scvString", scvSymbol: "scvSymbol",
-	16: "scvVec", 17: "scvMap", 18: "scvAddress",
+	scvVec: "scvVec", scvMap: "scvMap", scvAddress: "scvAddress",
 	19: "scvContractInstance", 20: "scvLedgerKeyContractInstance", 21: "scvLedgerKeyNonce",
 }
 
-// decodeScVal decodes a base64-encoded XDR ScVal.
-func decodeScVal(b64 string) (scVal, error) {
+// Decode decodes a base64-encoded XDR ScVal.
+func Decode(b64 string) (scVal, error) {
 	raw, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
 		return scVal{}, fmt.Errorf("scval: base64 decode: %w", err)
@@ -105,7 +108,7 @@ func decodeScVal(b64 string) (scVal, error) {
 		v := new(big.Int).SetInt64(hi)
 		v.Lsh(v, 64)
 		v.Or(v, new(big.Int).SetUint64(lo))
-		return scVal{Type: typeName, Value: v, Human: v.String()}, nil
+		return scVal{Type: typeName, Value: v.String(), Human: v.String()}, nil
 	case scvString, scvSymbol:
 		if len(body) < 4 {
 			break
@@ -126,6 +129,78 @@ func decodeScVal(b64 string) (scVal, error) {
 		}
 		v := body[4 : 4+length]
 		return scVal{Type: typeName, Value: v, Human: fmt.Sprintf("%x", v)}, nil
+	case scvVec:
+		if len(body) < 4 {
+			break
+		}
+		vecLength := binary.BigEndian.Uint32(body[:4])
+		var vec []any
+		offset := uint32(4)
+		for i := uint32(0); i < vecLength; i++ {
+			if offset+4 > uint32(len(body)) {
+				break
+			}
+			elemLength := binary.BigEndian.Uint32(body[offset : offset+4])
+			offset += 4
+			if offset+elemLength > uint32(len(body)) {
+				break
+			}
+			elemB64 := base64.StdEncoding.EncodeToString(body[offset : offset+elemLength])
+			elem, err := Decode(elemB64)
+			if err != nil {
+				vec = append(vec, elemB64)
+			} else {
+				vec = append(vec, elem.Value)
+			}
+			offset += elemLength
+		}
+		return scVal{Type: typeName, Value: vec, Human: fmt.Sprintf("vec[%d]", len(vec))}, nil
+	case scvMap:
+		if len(body) < 4 {
+			break
+		}
+		mapLength := binary.BigEndian.Uint32(body[:4])
+		result := make(map[string]any)
+		offset := uint32(4)
+		for i := uint32(0); i < mapLength; i++ {
+			if offset+4 > uint32(len(body)) {
+				break
+			}
+			keyLength := binary.BigEndian.Uint32(body[offset : offset+4])
+			offset += 4
+			if offset+keyLength > uint32(len(body)) {
+				break
+			}
+			keyB64 := base64.StdEncoding.EncodeToString(body[offset : offset+keyLength])
+			offset += keyLength
+			if offset+4 > uint32(len(body)) {
+				break
+			}
+			valLength := binary.BigEndian.Uint32(body[offset : offset+4])
+			offset += 4
+			if offset+valLength > uint32(len(body)) {
+				break
+			}
+			valB64 := base64.StdEncoding.EncodeToString(body[offset : offset+valLength])
+			offset += valLength
+			key, err := Decode(keyB64)
+			if err != nil {
+				continue
+			}
+			val, err := Decode(valB64)
+			if err != nil {
+				continue
+			}
+			keyStr := fmt.Sprintf("%v", key.Value)
+			result[keyStr] = val.Value
+		}
+		return scVal{Type: typeName, Value: result, Human: fmt.Sprintf("map[%d]", len(result))}, nil
+	case scvAddress:
+		if len(body) < 32 {
+			break
+		}
+		addr := body[:32]
+		return scVal{Type: typeName, Value: addr, Human: fmt.Sprintf("%x", addr)}, nil
 	}
 	return scVal{Type: typeName, Value: b64, Human: typeName + ":" + b64}, nil
 }

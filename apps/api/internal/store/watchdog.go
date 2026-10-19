@@ -259,7 +259,8 @@ func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, ne
 	}
 	var cursorTS time.Time
 	var cursorID string
-	if cursor != "" {
+	hasCursor := cursor != ""
+	if hasCursor {
 		ts, id, err := decodeAlertsCursor(cursor)
 		if err != nil {
 			return nil, "", err
@@ -273,10 +274,10 @@ func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, ne
 		WHERE ($1 = '' OR a.contract_id = $1)
 		  AND ($2 = '' OR a.severity = $2)
 		  AND ($3 = '' OR m.network = $3)
-		  AND ($4 = '' OR (a.timestamp, a.contract_id) < ($4::timestamptz, $5))
+		  AND (NOT $4 OR (a.timestamp, a.contract_id) < ($5::timestamptz, $6))
 		ORDER BY a.timestamp DESC, a.contract_id DESC
-		LIMIT $6`, contractID, severity, network,
-		cursorTS.Format(time.RFC3339Nano), cursorID, limit+1)
+		LIMIT $7`, contractID, severity, network,
+		hasCursor, cursorTS, cursorID, limit+1)
 	if err != nil {
 		return nil, "", fmt.Errorf("list alerts: %w", err)
 	}

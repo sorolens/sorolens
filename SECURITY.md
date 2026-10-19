@@ -1,6 +1,6 @@
 # Security Policy
 
-Sorolens takes the security of its API, indexer, dashboard, CLI, and on-chain contracts seriously. This document explains how to report a vulnerability, what to expect from us in return, and how coordinated disclosure works.
+Sorolens takes the security of its API, indexer, dashboard, CLI, SDKs, on-chain contracts, Discord bot, and browser extension seriously. This document explains how to report a vulnerability, what to expect from us in return, and how coordinated disclosure works.
 
 ## Table of contents
 
@@ -49,7 +49,7 @@ them cannot escalate privileges (issue #518). Routes that require a user (for
 example watchlists, groups and notes) return `401` without a verified session
 or user-bound key.
 
-
+## Reporting a vulnerability
 
 If you believe you have found a security vulnerability in Sorolens, please report it by email:
 
@@ -61,8 +61,8 @@ Email is currently the only confidential reporting channel: GitHub private vulne
 
 ### What to include in your report
 
-- A description of the vulnerability and the component it affects (API, indexer, dashboard, CLI, XDR decoder, or fixture contract).
-- Steps to reproduce the issue, including any relevant contract IDs, network (testnet or mainnet), or request payloads.
+- A description of the vulnerability and the component it affects (API, indexer, dashboard, CLI, SDKs, on-chain contracts, Discord bot, browser extension, or XDR decoder).
+- Steps to reproduce the issue, including any relevant contract IDs, network (testnet or mainnet), request payloads, or environment details.
 - Your assessment of the potential impact.
 - Whether you have already developed a proof of concept (you do not need to share exploit code, a description is sufficient).
 
@@ -113,15 +113,23 @@ This policy covers:
 - The Sorolens API (`apps/api`)
 - The Sorolens indexer (`services/indexer`)
 - The Sorolens CLI (`cli/`)
-- The XDR decoder package (`packages/xdr`)
 - The Sorolens dashboard (`apps/web`)
+- The official Python SDK (`packages/python-sdk`, `sdks/python`)
+- The official Rust SDK (`packages/rust-sdk`, `sdks/rust`)
+- The Go client (`packages/go-client`)
+- The XDR decoder package (`packages/xdr`)
+- The shared UI primitives (`packages/ui`)
+- The on-chain watchdog contract (`contracts/watchdog`)
 - The fixture contract (`contracts/counter`) when deployed to testnet or mainnet
+- The Sorolens Discord bot (`services/discord-bot`)
+- The Sorolens browser extension (`extension/`)
 
 Out of scope:
 
 - Vulnerabilities in third-party dependencies (please report those to the upstream project). You are welcome to notify us as well so we can track the upstream fix.
 - The Stellar network or Soroban protocol itself.
 - Infrastructure operated by Neon, Upstash, or Vercel.
+- Third-party platforms and runtimes (Discord API, browser vendor platforms).
 
 ## Questions
 

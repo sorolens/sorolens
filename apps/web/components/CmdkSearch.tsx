@@ -145,7 +145,11 @@ export function CmdkSearch() {
           />
 
           <Command.List className="max-h-[60vh] overflow-y-auto p-2">
-            <Command.Empty className="p-6 text-center text-sm text-[var(--color-text-secondary)]">
+            <Command.Empty
+              role={loading ? "status" : undefined}
+              aria-busy={loading || undefined}
+              className="p-6 text-center text-sm text-[var(--color-text-secondary)]"
+            >
               {loading ? "Searching..." : error ? error : "No results found."}
             </Command.Empty>
 

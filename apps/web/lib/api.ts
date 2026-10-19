@@ -63,8 +63,7 @@ import type {
 import type { ContractVersionEntry } from "@sorolens/ui";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
 import { sessionHeaders } from "./user";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import { API_URL } from "./config";
 
 export class ApiError extends Error {
   constructor(

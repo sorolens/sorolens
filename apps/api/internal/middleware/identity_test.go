@@ -89,7 +89,15 @@ func TestSessionTokenCannotReachAdmin(t *testing.T) {
 func TestTamperedSessionTokenRejected(t *testing.T) {
 	signer := NewSessionSigner(testSessionSecret, time.Hour)
 	token, _ := signer.Issue("user-contributor")
-	tampered := token[:len(token)-1] + "0"
+	// Change a significant signature character. The last base64url character
+	// encodes only four bits, so replacing it can leave the decoded signature
+	// unchanged when the original character is already "0".
+	signatureChar := len(token) - 2
+	replacement := byte('A')
+	if token[signatureChar] == replacement {
+		replacement = 'B'
+	}
+	tampered := token[:signatureChar] + string(replacement) + token[signatureChar+1:]
 
 	req := newRequest(http.MethodPost, "/api/v1/contracts")
 	req.Header.Set("Authorization", "Bearer "+tampered)

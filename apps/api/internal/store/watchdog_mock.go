@@ -42,6 +42,22 @@ func (m *MockStore) DeleteMonitoredContract(_ context.Context, contractID string
 		}
 	}
 	m.alerts = filteredAlerts
+	// alert_subscriptions and alert_groups both reference
+	// monitored_contracts ON DELETE CASCADE, so mirror that here.
+	filteredSubs := m.alertSubscriptions[:0]
+	for _, sub := range m.alertSubscriptions {
+		if sub.ContractID != contractID {
+			filteredSubs = append(filteredSubs, sub)
+		}
+	}
+	m.alertSubscriptions = filteredSubs
+	filteredGroups := m.alertGroups[:0]
+	for _, g := range m.alertGroups {
+		if g.ContractID != contractID {
+			filteredGroups = append(filteredGroups, g)
+		}
+	}
+	m.alertGroups = filteredGroups
 	return nil
 }
 
@@ -103,14 +119,25 @@ func (m *MockStore) GetMonitoredContract(_ context.Context, contractID string) (
 }
 
 func (m *MockStore) ListHealthChecks(_ context.Context, contractID string, limit int) ([]HealthCheck, error) {
-	if limit <= 0 {
+	// Same page-size bounds as the postgres implementation.
+	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	out := make([]HealthCheck, 0)
-	for i := len(m.healthChecks) - 1; i >= 0 && len(out) < limit; i-- {
-		if m.healthChecks[i].ContractID == contractID {
-			out = append(out, m.healthChecks[i])
+	for _, h := range m.healthChecks {
+		if h.ContractID == contractID {
+			out = append(out, h)
 		}
+	}
+	// ORDER BY timestamp DESC, matching the postgres query.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Timestamp.Equal(out[j].Timestamp) {
+			return out[i].TxHash > out[j].TxHash
+		}
+		return out[i].Timestamp.After(out[j].Timestamp)
+	})
+	if len(out) > limit {
+		out = out[:limit]
 	}
 	return out, nil
 }
@@ -120,7 +147,8 @@ func (m *MockStore) ListHealthChecks(_ context.Context, contractID string, limit
 // cursor selects strictly older rows. The returned cursor points at the
 // last row of the page and is empty when the feed is exhausted.
 func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network, cursor string, limit int) ([]ContractAlert, string, error) {
-	if limit <= 0 {
+	// Same page-size bounds as the postgres implementation.
+	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	var cursorTS time.Time

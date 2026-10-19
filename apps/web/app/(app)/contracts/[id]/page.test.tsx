@@ -236,6 +236,16 @@ describe("ContractDetailPage failure states", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("links to the comparison, pre-selected on this contract (#607)", async () => {
+    await renderPage();
+
+    // The test's next/link mock only forwards href/children, so query by role.
+    const link = await screen.findByRole("link", { name: "Compare" });
+    expect(link.getAttribute("href")).toBe(
+      `/compare?ids=${encodeURIComponent(ID)}`
+    );
+  });
+
   it("shows a retryable error, not 'Contract not found', when the contract request fails", async () => {
     mockGetContract.mockRejectedValueOnce(new Error("API down"));
     await renderPage();

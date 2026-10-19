@@ -20,6 +20,13 @@ type Store interface {
 	ListContracts(ctx context.Context, cursor string, limit int) ([]Contract, string, error)
 	BatchInsertEvents(ctx context.Context, events []Event) error
 	BatchInsertInvocations(ctx context.Context, invocations []Invocation) error
+	// BatchInsertWithCursor writes a poll window atomically: events,
+	// invocations, the contract's sync state and the network cursor all
+	// commit together, or none of them do. Events that cannot be stored are
+	// parked in the dead-letter queue inside the same transaction and
+	// returned to the caller. The network cursor never advances past a
+	// window whose data did not commit.
+	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) ([]FailedEvent, error)
 	GetSyncState(ctx context.Context, contractID string) (SyncState, error)
 	UpsertSyncState(ctx context.Context, s SyncState) error
 	CreateNextMonthPartition(ctx context.Context) error

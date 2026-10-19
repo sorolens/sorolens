@@ -781,11 +781,20 @@ func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit
 	}
 
 	q := `
-		SELECT
-			id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at, last_activity_at
-		FROM contracts
-		WHERE id ILIKE $1 OR label ILIKE $1
-		ORDER BY added_at DESC
+		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at
+		FROM contracts c
+		LEFT JOIN (
+			SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
+			FROM (
+				SELECT contract_id, ledger_closed_at FROM events
+				UNION ALL
+				SELECT contract_id, ledger_closed_at FROM invocations
+			) activity_rows
+			GROUP BY contract_id
+		) activity ON activity.contract_id = c.id
+		WHERE c.id ILIKE $1 OR c.label ILIKE $1
+		ORDER BY c.added_at DESC
 		LIMIT $2
 	`
 

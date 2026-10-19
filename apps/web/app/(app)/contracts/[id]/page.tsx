@@ -429,6 +429,15 @@ function ContractDetailContent({ id }: { id: string }) {
           </span>
           <AddToGroup contractId={id} />
           <VerifiedBadge contractId={id} />
+          {/* Compare entry point (#607): pre-selects this contract in the
+              shared /compare?ids= URL; the picker fills the remaining slots. */}
+          <Link
+            data-testid="compare-entry-link"
+            href={`/compare?ids=${encodeURIComponent(id)}`}
+            className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]"
+          >
+            Compare
+          </Link>
         </div>
         <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-secondary)]">
           <span>Network: {contract?.network}</span>
@@ -640,16 +649,19 @@ function ContractDetailContent({ id }: { id: string }) {
 
 function SkeletonHeader() {
   return (
-    <div className="animate-pulse space-y-3">
-      <div className="h-3 w-16 rounded bg-[var(--color-border)]" />
-      <div className="flex items-center gap-3">
-        <div className="h-8 w-48 rounded bg-[var(--color-border)]" />
-        <div className="h-5 w-16 rounded-full bg-[var(--color-border)]" />
-      </div>
-      <div className="flex gap-4">
-        <div className="h-3 w-32 rounded bg-[var(--color-border)]" />
-        <div className="h-3 w-28 rounded bg-[var(--color-border)]" />
-        <div className="h-3 w-36 rounded bg-[var(--color-border)]" />
+    <div role="status" aria-busy="true" aria-label="Loading contract details">
+      <span className="sr-only">Loading contract details</span>
+      <div aria-hidden="true" className="animate-pulse space-y-3">
+        <div className="h-3 w-16 rounded bg-[var(--color-border)]" />
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-48 rounded bg-[var(--color-border)]" />
+          <div className="h-5 w-16 rounded-full bg-[var(--color-border)]" />
+        </div>
+        <div className="flex gap-4">
+          <div className="h-3 w-32 rounded bg-[var(--color-border)]" />
+          <div className="h-3 w-28 rounded bg-[var(--color-border)]" />
+          <div className="h-3 w-36 rounded bg-[var(--color-border)]" />
+        </div>
       </div>
     </div>
   );
