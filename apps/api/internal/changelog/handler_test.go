@@ -1,4 +1,3 @@
-//go:build integration
 // Package changelog_test provides integration-style tests for the changelog
 // HTTP handlers. Tests use the real handler code against an in-memory fake
 // store so they exercise the full request → handler → store → response path
@@ -13,14 +12,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"testing/httptest"
 	"time"
 
 	"github.com/sorolens/sorolens/apps/api/internal/changelog"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
-// ---- in-memory store fake --------------------------------------------------
 // ---- in-memory store fake --------------------------------------------------
 
 type fakeStore struct {
@@ -267,7 +264,6 @@ func TestGetBadge_200_returnsSVG(t *testing.T) {
 	if !strings.Contains(body, "deadbeef") {
 		t.Fatalf("badge body does not contain expected hash slice 'deadbeef':\n%s", body)
 	}
-	_ = httptest.NewRecorder
 }
 
 // TestGetBadge_unknownHashShowsUnknown verifies that a contract with no recorded
@@ -303,4 +299,14 @@ func (f *fakeStore) SearchEvents(_ context.Context, query string, limit int) ([]
 func (f *fakeStore) SearchFunctions(_ context.Context, query string, limit int) ([]store.FunctionMatch, error) {
 	return nil, nil
 }
-// end of file
+
+func (f *fakeStore) ListChangelog(_ context.Context, contractID string) ([]store.ContractVersion, error) {
+	return f.ListContractVersions(context.Background(), contractID)
+}
+
+func (f *fakeStore) ListRecentChangelog(_ context.Context, limit int) ([]store.ContractVersion, error) {
+	if len(f.versions) > limit {
+		return f.versions[:limit], nil
+	}
+	return f.versions, nil
+}

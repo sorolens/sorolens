@@ -4,10 +4,8 @@
 // Routes:
 //
 //	GET /contracts/{id}/changelog        – JSON array of ContractVersion records
-//	GET /contracts/{id}/changelog/feed   – Atom 1.0 XML feed
-//	GET /contracts/{id}/changelog/badge  – SVG badge with latest wasm hash slice
-//	GET /changelog/feed                  – Global Atom 1.0 XML feed across contracts
-//	GET /changelog/badge                 – Global SVG badge with latest wasm hash slice
+//	GET /changelog/feed                  – Atom 1.0 feed of recent changelog entries
+//	GET /changelog/badge                 – SVG badge with latest wasm hash slice
 package changelog
 
 import (
@@ -32,12 +30,14 @@ func New(s store.Store) *Handler {
 	return &Handler{store: s}
 }
 
-// Register wires the changelog routes onto the given mux.
-// It is the single entry point the API router uses to mount this feature.
+// Register mounts the changelog routes onto the given mux.
+// It is called from the API router so the handlers are reachable.
 func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/contracts/", h.handleContractScoped)
-	mux.HandleFunc("/changelog/feed", h.GetGlobalFeed)
-	mux.HandleFunc("/changelog/badge", h.GetGlobalBadge)
+	mux.HandleFunc("GET /contracts/{id}/changelog", h.GetChangelog)
+	mux.HandleFunc("GET /contracts/{id}/changelog/feed", h.GetFeed)
+	mux.HandleFunc("GET /contracts/{id}/changelog/badge", h.GetBadge)
+	mux.HandleFunc("GET /changelog/feed", h.GetFeed)
+	mux.HandleFunc("GET /changelog/badge", h.GetBadge)
 }
 
 // ---- JSON changelog -------------------------------------------------------
@@ -123,6 +123,11 @@ type atomEntry struct {
 // GetFeed handles GET /contracts/{id}/changelog/feed.
 // It returns an Atom 1.0 XML feed suitable for RSS readers.
 func (h *Handler) GetFeed(w http.ResponseWriter, r *http.Request) {
+	if isGlobalFeed(r) {
+		h.getGlobalFeed(w, r)
+		return
+	}
+
 	contractID := extractContractID(r)
 	if contractID == "" {
 		http.Error(w, "missing contract id", http.StatusBadRequest)
@@ -204,6 +209,11 @@ const badgeSVGTemplate = `<svg xmlns="http://www.w3.org/2000/svg" width="%d" hei
 // It returns an SVG badge showing the first 8 characters of the latest
 // known Wasm hash, suitable for embedding in READMEs.
 func (h *Handler) GetBadge(w http.ResponseWriter, r *http.Request) {
+	if isGlobalBadge(r) {
+		writeBadge(w, "sorolens")
+		return
+	}
+
 	contractID := extractContractID(r)
 	if contractID == "" {
 		http.Error(w, "missing contract id", http.StatusBadRequest)
@@ -243,11 +253,64 @@ func writeBadge(w http.ResponseWriter, hashSlice string) {
 	fmt.Fprint(w, svg) //nolint:errcheck
 }
 
+// ---- global feed/badge helpers --------------------------------------------
+
+// isGlobalFeed reports whether the request targets the global changelog feed.
+func isGlobalFeed(r *http.Request) bool {
+	return strings.Trim(r.URL.Path, "/") == "changelog/feed"
+}
+
+// isGlobalBadge reports whether the request targets the global changelog badge.
+func isGlobalBadge(r *http.Request) bool {
+	return strings.Trim(r.URL.Path, "/") == "changelog/badge"
+}
+
+// getGlobalFeed renders an Atom feed of the most recent changelog entries
+// across all contracts.
+func (h *Handler) getGlobalFeed(w http.ResponseWriter, r *http.Request) {
+	versions, err := h.store.ListRecentContractVersions(r.Context(), 50)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	selfURL := fmt.Sprintf("%s/changelog/feed", baseURL(r))
+	updated := time.Now().UTC().Format(time.RFC3339)
+	if len(versions) > 0 {
+		updated = versions[0].RecordedAt.UTC().Format(time.RFC3339)
+	}
+
+	feed := atomFeed{
+		Title:   "Sorolens contract changelog",
+		ID:      selfURL,
+		Updated: updated,
+		Link:    atomLink{Href: selfURL, Rel: "self"},
+	}
+
+	for _, v := range versions {
+		feed.Entries = append(feed.Entries, atomEntry{
+			Title:   fmt.Sprintf("%s: wasm %s (ledger %d)", v.ContractID, shortHash(v.WasmHash), v.FirstSeenLedger),
+			ID:      fmt.Sprintf("%s/contracts/%s/changelog#%d", baseURL(r), v.ContractID, v.ID),
+			Updated: v.RecordedAt.UTC().Format(time.RFC3339),
+			Content: fmt.Sprintf("contract=%s | hash=%s | first_seen_ledger=%d",
+				v.ContractID, v.WasmHash, v.FirstSeenLedger),
+			Link: atomLink{Href: fmt.Sprintf("%s/contracts/%s/changelog", baseURL(r), v.ContractID)},
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/atom+xml; charset=utf-8")
+	w.Write([]byte(xml.Header))    //nolint:errcheck
+	xml.NewEncoder(w).Encode(feed) //nolint:errcheck
+}
+
 // ---- helpers ---------------------------------------------------------------
 
 // extractContractID extracts the contract ID from the URL path.
 // It supports both /contracts/{id}/changelog and /contracts/{id}/changelog/feed.
 func extractContractID(r *http.Request) string {
+	if id := r.PathValue("id"); id != "" {
+		return id
+	}
 	// URL pattern: /contracts/<id>/changelog[/...]
 	// We split on "/" and find the segment after "contracts".
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
