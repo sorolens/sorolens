@@ -81,6 +81,7 @@ enum DataKey {
     Health(Address), // ContractHealth by contract id
     Alerts(Address), // Vec<Alert> by contract id
     Paused,          // bool: emergency stop flag; absent means not paused
+    PendingAdmin,    // Address: nominated next admin awaiting acceptance
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +139,32 @@ pub struct ContractAlert {
     pub timestamp: u64,
 }
 
+/// An admin hand-off has started: `current_admin` nominated `new_admin`.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdminTransferProposed {
+    #[topic]
+    pub current_admin: Address,
+    pub new_admin: Address,
+}
+
+/// The nominated address accepted and is now the contract admin.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdminTransferAccepted {
+    #[topic]
+    pub new_admin: Address,
+}
+
+/// A pending admin nomination was withdrawn; `current_admin` keeps the role.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdminTransferCancelled {
+    #[topic]
+    pub current_admin: Address,
+    pub pending_admin: Address,
+}
+
 // ---------------------------------------------------------------------------
 // Contract
 // ---------------------------------------------------------------------------
@@ -147,6 +174,17 @@ pub struct WatchdogContract;
 
 const MAX_ALERTS_PER_CONTRACT: u32 = 100;
 const MAX_BATCH_SIZE: u32 = 20;
+
+// TTL management (issue #573). Every entry this contract writes is durable
+// state: losing the admin, registry, health record or alert history means the
+// watchdog can no longer be operated or audited. Ledger TTLs on Stellar are
+// finite, so reads and writes bump the entries they touch back to
+// `TTL_EXTEND_TO` whenever the remaining lifetime falls below `TTL_THRESHOLD`.
+//
+// At ~5 second ledgers: 17,280 ledgers is ~1 day and 518,400 is ~30 days, so a
+// contract that is read at least once a day never lets its state archive.
+const TTL_THRESHOLD: u32 = 17_280;
+const TTL_EXTEND_TO: u32 = 518_400;
 
 #[contractimpl]
 impl WatchdogContract {
@@ -161,6 +199,7 @@ impl WatchdogContract {
         env.storage()
             .instance()
             .set(&DataKey::Registry, &Vec::<Address>::new(&env));
+        Self::bump_instance_ttl(&env);
     }
 
     /// Register a contract for monitoring. Only the admin, or the account
@@ -274,6 +313,7 @@ impl WatchdogContract {
             }
         }
         env.storage().instance().set(&DataKey::Registry, &updated);
+        Self::bump_instance_ttl(&env);
 
         ContractDeregistered {
             contract_id,
@@ -309,6 +349,8 @@ impl WatchdogContract {
         record.status = status.clone();
         record.last_check = now;
         env.storage().persistent().set(&health_key, &record);
+        Self::bump_persistent_ttl(&env, &health_key);
+        Self::bump_instance_ttl(&env);
 
         HealthCheckEvent {
             contract_id,
@@ -361,6 +403,9 @@ impl WatchdogContract {
             alerts.pop_front();
         }
         env.storage().persistent().set(&alerts_key, &alerts);
+        Self::bump_persistent_ttl(&env, &alerts_key);
+        Self::bump_persistent_ttl(&env, &health_key);
+        Self::bump_instance_ttl(&env);
 
         ContractAlert {
             contract_id,
@@ -381,6 +426,7 @@ impl WatchdogContract {
         admin.require_auth();
         Self::require_admin_only(&env, &admin);
         env.storage().instance().set(&DataKey::Paused, &true);
+        Self::bump_instance_ttl(&env);
     }
 
     /// Lift a pause set by `pause`. Admin only. Unpausing a contract that is
@@ -389,19 +435,107 @@ impl WatchdogContract {
         admin.require_auth();
         Self::require_admin_only(&env, &admin);
         env.storage().instance().remove(&DataKey::Paused);
+        Self::bump_instance_ttl(&env);
+    }
+
+    // ---- admin: two-step transfer ------------------------------------------
+
+    /// Start a two-step admin hand-off by nominating `new_admin`. Admin only.
+    ///
+    /// The nomination is stored as a *pending* admin and does not take effect
+    /// until that exact address calls `accept_admin`. A typo or an
+    /// unavailable nominee therefore cannot lock the contract out of its
+    /// admin role: the current admin stays in control until acceptance.
+    /// Nominating again replaces any earlier pending nomination.
+    ///
+    /// This call is intentionally **not** gated by `ensure_not_paused`:
+    /// rotating admin keys (for example while the kill switch is engaged)
+    /// must remain possible for the current admin, like `pause`/`unpause`.
+    pub fn propose_admin(env: Env, current_admin: Address, new_admin: Address) {
+        current_admin.require_auth();
+        Self::require_admin_only(&env, &current_admin);
+
+        if new_admin == current_admin {
+            panic!("new admin is already the current admin");
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingAdmin, &new_admin);
+        Self::bump_instance_ttl(&env);
+
+        AdminTransferProposed {
+            current_admin,
+            new_admin,
+        }
+        .publish(&env);
+    }
+
+    /// Complete a pending hand-off. Only the nominated address may call this,
+    /// and it must authorize the call.
+    ///
+    /// On success the nominee becomes the stored admin and the pending slot
+    /// is cleared. Nothing is written if there is no live nomination or if
+    /// the caller is not the nominee.
+    pub fn accept_admin(env: Env, new_admin: Address) {
+        new_admin.require_auth();
+
+        let pending: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingAdmin)
+            .unwrap_or_else(|| panic!("no admin transfer proposed"));
+
+        if new_admin != pending {
+            panic!("caller is not the pending admin");
+        }
+
+        env.storage().instance().set(&DataKey::Admin, &pending);
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+        Self::bump_instance_ttl(&env);
+
+        AdminTransferAccepted { new_admin }.publish(&env);
+    }
+
+    /// Withdraw the pending nomination, leaving the current admin in place.
+    /// Admin only; panics if there is nothing pending.
+    pub fn cancel_admin_proposal(env: Env, current_admin: Address) {
+        current_admin.require_auth();
+        Self::require_admin_only(&env, &current_admin);
+
+        let pending: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingAdmin)
+            .unwrap_or_else(|| panic!("no admin transfer proposed"));
+
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+        Self::bump_instance_ttl(&env);
+
+        AdminTransferCancelled {
+            current_admin,
+            pending_admin: pending,
+        }
+        .publish(&env);
     }
 
     // ---- read-only queries -------------------------------------------------
 
     pub fn get_status(env: Env, contract_id: Address) -> ContractHealth {
-        env.storage()
+        let key = DataKey::Health(contract_id);
+        let record = env
+            .storage()
             .persistent()
-            .get(&DataKey::Health(contract_id))
-            .unwrap_or_else(|| panic!("contract not registered"))
+            .get(&key)
+            .unwrap_or_else(|| panic!("contract not registered"));
+        Self::bump_persistent_ttl(&env, &key);
+        Self::bump_instance_ttl(&env);
+        record
     }
 
     /// Gets a page of monitored contracts.
     pub fn get_monitored_page(env: Env, start: u32, limit: u32) -> (Vec<ContractHealth>, u32) {
+        Self::bump_instance_ttl(&env);
         let registry: Vec<Address> = env
             .storage()
             .instance()
@@ -412,7 +546,13 @@ impl WatchdogContract {
         if start < total {
             for i in start..core::cmp::min(start + limit, total) {
                 if let Some(id) = registry.get(i) {
-                    if let Some(record) = env.storage().persistent().get::<_, ContractHealth>(&DataKey::Health(id.clone())) {
+                    let key = DataKey::Health(id.clone());
+                    if let Some(record) = env
+                        .storage()
+                        .persistent()
+                        .get::<_, ContractHealth>(&key)
+                    {
+                        Self::bump_persistent_ttl(&env, &key);
                         page.push_back(record);
                     }
                 }
@@ -422,6 +562,7 @@ impl WatchdogContract {
     }
 
     pub fn get_all_monitored(env: Env) -> Vec<ContractHealth> {
+        Self::bump_instance_ttl(&env);
         let registry: Vec<Address> = env
             .storage()
             .instance()
@@ -429,7 +570,9 @@ impl WatchdogContract {
             .unwrap_or_else(|| Vec::new(&env));
         let mut out: Vec<ContractHealth> = Vec::new(&env);
         for id in registry.iter() {
-            if let Some(record) = env.storage().persistent().get(&DataKey::Health(id)) {
+            let key = DataKey::Health(id);
+            if let Some(record) = env.storage().persistent().get(&key) {
+                Self::bump_persistent_ttl(&env, &key);
                 out.push_back(record);
             }
         }
@@ -437,13 +580,46 @@ impl WatchdogContract {
     }
 
     pub fn get_alerts(env: Env, contract_id: Address) -> Vec<Alert> {
-        env.storage()
+        Self::bump_instance_ttl(&env);
+        let key = DataKey::Alerts(contract_id);
+        let alerts = env
+            .storage()
             .persistent()
-            .get(&DataKey::Alerts(contract_id))
-            .unwrap_or_else(|| Vec::new(&env))
+            .get(&key)
+            .unwrap_or_else(|| Vec::new(&env));
+        Self::bump_persistent_ttl(&env, &key);
+        alerts
+    }
+
+    /// Returns only the alerts for `contract_id` whose timestamp is strictly
+    /// greater than `since_timestamp`, oldest first. Passing `0` returns the
+    /// full history (same as `get_alerts`). The indexer passes the timestamp
+    /// of the last alert it processed so each poll only reads new alerts.
+    ///
+    /// Alerts are appended in ledger-timestamp order, so the scan walks back
+    /// from the newest alert and stops at the first one that is not newer.
+    pub fn get_alerts_since(env: Env, contract_id: Address, since_timestamp: u64) -> Vec<Alert> {
+        Self::bump_instance_ttl(&env);
+        let key = DataKey::Alerts(contract_id);
+        let alerts: Vec<Alert> = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| Vec::new(&env));
+        Self::bump_persistent_ttl(&env, &key);
+
+        let mut first_new = alerts.len();
+        while first_new > 0 {
+            match alerts.get(first_new - 1) {
+                Some(alert) if alert.timestamp > since_timestamp => first_new -= 1,
+                _ => break,
+            }
+        }
+        alerts.slice(first_new..)
     }
 
     pub fn get_monitored_count(env: Env) -> u32 {
+        Self::bump_instance_ttl(&env);
         let registry: Vec<Address> = env
             .storage()
             .instance()
@@ -453,6 +629,7 @@ impl WatchdogContract {
     }
 
     pub fn admin(env: Env) -> Address {
+        Self::bump_instance_ttl(&env);
         env.storage()
             .instance()
             .get(&DataKey::Admin)
@@ -460,13 +637,42 @@ impl WatchdogContract {
     }
 
     pub fn is_paused(env: Env) -> bool {
+        Self::bump_instance_ttl(&env);
         env.storage()
             .instance()
             .get(&DataKey::Paused)
             .unwrap_or(false)
     }
 
+    /// The address currently nominated to become admin, if a hand-off is in
+    /// progress.
+    pub fn pending_admin(env: Env) -> Option<Address> {
+        Self::bump_instance_ttl(&env);
+        env.storage()
+            .instance()
+            .get::<_, Address>(&DataKey::PendingAdmin)
+    }
+
     // ---- helpers -----------------------------------------------------------
+
+    /// Top up the contract instance's TTL (Admin, Registry, Paused and
+    /// PendingAdmin all live in instance storage).
+    fn bump_instance_ttl(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+
+    /// Top up a persistent entry's TTL. Missing keys are skipped: the host
+    /// rejects `extend_ttl` for an entry that does not exist, and read paths
+    /// such as `get_alerts_since` serve unknown contracts with an empty list.
+    fn bump_persistent_ttl(env: &Env, key: &DataKey) {
+        if env.storage().persistent().has(key) {
+            env.storage()
+                .persistent()
+                .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+        }
+    }
 
     fn ensure_not_paused(env: &Env) {
         if Self::is_paused(env.clone()) {
@@ -500,6 +706,10 @@ impl WatchdogContract {
             .unwrap_or_else(|| Vec::new(env));
         registry.push_back(registration.contract_id.clone());
         env.storage().instance().set(&DataKey::Registry, &registry);
+
+        Self::bump_instance_ttl(env);
+        Self::bump_persistent_ttl(env, &DataKey::Health(registration.contract_id.clone()));
+        Self::bump_persistent_ttl(env, &DataKey::Alerts(registration.contract_id.clone()));
 
         ContractRegistered {
             contract_id: registration.contract_id.clone(),
@@ -816,6 +1026,72 @@ mod test {
         assert_eq!(alerts.get(1).unwrap().severity, AlertSeverity::Info);
     }
 
+    /// Registers a contract and reports three alerts at t=100, t=200, t=300.
+    fn setup_alert_history(env: &Env) -> (WatchdogContractClient<'_>, Address) {
+        let (_admin, client) = setup(env);
+        let owner = Address::generate(env);
+        let monitored = Address::generate(env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        for (ts, msg) in [(100u64, "first"), (200, "second"), (300, "third")] {
+            set_timestamp(env, ts);
+            client.report_alert(
+                &owner,
+                &monitored,
+                &AlertSeverity::Warning,
+                &SString::from_str(env, msg),
+            );
+        }
+        (client, monitored)
+    }
+
+    #[test]
+    fn get_alerts_since_zero_returns_all_alerts() {
+        let env = Env::default();
+        let (client, monitored) = setup_alert_history(&env);
+
+        let since = client.get_alerts_since(&monitored, &0u64);
+        assert_eq!(since.len(), 3);
+        assert_eq!(since, client.get_alerts(&monitored));
+    }
+
+    #[test]
+    fn get_alerts_since_returns_only_newer_alerts() {
+        let env = Env::default();
+        let (client, monitored) = setup_alert_history(&env);
+
+        // Strictly greater than: the alert at exactly t=200 is excluded.
+        let since = client.get_alerts_since(&monitored, &200u64);
+        assert_eq!(since.len(), 1);
+        assert_eq!(since.get(0).unwrap().timestamp, 300);
+        assert_eq!(
+            since.get(0).unwrap().message,
+            SString::from_str(&env, "third")
+        );
+
+        let since = client.get_alerts_since(&monitored, &150u64);
+        assert_eq!(since.len(), 2);
+        assert_eq!(since.get(0).unwrap().timestamp, 200);
+        assert_eq!(since.get(1).unwrap().timestamp, 300);
+    }
+
+    #[test]
+    fn get_alerts_since_returns_empty_when_no_new_alerts() {
+        let env = Env::default();
+        let (client, monitored) = setup_alert_history(&env);
+
+        assert_eq!(client.get_alerts_since(&monitored, &300u64).len(), 0);
+        assert_eq!(client.get_alerts_since(&monitored, &u64::MAX).len(), 0);
+    }
+
+    #[test]
+    fn get_alerts_since_unknown_contract_returns_empty() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let unknown = Address::generate(&env);
+
+        assert_eq!(client.get_alerts_since(&unknown, &0u64).len(), 0);
+    }
+
     #[test]
     fn deregister_removes_from_registry_and_state() {
         let env = Env::default();
@@ -873,7 +1149,7 @@ mod test {
             let name = symbol_short!("test");
             client.register_contract(&owner, &id, &name, &60u64);
         }
-        
+
         // Test first page
         let (page, total) = client.get_monitored_page(&0, &2);
         assert_eq!(page.len(), 2);
@@ -1097,5 +1373,275 @@ mod test {
 
         assert!(client.try_pause(&admin).is_err());
         assert!(!client.is_paused());
+    }
+
+    // ---- two-step admin transfer -------------------------------------------
+
+    #[test]
+    fn admin_transfer_full_handshake_succeeds() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let new_admin = Address::generate(&env);
+
+        assert_eq!(client.pending_admin(), None);
+        client.propose_admin(&admin, &new_admin);
+        assert_eq!(client.pending_admin(), Some(new_admin.clone()));
+        // The nomination alone must not move admin authority.
+        assert_eq!(client.admin(), admin);
+
+        client.accept_admin(&new_admin);
+        assert_eq!(client.admin(), new_admin);
+        assert_eq!(client.pending_admin(), None);
+    }
+
+    #[test]
+    fn accepted_admin_gains_privileges_and_old_admin_loses_them() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let new_admin = Address::generate(&env);
+
+        client.propose_admin(&admin, &new_admin);
+        client.accept_admin(&new_admin);
+
+        // The new admin can exercise admin-only powers...
+        client.pause(&new_admin);
+        assert!(client.is_paused());
+        client.unpause(&new_admin);
+        assert!(!client.is_paused());
+
+        // ...while the previous admin no longer can.
+        assert!(client
+            .try_propose_admin(&admin, &Address::generate(&env))
+            .is_err());
+        assert_eq!(client.admin(), new_admin);
+    }
+
+    #[test]
+    #[should_panic(expected = "caller is not the pending admin")]
+    fn non_pending_address_cannot_accept() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let pending = Address::generate(&env);
+        let impostor = Address::generate(&env);
+
+        client.propose_admin(&admin, &pending);
+        // Auth is mocked, so this is rejected by the pending-admin check, not
+        // by a missing authorization.
+        client.accept_admin(&impostor);
+    }
+
+    #[test]
+    fn impostor_accept_does_not_change_admin() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let pending = Address::generate(&env);
+        let impostor = Address::generate(&env);
+
+        client.propose_admin(&admin, &pending);
+        assert!(client.try_accept_admin(&impostor).is_err());
+        assert_eq!(client.admin(), admin);
+        assert_eq!(client.pending_admin(), Some(pending));
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner may perform this action")]
+    fn non_admin_cannot_propose_admin() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let stranger = Address::generate(&env);
+        client.propose_admin(&stranger, &Address::generate(&env));
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or owner may perform this action")]
+    fn non_admin_cannot_cancel_proposal() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let stranger = Address::generate(&env);
+        client.propose_admin(&admin, &Address::generate(&env));
+        client.cancel_admin_proposal(&stranger);
+    }
+
+    #[test]
+    fn cancel_proposal_clears_pending_and_keeps_admin() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let pending = Address::generate(&env);
+
+        client.propose_admin(&admin, &pending);
+        client.cancel_admin_proposal(&admin);
+
+        assert_eq!(client.pending_admin(), None);
+        assert_eq!(client.admin(), admin);
+        // A cancelled nominee can no longer accept.
+        assert!(client.try_accept_admin(&pending).is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "no admin transfer proposed")]
+    fn accept_without_proposal_panics() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        client.accept_admin(&Address::generate(&env));
+    }
+
+    #[test]
+    #[should_panic(expected = "no admin transfer proposed")]
+    fn cancel_without_proposal_panics() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        client.cancel_admin_proposal(&admin);
+    }
+
+    #[test]
+    #[should_panic(expected = "new admin is already the current admin")]
+    fn proposing_current_admin_panics() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        client.propose_admin(&admin, &admin);
+    }
+
+    #[test]
+    fn proposing_again_replaces_previous_nominee() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let first = Address::generate(&env);
+        let second = Address::generate(&env);
+
+        client.propose_admin(&admin, &first);
+        client.propose_admin(&admin, &second);
+
+        assert_eq!(client.pending_admin(), Some(second.clone()));
+        assert!(client.try_accept_admin(&first).is_err());
+        client.accept_admin(&second);
+        assert_eq!(client.admin(), second);
+    }
+
+    #[test]
+    fn propose_and_accept_require_expected_auth() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let new_admin = Address::generate(&env);
+
+        client.propose_admin(&admin, &new_admin);
+        assert_eq!(
+            env.auths(),
+            std::vec![(
+                admin.clone(),
+                AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        client.address.clone(),
+                        Symbol::new(&env, "propose_admin"),
+                        (admin.clone(), new_admin.clone()).into_val(&env),
+                    )),
+                    sub_invocations: std::vec![],
+                }
+            )]
+        );
+
+        client.accept_admin(&new_admin);
+        assert_eq!(
+            env.auths(),
+            std::vec![(
+                new_admin.clone(),
+                AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        client.address.clone(),
+                        Symbol::new(&env, "accept_admin"),
+                        (new_admin.clone(),).into_val(&env),
+                    )),
+                    sub_invocations: std::vec![],
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn accept_without_nominee_signature_fails() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let new_admin = Address::generate(&env);
+
+        client.propose_admin(&admin, &new_admin);
+        // Drop the blanket auth mock: the nominee never signed.
+        env.set_auths(&[]);
+
+        assert!(client.try_accept_admin(&new_admin).is_err());
+        assert_eq!(client.admin(), admin);
+        assert_eq!(client.pending_admin(), Some(new_admin));
+    }
+
+    #[test]
+    fn reads_extend_ttl_past_the_original_expiry() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.report_alert(
+            &owner,
+            &monitored,
+            &AlertSeverity::Critical,
+            &SString::from_str(&env, "down"),
+        );
+
+        // Just inside the extension threshold, so the next read must renew.
+        env.ledger().with_mut(|li| {
+            li.sequence_number = TTL_EXTEND_TO - TTL_THRESHOLD + 1;
+        });
+
+        assert_eq!(client.get_monitored_count(), 1);
+        assert_eq!(client.get_status(&monitored).owner, owner);
+        assert_eq!(client.get_alerts(&monitored).len(), 1);
+
+        // Past the expiry the entries had at registration, but inside the
+        // window renewed by the reads above.
+        env.ledger().with_mut(|li| {
+            li.sequence_number += TTL_EXTEND_TO / 2;
+        });
+
+        assert_eq!(client.admin(), admin);
+        assert_eq!(client.get_monitored_count(), 1);
+        assert_eq!(client.get_status(&monitored).owner, owner);
+        assert_eq!(client.get_alerts(&monitored).len(), 1);
+        assert_eq!(client.pending_admin(), None);
+    }
+
+    #[test]
+    fn writes_extend_ttl_past_the_original_expiry() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        // Near expiry again, then renew through the mutating entry points.
+        env.ledger().with_mut(|li| {
+            li.sequence_number = TTL_EXTEND_TO - TTL_THRESHOLD + 1;
+        });
+        client.report_status(
+            &owner,
+            &monitored,
+            &HealthStatus::Degraded,
+            &SString::from_str(&env, "slow"),
+        );
+        client.report_alert(
+            &owner,
+            &monitored,
+            &AlertSeverity::Warning,
+            &SString::from_str(&env, "latency"),
+        );
+
+        env.ledger().with_mut(|li| {
+            li.sequence_number += TTL_EXTEND_TO / 2;
+        });
+
+        let record = client.get_status(&monitored);
+        assert_eq!(record.status, HealthStatus::Degraded);
+        assert_eq!(client.get_alerts(&monitored).len(), 1);
+        client.deregister_contract(&owner, &monitored);
+        assert_eq!(client.get_monitored_count(), 0);
     }
 }

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 )
@@ -41,6 +42,22 @@ func (m *MockStore) DeleteMonitoredContract(_ context.Context, contractID string
 		}
 	}
 	m.alerts = filteredAlerts
+	// alert_subscriptions and alert_groups both reference
+	// monitored_contracts ON DELETE CASCADE, so mirror that here.
+	filteredSubs := m.alertSubscriptions[:0]
+	for _, sub := range m.alertSubscriptions {
+		if sub.ContractID != contractID {
+			filteredSubs = append(filteredSubs, sub)
+		}
+	}
+	m.alertSubscriptions = filteredSubs
+	filteredGroups := m.alertGroups[:0]
+	for _, g := range m.alertGroups {
+		if g.ContractID != contractID {
+			filteredGroups = append(filteredGroups, g)
+		}
+	}
+	m.alertGroups = filteredGroups
 	return nil
 }
 
@@ -66,7 +83,8 @@ func (m *MockStore) InsertContractAlert(_ context.Context, a ContractAlert) erro
 
 func (m *MockStore) ListMonitoredContracts(_ context.Context, cursor string, limit int, network string) ([]MonitoredContract, string, error) {
 	m.ensureWatchdog()
-	if limit <= 0 {
+	// Same page-size bounds as the postgres implementation.
+	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	ids := make([]string, 0, len(m.monitored))
@@ -101,25 +119,50 @@ func (m *MockStore) GetMonitoredContract(_ context.Context, contractID string) (
 }
 
 func (m *MockStore) ListHealthChecks(_ context.Context, contractID string, limit int) ([]HealthCheck, error) {
-	if limit <= 0 {
+	// Same page-size bounds as the postgres implementation.
+	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	out := make([]HealthCheck, 0)
-	for i := len(m.healthChecks) - 1; i >= 0 && len(out) < limit; i-- {
-		if m.healthChecks[i].ContractID == contractID {
-			out = append(out, m.healthChecks[i])
+	for _, h := range m.healthChecks {
+		if h.ContractID == contractID {
+			out = append(out, h)
 		}
+	}
+	// ORDER BY timestamp DESC, matching the postgres query.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Timestamp.Equal(out[j].Timestamp) {
+			return out[i].TxHash > out[j].TxHash
+		}
+		return out[i].Timestamp.After(out[j].Timestamp)
+	})
+	if len(out) > limit {
+		out = out[:limit]
 	}
 	return out, nil
 }
 
-func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network string, limit int) ([]ContractAlert, error) {
-	if limit <= 0 {
+// ListAlerts mirrors the postgres keyset pagination: rows are ordered
+// newest first by (timestamp desc, contract_id desc) and the optional
+// cursor selects strictly older rows. The returned cursor points at the
+// last row of the page and is empty when the feed is exhausted.
+func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network, cursor string, limit int) ([]ContractAlert, string, error) {
+	// Same page-size bounds as the postgres implementation.
+	if limit <= 0 || limit > 500 {
 		limit = 100
+	}
+	var cursorTS time.Time
+	var cursorID string
+	if cursor != "" {
+		ts, id, err := decodeAlertsCursor(cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		cursorTS, cursorID = ts, id
 	}
 	m.ensureWatchdog()
 	out := make([]ContractAlert, 0)
-	for i := len(m.alerts) - 1; i >= 0 && len(out) < limit; i-- {
+	for i := len(m.alerts) - 1; i >= 0; i-- {
 		a := m.alerts[i]
 		if contractID != "" && a.ContractID != contractID {
 			continue
@@ -130,9 +173,28 @@ func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network 
 		if network != "" && m.monitored[a.ContractID].Network != network {
 			continue
 		}
+		if cursor != "" {
+			// Keyset: keep rows strictly older than the (timestamp, id) pair
+			// under (timestamp DESC, contract_id DESC) ordering.
+			if a.Timestamp.After(cursorTS) {
+				continue
+			}
+			if a.Timestamp.Equal(cursorTS) && a.ContractID >= cursorID {
+				continue
+			}
+		}
 		out = append(out, a)
+		if len(out) > limit {
+			break
+		}
 	}
-	return out, nil
+	var next string
+	if len(out) > limit {
+		last := out[limit-1]
+		next = encodeAlertsCursor(last.Timestamp, last.ContractID)
+		out = out[:limit]
+	}
+	return out, next, nil
 }
 
 func (m *MockStore) GetWatchdogStats(_ context.Context, network string) (WatchdogStats, error) {
@@ -162,4 +224,45 @@ func (m *MockStore) GetWatchdogStats(_ context.Context, network string) (Watchdo
 		}
 	}
 	return s, nil
+}
+
+// GetContractUptime computes uptime percentage for the mock store by scanning
+// the in-memory health checks for the requested window.
+func (m *MockStore) GetContractUptime(_ context.Context, contractID string, window string) (UptimeResult, error) {
+	var dur time.Duration
+	switch window {
+	case "24h":
+		dur = 24 * time.Hour
+	case "7d":
+		dur = 7 * 24 * time.Hour
+	case "30d":
+		dur = 30 * 24 * time.Hour
+	default:
+		return UptimeResult{}, fmt.Errorf("invalid window %q: must be 24h, 7d, or 30d", window)
+	}
+
+	since := time.Now().UTC().Add(-dur)
+	var total, healthy int64
+	for _, h := range m.healthChecks {
+		if h.ContractID != contractID {
+			continue
+		}
+		if h.Timestamp.Before(since) {
+			continue
+		}
+		total++
+		if h.Status == "Healthy" {
+			healthy++
+		}
+	}
+
+	var uptimePct float64
+	if total > 0 {
+		uptimePct = float64(healthy) / float64(total) * 100.0
+	}
+	return UptimeResult{
+		ContractID: contractID,
+		Window:     window,
+		Uptime:     uptimePct,
+	}, nil
 }

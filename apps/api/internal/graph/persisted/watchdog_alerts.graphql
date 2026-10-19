@@ -1,0 +1,20 @@
+query WatchdogAlerts($severity: String) {
+  watchdog {
+    stats {
+      totalMonitored
+      criticalAlerts
+    }
+    alerts(severity: $severity, first: 20) {
+      severity
+      message
+      contract {
+        id
+        label
+      }
+      monitor {
+        name
+        status
+      }
+    }
+  }
+}

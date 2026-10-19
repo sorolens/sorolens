@@ -1,0 +1,4 @@
+# Stack settings are per deployment (they hold your region, images, domain
+# and the encryption salt for secrets); only the project file is tracked.
+Pulumi.*.yaml
+!Pulumi.yaml

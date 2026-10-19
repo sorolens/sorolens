@@ -22,7 +22,7 @@ export class SlidingWindowRateLimiter {
   constructor(
     private readonly limit: number,
     private readonly windowMs = 60_000,
-    private readonly now: () => number = Date.now,
+    private readonly now: () => number = Date.now
   ) {
     if (limit < 1) throw new Error("rate limit must be at least 1");
   }
@@ -45,7 +45,11 @@ export class SlidingWindowRateLimiter {
 
     recent.push(now);
     this.hits.set(key, recent);
-    return { allowed: true, retryAfterMs: 0, remaining: this.limit - recent.length };
+    return {
+      allowed: true,
+      retryAfterMs: 0,
+      remaining: this.limit - recent.length,
+    };
   }
 
   /** Drop the window for one key, or all keys when called with no argument. */

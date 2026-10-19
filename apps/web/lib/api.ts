@@ -1,20 +1,40 @@
 import type {
+  AlertGroupsResponse,
   AlertsResponse,
   AlertSubscription,
+  ChannelType,
+  BatchContractsRequest,
+  BatchContractsResponse,
   ContractDetail,
+  ContractNote,
+  ContractNotesResponse,
+  CompareResponse,
+  APIHealthResponse,
+  APIVersionResponse,
+  ContractForecastResponse,
   ContractSnapshot,
   ContractSummary,
+  ContractTagsResponse,
   ContractsListResponse,
   EventsResponse,
+  GlobalEventsResponse,
   GlobalStats,
   HealthChecksResponse,
   InvocationsResponse,
+  IndexerStatusResponse,
+  LiveActivityResponse,
   MonitoredContract,
+  RecentEventsResponse,
   MonitoredContractsResponse,
+  ReportFormat,
   StatsResponse,
   StorageResponse,
   TimeWindow,
   TrackContractRequest,
+  ValidateContractResponse,
+  SLAHistoryResponse,
+  UptimeResponse,
+  UptimeWindow,
   WatchdogStats,
   CreateSubscriptionRequest,
   SubscriptionsResponse,
@@ -22,16 +42,34 @@ import type {
   WatchlistResponse,
   WatchlistStatusResponse,
   HealthScoreResponse,
+  Group,
+  GroupDeletedResponse,
+  GroupDetail,
+  GroupMembershipResponse,
+  GroupsListResponse,
+  GroupStats,
+  ContractVerification,
+  LabelResolution,
+  TraceResponse,
+  RulesResponse,
+  AlertRule,
+  CreateRuleRequest,
+  RuleValidation,
+  RulePreview,
+  RuleCatalogResponse,
+  RuleLibraryResponse,
+  SearchResponse,
 } from "./types";
-
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import type { ContractVersionEntry } from "@sorolens/ui";
+import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
+import { sessionHeaders } from "./user";
+import { API_URL } from "./config";
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    public code?: string,
+    public code?: string
   ) {
     super(message);
     this.name = "ApiError";
@@ -57,37 +95,109 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     throw new ApiError(res.status, body.error || res.statusText, body.code);
   }
 
+  // A usable payload is on the wire, so the footer can report a fresh view.
+  recordLastUpdated(resourceFromUrl(url));
+
   return res.json();
+}
+
+// fetchNoContent is the variant for endpoints that return 204 with no body.
+async function fetchNoContent(
+  url: string,
+  options?: RequestInit
+): Promise<void> {
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options?.headers,
+    },
+  });
+
+  if (!res.ok) {
+    let body: { error?: string; code?: string } = {};
+    try {
+      body = await res.json();
+    } catch {
+      // ignore parse error
+    }
+    throw new ApiError(res.status, body.error || res.statusText, body.code);
+  }
+}
+
+export function getAPIHealth(): Promise<APIHealthResponse> {
+  return fetchJson<APIHealthResponse>(`${API_URL}/api/v1/health`);
+}
+
+export function getAPIReadiness(): Promise<{
+  status: string;
+  checks?: Record<string, string>;
+}> {
+  return fetchJson(`${API_URL}/readyz`);
+}
+
+export function getAPIVersion(): Promise<APIVersionResponse> {
+  return fetchJson<APIVersionResponse>(`${API_URL}/api/version`);
+}
+
+export function getIndexerStatus(): Promise<IndexerStatusResponse> {
+  return fetchJson<IndexerStatusResponse>("/api/status/indexer");
 }
 
 export function listContractsAll(): Promise<ContractsListResponse> {
   return fetchJson<ContractsListResponse>(
-    `${API_URL}/api/v1/contracts?limit=1000`,
+    `${API_URL}/api/v1/contracts?limit=1000`
   );
 }
 
-export function listContracts(
-  params?: { cursor?: string; limit?: number; network?: string; status?: string },
-): Promise<ContractsListResponse> {
+/**
+ * Search contracts by ID or label (`GET /api/v1/search`, issue #619).
+ * The response shape is `{ items: Contract[] }` exactly as declared in
+ * `docs/openapi.yaml`.
+ */
+export function searchContracts(
+  query: string,
+  params?: { limit?: number; network?: string }
+): Promise<SearchResponse> {
+  const search = new URLSearchParams({ q: query });
+  if (params?.limit) search.set("limit", String(params.limit));
+  if (params?.network) search.set("network", params.network);
+  return fetchJson<SearchResponse>(
+    `${API_URL}/api/v1/search?${search.toString()}`
+  );
+}
+
+export function listContracts(params?: {
+  cursor?: string;
+  limit?: number;
+  network?: string;
+  status?: string;
+  tag?: string;
+  sort?: string;
+  dir?: "asc" | "desc";
+}): Promise<ContractsListResponse> {
   const search = new URLSearchParams();
   if (params?.cursor) search.set("cursor", params.cursor);
   if (params?.limit) search.set("limit", String(params.limit));
   if (params?.network) search.set("network", params.network);
   if (params?.status) search.set("status", params.status);
+  if (params?.tag) search.set("tag", params.tag);
+  if (params?.sort) search.set("sort", params.sort);
+  if (params?.dir) search.set("dir", params.dir);
   const qs = search.toString();
   return fetchJson<ContractsListResponse>(
-    `${API_URL}/api/v1/contracts${qs ? "?" + qs : ""}`,
+    `${API_URL}/api/v1/contracts${qs ? "?" + qs : ""}`
   );
 }
 
 export function trackContract(
   req: TrackContractRequest,
-  userId?: string,
+  userId?: string
 ): Promise<ContractSummary> {
   const headers: Record<string, string> = {};
   // RBAC: registering a contract requires a recognized (contributor+) user,
-  // so the UI forwards its browser identity the same way the watchlist does.
-  if (userId) headers["X-User-ID"] = userId;
+  // so the UI sends its signed session token.
+  Object.assign(headers, sessionHeaders(userId));
   return fetchJson<ContractSummary>(`${API_URL}/api/v1/contracts`, {
     method: "POST",
     body: JSON.stringify(req),
@@ -95,8 +205,110 @@ export function trackContract(
   });
 }
 
+// batchContracts applies one bulk action (untrack | tag) to many contracts.
+// Like trackContract it sends the signed session so the API's RBAC layer can
+// require the contributor role.
+export function batchContracts(
+  req: BatchContractsRequest,
+  userId?: string
+): Promise<BatchContractsResponse> {
+  const headers: Record<string, string> = {};
+  Object.assign(headers, sessionHeaders(userId));
+  return fetchJson<BatchContractsResponse>(
+    `${API_URL}/api/v1/contracts/batch`,
+    {
+      method: "POST",
+      body: JSON.stringify(req),
+      headers,
+    }
+  );
+}
+
 export function getContract(id: string): Promise<ContractDetail> {
   return fetchJson<ContractDetail>(`${API_URL}/api/v1/contracts/${id}`);
+}
+
+// ---- contract tags (issue #459) ---------------------------------------------
+
+/**
+ * Adds a user-defined tag. Requires a contributor identity, so the browser
+ * identity is forwarded the same way the watchlist and registration calls do.
+ * Adding a tag the contract already carries is a no-op, and the response is
+ * the contract's full, sorted tag list.
+ */
+export function addContractTag(
+  id: string,
+  tag: string,
+  userId: string
+): Promise<ContractTagsResponse> {
+  return fetchJson<ContractTagsResponse>(
+    `${API_URL}/api/v1/contracts/${id}/tags`,
+    {
+      method: "POST",
+      body: JSON.stringify({ tag }),
+      headers: sessionHeaders(userId),
+    }
+  );
+}
+
+/** Removes a tag. Removing one the contract does not carry is a no-op. */
+export function removeContractTag(
+  id: string,
+  tag: string,
+  userId: string
+): Promise<void> {
+  return fetchJson<void>(
+    `${API_URL}/api/v1/contracts/${id}/tags/${encodeURIComponent(tag)}`,
+    {
+      method: "DELETE",
+      headers: sessionHeaders(userId),
+    }
+  );
+}
+
+/**
+ * Pre-flight check for the tracking wizard: validates the contract id's StrKey
+ * format (including its checksum) and reports whether it is already tracked.
+ * Read-only; it never registers the contract.
+ */
+export function validateContract(req: {
+  contract_id: string;
+  network: string;
+}): Promise<ValidateContractResponse> {
+  return fetchJson<ValidateContractResponse>(
+    `${API_URL}/api/v1/contracts/validate`,
+    { method: "POST", body: JSON.stringify(req) }
+  );
+}
+
+// ---- live dashboard (#139) -------------------------------------------------
+
+/**
+ * The newest events across every tracked contract, newest first. The /live
+ * ticker polls this and de-duplicates by event id; there is no cursor because
+ * the dashboard always wants the newest slice.
+ */
+export function getRecentEvents(limit = 50): Promise<RecentEventsResponse> {
+  return fetchJson<RecentEventsResponse>(
+    `${API_URL}/api/v1/events/recent?limit=${limit}`
+  );
+}
+
+/**
+ * Per-contract events-per-minute buckets over the last `minutes` minutes,
+ * ordered hottest first. Backs both the sparklines and the hot-contracts
+ * leaderboard in a single request.
+ */
+export function getLiveActivity(minutes = 30): Promise<LiveActivityResponse> {
+  return fetchJson<LiveActivityResponse>(
+    `${API_URL}/api/v1/stats/activity?minutes=${minutes}`
+  );
+}
+
+export function resolveLabel(query: string): Promise<LabelResolution> {
+  return fetchJson<LabelResolution>(
+    `${API_URL}/api/v1/resolve?query=${encodeURIComponent(query)}`
+  );
 }
 
 export function getContractEvents(
@@ -108,7 +320,8 @@ export function getContractEvents(
     tx_hash?: string;
     since?: string;
     until?: string;
-  },
+    in_successful_call?: boolean;
+  }
 ): Promise<EventsResponse> {
   const search = new URLSearchParams();
   if (params?.cursor) search.set("cursor", params.cursor);
@@ -117,9 +330,11 @@ export function getContractEvents(
   if (params?.tx_hash) search.set("tx_hash", params.tx_hash);
   if (params?.since) search.set("since", params.since);
   if (params?.until) search.set("until", params.until);
+  if (params?.in_successful_call !== undefined)
+    search.set("in_successful_call", String(params.in_successful_call));
   const qs = search.toString();
   return fetchJson<EventsResponse>(
-    `${API_URL}/api/v1/contracts/${id}/events${qs ? "?" + qs : ""}`,
+    `${API_URL}/api/v1/contracts/${id}/events${qs ? "?" + qs : ""}`
   );
 }
 
@@ -132,7 +347,7 @@ export function getContractInvocations(
     since?: string;
     until?: string;
     function_name?: string;
-  },
+  }
 ): Promise<InvocationsResponse> {
   const search = new URLSearchParams();
   if (params?.cursor) search.set("cursor", params.cursor);
@@ -143,7 +358,38 @@ export function getContractInvocations(
   if (params?.function_name) search.set("function_name", params.function_name);
   const qs = search.toString();
   return fetchJson<InvocationsResponse>(
-    `${API_URL}/api/v1/contracts/${id}/invocations${qs ? "?" + qs : ""}`,
+    `${API_URL}/api/v1/contracts/${id}/invocations${qs ? "?" + qs : ""}`
+  );
+}
+
+// ---- global invocations ----------------------------------------------------
+
+/**
+ * Lists invocations across every tracked contract (newest first). Backs the
+ * /invocations explorer. All filters are optional.
+ */
+export function listInvocations(params?: {
+  cursor?: string;
+  limit?: number;
+  contract_id?: string;
+  fn?: string;
+  status?: string;
+  network?: string;
+  since?: string;
+  until?: string;
+}): Promise<InvocationsResponse> {
+  const search = new URLSearchParams();
+  if (params?.cursor) search.set("cursor", params.cursor);
+  if (params?.limit) search.set("limit", String(params.limit));
+  if (params?.contract_id) search.set("contract_id", params.contract_id);
+  if (params?.fn) search.set("fn", params.fn);
+  if (params?.status) search.set("status", params.status);
+  if (params?.network) search.set("network", params.network);
+  if (params?.since) search.set("since", params.since);
+  if (params?.until) search.set("until", params.until);
+  const qs = search.toString();
+  return fetchJson<InvocationsResponse>(
+    `${API_URL}/api/v1/invocations${qs ? "?" + qs : ""}`
   );
 }
 
@@ -155,7 +401,7 @@ export function getContractStorage(
     durability?: string;
     status?: string;
     expiring_within?: number;
-  },
+  }
 ): Promise<StorageResponse> {
   const search = new URLSearchParams();
   if (params?.cursor) search.set("cursor", params.cursor);
@@ -166,16 +412,16 @@ export function getContractStorage(
     search.set("expiring_within", String(params.expiring_within));
   const qs = search.toString();
   return fetchJson<StorageResponse>(
-    `${API_URL}/api/v1/contracts/${id}/storage${qs ? "?" + qs : ""}`,
+    `${API_URL}/api/v1/contracts/${id}/storage${qs ? "?" + qs : ""}`
   );
 }
 
 export function getContractStats(
   id: string,
-  window: TimeWindow = "7d",
+  window: TimeWindow = "7d"
 ): Promise<StatsResponse> {
   return fetchJson<StatsResponse>(
-    `${API_URL}/api/v1/contracts/${id}/stats?window=${window}`,
+    `${API_URL}/api/v1/contracts/${id}/stats?window=${window}`
   );
 }
 
@@ -183,6 +429,26 @@ export function getContractStats(
 
 export function getGlobalStats(): Promise<GlobalStats> {
   return fetchJson<GlobalStats>(`${API_URL}/api/v1/stats/global`);
+}
+
+// ---- comparison -------------------------------------------------------------
+
+/**
+ * Fetch unified stats for up to 4 contracts in a single round-trip. The API
+ * fans out to the per-contract lookups in parallel and returns one entry per
+ * requested contract; a contract with no data yet still gets an entry with
+ * zeroed metrics rather than an error.
+ */
+export function getCompare(
+  ids: string[],
+  window: TimeWindow = "7d"
+): Promise<CompareResponse> {
+  const search = new URLSearchParams();
+  search.set("ids", ids.join(","));
+  search.set("window", window);
+  return fetchJson<CompareResponse>(
+    `${API_URL}/api/v1/compare?${search.toString()}`
+  );
 }
 
 // ---- snapshot / replay ------------------------------------------------------
@@ -193,20 +459,72 @@ export function getGlobalStats(): Promise<GlobalStats> {
  */
 export function getContractSnapshot(
   id: string,
-  ledger: number,
+  ledger: number
 ): Promise<ContractSnapshot> {
   return fetchJson<ContractSnapshot>(
-    `${API_URL}/api/v1/contracts/${id}/snapshot?ledger=${ledger}`,
+    `${API_URL}/api/v1/contracts/${id}/snapshot?ledger=${ledger}`
   );
 }
 
-
 export function getContractHealthScore(
-  id: string,
+  id: string
 ): Promise<HealthScoreResponse> {
   return fetchJson<HealthScoreResponse>(
-    `${API_URL}/api/v1/contracts/${id}/health-score`,
+    `${API_URL}/api/v1/contracts/${id}/health-score`
   );
+}
+
+// ---- source verification ---------------------------------------------------
+
+/**
+ * Fetch the cached source-verification verdict for a contract. Returns a 404
+ * ApiError when the contract has never been submitted for verification.
+ */
+export function getContractVerification(
+  id: string
+): Promise<ContractVerification> {
+  return fetchJson<ContractVerification>(
+    `${API_URL}/api/v1/contracts/${id}/verification`
+  );
+}
+
+// ---- Wasm changelog (issue #601) -------------------------------------------
+
+/**
+ * Full Wasm hash history for a contract, oldest first. Served by the
+ * changelog handler in apps/api/internal/changelog.
+ */
+export function getContractChangelog(
+  id: string
+): Promise<ContractVersionEntry[]> {
+  return fetchJson<ContractVersionEntry[]>(
+    `${API_URL}/api/v1/contracts/${id}/changelog`
+  );
+}
+
+export function getContractForecast(
+  contractId: string,
+  horizonDays = 30
+): Promise<ContractForecastResponse> {
+  const search = new URLSearchParams({ horizon: `${horizonDays}d` });
+  return fetchJson<ContractForecastResponse>(
+    `${API_URL}/api/v1/contracts/${contractId}/forecast?${search.toString()}`
+  );
+}
+
+/** Base URL the ContractChangelog component builds feed/badge links from. */
+export function changelogApiBase(): string {
+  return `${API_URL}/api/v1`;
+}
+
+/** URL of the Atom feed of a contract's Wasm upgrades. */
+export function contractChangelogFeedUrl(id: string): string {
+  return `${changelogApiBase()}/contracts/${id}/changelog/feed`;
+}
+
+/** URL of the embeddable SVG badge showing a contract's current Wasm hash. */
+export function contractChangelogBadgeUrl(id: string): string {
+  return `${changelogApiBase()}/contracts/${id}/changelog/badge`;
 }
 
 // ---- watchdog --------------------------------------------------------------
@@ -216,48 +534,100 @@ export function getWatchdogStats(network?: string): Promise<WatchdogStats> {
   if (network) search.set("network", network);
   const qs = search.toString();
   return fetchJson<WatchdogStats>(
-    `${API_URL}/api/v1/watchdog/stats${qs ? "?" + qs : ""}`,
+    `${API_URL}/api/v1/watchdog/stats${qs ? "?" + qs : ""}`
   );
 }
 
-export function listMonitoredContracts(
-  params?: { cursor?: string; limit?: number; network?: string },
-): Promise<MonitoredContractsResponse> {
+export function listMonitoredContracts(params?: {
+  cursor?: string;
+  limit?: number;
+  network?: string;
+}): Promise<MonitoredContractsResponse> {
   const search = new URLSearchParams();
   if (params?.cursor) search.set("cursor", params.cursor);
   if (params?.limit) search.set("limit", String(params.limit));
   if (params?.network) search.set("network", params.network);
   const qs = search.toString();
   return fetchJson<MonitoredContractsResponse>(
-    `${API_URL}/api/v1/watchdog/contracts${qs ? "?" + qs : ""}`,
+    `${API_URL}/api/v1/watchdog/contracts${qs ? "?" + qs : ""}`
   );
 }
 
 export function getMonitoredContract(
-  contractId: string,
+  contractId: string
 ): Promise<MonitoredContract> {
   return fetchJson<MonitoredContract>(
-    `${API_URL}/api/v1/watchdog/contracts/${contractId}`,
+    `${API_URL}/api/v1/watchdog/contracts/${contractId}`
   );
+}
+
+export function getContractUptime(
+  contractId: string,
+  window: UptimeWindow = "24h"
+): Promise<UptimeResponse> {
+  return fetchJson<UptimeResponse>(
+    `${API_URL}/api/v1/watchdog/contracts/${contractId}/uptime?window=${window}`
+  );
+}
+
+// ---- SLA reporting (issue #266) --------------------------------------------
+
+/**
+ * Monthly SLA buckets for the last `months` calendar months, oldest first.
+ * Backs the trend chart in one round-trip instead of a request per month.
+ */
+export function getContractReportHistory(
+  contractId: string,
+  months = 12
+): Promise<SLAHistoryResponse> {
+  const search = new URLSearchParams({ months: String(months) });
+  return fetchJson<SLAHistoryResponse>(
+    `${API_URL}/api/v1/reports/${contractId}/history?${search.toString()}`
+  );
+}
+
+/**
+ * URL for a report export. Returned rather than fetched so the browser can
+ * follow it as a download and honour Content-Disposition.
+ */
+export function contractReportUrl(
+  contractId: string,
+  month: string,
+  format: ReportFormat
+): string {
+  const search = new URLSearchParams({ month, format });
+  return `${API_URL}/api/v1/reports/${contractId}?${search.toString()}`;
+}
+
+/** URL of the embeddable SVG SLA badge for a month. */
+export function contractSLABadgeUrl(contractId: string, month: string): string {
+  const search = new URLSearchParams({ month });
+  return `${API_URL}/api/v1/reports/${contractId}/badge.svg?${search.toString()}`;
 }
 
 export function listHealthChecks(
   contractId: string,
-  limit = 100,
+  limit = 100
 ): Promise<HealthChecksResponse> {
   return fetchJson<HealthChecksResponse>(
-    `${API_URL}/api/v1/watchdog/contracts/${contractId}/health?limit=${limit}`,
+    `${API_URL}/api/v1/watchdog/contracts/${contractId}/health?limit=${limit}`
   );
 }
 
 export function listAlerts(
   contractId?: string,
-  params?: { severity?: string; limit?: number; network?: string },
+  params?: {
+    severity?: string;
+    limit?: number;
+    network?: string;
+    cursor?: string;
+  }
 ): Promise<AlertsResponse> {
   const search = new URLSearchParams();
   if (params?.severity) search.set("severity", params.severity);
   if (params?.limit) search.set("limit", String(params.limit));
   if (params?.network) search.set("network", params.network);
+  if (params?.cursor) search.set("cursor", params.cursor);
   const qs = search.toString();
   const path = contractId
     ? `/api/v1/watchdog/contracts/${contractId}/alerts`
@@ -265,62 +635,414 @@ export function listAlerts(
   return fetchJson<AlertsResponse>(`${API_URL}${path}${qs ? "?" + qs : ""}`);
 }
 
+/**
+ * Wrapper around the grouped alert feed (GET /api/v1/alerts, issue #269).
+ *
+ * Unlike listAlerts — the flat per-event watchdog feed — this returns one row
+ * per deduplicated group with its aggregate count plus first/last seen bounds.
+ * Filters mirror the flat feed: contract_id, severity and network.
+ */
+export function listAlertGroups(params?: {
+  contractId?: string;
+  severity?: string;
+  network?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<AlertGroupsResponse> {
+  const search = new URLSearchParams();
+  if (params?.contractId) search.set("contract_id", params.contractId);
+  if (params?.severity) search.set("severity", params.severity);
+  if (params?.network) search.set("network", params.network);
+  if (params?.cursor) search.set("cursor", params.cursor);
+  if (params?.limit) search.set("limit", String(params.limit));
+  const qs = search.toString();
+  return fetchJson<AlertGroupsResponse>(
+    `${API_URL}/api/v1/alerts${qs ? "?" + qs : ""}`
+  );
+}
+
+// ---- events explorer ------------------------------------------------------
+
+export interface ListAllEventsParams {
+  cursor?: string;
+  limit?: number;
+  contractId?: string;
+  type?: string;
+  network?: string;
+  /** RFC 3339 inclusive bounds on ledger_closed_at. */
+  since?: string;
+  until?: string;
+}
+
+/** Cross-contract events feed, newest first (GET /api/v1/events). */
+export function listAllEvents(
+  params: ListAllEventsParams = {},
+  init?: RequestInit
+): Promise<GlobalEventsResponse> {
+  const search = new URLSearchParams();
+  if (params.cursor) search.set("cursor", params.cursor);
+  if (params.limit) search.set("limit", String(params.limit));
+  if (params.contractId) search.set("contract_id", params.contractId);
+  if (params.type) search.set("type", params.type);
+  if (params.network) search.set("network", params.network);
+  if (params.since) search.set("since", params.since);
+  if (params.until) search.set("until", params.until);
+  const qs = search.toString();
+  return fetchJson<GlobalEventsResponse>(
+    `${API_URL}/api/v1/events${qs ? "?" + qs : ""}`,
+    init
+  );
+}
+
 // ---- subscriptions --------------------------------------------------------
+// Subscriptions hold integration secrets, so every call needs a contributor
+// identity; the dashboard sends its signed session like trackContract.
+
+function userHeaders(userId?: string): Record<string, string> {
+  return sessionHeaders(userId);
+}
 
 export function createSubscription(
   req: CreateSubscriptionRequest,
+  userId?: string
 ): Promise<AlertSubscription> {
-  return fetchJson<AlertSubscription>(`${API_URL}/api/v1/watchdog/subscriptions`, {
+  return fetchJson<AlertSubscription>(
+    `${API_URL}/api/v1/watchdog/subscriptions`,
+    {
+      method: "POST",
+      body: JSON.stringify(req),
+      headers: userHeaders(userId),
+    }
+  );
+}
+
+export function listSubscriptions(
+  userId?: string
+): Promise<SubscriptionsResponse> {
+  return fetchJson<SubscriptionsResponse>(
+    `${API_URL}/api/v1/watchdog/subscriptions`,
+    {
+      headers: userHeaders(userId),
+    }
+  );
+}
+
+export async function deleteSubscription(
+  id: string,
+  userId?: string
+): Promise<void> {
+  const res = await fetch(
+    `${API_URL}/api/v1/watchdog/subscriptions/${encodeURIComponent(id)}`,
+    { method: "DELETE", headers: userHeaders(userId) }
+  );
+  if (!res.ok) {
+    let body: { error?: string | { message?: string } } = {};
+    try {
+      body = await res.json();
+    } catch {
+      // ignore parse error
+    }
+    const message =
+      typeof body.error === "string" ? body.error : body.error?.message;
+    throw new ApiError(res.status, message || res.statusText);
+  }
+}
+
+export async function sendTestNotification(params: {
+  contractId: string;
+  channel: ChannelType;
+  destination: string;
+  severity?: string;
+}): Promise<{ success: boolean; message?: string }> {
+  const res = await fetch("/api/watchdog/test-notification", {
     method: "POST",
-    body: JSON.stringify(req),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contract_id: params.contractId,
+      channel_type: params.channel,
+      destination: params.destination,
+      severity: params.severity || "Critical",
+    }),
   });
-}
-
-export function listSubscriptions(): Promise<SubscriptionsResponse> {
-  return fetchJson<SubscriptionsResponse>(`${API_URL}/api/v1/watchdog/subscriptions`);
-}
-
-export function deleteSubscription(id: string): Promise<void> {
-  return fetchJson<void>(`${API_URL}/api/v1/watchdog/subscriptions/${id}`, {
-    method: "DELETE",
-  });
+  let body: { success?: boolean; message?: string; error?: string } = {};
+  try {
+    body = await res.json();
+  } catch {
+    // ignore parse error
+  }
+  if (!res.ok || body.success === false) {
+    throw new Error(
+      body.error || `Failed to send test notification (${res.status})`
+    );
+  }
+  return {
+    success: true,
+    message: body.message || "Test notification sent successfully.",
+  };
 }
 
 // ---- watchlist ------------------------------------------------------------
 
 export function addToWatchlist(
   contractId: string,
-  userId: string,
+  userId: string
 ): Promise<WatchlistStatusResponse> {
   return fetchJson<WatchlistStatusResponse>(`${API_URL}/api/v1/watchlist`, {
     method: "POST",
     body: JSON.stringify({ contract_id: contractId }),
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
 export function removeFromWatchlist(
   contractId: string,
-  userId: string,
+  userId: string
 ): Promise<WatchlistStatusResponse> {
-  return fetchJson<WatchlistStatusResponse>(`${API_URL}/api/v1/watchlist/${contractId}`, {
-    method: "DELETE",
-    headers: { "X-User-ID": userId },
-  });
+  return fetchJson<WatchlistStatusResponse>(
+    `${API_URL}/api/v1/watchlist/${contractId}`,
+    {
+      method: "DELETE",
+      headers: sessionHeaders(userId),
+    }
+  );
 }
 
 export function listWatchlist(userId: string): Promise<WatchlistResponse> {
   return fetchJson<WatchlistResponse>(`${API_URL}/api/v1/watchlist`, {
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
 export function watchlistStatus(
   contractId: string,
-  userId: string,
+  userId: string
 ): Promise<WatchlistStatusResponse> {
   return fetchJson<WatchlistStatusResponse>(
     `${API_URL}/api/v1/watchlist/${contractId}/status`,
-    { headers: { "X-User-ID": userId } },
+    { headers: sessionHeaders(userId) }
+  );
+}
+
+// ---- groups (contract portfolios) ------------------------------------------
+//
+// Groups are owned by the session user, the same identity contract the
+// watchlist uses, so every call sends the signed session.
+
+export function listGroups(userId: string): Promise<GroupsListResponse> {
+  return fetchJson<GroupsListResponse>(`${API_URL}/api/v1/groups`, {
+    headers: sessionHeaders(userId),
+  });
+}
+
+export function createGroup(name: string, userId: string): Promise<Group> {
+  return fetchJson<Group>(`${API_URL}/api/v1/groups`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+    headers: sessionHeaders(userId),
+  });
+}
+
+export function getGroup(id: string, userId: string): Promise<GroupDetail> {
+  return fetchJson<GroupDetail>(`${API_URL}/api/v1/groups/${id}`, {
+    headers: sessionHeaders(userId),
+  });
+}
+
+export function renameGroup(
+  id: string,
+  name: string,
+  userId: string
+): Promise<Group> {
+  return fetchJson<Group>(`${API_URL}/api/v1/groups/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+    headers: sessionHeaders(userId),
+  });
+}
+
+export function deleteGroup(
+  id: string,
+  userId: string
+): Promise<GroupDeletedResponse> {
+  return fetchJson<GroupDeletedResponse>(`${API_URL}/api/v1/groups/${id}`, {
+    method: "DELETE",
+    headers: sessionHeaders(userId),
+  });
+}
+
+export function getGroupStats(id: string, userId: string): Promise<GroupStats> {
+  return fetchJson<GroupStats>(`${API_URL}/api/v1/groups/${id}/stats`, {
+    headers: sessionHeaders(userId),
+  });
+}
+
+export function addContractToGroup(
+  groupId: string,
+  contractId: string,
+  userId: string
+): Promise<GroupMembershipResponse> {
+  return fetchJson<GroupMembershipResponse>(
+    `${API_URL}/api/v1/groups/${groupId}/contracts`,
+    {
+      method: "POST",
+      body: JSON.stringify({ contract_id: contractId }),
+      headers: sessionHeaders(userId),
+    }
+  );
+}
+
+export function removeContractFromGroup(
+  groupId: string,
+  contractId: string,
+  userId: string
+): Promise<GroupMembershipResponse> {
+  return fetchJson<GroupMembershipResponse>(
+    `${API_URL}/api/v1/groups/${groupId}/contracts/${contractId}`,
+    {
+      method: "DELETE",
+      headers: sessionHeaders(userId),
+    }
+  );
+}
+
+// ---- invocation trace ------------------------------------------------------
+
+/**
+ * Cross-contract call tree for a transaction, materialised by the indexer from
+ * the Soroban host diagnostic events. Backs the flame-graph view.
+ */
+export function getInvocationTrace(txHash: string): Promise<TraceResponse> {
+  return fetchJson<TraceResponse>(
+    `${API_URL}/api/v1/invocations/${txHash}/trace`
+  );
+}
+
+// ---- alert rules (rule language) -------------------------------------------
+
+export function listRules(): Promise<RulesResponse> {
+  return fetchJson<RulesResponse>(`${API_URL}/api/v1/rules`);
+}
+
+// Rule authoring mutates shared state, so the API requires a contributor
+// identity; userId selects the session token (see lib/user.ts).
+export function createRule(
+  req: CreateRuleRequest,
+  userId?: string
+): Promise<AlertRule> {
+  return fetchJson<AlertRule>(`${API_URL}/api/v1/rules`, {
+    method: "POST",
+    body: JSON.stringify(req),
+    headers: sessionHeaders(userId),
+  });
+}
+
+export function deleteRule(id: number, userId?: string): Promise<void> {
+  return fetchNoContent(`${API_URL}/api/v1/rules/${id}`, {
+    method: "DELETE",
+    headers: sessionHeaders(userId),
+  });
+}
+
+export function setRuleEnabled(
+  id: number,
+  enabled: boolean,
+  userId?: string
+): Promise<AlertRule> {
+  return fetchJson<AlertRule>(`${API_URL}/api/v1/rules/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+    headers: sessionHeaders(userId),
+  });
+}
+
+/**
+ * validateRule is a pure server-side check of the rule text. It returns
+ * `{ valid: false, errors }` for a bad rule rather than throwing, so the
+ * editor can render diagnostics inline.
+ */
+export function validateRule(source: string): Promise<RuleValidation> {
+  return fetchJson<RuleValidation>(`${API_URL}/api/v1/rules/validate`, {
+    method: "POST",
+    body: JSON.stringify({ source }),
+  });
+}
+
+/**
+ * previewRule evaluates the rule against the contract's recent metric
+ * samples using the real evaluator.
+ */
+export function previewRule(
+  source: string,
+  contractId?: string,
+  window?: string
+): Promise<RulePreview> {
+  return fetchJson<RulePreview>(`${API_URL}/api/v1/rules/preview`, {
+    method: "POST",
+    body: JSON.stringify({ source, contract_id: contractId, window }),
+  });
+}
+
+export function listRuleMetrics(): Promise<RuleCatalogResponse> {
+  return fetchJson<RuleCatalogResponse>(`${API_URL}/api/v1/rules/metrics`);
+}
+
+export function listRuleLibrary(): Promise<RuleLibraryResponse> {
+  return fetchJson<RuleLibraryResponse>(`${API_URL}/api/v1/rules/library`);
+}
+
+// ---- contract notes (issue #164) -------------------------------------------
+
+/** Lists a contract's notes, newest first. */
+export function listContractNotes(id: string): Promise<ContractNotesResponse> {
+  return fetchJson<ContractNotesResponse>(
+    `${API_URL}/api/v1/contracts/${id}/notes`
+  );
+}
+
+/**
+ * Adds a markdown note. Authoring requires a contributor identity, so the
+ * browser identity is sent as a session token like the tag and watchlist calls.
+ */
+export function createContractNote(
+  id: string,
+  body: string,
+  userId: string
+): Promise<ContractNote> {
+  return fetchJson<ContractNote>(`${API_URL}/api/v1/contracts/${id}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+    headers: sessionHeaders(userId),
+  });
+}
+
+/** Rewrites a note. The API only accepts this from the note's author. */
+export function updateContractNote(
+  contractId: string,
+  noteId: string,
+  body: string,
+  userId: string
+): Promise<ContractNote> {
+  return fetchJson<ContractNote>(
+    `${API_URL}/api/v1/contracts/${contractId}/notes/${noteId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+      headers: sessionHeaders(userId),
+    }
+  );
+}
+
+/** Deletes a note. Only the author may delete it; deleting twice is a no-op. */
+export function deleteContractNote(
+  contractId: string,
+  noteId: string,
+  userId: string
+): Promise<void> {
+  return fetchNoContent(
+    `${API_URL}/api/v1/contracts/${contractId}/notes/${noteId}`,
+    {
+      method: "DELETE",
+      headers: sessionHeaders(userId),
+    }
   );
 }

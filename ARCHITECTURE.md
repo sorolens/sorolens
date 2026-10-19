@@ -1,4 +1,5 @@
-# ARCHITECTURE.md
+# Architecture
+
 ## Sorolens System Architecture
 
 ---
@@ -22,7 +23,7 @@ graph TB
     end
 
     subgraph "GitHub Actions"
-        I[Go Indexer\ncron every 5 min\nbackfill + catch-up]
+        I[Go Indexer\nsharded cron every 5 min\nbackfill + catch-up]
     end
 
     subgraph "Stellar Network"
@@ -55,7 +56,7 @@ This flow runs when a contract ID is first submitted to the system (either via t
    - Calls RPC getLedgerEntries for the contract instance entry
      - If not found: return 404 (contract does not exist on-chain)
    - Inserts row into `contracts` table with status = "backfilling"
-   - Returns 201 Accepted
+   - Returns 201 Created
 
 2. On next cron run (at most 5 minutes later), the indexer sees
    the contract in "backfilling" status.
@@ -79,12 +80,12 @@ This flow runs when a contract ID is first submitted to the system (either via t
    Repeats with cursor until no more pages.
 
 6. For each event batch:
-   - Decode XDR ScVal topics and value (via local XDR lib)
+   - Decode XDR ScVal topics and value (via a local XDR library)
    - Upsert into `events` table (on conflict: skip duplicate by event `id`)
 
 7. For each unique txHash seen in events:
    - Call RPC getTransaction for any txHash not already in `invocations`
-   - Parse status, result_xdr, resource fees from resultXdr.feeCharged
+   - Parse status, result_xdr, and resource fees from resultXdr.feeCharged
    - Upsert into `invocations` table
 
 8. Call RPC getLedgerEntries for the contract instance + any known
@@ -108,7 +109,10 @@ This flow runs for all contracts in "active" status on every 5-minute cron tick.
    If lock is already held: exit immediately (previous run still in progress).
 
 2. Indexer queries `sync_state` for each tracked contract:
-   SELECT contract_id, last_ledger FROM sync_state WHERE status = 'active'
+   SELECT s.contract_id, s.last_ledger
+   FROM sync_state s
+   JOIN contracts c ON c.id = s.contract_id
+   WHERE c.status = 'active'
 
 3. Calls RPC getLatestLedger -> current_ledger
 
@@ -123,12 +127,43 @@ This flow runs for all contracts in "active" status on every 5-minute cron tick.
 
 5. Same upsert logic as backfill steps 6-8.
 
-6. Refreshes storage_entries for all keys belonging to active contracts
+6. Refresh `storage_entries` for all keys belonging to active contracts
    by calling getLedgerEntries in batches of 100 keys.
 
-7. Updates sync_state.last_ledger = current_ledger for each contract.
+7. Update `sync_state.last_ledger = current_ledger` for each contract.
 
-8. Releases global Redis lock.
+8. Release the global Redis lock.
+```
+
+### 2.3 Contract discovery (watched accounts)
+
+Runs at the start of every pass, before the per-contract loop, so a newly
+discovered contract is indexed in the same pass. Skipped for a network whose
+RPC client cannot serve `getTransactions` or when the store has no discovery
+support.
+
+```
+1. Load watched_accounts. If there are none, move the discovery cursor
+   (indexer_cursors row 'discovery:<network>') to the tip and stop, so adding
+   the first account never triggers a scan of stale history.
+
+2. Page through RPC getTransactions from cursor + 1 (first run: tip - 720
+   ledgers, ~1 hour), 200 per page, at most 50 pages per pass.
+
+3. For each SUCCESS transaction, decode the envelope (services/indexer/
+   internal/discovery). A Soroban tx has exactly one operation; when it is an
+   InvokeHostFunction CREATE_CONTRACT / CREATE_CONTRACT_V2, derive the
+   contract id = sha256(HashIDPreimage{CONTRACT_ID, sha256(passphrase),
+   preimage}).
+
+4. If the operation source (else the tx source) or the from-address deployer
+   is watched: insert the contract as status 'active', label
+   'discovered_by:<account>', seed sync_state.last_ledger = deploy_ledger - 1
+   and bump watched_accounts.discovered_count, in one transaction. An already
+   tracked contract is left untouched.
+
+5. Advance the discovery cursor to the last fully scanned ledger. On a store
+   error the cursor stops before that ledger so the deployment is retried.
 ```
 
 ---
@@ -176,7 +211,7 @@ CREATE TABLE events (
 -- Primary query pattern: all events for a contract, newest first.
 CREATE INDEX idx_events_contract_ledger ON events (contract_id, ledger DESC);
 
--- Support filtering by transaction hash (e.g. "show all events in this tx").
+-- Support filtering by transaction hash (e.g., "show all events in this tx").
 CREATE INDEX idx_events_tx_hash ON events (tx_hash);
 
 -- Time-range queries from the dashboard.
@@ -253,71 +288,22 @@ CREATE TABLE sync_state (
     error_message  TEXT,                               -- last error, if any
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
--- ============================================================
--- storage_entry_history
--- Append-only history of storage entries (migration 000005). Every write
--- to storage_entries also appends a versioned row here, so the snapshot/
--- replay endpoint can answer "what was live at ledger N?".
--- ============================================================
-CREATE TABLE storage_entry_history (
-    id                   BIGSERIAL   PRIMARY KEY,
-    contract_id          TEXT        NOT NULL,
-    key_xdr              TEXT        NOT NULL,
-    key_decoded          JSONB,
-    value_xdr            TEXT,
-    value_decoded        JSONB,
-    durability           TEXT        NOT NULL,
-    live_until_ledger    BIGINT,
-    last_modified_ledger BIGINT,
-    status               TEXT        NOT NULL DEFAULT 'live',
-    recorded_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (contract_id, key_xdr, last_modified_ledger)
-);
-
-CREATE INDEX idx_storage_history_lookup
-    ON storage_entry_history (contract_id, key_xdr, last_modified_ledger DESC);
-
--- ============================================================
--- api_keys
--- Scoped API credentials (migration 000004). Only the SHA-256 hash of the
--- plaintext token is stored; the token is shown once at creation.
--- ============================================================
-CREATE TABLE api_keys (
-    id           TEXT        PRIMARY KEY,
-    name         TEXT        NOT NULL,
-    key_prefix   TEXT        NOT NULL,
-    key_hash     TEXT        NOT NULL UNIQUE,
-    scopes       TEXT[]      NOT NULL DEFAULT '{}',
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_used_at TIMESTAMPTZ,
-    revoked_at   TIMESTAMPTZ
-);
-
-CREATE INDEX idx_api_keys_hash ON api_keys (key_hash) WHERE revoked_at IS NULL;
-
--- ============================================================
--- multi-network (migration 000003)
--- events, invocations, storage_entries, and monitored_contracts gained a
--- `network` column defaulting to 'testnet', so the indexer and API can track
--- testnet, mainnet, and futurenet simultaneously. Existing rows are
--- backfilled to 'testnet' for backward compatibility.
--- ============================================================
 ```
 
 ### Index justifications
 
-| Index | Justification |
-|---|---|
-| `idx_contracts_network` | Dashboard lists contracts per network; network filter is the most common WHERE clause on the contracts table. |
-| `idx_events_contract_ledger` | The most common dashboard query: "show me recent events for contract X." Composite index with ledger DESC avoids sort. |
-| `idx_events_tx_hash` | Supports the invocation-detail page which shows all events emitted in a given transaction. |
-| `idx_events_ledger_closed_at` | Time-range filtering on the events feed. |
-| `idx_invocations_contract_ledger` | Same pattern as events; the invocation list is paginated with newest-first ordering. |
-| `idx_invocations_ledger_closed_at` | Time-range filter for resource-usage charts. |
-| `idx_invocations_status` | Supports the "show only failures" filter on the invocations list. |
-| `idx_storage_live_until` | The TTL health view needs to order by `live_until_ledger ASC` for a given contract; partial index on `status = 'live'` avoids scanning archived rows. |
-| `idx_storage_durability` | Supports filtering the storage view by entry type. |
+| Index                              | Justification                                                                                                                                                                                                    |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idx_contracts_network`            | Dashboard lists contracts per network; network filter is the most common WHERE clause on the contracts table.                                                                                                    |
+| `idx_events_contract_ledger`       | The most common dashboard query: "show me recent events for contract X." Composite index with ledger DESC avoids sort.                                                                                           |
+| `idx_events_tx_hash`               | Supports the invocation-detail page which shows all events emitted in a given transaction.                                                                                                                       |
+| `idx_events_ledger_closed_at`      | Time-range filtering on the events feed.                                                                                                                                                                         |
+| `idx_invocations_contract_ledger`  | Same pattern as events; the invocation list is paginated with newest-first ordering.                                                                                                                             |
+| `idx_invocations_ledger_closed_at` | Time-range filter for resource-usage charts.                                                                                                                                                                     |
+| `idx_invocations_status`           | Supports the "show only failures" filter on the invocations list.                                                                                                                                                |
+| `idx_storage_live_until`           | The TTL health view needs to order by `live_until_ledger ASC` for a given contract; partial index on `status = 'live'` avoids scanning archived rows.                                                            |
+| `idx_storage_durability`           | Supports filtering the storage view by entry type.                                                                                                                                                               |
+| `idx_contract_tags_tag`            | Cross-contract lookup for the dashboard's tag filter ("which contracts carry tag X?"). The `(contract_id, tag)` primary key already serves per-contract tag reads, so only the reverse direction needs an index. |
 
 ---
 
@@ -329,6 +315,22 @@ All routes return `Content-Type: application/json`. Errors follow:
 { "error": "human readable message", "code": "ERROR_CODE" }
 ```
 
+Request bodies are capped at 1 MiB by default. A request whose
+`Content-Length` exceeds the cap is rejected before its body is read, and any
+other body is bounded with `http.MaxBytesReader`; both paths return `413` with:
+
+```json
+{
+  "error": {
+    "code": "PAYLOAD_TOO_LARGE",
+    "message": "request body exceeds the 1048576 byte limit",
+    "request_id": "..."
+  }
+}
+```
+
+Set `REQUEST_MAX_BODY_BYTES` to change the cap.
+
 Cursor pagination uses an opaque `cursor` token (base64 of `{ledger}:{id}`) rather than offset. This is safe against inserts during pagination and aligns with how the RPC itself paginates.
 
 #### Authentication and scopes
@@ -336,21 +338,56 @@ Cursor pagination uses an opaque `cursor` token (base64 of `{ledger}:{id}`) rath
 Every list endpoint accepts an optional `?network=testnet|mainnet|futurenet`
 filter (omitted or `all` means every network).
 
-Requests may carry a scoped API key via `Authorization: Bearer <token>` or
-`X-API-Key: <token>`. Scope enforcement is driven by a route metadata table
-keyed by the chi route pattern (`internal/middleware/scopes.go`):
+Requests authenticate with a credential the server can verify. The `Identity`
+middleware (`internal/middleware/identity.go`) resolves it once, before scope
+and role checks, and attaches a `VerifiedIdentity` to the request context:
 
-| Scope | Grants |
-|---|---|
-| `read:contracts` | contract, event, invocation, storage, stats, and snapshot reads |
-| `write:contracts` | `POST /api/v1/contracts` |
-| `read:watchdog` | all `/api/v1/watchdog/*` reads |
-| `admin:*` | everything, including API key management |
+- **Workspace session token.** `POST /api/v1/auth/session` creates a workspace
+  user with the contributor role and returns an HMAC-SHA256 token
+  (`Authorization: Bearer sls_...`). The token is stateless and valid until the
+  returned `expires_at`.
+- **Scoped API key.** `Authorization: Bearer <key>` or `X-API-Key: <key>`. A
+  key may be bound to a user (`api_keys.user_id`); requests then act as that
+  user and inherit its role. Unbound keys authenticate scopes only.
+- **Trusted proxy identity.** When `TRUSTED_IDENTITY_PROXY_SECRET` is set, a
+  reverse proxy may sign `X-Identity-User-ID`, `X-Identity-Timestamp` and
+  `X-Identity-Signature` (HMAC-SHA256 over method, request URI, user ID and
+  timestamp; 5-minute skew).
+
+Raw `X-User-ID`, `X-GitHub-Login`, `X-User-Sub` and `X-GitHub-ID` headers are
+ignored (issue #518). Without `IDENTITY_SIGNING_KEY` the API generates a random
+ephemeral key at boot, so minted sessions do not survive a restart.
+
+Scope enforcement is driven by a route metadata table keyed by the chi route
+pattern (`internal/middleware/scopes.go`):
+
+| Scope             | Grants                                                                          |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `read:contracts`  | contract, event, invocation, storage, stats, snapshot, and interface-spec reads |
+| `write:contracts` | `POST /api/v1/contracts` and contract tag writes                                |
+| `read:watchdog`   | all `/api/v1/watchdog/*` reads                                                  |
+| `admin:*`         | everything, including API key management                                        |
 
 A presented key that lacks the required scope receives `403` with
 `{"error":"missing scope","required":"<scope>"}`. Unknown or revoked keys
 receive `401`. Requests that present no credential keep the public v0.1 read
 surface open; API key management always requires a credential.
+
+Role checks (`RequireRole`, `RequireRoleOrForbidden`) run after scopes and use
+the verified identity: an unverified caller gets `401`, a verified caller with
+an insufficient role gets `403`. An `admin:*` key satisfies admin role checks
+without a user binding so operators can bootstrap and rotate keys. Per-user
+resources (watchlist, groups, notes, labels) key on the verified user ID and
+return `401` when no user identity is present.
+
+#### Profiling: `/debug/pprof/*`
+
+The Go runtime profiling handlers (`net/http/pprof`) are mounted on the same
+router at `/debug/pprof/*` but are admin-only. Every request from a caller
+without the `admin` role — anonymous requests included — receives `403`, so
+the surface is not advertised. An admin gets the standard pprof index at
+`/debug/pprof/` and the named profiles (`goroutine`, `heap`, `allocs`, …),
+`cmdline`, `profile`, `symbol` and `trace` beneath it.
 
 ---
 
@@ -361,6 +398,7 @@ surface open; API key management always requires a credential.
 Register a contract for tracking.
 
 **Request body:**
+
 ```json
 {
   "contract_id": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
@@ -370,6 +408,7 @@ Register a contract for tracking.
 ```
 
 **Responses:**
+
 - `201 Created`: contract accepted for backfill.
 - `400 Bad Request`: invalid contract ID format or missing fields.
 - `404 Not Found`: contract does not exist on-chain (getLedgerEntries returned no entry).
@@ -381,9 +420,13 @@ Register a contract for tracking.
 
 List all tracked contracts.
 
-**Query params:** `network` (filter by network), `status` (filter by status).
+**Query params:** `network` (filter by network), `status` (filter by status),
+`tag` (show only contracts carrying this tag), `sort` (sort column: `id`, `label`,
+`network`, `status`, or `added_at`; defaults to `id`), `dir` (`asc` or `desc`,
+default `asc`). Values outside those sets are rejected with `422`.
 
 **Response `200`:**
+
 ```json
 {
   "contracts": [
@@ -393,11 +436,46 @@ List all tracked contracts.
       "label": "My Token Contract",
       "status": "active",
       "wasm_hash": "a1b2c3d4...",
-      "added_at": "2026-07-01T10:00:00Z"
+      "added_at": "2026-07-01T10:00:00Z",
+      "tags": ["prod", "defi"]
     }
   ]
 }
 ```
+
+---
+
+#### `POST /api/v1/contracts/batch`
+
+Apply one action to many contracts at once. Requires the `write:contracts`
+scope and at least the `contributor` role.
+
+**Request body:**
+
+```json
+{
+  "ids": ["CDLZFC3S...", "GABC..."],
+  "action": "untrack",
+  "args": {}
+}
+```
+
+| `action`  | `args`                    | Effect                                                                                                                                                                                                                                                            |
+| --------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `untrack` | (none)                    | Permanently deletes the contracts together with every indexed row that references them: events, invocations, storage entries and history, sync state, upgrades, health scores, and performance baselines. Irreversible, so the dashboard confirms before sending. |
+| `tag`     | `{ "label": "payments" }` | Sets `label` on each contract, replacing any existing alias.                                                                                                                                                                                                      |
+
+A request may target at most 100 distinct IDs; unknown IDs are ignored
+rather than failing the whole batch.
+
+**Response `200`:**
+
+```json
+{ "action": "untrack", "requested": 2, "affected": 2 }
+```
+
+**Responses:** `200`, `401`, `403`, `415`, `422` (bad body, unknown action, blank
+label), `500`.
 
 ---
 
@@ -406,6 +484,7 @@ List all tracked contracts.
 Get a single contract's metadata and sync state.
 
 **Response `200`:**
+
 ```json
 {
   "id": "CDLZFC3S...",
@@ -419,7 +498,8 @@ Get a single contract's metadata and sync state.
     "last_run_at": "2026-07-26T10:00:00Z"
   },
   "storage_entry_count": 42,
-  "expiring_entry_count": 3
+  "expiring_entry_count": 3,
+  "tags": ["prod", "defi"]
 }
 ```
 
@@ -445,6 +525,96 @@ tracked.
 
 ---
 
+#### `GET /api/v1/contracts/:id/spec`
+
+Returns the contract's SEP-48 interface: a JSON tree of the functions it
+exports, with their argument and return types.
+
+The spec is extracted from the `contractspecv0` custom section of the
+contract's Wasm the first time the indexer indexes it, and cached in the
+`contract_specs` table. Type nodes are one of the scalar kinds
+(`address`, `u32`, `i128`, `string`, ...) or a composite carrying its children:
+`vec` and `option` use `elem`, `map` uses `key` and `value`, `result` uses `ok`
+and `err`, `tuple` uses `tuple`, and `bytes_n` carries `n`. A reference to a
+user-defined type is `{"kind":"udt","name":"..."}`.
+
+**Response `200`:**
+
+```json
+{
+  "contract_id": "CDLZFC3S...",
+  "wasm_hash": "a1b2c3d4...",
+  "parsed_at": "2026-07-01T10:06:00Z",
+  "spec": {
+    "functions": [
+      {
+        "name": "transfer",
+        "doc": "Transfer tokens between two accounts",
+        "inputs": [
+          { "name": "from", "type": { "kind": "address" } },
+          { "name": "to", "type": { "kind": "address" } },
+          { "name": "amount", "type": { "kind": "i128" } }
+        ],
+        "outputs": [{ "kind": "void" }]
+      }
+    ]
+  }
+}
+```
+
+**Responses:**
+
+- `200`: the parsed interface.
+- `404`: the contract is not tracked (message: "contract not found"), or it is
+  tracked but its spec has not been parsed yet (message: "no parsed interface
+  spec is available for this contract yet"). A contract whose Wasm carries no
+  `contractspecv0` section — for example one not built with `#[contractimpl]` —
+  never gets a row, so it answers `404` indefinitely; the indexer logs a warning
+  rather than failing the indexing pass.
+
+---
+
+#### `POST /api/v1/contracts/:id/tags`
+
+Add a user-defined tag to a contract. Tags are free-form labels (e.g. `prod`,
+`defi`, `staging`) that let an operator organize a large fleet and filter the
+contracts list. Requires the `write:contracts` scope and the `contributor`
+role.
+
+Tags are normalized before storage: surrounding whitespace is trimmed and the
+value is lowercased. A tag must be 1-32 characters matching
+`^[a-z0-9][a-z0-9_-]*$` (lowercase letters, digits, hyphen, or underscore,
+starting with a letter or digit); anything else receives `422`.
+
+**Request body:**
+
+```json
+{ "tag": "prod" }
+```
+
+**Responses:**
+
+- `200 OK`: the contract's full, sorted tag list. Adding a tag that is already
+  present is a no-op, so the operation is idempotent.
+  ```json
+  { "contract_id": "CDLZFC3S...", "tags": ["defi", "prod"] }
+  ```
+- `404 Not Found`: no tracked contract with that ID.
+- `422 Unprocessable Entity`: missing or malformed tag.
+
+---
+
+#### `DELETE /api/v1/contracts/:id/tags/:tag`
+
+Remove a user-defined tag from a contract. Requires the `write:contracts`
+scope and the `contributor` role. Removing a tag that is not present is a
+no-op.
+
+**Response:** `204 No Content`. `404 Not Found` when the contract is unknown,
+`422 Unprocessable Entity` when the tag is malformed.
+
+---
+
 ### 4.2 Events
 
 #### `GET /api/v1/contracts/:id/events`
@@ -453,16 +623,17 @@ Paginated event list for a contract.
 
 **Query params:**
 
-| Param | Type | Default | Notes |
-|---|---|---|---|
-| `cursor` | string | (none) | Opaque cursor from previous response. |
-| `limit` | integer | 50 | Max 500. |
-| `topic` | string | (none) | Filter: match events where topic[0] decodes to this symbol string. |
-| `tx_hash` | string | (none) | Filter by transaction hash. |
-| `since` | ISO-8601 | (none) | Return events after this timestamp. |
-| `until` | ISO-8601 | (none) | Return events before this timestamp. |
+| Param     | Type     | Default | Notes                                                              |
+| --------- | -------- | ------- | ------------------------------------------------------------------ |
+| `cursor`  | string   | (none)  | Opaque cursor from previous response.                              |
+| `limit`   | integer  | 50      | Max 500.                                                           |
+| `topic`   | string   | (none)  | Filter: match events where topic[0] decodes to this symbol string. |
+| `tx_hash` | string   | (none)  | Filter by transaction hash.                                        |
+| `since`   | ISO-8601 | (none)  | Return events after this timestamp.                                |
+| `until`   | ISO-8601 | (none)  | Return events before this timestamp.                               |
 
 **Response `200`:**
+
 ```json
 {
   "events": [
@@ -482,9 +653,88 @@ Paginated event list for a contract.
 }
 ```
 
+#### `GET /api/v1/contracts/:id/events.csv`
+
+Flat CSV export of a contract's events, for handing the whole history to a
+spreadsheet or an analyst in one request. Rows are streamed straight from the
+query, so memory use in the API does not grow with the size of the export.
+Served as a download with `Content-Type: text/csv; charset=utf-8` and
+`Content-Disposition: attachment; filename="<id>-events.csv"`.
+
+**Query params:** `network`, `type`, `from` / `to` (inclusive ledger bounds).
+`topic` and `in_successful_call` are not supported here, and there is no `cursor`
+and no `limit`: an export is meant to be complete.
+
+**Columns** (in order): `id`, `contract_id`, `network`, `ledger`,
+`ledger_closed_at`, `tx_hash`, `type`, `topic_xdr`, `value_xdr`,
+`topic_decoded`, `value_decoded`, `in_successful_call`. The three `*_xdr` /
+`*_decoded` columns hold JSON.
+
+**Responses:**
+
+- `200`: the header row, then one row per matching event ordered by
+  `(ledger, id)` ascending. The export is deterministic, so an unchanged store
+  produces an identical file and a diff means the data changed. An unknown
+  contract yields the header row with no data rows, matching the JSON listing.
+- `422`: `network` is not a known network, a ledger bound is not a positive
+  integer, or `from` is greater than `to`.
+
+Two details worth knowing before opening a downloaded file:
+
+- Free-text columns (`type`, `value_xdr`) are prefixed with an apostrophe when
+  they start with `=`, `+`, `-` or `@`, because a spreadsheet would otherwise
+  evaluate a contract-supplied value as a formula. The JSON columns are left
+  alone: they always open with a bracket, a quote or a digit.
+- The response is committed as soon as the first byte is written, so a store
+  failure part-way through a large export is logged rather than turned into an
+  error status. A failure before any row is written still answers `500` with a
+  JSON error body.
+
 ---
 
 ### 4.3 Invocations
+
+#### `GET /api/v1/invocations`
+
+Global invocation explorer: resource usage for every tracked contract, newest
+first (`ledger DESC, tx_hash DESC`). Backs the dashboard's `/invocations` page.
+
+**Query params:** `cursor`, `limit` (default 50, max 200), `contract_id`, `fn`
+(function name), `status` (`SUCCESS`/`FAILED`/`NOT_FOUND`), `network`, `from` /
+`to` (ledger bounds), `since` / `until` (inclusive `ledger_closed_at` bounds, as
+`YYYY-MM-DD` or RFC3339).
+
+Pagination is keyset-based: the cursor encodes the `(ledger, tx_hash)` position,
+which is the sort tuple, so pages stay stable while the indexer appends rows.
+
+**Response `200`:**
+
+```json
+{
+  "invocations": [
+    {
+      "tx_hash": "32f7e5c3...",
+      "contract_id": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "network": "testnet",
+      "ledger": 490252,
+      "ledger_closed_at": "2026-07-26T10:00:21Z",
+      "status": "SUCCESS",
+      "function_name": "transfer",
+      "resource_fee_charged": 123456,
+      "cpu_insn": 4883530,
+      "mem_byte": 2298162,
+      "ledger_read_byte": 21812,
+      "ledger_write_byte": 1808
+    }
+  ],
+  "next_cursor": "NDkwMjUyOmFiYzEyMw=="
+}
+```
+
+`next_cursor` is an empty string on the last page. Invalid `cursor`, `since`,
+`until`, or `network` values return `422`.
+
+---
 
 #### `GET /api/v1/contracts/:id/invocations`
 
@@ -493,6 +743,7 @@ Paginated invocation list.
 **Query params:** `cursor`, `limit` (max 500), `status` (`SUCCESS`/`FAILED`), `since`, `until`, `function_name`.
 
 **Response `200`:**
+
 ```json
 {
   "invocations": [
@@ -502,7 +753,11 @@ Paginated invocation list.
       "ledger_closed_at": "2026-07-26T10:00:21Z",
       "status": "SUCCESS",
       "function_name": "transfer",
-      "args_decoded": { "from": "GABC...", "to": "GDEF...", "amount": "1000000000" },
+      "args_decoded": {
+        "from": "GABC...",
+        "to": "GDEF...",
+        "amount": "1000000000"
+      },
       "result_decoded": null,
       "resource_fee_charged": 123456,
       "cpu_insn": 4883530,
@@ -523,6 +778,7 @@ Paginated invocation list.
 Full detail for a single invocation, including all associated events.
 
 **Response `200`:**
+
 ```json
 {
   "tx_hash": "32f7e5c3...",
@@ -555,6 +811,7 @@ Paginated storage entry list.
 **Query params:** `cursor`, `limit` (max 200), `durability` (`temporary`/`persistent`/`instance`), `status` (`live`/`archived`), `expiring_within` (integer: show only entries with `live_until_ledger - current_ledger <= N`).
 
 **Response `200`:**
+
 ```json
 {
   "current_ledger": 490314,
@@ -586,6 +843,7 @@ Replays the contract's storage state and last known event as they were at
 ledger `N`. Used by the ledger scrubber on the contract detail page.
 
 **Responses:**
+
 - `200`: `{ contract_id, network, ledger, first_tracked_ledger, storage, last_event }`.
 - `404`: contract is unknown, or `N` precedes the first ledger the contract
   was tracked at (the message names that ledger).
@@ -593,23 +851,50 @@ ledger `N`. Used by the ledger scrubber on the contract detail page.
 
 ---
 
+#### `GET /api/v1/contracts/:id/snapshot.json`
+
+Portable JSON export of the contract's current state: the four sections
+`metadata`, `storage`, `events`, and `summary`, wrapped in a versioned
+envelope (`schema_version`, `contract_id`, `network`, `ledger`). The document
+is deterministic for an unchanged store (stable field order, sorted
+collections, no wall-clock fields), so exports can be archived or diffed.
+Served with `Content-Type: application/json; charset=utf-8` and
+`Content-Disposition: attachment; filename="<id>-snapshot.json"`; when the
+client sends `Accept-Encoding: gzip` the body is gzip-compressed.
+
+**Responses:**
+
+- `200`: the four-section export described above.
+- `404`: contract is unknown.
+
+---
+
 ### 4.6 API keys
 
 Scoped credentials are managed under `/api/v1/api-keys` and require the
-`admin:*` scope.
+`admin:*` scope plus the admin role.
 
 #### `POST /api/v1/api-keys`
 
-Create a key. Body: `{ "name": string, "scopes": string[] }`. Returns `201`
-with the plaintext `key` exactly once; only its SHA-256 hash is persisted.
+Create a key. Body: `{ "name": string, "scopes": string[], "user_id"?: string }`.
+When `user_id` is set the key acts as that user (role checks use the user's
+role); otherwise it only authenticates scopes. Returns `201` with the plaintext
+`key` exactly once; only its SHA-256 hash is persisted.
 
 #### `GET /api/v1/api-keys`
 
-List key metadata (never the token).
+List key metadata (never the token), including the optional `user_id` binding.
 
 #### `DELETE /api/v1/api-keys/:id`
 
 Revoke a key. Returns `204`.
+
+#### `POST /api/v1/auth/session`
+
+Mint a workspace session without a pre-existing account. Returns `201` with
+`user_id`, an HMAC-signed `token` (`sls_...`) and `expires_at`; the user is
+created with the contributor role. Returns `503` when session signing is not
+configured.
 
 ---
 
@@ -620,6 +905,7 @@ Revoke a key. Returns `204`.
 Network-wide summary across all tracked contracts.
 
 **Response `200`:**
+
 ```json
 {
   "tracked_contracts": 12,
@@ -637,6 +923,108 @@ Network-wide summary across all tracked contracts.
 
 ---
 
+### 4.8 Request timeouts
+
+Every `/api/v1` route runs under `API_REQUEST_TIMEOUT` (default 30s,
+`middleware.Timeout`, built on `http.TimeoutHandler`). The request context is
+cancelled at the deadline so in-flight store queries abort, and a handler that
+has not finished gets a `503` with the standard error envelope
+(`code: TIMEOUT`). The response is buffered, so late writes from a slow handler
+are discarded instead of racing the 503.
+
+`GET /api/v1/stream/events` (SSE) is registered outside that cap and runs
+under `API_STREAM_TIMEOUT` (default 5m, `middleware.StreamTimeout`): the
+response is not buffered, the connection write deadline is extended to match,
+and at the deadline the context is cancelled so the stream closes and
+`EventSource` reconnects. The server `WriteTimeout` is set to
+`API_REQUEST_TIMEOUT + 5s` so it never cuts off the 503.
+
+---
+
+### 4.9 Live dashboard feeds
+
+The `/live` page (issue #139) polls two bounded, non-paginated reads.
+
+#### `GET /api/v1/events/recent?limit=50`
+
+The newest events across every tracked contract, ordered by
+`ledger_closed_at DESC`. The ticker de-duplicates by event `id`, so no cursor is
+needed and a repeated poll that returns already-rendered rows is a no-op.
+
+#### `GET /api/v1/stats/activity?minutes=30`
+
+One entry per contract that emitted at least one event in the last `minutes`
+minutes, ordered hottest first. Each entry carries `per_minute`: exactly
+`minutes` one-minute buckets, oldest first, zero-filled. Bucket boundaries are
+aligned to the wall-clock minute so two consecutive polls agree on the x-axis
+and a sparkline never shifts under the reader.
+
+#### `POST /api/v1/contracts/validate`
+
+Read-only pre-flight check for the tracking wizard (issue #140). Body:
+`{"contract_id": "C...", "network": "testnet"}`. It validates the StrKey —
+base32-decoding the payload, checking the contract version byte, and verifying
+the CRC16-XModem checksum — which catches a mistyped character that the
+length-only check used by registration cannot. It also reports
+`already_tracked` so the wizard can redirect instead of creating a duplicate.
+It never writes.
+
+---
+
+### 4.10 API v2
+
+`/api/v2/*` mirrors `/api/v1/*` route for route with a consistent response
+contract:
+
+- every list endpoint returns
+  `{"data": [...], "pagination": {"next_cursor", "has_more"}}`
+- every list endpoint accepts `cursor` and `limit`, and always returns
+  `pagination`
+- every timestamp is RFC 3339 UTC; optional fields are explicit `null`
+- errors keep the v1 `{"error": {"code", "message", "request_id"}}` shape
+
+Scopes and roles are identical in both namespaces. `docs/api-v2.md` is the
+field-by-field v1 → v2 mapping, and `docs/openapi.yaml` documents both
+namespaces. Route parity is enforced by `TestV2CoversEveryV1Route`, which walks
+the chi route table and fails if a v1 route has no v2 counterpart.
+
+---
+
+### 4.11 Alert rules
+
+User-defined alert rules are the one surface where clients author logic rather
+than query data. A rule is a string in the Sorolens rule language; the API
+validates it before storing it, and the indexer evaluates enabled rules at the
+end of every pass.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/rules` | List stored rules. |
+| `POST` | `/api/v1/rules` | Create a rule (validated; `422` with a positioned diagnostic on failure). |
+| `PATCH` | `/api/v1/rules/{id}` | Enable or pause a rule. |
+| `DELETE` | `/api/v1/rules/{id}` | Delete a rule. |
+| `POST` | `/api/v1/rules/validate` | Validate rule text without writing. |
+| `POST` | `/api/v1/rules/preview` | Evaluate against the contract's recent metric samples. |
+| `GET` | `/api/v1/rules/metrics` | The closed metric catalog. |
+| `GET` | `/api/v1/rules/library` | Curated starter rules. |
+
+Reads carry the `read:contracts` scope; authoring carries `write:contracts` and
+the `contributor` role, like contract registration.
+
+The language itself lives in `apps/api/rulelang` (a dependency-free leaf
+package imported by the indexer through the Go workspace): a hand-rolled lexer
+and recursive-descent parser, a
+closed metric catalog with units, semantic validation with "did you mean"
+hints, and a windowed evaluator supporting `avg`, `max`, `min`, `sum`, `rate`,
+and `count` over a `for` window. `GET /api/v1/rules/metrics` drives the
+dashboard editor's autocomplete, and `POST /api/v1/rules/preview` runs the same
+evaluator so the preview matches the indexer exactly.
+
+See [`docs/rule-language.md`](docs/rule-language.md) for the grammar and metric
+reference.
+
+---
+
 ## 5. Design Decisions with Rationale
 
 ### 5.1 Cron-driven indexer over a persistent worker
@@ -644,14 +1032,16 @@ Network-wide summary across all tracked contracts.
 **Decision:** The indexer runs as a GitHub Actions scheduled workflow on a 5-minute cron, not as a long-running process.
 
 **Rationale:**
+
 - Zero hosting cost (GitHub Actions free tier covers this comfortably at 5-minute intervals for a small number of contracts).
 - No server to maintain or restart. Vercel and Neon are both serverless; the indexer being serverless is architecturally consistent.
 - GitHub Actions provides logging, history, and alerting for free.
 
 **Tradeoffs:**
+
 - 5-minute minimum latency for new events. For an observability tool (not a trading system), this is acceptable.
 - Cold start on each run adds a few seconds of overhead.
-- Cannot hold long-running TCP connections to Soroban RPC (not needed; RPC is HTTP).
+- Cannot hold long-running TCP connections to Soroban RPC (unnecessary; RPC is HTTP).
 
 **Migration path to a persistent worker:** When event volume or contract count makes 5-minute cron latency unacceptable, extract the indexer binary and run it as a Fly.io Machine (free tier) or a Railway worker. The indexer already exposes a `Run()` function with a configurable poll interval; no structural change is required. The Redis advisory lock mechanism is already in place to prevent duplicate runs regardless of how the indexer is deployed.
 
@@ -663,7 +1053,7 @@ Network-wide summary across all tracked contracts.
 
 **Rationale:** Vercel serverless functions have a maximum execution time (approximately 60 seconds for Pro, 10 seconds for free). Long-lived SSE connections are not supported on Vercel serverless. HTTP polling with a 5-second interval and a cursor is the only viable approach without a separate persistent WebSocket server.
 
-**Tradeoffs:** 5-second polling is slightly higher latency than SSE and uses more requests. For an observability tool where data is already indexed with 5-minute granularity, this is acceptable. Clients deduplicate by event `id`.
+**Tradeoffs:** Five-second polling has slightly higher latency than SSE and uses more requests. For an observability tool where data is already indexed with 5-minute granularity, this is acceptable. Clients deduplicate by event `id`.
 
 **Migration path:** If Sorolens is ever deployed with a persistent server, replace the polling client code with an SSE or WebSocket endpoint backed by a Go `net/http` SSE handler. The API contract (cursor-based event list) does not change.
 
@@ -686,9 +1076,100 @@ Upstash Redis is used because it is serverless (no idle cost), has a free tier, 
 **Decision:** All list endpoints use cursor-based pagination via an opaque `cursor` string, not `?page=N&limit=M` offset pagination.
 
 **Rationale:**
+
 - Events and invocations are append-only. During pagination, new rows are inserted. Offset pagination produces duplicate or missing rows if a page boundary shifts between requests.
 - Cursor pagination is stable: the cursor encodes the position (ledger + id) of the last returned row, not an offset.
 - Aligns with how Soroban RPC itself paginates `getEvents`.
 - Postgres `WHERE (ledger, id) < (cursor_ledger, cursor_id) ORDER BY ledger DESC, id DESC LIMIT N` uses the composite index efficiently.
 
 **Tradeoff:** Clients cannot jump to an arbitrary page number. This is acceptable for an observability dashboard where users scroll through a feed; it is not a spreadsheet export use case.
+
+---
+
+### 5.5 A parallel v2 namespace over a frozen v1
+
+**Decision:** Introduce `/api/v2/*` as a new route subtree rather than
+versioning individual endpoints or rewriting v1 in place.
+
+**Rationale:** v1 is consumed by the dashboard, the CLI, and the generated Go
+client simultaneously. Changing its response shapes would break all three at
+once. A parallel namespace lets the accumulated inconsistencies be fixed
+(uniform list envelope, unambiguous field names, ISO 8601 timestamps
+everywhere) without a coordinated client migration, and lets each consumer move
+endpoint by endpoint. Both namespaces share the same store and middleware, so
+there is no duplicated query logic and scopes and roles behave identically.
+
+**Tradeoff:** Two handler layers must be kept in step. A route-parity test
+guards the surface mechanically, and the DTO duplication is deliberate: that
+duplication _is_ the versioning contract.
+
+---
+
+### 5.6 Parquet cold storage with a pure-Go reader
+
+**Decision:** Events older than `COLD_STORAGE_THRESHOLD_DAYS` (default 90) are
+exported to Parquet objects in an S3-compatible bucket and then deleted from
+Postgres. A scheduled job (`apps/api/cmd/coldarchive`) performs the export, and
+the API falls back to the archive when a queried ledger range is no longer in
+the hot store.
+
+**Rationale:** Postgres storage is the dominant cost at scale, while historical
+events are read rarely and almost always in ledger order. One Parquet object per
+contract per calendar month keeps reads cheap and the layout comprehensible by
+non-Go tools.
+
+**Write-before-delete:** export and delete are separate steps, and the delete
+only runs after the object is durable, so a failed upload can never lose data.
+Re-archiving a month merges into the existing object and de-duplicates by event
+id, which makes the job idempotent and safe to re-run.
+
+**Not embedded DuckDB:** the issue suggested loading the Parquet with DuckDB
+embedded. That requires cgo and a multi-minute C++ build in every environment
+that compiles the API, including CI, so the reader uses a pure-Go Parquet
+library instead. The on-disk format is unchanged, so a DuckDB-backed reader can
+consume the same objects later without a migration.
+
+**Tradeoff:** an archive-backed query lists and decodes every object for the
+contract, so it is materially slower than the Postgres path. That is the
+accepted cost of the cold tier (issue #146 asks for "slower but succeeds"), and
+the one-object-per-month layout bounds the work to the months touched.
+
+---
+
+### 5.7 PWA / Web Push (issue #275)
+
+**Decision:** Ship installability and push-notification delivery as a Progressive Web App (Workbox service worker + VAPID Web Push) rather than a native mobile wrapper.
+
+**Rationale:** A PWA requires no App Store review cycle, works on all major mobile browsers, and can be maintained purely within the existing Next.js codebase. VAPID push is the W3C standard supported natively by all modern browsers and does not require any cloud push SDK.
+
+**New API surface** (Next.js App Router route handlers in `apps/web/app/api/push/`):
+
+| Method   | Path                         | Purpose                                                                                                         |
+| -------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/push/vapid-public-key` | Returns the VAPID public key for `PushManager.subscribe()`. Public by design.                                   |
+| `POST`   | `/api/push/subscribe`        | Saves a `PushSubscription` JSON blob (endpoint + keys) to the server-side store.                                |
+| `DELETE` | `/api/push/subscribe`        | Removes a subscription by endpoint.                                                                             |
+| `PUT`    | `/api/push/subscribe`        | Internal endpoint: fans out a push payload to all stored subscriptions. Auth-guarded by `PUSH_INTERNAL_SECRET`. |
+
+**Environment variables** (server-side only — never `NEXT_PUBLIC_*`):
+
+| Variable               | Purpose                                               |
+| ---------------------- | ----------------------------------------------------- |
+| `VAPID_PUBLIC_KEY`     | Base64url-encoded EC P-256 public key                 |
+| `VAPID_PRIVATE_KEY`    | Base64url-encoded EC P-256 private key                |
+| `VAPID_SUBJECT`        | Contact URI for the VAPID JWT (`mailto:` or `https:`) |
+| `PUSH_INTERNAL_SECRET` | Shared secret for the `PUT` push-send endpoint        |
+
+**#127 dependency:** Issue #127 ("pluggable notification channels") specifies Slack/Discord/PagerDuty integrations, not Web Push. The server-side alert-triggered push path is **stubbed** — the `PUT /api/push/subscribe` route exists and works, but the indexer/notifier does not yet call it. When #127 or a dedicated push-delivery issue lands, the notifier should call `PUT /api/push/subscribe` with `x-push-secret: $PUSH_INTERNAL_SECRET` when a Critical alert fires. This is documented in `apps/web/app/api/push/subscribe/route.ts`.
+
+**Subscription persistence:** The current `POST /api/push/subscribe` stores subscriptions in-process (a `Map`). This is lost on serverless cold starts. Before enabling push in production, replace the `Map` with a Postgres table (a simple `push_subscriptions(endpoint TEXT PK, keys JSONB, created_at TIMESTAMPTZ)` suffices) and call the Go API to persist it.
+
+**Client-side PWA components:**
+
+- `apps/web/public/manifest.webmanifest` — Web App Manifest with icons, shortcuts, and `display: standalone`.
+- `apps/web/next.config.ts` — wraps Next.js with `@ducanh2912/next-pwa` (Workbox) to generate a service worker that precaches the app shell and runtime-caches API responses (stale-while-revalidate, 5-minute TTL).
+- `apps/web/lib/alertQueue.ts` — IndexedDB-backed offline alert queue (via `idb`).
+- `apps/web/hooks/useOfflineAlertQueue.ts` — React hook that reads/writes the queue and tracks `navigator.onLine`.
+- `apps/web/hooks/usePushSubscription.ts` — React hook managing the push subscription lifecycle (idle → subscribing → subscribed → denied).
+- `apps/web/components/OfflineAlert.tsx` — `OfflineBanner` (shown when offline) + `OfflineAlertPanel` (the `/offline-alerts` page body).
+- `apps/web/app/offline-alerts/page.tsx` — dedicated page for the queued-alert view.

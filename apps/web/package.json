@@ -8,16 +8,27 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --environment jsdom",
+    "prebuild": "pnpm openapi:generate",
+    "test": "pnpm openapi:check && vitest run --environment jsdom",
+    "test:coverage": "pnpm openapi:check && vitest run --coverage",
+    "openapi:generate": "node scripts/generate-openapi.mjs",
+    "openapi:check": "node scripts/generate-openapi.mjs --check",
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ducanh2912/next-pwa": "^10.2.9",
+    "@sentry/nextjs": "^11.0.0",
     "@sorolens/ui": "workspace:*",
     "@sorolens/xdr": "workspace:*",
+    "@tanstack/react-virtual": "^3.14.21",
+    "cmdk": "^1.1.1",
+    "idb": "^8.0.3",
     "next": "^15.3.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "recharts": "^2.15.3"
+    "recharts": "^2.15.3",
+    "swr": "^2.5.1",
+    "use-debounce": "^10.1.1"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^15.3.1",
@@ -28,10 +39,15 @@
     "@types/node": "^22.15.3",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/coverage-v8": "2.1.9",
+    "fake-indexeddb": "^6.2.5",
+    "js-yaml": "^4.3.2",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.1.6",
     "typescript": "^5.5.0",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "web-push": "^3.6.7"
   }
 }

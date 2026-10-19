@@ -56,7 +56,10 @@ export const config = {
   publicBaseUrl: required("PUBLIC_BASE_URL"),
 
   // Sorolens API (backing /status, /alerts, /watch and /unwatch)
-  sorolensApiBaseUrl: optional("SOROLENS_API_BASE_URL", "http://localhost:8080"),
+  sorolensApiBaseUrl: optional(
+    "SOROLENS_API_BASE_URL",
+    "http://localhost:8080"
+  ),
 
   // Optional admin-scoped key (`admin:*`). When set, `/connect` mints a
   // per-contributor key through POST /api/v1/api-keys so each command runs

@@ -1,163 +1,77 @@
-"use client";
+import { CompareView } from "@/components/compare";
+import type { TimeWindow } from "@/lib/types";
 
-import { useEffect, useState } from "react";
-import { listContractsAll, getContractStats, getMonitoredContract } from "@/lib/api";
-import type { ContractSummary, MonitoredContract, ContractStatsApiResponse } from "@/lib/types";
-import { CompareCard, ContractSelector } from "@/components/compare";
+const SUPPORTED_WINDOWS: TimeWindow[] = ["24h", "7d", "30d", "all"];
+const DEFAULT_WINDOW: TimeWindow = "7d";
+const MAX_IDS = 4;
 
-interface ComparisonItem {
-  contract: ContractSummary;
-  stats: ContractStatsApiResponse;
-  stats7d: ContractStatsApiResponse;
-  health_status: string;
-  last_check: string | null;
+// Soroban contract id: 56 chars, 'C' + base32 alphabet — the same shape the
+// API rejects with 422 (parseCompareIDs) and that the tracking wizard and CSV
+// import validate client-side. A malformed id in the URL used to be forwarded
+// to GET /compare, failing the whole comparison for one typo (#607).
+const CONTRACT_ID_RE = /^C[A-Z0-9]{55}$/;
+
+export interface ParsedIds {
+  /** Valid, upper-cased, de-duplicated ids, capped at MAX_IDS. */
+  ids: string[];
+  /** Ids dropped because they are malformed. */
+  dropped: number;
+  /** Valid ids dropped because more than MAX_IDS were supplied. */
+  truncated: number;
 }
 
-export default function ComparePage() {
-  const [contracts, setContracts] = useState<ContractSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [comparisonData, setComparisonData] = useState<ComparisonItem[]>([]);
-  const [fetching, setFetching] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const data = await listContractsAll();
-        if (!cancelled) setContracts(data.contracts ?? []);
-      } catch {
-        // Backend not reachable yet
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+/**
+ * Splits ?ids=A,B, validates each part, and counts what had to be dropped so
+ * the view can tell the user instead of failing silently. Lowercase input is
+ * canonicalised to upper case, matching the wizard's paste handling.
+ */
+export function parseIds(raw: string | undefined): ParsedIds {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  const result: ParsedIds = { ids, dropped: 0, truncated: 0 };
+  if (!raw) return result;
+  for (const part of raw.split(",")) {
+    const id = part.trim().toUpperCase();
+    if (!id) continue;
+    if (!CONTRACT_ID_RE.test(id)) {
+      result.dropped++;
+      continue;
     }
-    load();
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    if (selectedIds.length < 2) {
-      setComparisonData([]);
-      return;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    if (ids.length === MAX_IDS) {
+      result.truncated++;
+      continue;
     }
+    ids.push(id);
+  }
+  return result;
+}
 
-    let cancelled = false;
-    async function fetchComparison() {
-      setFetching(true);
-      try {
-        const results = await Promise.all(
-          selectedIds.map(async (id) => {
-            const [stats24h, rawStats7d, monitored] = await Promise.all([
-              getContractStats(id, "24h").catch(() => null),
-              getContractStats(id, "7d").catch(() => null),
-              getMonitoredContract(id).catch(() => null),
-            ]);
+export function parseWindow(raw: string | undefined): TimeWindow {
+  return SUPPORTED_WINDOWS.includes(raw as TimeWindow)
+    ? (raw as TimeWindow)
+    : DEFAULT_WINDOW;
+}
 
-            const s24 = stats24h as ContractStatsApiResponse | null;
-            const s7 = rawStats7d as ContractStatsApiResponse | null;
-            const mon = monitored as MonitoredContract | null;
+interface ComparePageProps {
+  searchParams: Promise<{ ids?: string; window?: string }>;
+}
 
-            const stats: ContractStatsApiResponse = {
-              event_count: 0,
-              invocation_count: 0,
-              storage_count: 0,
-              last_synced_ledger: 0,
-              window_event_count: s24?.window_event_count ?? 0,
-              window_invocation_count: s24?.window_invocation_count ?? 0,
-              window_duration: s24?.window_duration ?? "",
-            };
-
-            const stats7d: ContractStatsApiResponse = {
-              ...stats,
-              window_event_count: s7?.window_event_count ?? 0,
-              window_invocation_count: s7?.window_invocation_count ?? 0,
-            };
-
-            const health_status = mon?.status ?? "Healthy";
-            const last_check = mon?.last_check ?? null;
-
-            return {
-              contract: contracts.find((c) => c.id === id)!,
-              stats,
-              stats7d,
-              health_status,
-              last_check,
-            };
-          }),
-        );
-        if (!cancelled) setComparisonData(results);
-      } catch {
-        // non-critical
-      } finally {
-        if (!cancelled) setFetching(false);
-      }
-    }
-    fetchComparison();
-    return () => { cancelled = true; };
-  }, [selectedIds, contracts]);
-
+/**
+ * Server component: reads ?ids=A,B&window=7d from the URL so a shared or
+ * bookmarked comparison link renders its selection on first paint. All
+ * interactive behaviour lives in the client CompareView.
+ */
+export default async function ComparePage({ searchParams }: ComparePageProps) {
+  const params = await searchParams;
+  const parsed = parseIds(params.ids);
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Compare Contracts</h1>
-        <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-          Select 2–3 tracked contracts to compare their stats side by side
-        </p>
-      </div>
-
-      <ContractSelector
-        selected={selectedIds}
-        onSelect={setSelectedIds}
-        contracts={contracts}
-      />
-
-      {loading && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-64 animate-pulse rounded-xl bg-[var(--color-border)]"
-            />
-          ))}
-        </div>
-      )}
-
-      {!loading && selectedIds.length < 2 && (
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
-          <p className="text-lg font-medium text-[var(--color-text-primary)]">
-            Select at least 2 contracts to compare
-          </p>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            Choose from the tracked contracts list above
-          </p>
-        </div>
-      )}
-
-      {fetching && comparisonData.length > 0 && (
-        <p className="text-sm text-[var(--color-text-secondary)]">Loading comparison data…</p>
-      )}
-
-      {!fetching && comparisonData.length >= 2 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {comparisonData.map(({ contract, stats, stats7d, health_status, last_check }) => (
-            <CompareCard
-              key={contract.id}
-              contract={contract}
-              stats={{
-                event_count_24h: stats.window_event_count ?? 0,
-                event_count_7d: stats7d.window_event_count ?? 0,
-                invocation_count: stats.window_invocation_count ?? 0,
-                avg_cpu: 0,
-                avg_fee: 0,
-                last_activity: last_check,
-              }}
-              health_status={health_status}
-              last_check={last_check}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+    <CompareView
+      initialIds={parsed.ids}
+      initialWindow={parseWindow(params.window)}
+      droppedInvalid={parsed.dropped}
+      truncatedExtra={parsed.truncated}
+    />
   );
 }

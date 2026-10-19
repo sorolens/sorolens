@@ -32,7 +32,7 @@ export async function syncRoles(
   guild: Guild,
   discordId: string,
   mergedPRs: number,
-  tiers: Tiers,
+  tiers: Tiers
 ): Promise<AssignmentResult> {
   const target: AssignmentResult["targetTier"] =
     mergedPRs >= tiers.coreContributorThreshold
@@ -43,7 +43,13 @@ export async function syncRoles(
 
   const member = await guild.members.fetch(discordId).catch(() => null);
   if (!member) {
-    return { discordId, mergedPRs, targetTier: target, granted: [], revoked: [] };
+    return {
+      discordId,
+      mergedPRs,
+      targetTier: target,
+      granted: [],
+      revoked: [],
+    };
   }
 
   const hasContrib = member.roles.cache.has(tiers.contributor);

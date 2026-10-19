@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
@@ -56,8 +57,33 @@ func doRequest(srv http.Handler, method, path, token, body string) *httptest.Res
 	return doRequestAsUser(srv, method, path, token, "", body)
 }
 
-// doRequestAsUser is doRequest with an optional calling user identity in
-// X-User-ID, used to exercise role-based access control.
+// withTestIdentity attaches a verified identity the way the Identity
+// middleware does after authenticating a session or a user-bound API key.
+// Tests must not rely on X-User-ID: issue #518 stopped trusting it.
+func withTestIdentity(req *http.Request, userID string) *http.Request {
+	if userID == "" {
+		return req
+	}
+	return req.WithContext(middleware.WithIdentity(req.Context(), middleware.VerifiedIdentity{
+		UserID: userID,
+		Role:   testRole(userID),
+		Source: "test",
+	}))
+}
+
+func testRole(userID string) string {
+	switch userID {
+	case adminUser:
+		return store.RoleAdmin
+	case viewerUser:
+		return store.RoleViewer
+	default:
+		return store.RoleContributor
+	}
+}
+
+// doRequestAsUser is doRequest with an optional verified caller identity,
+// used to exercise role-based access control.
 func doRequestAsUser(srv http.Handler, method, path, token, userID, body string) *httptest.ResponseRecorder {
 	var reader io.Reader
 	if body != "" {
@@ -67,9 +93,7 @@ func doRequestAsUser(srv http.Handler, method, path, token, userID, body string)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	if userID != "" {
-		req.Header.Set("X-User-ID", userID)
-	}
+	req = withTestIdentity(req, userID)
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}

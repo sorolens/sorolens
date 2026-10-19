@@ -1,0 +1,6 @@
+# Standalone workspace for the Pulumi package: keeps its (large) dependency
+# tree out of the repository's root lockfile and CI jobs. Uses the same
+# build-script policy as the root workspace.
+allowBuilds:
+  esbuild: true
+  protobufjs: false

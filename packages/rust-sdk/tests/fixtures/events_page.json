@@ -1,0 +1,19 @@
+{
+  "events": [
+    {
+      "id": "evt_01HQZ8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8",
+      "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      "network": "testnet",
+      "ledger": 1234600,
+      "ledger_closed_at": "2026-01-15T11:00:00Z",
+      "tx_hash": "9c1f4e7b0d3c6a9f2e5b8d1c4a7f0e3b6d9c2a5f8e1b4d7c0a3f6e9b2d5c8a1f",
+      "type": "contract",
+      "topic_xdr": ["AAAAAQ=="],
+      "value_xdr": "AAAAAg==",
+      "topic_decoded": [{ "symbol": "transfer" }],
+      "value_decoded": { "amount": "1000" },
+      "in_successful_call": true
+    }
+  ],
+  "next_cursor": "ZXZ0LWN1cnNvcg=="
+}

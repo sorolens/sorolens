@@ -11,17 +11,21 @@ import { SlashCommandBuilder } from "discord.js";
 export const commandDefinitions = [
   new SlashCommandBuilder()
     .setName("connect")
-    .setDescription("Auto-link your GitHub via one-click OAuth (no typing needed)"),
+    .setDescription(
+      "Auto-link your GitHub via one-click OAuth (no typing needed)"
+    ),
   new SlashCommandBuilder()
     .setName("link")
-    .setDescription("Link your GitHub account manually (advanced; most users want /connect)")
+    .setDescription(
+      "Link your GitHub account manually (advanced; most users want /connect)"
+    )
     .addStringOption((o) =>
       o
         .setName("github")
         .setDescription("Your GitHub username (case-insensitive)")
         .setRequired(true)
         .setMinLength(1)
-        .setMaxLength(39),
+        .setMaxLength(39)
     ),
   new SlashCommandBuilder()
     .setName("unlink")
@@ -31,7 +35,25 @@ export const commandDefinitions = [
     .setDescription("Show your current linked GitHub account, if any"),
   new SlashCommandBuilder()
     .setName("mypr")
-    .setDescription("Show your merged PR count and current tier for sorolens/sorolens"),
+    .setDescription(
+      "Show your merged PR count and current tier for sorolens/sorolens"
+    ),
+  new SlashCommandBuilder()
+    .setName("members")
+    .setDescription("(Admin) List linked members and their roles")
+    .setDefaultMemberPermissions("0")
+    .addStringOption((o) =>
+      o
+        .setName("filter")
+        .setDescription("Filter by tier")
+        .setRequired(false)
+        .addChoices(
+          { name: "All linked", value: "all" },
+          { name: "Contributor", value: "contributor" },
+          { name: "Core Contributor", value: "core" },
+          { name: "No role yet", value: "none" }
+        )
+    ),
   new SlashCommandBuilder()
     .setName("status")
     .setDescription("Show the current Sorolens status of a tracked contract")
@@ -41,7 +63,7 @@ export const commandDefinitions = [
         .setDescription("Stellar contract id (56 characters, starts with C)")
         .setRequired(true)
         .setMinLength(1)
-        .setMaxLength(64),
+        .setMaxLength(64)
     ),
   new SlashCommandBuilder()
     .setName("alerts")
@@ -52,7 +74,7 @@ export const commandDefinitions = [
         .setDescription("Stellar contract id (56 characters, starts with C)")
         .setRequired(true)
         .setMinLength(1)
-        .setMaxLength(64),
+        .setMaxLength(64)
     )
     .addIntegerOption((o) =>
       o
@@ -60,7 +82,7 @@ export const commandDefinitions = [
         .setDescription("How many alerts to show (1-10, default 5)")
         .setMinValue(1)
         .setMaxValue(10)
-        .setRequired(false),
+        .setRequired(false)
     ),
   new SlashCommandBuilder()
     .setName("watch")
@@ -71,7 +93,7 @@ export const commandDefinitions = [
         .setDescription("Stellar contract id (56 characters, starts with C)")
         .setRequired(true)
         .setMinLength(1)
-        .setMaxLength(64),
+        .setMaxLength(64)
     ),
   new SlashCommandBuilder()
     .setName("unwatch")
@@ -82,6 +104,6 @@ export const commandDefinitions = [
         .setDescription("Stellar contract id (56 characters, starts with C)")
         .setRequired(true)
         .setMinLength(1)
-        .setMaxLength(64),
+        .setMaxLength(64)
     ),
 ].map((c) => c.toJSON());

@@ -1,0 +1,7 @@
+name: sorolens-aws
+description: Self-hosted Sorolens on AWS (ECS Fargate, Aurora PostgreSQL, ElastiCache Redis).
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+main: index.ts

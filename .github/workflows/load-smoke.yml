@@ -1,0 +1,111 @@
+name: Load smoke (k6)
+
+# Issue #551: a small k6 smoke run with enforced thresholds against a freshly
+# seeded API. This is deliberately NOT run on every pull request — it stands up
+# Postgres + Redis + the API and a seeded dataset, which is heavy. It runs on a
+# weekly schedule and on manual dispatch instead. The three k6 scripts fail the
+# job when latency/error-rate thresholds are breached (k6 exits non-zero on a
+# threshold failure), which is how the budgets are "enforced".
+on:
+  workflow_dispatch:
+    inputs:
+      events:
+        description: 'Rows to seed into the events table'
+        required: false
+        default: '20000'
+      vus:
+        description: 'k6 virtual users'
+        required: false
+        default: '10'
+      duration:
+        description: 'k6 duration per script'
+        required: false
+        default: '30s'
+  schedule:
+    # Weekly smoke on main.
+    - cron: '0 4 * * 1'
+
+jobs:
+  smoke:
+    name: Seed + k6 smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EVENTS: ${{ github.event.inputs.events || '20000' }}
+      VUS: ${{ github.event.inputs.vus || '10' }}
+      DURATION: ${{ github.event.inputs.duration || '30s' }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sorolens
+          POSTGRES_PASSWORD: sorolens
+          POSTGRES_DB: sorolens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sorolens -d sorolens"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go 1.26
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: false
+      - name: Install k6
+        run: |
+          sudo mkdir -p /etc/apt/keyrings
+          sudo curl -fsSL https://dl.k6.io/key.gpg -o /etc/apt/keyrings/k6.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/k6.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install -y k6
+          k6 version
+      - name: Apply migrations
+        working-directory: ./
+        env:
+          PGPASSWORD: sorolens
+        run: |
+          for f in $(ls apps/api/internal/db/migrations/*.up.sql | sort); do
+            psql -h 127.0.0.1 -U sorolens -d sorolens -f "$f"
+          done
+      - name: Seed load data
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable
+        run: go run ./cmd/seedload -events "$EVENTS" -invocations 5000 -contracts 20 -seed 42
+      - name: Start API
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable
+          REDIS_URL: redis://localhost:6379
+          PORT: "8080"
+        run: |
+          go build -o /tmp/sorolens-api .
+          /tmp/sorolens-api > /tmp/api.log 2>&1 &
+          echo $! > /tmp/api.pid
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/api/v1/health >/dev/null 2>&1; then
+              echo "API is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become healthy; last 40 log lines:"; tail -n 40 /tmp/api.log; exit 1
+      - name: k6 smoke — events
+        run: k6 run --vus "$VUS" --duration "$DURATION" tests/load/k6/events.js
+      - name: k6 smoke — invocations
+        run: k6 run --vus "$VUS" --duration "$DURATION" tests/load/k6/invocations.js
+      - name: k6 smoke — search
+        run: k6 run --vus "$VUS" --duration "$DURATION" tests/load/k6/search.js
+      - name: Show API log on failure
+        if: failure()
+        run: tail -n 80 /tmp/api.log || true

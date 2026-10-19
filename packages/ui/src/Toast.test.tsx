@@ -1,5 +1,11 @@
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Toast } from "./Toast";
 
@@ -55,7 +61,7 @@ describe("Toast", () => {
     const first = vi.fn();
     const second = vi.fn();
     const { rerender } = render(
-      <Toast message="Hi" duration={3000} onDismiss={first} />,
+      <Toast message="Hi" duration={3000} onDismiss={first} />
     );
 
     act(() => {
@@ -73,7 +79,7 @@ describe("Toast", () => {
   it("clears its timer on unmount", () => {
     const onDismiss = vi.fn();
     const { unmount } = render(
-      <Toast message="Gone" duration={3000} onDismiss={onDismiss} />,
+      <Toast message="Gone" duration={3000} onDismiss={onDismiss} />
     );
     expect(vi.getTimerCount()).toBe(1);
 
@@ -90,7 +96,9 @@ describe("Toast", () => {
     const onDismiss = vi.fn();
     render(<Toast message="Close me" onDismiss={onDismiss} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /dismiss notification/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /dismiss notification/i })
+    );
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

@@ -6,16 +6,29 @@
  */
 
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render as renderWithoutLocale,
+  screen,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SETTINGS_STORAGE_KEY } from "@/lib/settings";
+import { LocaleProvider } from "@/lib/i18n";
+import type { ReactNode } from "react";
 
 import PlaygroundPage from "./page";
 
 expect.extend(matchers);
 
+function render(ui: ReactNode) {
+  return renderWithoutLocale(<LocaleProvider>{ui}</LocaleProvider>);
+}
+
 function mockResponse(
   status = 200,
-  body = JSON.stringify({ contracts: [] }, null, 2),
+  body = JSON.stringify({ contracts: [] }, null, 2)
 ) {
   return {
     status,
@@ -34,44 +47,55 @@ describe("PlaygroundPage", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     fetchMock.mockResolvedValue(mockResponse());
+    localStorage.removeItem(SETTINGS_STORAGE_KEY);
     vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(() => {
     cleanup();
+    localStorage.removeItem(SETTINGS_STORAGE_KEY);
     vi.unstubAllGlobals();
   });
 
   it("lists endpoints grouped by tag", () => {
     render(<PlaygroundPage />);
     expect(
-      screen.getByRole("heading", { name: /api playground/i }),
+      screen.getByRole("heading", { name: /api playground/i })
     ).toBeDefined();
+    expect(screen.getByTestId("endpoint-GET-/api/v1/contracts")).toBeDefined();
+    expect(screen.getByTestId("endpoint-POST-/api/v1/contracts")).toBeDefined();
     expect(
-      screen.getByTestId("endpoint-GET-/api/v1/contracts"),
-    ).toBeDefined();
-    expect(
-      screen.getByTestId("endpoint-POST-/api/v1/contracts"),
-    ).toBeDefined();
-    expect(
-      screen.getByTestId("endpoint-GET-/api/v1/contracts/{id}/snapshot"),
+      screen.getByTestId("endpoint-GET-/api/v1/contracts/{id}/snapshot")
     ).toBeDefined();
   });
 
   it("does not auto-populate an API key", () => {
     render(<PlaygroundPage />);
     const keyInput = document.getElementById(
-      "playground-api-key",
+      "playground-api-key"
     ) as HTMLInputElement;
     expect(keyInput.value).toBe("");
+  });
+
+  it("pre-fills the API key saved in Settings", async () => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({ apiKey: "sl_saved_key" })
+    );
+    render(<PlaygroundPage />);
+
+    await waitFor(() => {
+      expect(
+        (document.getElementById("playground-api-key") as HTMLInputElement)
+          .value
+      ).toBe("sl_saved_key");
+    });
   });
 
   it("sends a request and renders status, headers, and body", async () => {
     render(<PlaygroundPage />);
 
-    fireEvent.click(
-      screen.getByTestId("endpoint-GET-/api/v1/contracts/{id}"),
-    );
+    fireEvent.click(screen.getByTestId("endpoint-GET-/api/v1/contracts/{id}"));
 
     const idInput = document.getElementById("param-id") as HTMLInputElement;
     fireEvent.change(idInput, { target: { value: "CABC" } });
@@ -84,10 +108,10 @@ describe("PlaygroundPage", () => {
     expect(options.method).toBe("GET");
 
     await waitFor(() =>
-      expect(screen.getByTestId("response-status").textContent).toContain("200"),
+      expect(screen.getByTestId("response-status").textContent).toContain("200")
     );
     expect(screen.getByTestId("response-body").textContent).toContain(
-      "contracts",
+      "contracts"
     );
   });
 
@@ -99,28 +123,28 @@ describe("PlaygroundPage", () => {
     expect(curlBlock.textContent).not.toContain("Authorization");
 
     const keyInput = document.getElementById(
-      "playground-api-key",
+      "playground-api-key"
     ) as HTMLInputElement;
     fireEvent.change(keyInput, { target: { value: "sl_user_key" } });
 
     expect(screen.getByTestId("curl-command").textContent).toContain(
-      "Authorization: Bearer sl_user_key",
+      "Authorization: Bearer sl_user_key"
     );
   });
 
   it("renders a non-2xx status", async () => {
     fetchMock.mockResolvedValue(
-      mockResponse(403, JSON.stringify({ error: "missing scope" })),
+      mockResponse(403, JSON.stringify({ error: "missing scope" }))
     );
     render(<PlaygroundPage />);
 
     fireEvent.click(document.getElementById("playground-send")!);
 
     await waitFor(() =>
-      expect(screen.getByTestId("response-status").textContent).toContain("403"),
+      expect(screen.getByTestId("response-status").textContent).toContain("403")
     );
     expect(screen.getByTestId("response-body").textContent).toContain(
-      "missing scope",
+      "missing scope"
     );
   });
 });

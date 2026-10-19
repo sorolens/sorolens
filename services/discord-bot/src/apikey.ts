@@ -32,7 +32,10 @@ export interface ApiKeyStore {
 
 /** The subset of the Sorolens API this module needs. */
 export interface ApiKeyMinter {
-  provisionApiKey(name: string, scopes?: string[]): Promise<{ id: string; key: string }>;
+  provisionApiKey(
+    name: string,
+    scopes?: string[]
+  ): Promise<{ id: string; key: string }>;
   revokeApiKey(id: string): Promise<void>;
 }
 
@@ -47,7 +50,10 @@ export function keyNameFor(discordId: string, githubLogin: string): string {
 }
 
 /** Return the stored key or null. Never provisions. */
-export function getUserApiKey(store: ApiKeyStore, discordId: string): StoredApiKey | null {
+export function getUserApiKey(
+  store: ApiKeyStore,
+  discordId: string
+): StoredApiKey | null {
   return store.get(discordId);
 }
 
@@ -63,13 +69,15 @@ export async function ensureUserApiKey(
   store: ApiKeyStore,
   minter: ApiKeyMinter,
   discordId: string,
-  githubLogin: string,
+  githubLogin: string
 ): Promise<StoredApiKey | null> {
   const existing = store.get(discordId);
   if (existing) return existing;
 
   try {
-    const grant = await minter.provisionApiKey(keyNameFor(discordId, githubLogin));
+    const grant = await minter.provisionApiKey(
+      keyNameFor(discordId, githubLogin)
+    );
     return store.set(discordId, grant.key, grant.id ?? null);
   } catch {
     return null;
@@ -84,7 +92,7 @@ export async function ensureUserApiKey(
 export async function revokeUserApiKey(
   store: ApiKeyStore,
   minter: ApiKeyMinter,
-  discordId: string,
+  discordId: string
 ): Promise<{ revoked: boolean; cleared: boolean }> {
   const existing = store.get(discordId);
   const cleared = store.clear(discordId);

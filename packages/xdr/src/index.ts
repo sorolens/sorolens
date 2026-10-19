@@ -11,6 +11,9 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 function readU32(bytes: Uint8Array, offset: number): [number, number] {
+  if (offset + 4 > bytes.length) {
+    throw new Error("unexpected end of buffer");
+  }
   const value =
     (bytes[offset] << 24) |
     (bytes[offset + 1] << 16) |
@@ -20,6 +23,9 @@ function readU32(bytes: Uint8Array, offset: number): [number, number] {
 }
 
 function readI32(bytes: Uint8Array, offset: number): [number, number] {
+  if (offset + 4 > bytes.length) {
+    throw new Error("unexpected end of buffer");
+  }
   const value =
     (bytes[offset] << 24) |
     (bytes[offset + 1] << 16) |
@@ -29,6 +35,9 @@ function readI32(bytes: Uint8Array, offset: number): [number, number] {
 }
 
 function readU64(bytes: Uint8Array, offset: number): [bigint, number] {
+  if (offset + 8 > bytes.length) {
+    throw new Error("unexpected end of buffer");
+  }
   const hi =
     (BigInt(bytes[offset]) << 24n) |
     (BigInt(bytes[offset + 1]) << 16n) |
@@ -86,6 +95,9 @@ function padded(len: number): number {
 
 function readString(bytes: Uint8Array, offset: number): [string, number] {
   const [len, off1] = readU32(bytes, offset);
+  if (off1 + len > bytes.length) {
+    throw new Error("string length exceeds buffer size");
+  }
   const decoder = new TextDecoder();
   const str = decoder.decode(bytes.slice(off1, off1 + len));
   return [str, off1 + padded(len)];
@@ -93,6 +105,9 @@ function readString(bytes: Uint8Array, offset: number): [string, number] {
 
 function readBytes(bytes: Uint8Array, offset: number): [Uint8Array, number] {
   const [len, off1] = readU32(bytes, offset);
+  if (off1 + len > bytes.length) {
+    throw new Error("bytes length exceeds buffer size");
+  }
   return [bytes.slice(off1, off1 + len), off1 + padded(len)];
 }
 
@@ -140,71 +155,77 @@ function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
     case 12: // SCV_I256
       return readI256(bytes, off);
 
-    case 13: // SCV_BYTES
-      {
-        const [data, newOff] = readBytes(bytes, off);
-        return ["0x" + bytesToHex(data), newOff];
-      }
+    case 13: {
+      // SCV_BYTES
+      const [data, newOff] = readBytes(bytes, off);
+      return ["0x" + bytesToHex(data), newOff];
+    }
 
     case 14: // SCV_STRING
     case 15: // SCV_SYMBOL
       return readString(bytes, off);
 
     case 16: // SCV_VEC
-    case 17: // SCV_MAP
-      {
-        const [len, off1] = readU32(bytes, off);
-        if (discriminant === 16) {
-          // Vec
-          const vec: unknown[] = [];
-          let currentOff = off1;
-          for (let i = 0; i < len; i++) {
-            const [val, newOff] = readScVal(bytes, currentOff);
-            vec.push(val);
-            currentOff = newOff;
-          }
-          return [vec, currentOff];
-        } else {
-          // Map
-          const map: Record<string, unknown> = {};
-          let currentOff = off1;
-          for (let i = 0; i < len; i++) {
-            const [key, offKey] = readScVal(bytes, currentOff);
-            const [val, offVal] = readScVal(bytes, offKey);
-            map[String(key)] = val;
-            currentOff = offVal;
-          }
-          return [map, currentOff];
+    case 17: {
+      // SCV_MAP
+      const [len, off1] = readU32(bytes, off);
+      if (discriminant === 16) {
+        // Vec: each ScVal element requires at least 4 bytes in XDR
+        if (len > Math.floor((bytes.length - off1) / 4)) {
+          throw new Error("vec length exceeds buffer size");
         }
-      }
-
-    case 18: // SCV_ADDRESS
-      {
-        // XDR union SCAddress: 4-byte ScAddressType discriminant + 32-byte payload.
-        const [addrType, typeOff] = readI32(bytes, off);
-        const addrBytes = bytes.slice(typeOff, typeOff + 32);
-        if (addrType === 0) {
-          // ScAddressType::SC_ADDRESS_TYPE_ACCOUNT - G... address
-          return ["<account:" + bytesToHex(addrBytes) + ">", typeOff + 32];
+        const vec: unknown[] = [];
+        let currentOff = off1;
+        for (let i = 0; i < len; i++) {
+          const [val, newOff] = readScVal(bytes, currentOff);
+          vec.push(val);
+          currentOff = newOff;
         }
-        // ScAddressType::SC_ADDRESS_TYPE_CONTRACT - C... address
-        return ["<contract:" + bytesToHex(addrBytes) + ">", typeOff + 32];
+        return [vec, currentOff];
+      } else {
+        // Map: each key-value pair requires at least 8 bytes in XDR
+        if (len > Math.floor((bytes.length - off1) / 8)) {
+          throw new Error("map length exceeds buffer size");
+        }
+        const map: Record<string, unknown> = {};
+        let currentOff = off1;
+        for (let i = 0; i < len; i++) {
+          const [key, offKey] = readScVal(bytes, currentOff);
+          const [val, offVal] = readScVal(bytes, offKey);
+          map[String(key)] = val;
+          currentOff = offVal;
+        }
+        return [map, currentOff];
       }
+    }
 
-    case 19: // SCV_CONTRACT_INSTANCE
-      {
-        // Skip contract instance for now
-        return ["<contract_instance>", bytes.length];
+    case 18: {
+      // SCV_ADDRESS
+      // XDR union SCAddress: 4-byte ScAddressType discriminant + 32-byte payload.
+      const [addrType, typeOff] = readI32(bytes, off);
+      const addrBytes = bytes.slice(typeOff, typeOff + 32);
+      if (addrType === 0) {
+        // ScAddressType::SC_ADDRESS_TYPE_ACCOUNT - G... address
+        return ["<account:" + bytesToHex(addrBytes) + ">", typeOff + 32];
       }
+      // ScAddressType::SC_ADDRESS_TYPE_CONTRACT - C... address
+      return ["<contract:" + bytesToHex(addrBytes) + ">", typeOff + 32];
+    }
+
+    case 19: {
+      // SCV_CONTRACT_INSTANCE
+      // Skip contract instance for now
+      return ["<contract_instance>", bytes.length];
+    }
 
     case 20: // SCV_LEDGER_KEY_CONTRACT_INSTANCE
       return ["<ledger_key_instance>", bytes.length];
 
-    case 21: // SCV_LEDGER_KEY_NONCE
-      {
-        const [val, newOff] = readI64(bytes, off);
-        return [val, newOff];
-      }
+    case 21: {
+      // SCV_LEDGER_KEY_NONCE
+      const [val, newOff] = readI64(bytes, off);
+      return [val, newOff];
+    }
 
     default:
       return [`<unknown_type:${discriminant}>`, bytes.length];
@@ -241,38 +262,46 @@ export function decode(base64Str: string): DecodedScVal {
     return { type: "error", value: null, human: "<decode_error>" };
   }
 
-  const [discriminant, off] = readI32(bytes, 0);
+  if (bytes.length < 4) {
+    return { type: "error", value: null, human: "<decode_error>" };
+  }
 
-  switch (discriminant) {
-    case 0: {
-      // SCV_BOOL - XDR encodes bool as a 4-byte integer
-      const [flag] = readU32(bytes, off);
-      const value = flag !== 0;
-      return { type: "bool", value, human: value ? "true" : "false" };
-    }
+  try {
+    const [discriminant, off] = readI32(bytes, 0);
 
-    case 3: {
-      // SCV_U32
-      const [value] = readU32(bytes, off);
-      return { type: "u32", value, human: value.toString() };
-    }
+    switch (discriminant) {
+      case 0: {
+        // SCV_BOOL - XDR encodes bool as a 4-byte integer
+        const [flag] = readU32(bytes, off);
+        const value = flag !== 0;
+        return { type: "bool", value, human: value ? "true" : "false" };
+      }
 
-    case 5: {
-      // SCV_U64
-      const [value] = readU64(bytes, off);
-      return { type: "u64", value: value.toString(), human: value.toString() };
-    }
+      case 3: {
+        // SCV_U32
+        const [value] = readU32(bytes, off);
+        return { type: "u32", value, human: value.toString() };
+      }
 
-    case 15: {
-      // SCV_SYMBOL
-      const [value] = readString(bytes, off);
-      return { type: "symbol", value, human: value };
-    }
+      case 5: {
+        // SCV_U64
+        const [value] = readU64(bytes, off);
+        return { type: "u64", value: value.toString(), human: value.toString() };
+      }
 
-    default: {
-      const value = decodeScVal(base64Str);
-      return { type: "unknown", value, human: String(value) };
+      case 15: {
+        // SCV_SYMBOL
+        const [value] = readString(bytes, off);
+        return { type: "symbol", value, human: value };
+      }
+
+      default: {
+        const value = decodeScVal(base64Str);
+        return { type: "unknown", value, human: String(value) };
+      }
     }
+  } catch {
+    return { type: "error", value: null, human: "<decode_error>" };
   }
 }
 

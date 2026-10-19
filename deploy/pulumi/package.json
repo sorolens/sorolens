@@ -1,0 +1,30 @@
+{
+  "name": "@sorolens/pulumi",
+  "version": "0.1.0",
+  "description": "Pulumi components that provision a self-hosted Sorolens stack (AWS today).",
+  "private": true,
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pulumi/aws": "^7.48.0",
+    "@pulumi/pulumi": "^3.260.0",
+    "@pulumi/random": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

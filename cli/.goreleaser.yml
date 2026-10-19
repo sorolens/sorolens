@@ -19,10 +19,10 @@ builds:
         goarch: arm64
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
@@ -32,14 +32,20 @@ checksum:
   name_template: "checksums.txt"
   algorithm: sha256
 
-brews:
+sboms:
+  - artifacts: archive
+
+homebrew_casks:
   - name: sorolens
+    binaries:
+      - sorolens
     homepage: https://github.com/sorolens/sorolens
     description: "CLI for the Sorolens Soroban smart contract observability platform"
+    license: Apache-2.0
     repository:
       owner: sorolens
       name: homebrew-tap
-      # token not configured; set HOMEBREW_TAP_GITHUB_TOKEN in environment
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
 
 snapshot:
   version_template: "{{ .Tag }}-snapshot"

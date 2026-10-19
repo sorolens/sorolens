@@ -30,7 +30,7 @@ describe("oauth start URL", () => {
     const url = buildConnectUrl("1111", cfg);
     const expected = signDiscordId("1111", cfg.oauthStateSecret);
     expect(url).toBe(
-      `https://sorolens.onrender.com/oauth/start?discord_id=1111&sig=${expected}`,
+      `https://sorolens.onrender.com/oauth/start?discord_id=1111&sig=${expected}`
     );
   });
 

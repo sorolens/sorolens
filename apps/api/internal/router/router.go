@@ -1,26 +1,129 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
+	"net/http/pprof"
+	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sorolens/sorolens/apps/api/internal/graph"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
+	"github.com/sorolens/sorolens/apps/api/internal/metrics"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 )
 
+// corsMiddleware returns an http.Handler middleware that sets CORS headers.
+//
+// When CORS_ALLOWED_ORIGINS is unset or contains "*" all origins are allowed
+// (Access-Control-Allow-Origin: *). When it is a comma-separated list of
+// origins, only requests whose Origin header is in the list receive an echoed
+// origin back; all others receive the first entry in the list (the browser
+// will still block the mismatch). This lets a self-hosted API restrict
+// cross-origin access to the Vercel dashboard domain without any code change.
+func corsMiddleware() func(http.Handler) http.Handler {
+	raw := os.Getenv("CORS_ALLOWED_ORIGINS")
+
+	// Build the allow-set. nil means wildcard (*).
+	var allowed map[string]struct{}
+	if raw != "" {
+		allowed = make(map[string]struct{})
+		for _, o := range strings.Split(raw, ",") {
+			o = strings.TrimSpace(o)
+			if o == "" {
+				continue
+			}
+			if o == "*" {
+				allowed = nil // wildcard overrides any explicit list
+				break
+			}
+			allowed[o] = struct{}{}
+		}
+		if len(allowed) == 0 {
+			allowed = nil
+		}
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			var allowOrigin string
+			if allowed == nil {
+				allowOrigin = "*"
+			} else if _, ok := allowed[origin]; ok {
+				allowOrigin = origin
+			} else {
+				// Fall back to the first configured origin; the browser will
+				// reject the mismatch, but the response header is always set.
+				for o := range allowed {
+					allowOrigin = o
+					break
+				}
+			}
+
+			w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, Authorization, X-API-Key")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			if allowOrigin != "*" {
+				w.Header().Set("Vary", "Origin")
+			}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // New builds and returns the HTTP router with all middleware and routes wired.
-func New(h *handler.Handler) http.Handler {
+// maxBodyBytes caps the request body size in bytes; values of zero or less
+// disable the limit. Callers normally pass config.MaxBodyBytesFromEnv().
+func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r := chi.NewRouter()
 
 	// Global middleware
 	r.Use(OTelMiddleware)
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.CORS)
+	r.Use(corsMiddleware())
+	// Sentry must run before Recoverer: it reports a panic and re-panics so
+	// Recoverer still produces the standard 500 response.
+	r.Use(middleware.Sentry)
 	r.Use(middleware.Recoverer(h.Logger))
+	r.Use(middleware.BodyLimit(maxBodyBytes))
 	r.Use(middleware.Logger(h.Logger))
+	// Verify the caller's credential once and attach the resulting identity
+	// to the request context (issue #518). Must run before Audit, which
+	// attributes writes to the verified caller, and before the per-route
+	// scope/role middleware. Bare identity headers are never trusted.
+	r.Use(middleware.Identity(h.Store, middleware.IdentityOptions{
+		Sessions:    h.SessionSigner,
+		ProxySecret: h.TrustedProxySecret,
+	}, h.Logger))
+	// Audit trail for every mutating /api/ request (issue #122). It sits
+	// outside rate limiting, content-type and auth checks so their
+	// rejections are audited too, and inside Recoverer so a panic is
+	// recorded as 500 before being recovered.
+	r.Use(middleware.Audit(h.Store, h.Logger, "/api/"))
 	r.Use(chiMiddleware.StripSlashes)
+	r.Use(middleware.Metrics)
+
+	// Emit ETags on cacheable GET/HEAD responses and answer If-None-Match
+	// matches with an empty 304, short-circuiting the body before it
+	// crosses the wire (issue #152).
+	r.Use(middleware.ETag)
+
+	// Compress responses (gzip/br) for clients that ask for it. Must run
+	// before the rate limiter so compressed and uncompressed variants of a
+	// route share one rate-limit bucket (responses are buffered until the
+	// compression decision, so limiter headers written later are unaffected).
+	r.Use(middleware.Compression)
 
 	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
 
@@ -28,9 +131,78 @@ func New(h *handler.Handler) http.Handler {
 	r.Get("/health", h.Health)
 	r.Get("/readyz", h.Readyz)
 
+	// Version (public, not rate-limited, no DB access). Mounted at /api/version
+	// rather than under /api/v1 so it stays reachable without a versioned client
+	// and without the v1 scope/role middleware.
+	r.Get("/api/version", h.Version)
+
+	// Prometheus metrics. It sits outside /api/v1 so it needs no API key, and
+	// the rate limiter skips it explicitly (see middleware.RateLimit) so a
+	// scrape is never throttled. A registry per router keeps tests that build
+	// many routers independent; it carries the request collectors from the
+	// metrics package (updated by middleware.Metrics), the response-cache
+	// counters (issue #143), the rate-limiter decision counters, the Postgres
+	// pool collector (metrics.SetPool wires the live pool), and the default Go
+	// and process collectors.
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	reg.MustRegister(middleware.CacheCollectors()...)
+	reg.MustRegister(middleware.RateLimitCollectors()...)
+	reg.MustRegister(metrics.HTTPRequestsInFlight, metrics.HTTPRequestsTotal, metrics.HTTPRequestDuration)
+	reg.MustRegister(metrics.PoolCollector())
+	r.Get("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP)
+	pprofAdmin := middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)
+	r.With(pprofAdmin).Get("/debug/pprof", pprof.Index)
+	r.With(pprofAdmin).Get("/debug/pprof/", pprof.Index)
+	r.With(pprofAdmin).Get("/debug/pprof/cmdline", pprof.Cmdline)
+	r.With(pprofAdmin).Get("/debug/pprof/profile", pprof.Profile)
+	r.With(pprofAdmin).Get("/debug/pprof/symbol", pprof.Symbol)
+	r.With(pprofAdmin).Post("/debug/pprof/symbol", pprof.Symbol)
+	r.With(pprofAdmin).Get("/debug/pprof/trace", pprof.Trace)
+	for _, profile := range []string{"allocs", "block", "goroutine", "heap", "mutex", "threadcreate"} {
+		r.With(pprofAdmin).Get("/debug/pprof/"+profile, pprof.Handler(profile).ServeHTTP)
+	}
+
+	// Slack slash commands (issue #127). Outside /api/v1 because Slack posts
+	// form-encoded bodies, which the JSON content-type guard would reject;
+	// every request is authenticated by its Slack signature instead.
+	r.Post("/integrations/slack/commands", h.SlackCommand)
+
+	// pprof (issue #157). Gated behind admin role so probing always gets 403
+	// rather than 401, avoiding path enumeration by unauthenticated callers.
+	adminOnly := middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)
+	r.With(adminOnly).HandleFunc("/debug/pprof", pprof.Index)
+	r.With(adminOnly).HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	r.With(adminOnly).HandleFunc("/debug/pprof/profile", pprof.Profile)
+	r.With(adminOnly).HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	r.With(adminOnly).HandleFunc("/debug/pprof/trace", pprof.Trace)
+	r.With(adminOnly).HandleFunc("/debug/pprof/{name}", pprof.Index)
+
+	// GraphQL (issue #125): read-only, POST only. Same credential rules as
+	// the REST read routes: anonymous is allowed, an API key needs
+	// read:contracts.
+	gql, err := graph.NewHandler(h.Store, h.GraphQL)
+	if err != nil {
+		// Only fails if the embedded persisted queries are unreadable,
+		// which is a build defect.
+		panic(fmt.Sprintf("graphql handler: %v", err))
+	}
+	r.With(middleware.RequireScopes(h.Logger)).Post("/graphql", gql.ServeHTTP)
+
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
+
+		// Liveness probe with dependency reachability. It always returns 200
+		// and carries no scope rule, so uptime monitors can poll it without a
+		// credential.
+		r.Get("/health", h.HealthCheck)
+
+		// Workspace sessions (issue #518). Unauthenticated and unscoped by
+		// design: the server mints an unguessable identity and returns an
+		// HMAC-signed token the dashboard sends as a bearer credential.
+		// Global rate limiting still applies.
+		r.Post("/auth/session", h.CreateSession)
 
 		// Scoped API key auth. It is applied per route with r.With so chi has
 		// already resolved the leaf route pattern when the middleware runs; the
@@ -38,49 +210,160 @@ func New(h *handler.Handler) http.Handler {
 		// middleware/scopes.go keyed by that pattern. Requests without a
 		// credential still pass on read/write routes (public v0.1 surface),
 		// while API key management always requires a credential.
-		scope := middleware.RequireScopes(h.Store, h.Logger)
+		scope := middleware.RequireScopes(h.Logger)
 		// RBAC: role enforcement on top of scope. Route wiring uses r.With
 		// (same pattern as scope) so the role middleware denies a request
 		// that lacks the minimum role regardless of API key scopes.
-		contributor := middleware.RequireRole(h.Store, h.Logger, middleware.RoleContributor)
-		admin := middleware.RequireRole(h.Store, h.Logger, middleware.RoleAdmin)
+		contributor := middleware.RequireRole(h.Logger, middleware.RoleContributor)
+		admin := middleware.RequireRole(h.Logger, middleware.RoleAdmin)
+
+		// Request timeouts (issue #154). The SSE stream is registered first
+		// with its own long deadline; r is then rebound so every route
+		// registered below inherits the default cap and returns 503 past it.
+		r.With(scope, middleware.StreamTimeout(h.StreamTimeoutOrDefault())).Get("/stream/events", h.StreamEventsSSE)
+		// WebSocket subscriptions (issue #126): real-time push with live filter
+		// changes, complementary to the SSE stream above. Registered before the
+		// default Timeout rebind (it buffers responses, which breaks the upgrade
+		// handshake) and without StreamTimeout (its write deadline would cut
+		// hijacked connections); the handler enforces its own liveness via
+		// protocol heartbeats.
+		r.With(scope).Get("/subscribe", h.SubscribeEventsWS)
+		r = r.With(middleware.Timeout(h.RequestTimeoutOrDefault()))
 
 		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
 
 		// Stats
 		get("/stats/global", h.GlobalStats)
 
-		// Contracts. Registration and untracking mutate shared state, so
-		// they require at least contributor role. Reads stay open.
-		r.With(scope, contributor).Post("/contracts", h.RegisterContract)
-		r.With(scope, contributor).Delete("/contracts/{id}", h.UntrackContract)
-		get("/contracts", h.ListContracts)
-		get("/contracts/{id}", h.GetContract)
+		// Live dashboard feeds (#139): the newest events across all tracked
+		// contracts, and per-contract events-per-minute buckets for the
+		// sparklines and hot-contracts leaderboard.
+		get("/events/recent", h.RecentEvents)
+		get("/stats/activity", h.LiveActivity)
+
+		// Cross-contract events explorer feed (issue #97).
+		get("/events", h.ListAllEvents)
+
+		// Alert deduplication and grouping engine (issue #269).
+		// GET /api/v1/alerts          — grouped view (default)
+		// GET /api/v1/alerts?flat=true — raw ContractAlert feed
+		get("/alerts", h.ListAlerts)
+		// User-defined alert rules (rule language). Reads are public like the
+		// rest of the v0.1 surface; authoring mutates shared state, so it needs
+		// the contributor role like contract registration.
+		get("/rules", h.ListRules)
+		get("/rules/metrics", h.ListRuleMetrics)
+		get("/rules/library", h.ListRuleLibrary)
+		r.With(scope).Post("/rules/validate", h.ValidateRule)
+		r.With(scope).Post("/rules/preview", h.PreviewRule)
+		r.With(scope, contributor).Post("/rules", h.CreateRule)
+		r.With(scope, contributor).Patch("/rules/{id}", h.SetRuleEnabled)
+		r.With(scope, contributor).Delete("/rules/{id}", h.DeleteRule)
+
+		// Search contracts (issue #181)
+		get("/search", h.SearchContracts)
+
+		// Cross-contract comparison (issue #324): one round-trip that fans
+		// out to the per-contract stats/health lookups in parallel.
+		get("/compare", h.CompareContracts)
+
+		// Response cache (issue #143): hot reads are cached for CacheTTL and
+		// a successful write purges the namespace it changes.
+		cacheContracts := middleware.Cache(h.Cache, middleware.CacheNamespaceContracts, h.CacheTTL, h.Logger)
+		cacheWatchdog := middleware.Cache(h.Cache, middleware.CacheNamespaceWatchdog, h.CacheTTL, h.Logger)
+		purgeContracts := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceContracts)
+		cacheLabels := middleware.Cache(h.Cache, middleware.CacheNamespaceLabels, h.CacheTTL, h.Logger)
+		purgeLabels := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceLabels)
+
+		// Contracts. Registration mutates shared state, so it requires at
+		// least contributor role. Reads stay open.
+		//
+		// /contracts/validate is the tracking wizard's read-only pre-flight
+		// check (issue #140). It is a POST purely to keep the path
+		// unambiguous against /contracts/{id}; it never writes.
+		r.With(scope).Post("/contracts/validate", h.ValidateContract)
+		r.With(scope, contributor, purgeContracts).Post("/contracts", h.RegisterContract)
+		// Bulk untrack/tag over a selection (#176). Like registration it mutates
+		// shared state, so it needs the same contributor role, and it purges both
+		// caches since it can untrack contracts and retag them.
+		r.With(scope, contributor, purgeContracts, purgeLabels).Post("/contracts/batch", h.BatchContracts)
+		r.With(scope, contributor, purgeLabels).Post("/labels", h.CreateLabel)
+		r.With(scope, cacheLabels).Get("/labels", h.ListLabels)
+		r.With(scope, cacheLabels).Get("/resolve", h.ResolveLabel)
+		r.With(scope, cacheContracts).Get("/contracts", h.ListContracts)
+		r.With(scope, cacheContracts).Get("/contracts/{id}", h.GetContract)
 		get("/contracts/{id}/events", h.ListEvents)
+		get("/contracts/{id}/events.csv", h.ExportEventsCSV)
+		get("/contracts/{id}/invocations/stats", h.ContractInvocationStats)
 		get("/contracts/{id}/invocations", h.ListInvocations)
+		get("/contracts/{id}/invocations/{tx_hash}", h.GetInvocation)
+		// Global invocation explorer: resource usage across every contract.
+		get("/invocations", h.ListAllInvocations)
+
+		// Cross-contract call graph. Rooted at the invocations row for the
+		// transaction, so a trace is reachable straight from an invocation.
+		get("/invocations/{tx_hash}/trace", h.GetInvocationTrace)
 		get("/contracts/{id}/storage", h.ListStorageEntries)
 		get("/contracts/{id}/stats", h.ContractStats)
 		get("/contracts/{id}/forecast", h.ContractForecast)
 		get("/contracts/{id}/snapshot", h.ContractSnapshot)
+		get("/contracts/{id}/snapshot.json", h.ContractSnapshotExport)
 		get("/contracts/{id}/upgrades", h.ListContractUpgrades)
 		get("/contracts/{id}/health-score", h.GetContractHealthScore)
+		get("/contracts/{id}/summary", h.ContractSummary)
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
-		get("/stream/events", h.StreamEventsSSE)
 
+		// Source verification (issue #263). Submitting source mutates the
+		// verification record, so it requires at least contributor role;
+		// reading the cached verdict stays open.
+		r.With(scope, contributor).Post("/contracts/{id}/verify", h.VerifyContract)
+		get("/contracts/{id}/verification", h.GetContractVerification)
+		get("/contracts/{id}/wasm", h.GetContractWasm)
+		get("/contracts/{id}/spec", h.GetContractSpec)
+
+		// User-defined contract tags (issue #459). Wrapped by the contributor
+		// role so an anonymous caller cannot label a contract even though the
+		// write scope passes on the public surface.
+		r.With(scope, contributor).Post("/contracts/{id}/tags", h.AddContractTag)
+		r.With(scope, contributor).Delete("/contracts/{id}/tags/{tag}", h.RemoveContractTag)
+
+		// Markdown notes on a contract (issue #164). Reads stay open like the
+		// rest of the v0.1 surface; authoring needs the contributor role, and
+		// the handlers additionally restrict edits and deletes to the identity
+		// that wrote the note.
+		get("/contracts/{id}/notes", h.ListContractNotes)
+		r.With(scope, contributor).Post("/contracts/{id}/notes", h.CreateContractNote)
+		r.With(scope, contributor).Patch("/contracts/{id}/notes/{noteID}", h.UpdateContractNote)
+		r.With(scope, contributor).Delete("/contracts/{id}/notes/{noteID}", h.DeleteContractNote)
+		// Dead-letter queue for events that failed processing (issue #202).
+		get("/dlq", h.ListFailedEvents)
+		r.With(scope, contributor).Post("/dlq/{id}/requeue", h.RequeueFailedEvent)
 
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
 		r.With(scope, admin).Post("/api-keys", h.CreateAPIKey)
+		r.With(scope, admin).Get("/api-keys/{id}", h.GetAPIKey)
 		r.With(scope, admin).Delete("/api-keys/{id}", h.RevokeAPIKey)
+		r.With(scope, admin).Post("/api-keys/{id}/rotate", h.RotateAPIKey)
 
 		// Admin surface. Wrapped by role admin so contributors cannot reach
 		// these endpoints even when the API key carries admin scope.
 		r.With(admin).Route("/admin", func(r chi.Router) {
 			r.Get("/keys", h.ListAPIKeys)
 			r.Post("/keys", h.CreateAPIKey)
+			r.Get("/keys/{id}", h.GetAPIKey)
 			r.Delete("/keys/{id}", h.RevokeAPIKey)
+			r.Post("/keys/{id}/rotate", h.RotateAPIKey)
+			r.Get("/audit", h.ListAuditEvents)
 		})
+
+		// Watched accounts: contracts deployed by these accounts are tracked
+		// automatically by the indexer (issue #123). Same role rules as
+		// contract registration.
+		r.With(scope, contributor).Post("/watched-accounts", h.AddWatchedAccount)
+		get("/watched-accounts", h.ListWatchedAccounts)
+		r.With(scope, contributor).Delete("/watched-accounts/{id}", h.DeleteWatchedAccount)
 
 		// Watchlist
 		r.Route("/watchlist", func(r chi.Router) {
@@ -90,13 +373,131 @@ func New(h *handler.Handler) http.Handler {
 			r.Get("/{contractId}/status", h.WatchlistStatus)
 		})
 
+		// Groups (contract portfolios). Ownership is per-user via the same
+		// X-User-ID contract as the watchlist, so the routes are unscoped.
+		r.Route("/groups", func(r chi.Router) {
+			r.Post("/", h.CreateGroup)
+			r.Get("/", h.ListGroups)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", h.GetGroup)
+				r.Patch("/", h.UpdateGroup)
+				r.Delete("/", h.DeleteGroup)
+				r.Get("/stats", h.GroupStats)
+				r.Post("/contracts", h.AddGroupContract)
+				r.Delete("/contracts", h.RemoveGroupContract)
+				r.Delete("/contracts/{contractId}", h.RemoveGroupContract)
+			})
+		})
+
 		// Watchdog: data from the on-chain sorolens-watchdog contract.
-		get("/watchdog/stats", h.WatchdogStats)
+		// Watchdog stats are written by the indexer, not the API, so they
+		// rely on the TTL rather than write invalidation.
+		r.With(scope, cacheWatchdog).Get("/watchdog/stats", h.WatchdogStats)
 		get("/watchdog/alerts", h.ListWatchdogAlerts)
 		get("/watchdog/contracts", h.ListMonitoredContracts)
 		get("/watchdog/contracts/{id}", h.GetMonitoredContract)
 		get("/watchdog/contracts/{id}/health", h.ListHealthChecks)
 		get("/watchdog/contracts/{id}/alerts", h.ListWatchdogAlerts)
+		get("/watchdog/contracts/{id}/uptime", h.GetContractUptime)
+
+		// Monthly SLA and uptime reporting (issue #266). Reports are derived
+		// from the watchdog health checks and alerts already stored, so there
+		// is no new ingestion path. The badge is plain SVG so it can be
+		// embedded in a README without a client library.
+		get("/reports/{contract_id}", h.GetContractReport)
+		get("/reports/{contract_id}/history", h.GetContractReportHistory)
+		get("/reports/{contract_id}/badge.svg", h.GetContractSLABadge)
+
+		// Email digest subscriptions (issue #330). Self-service by email with
+		// no login: the one-click unsubscribe link must work straight from an
+		// inbox, so these are public like the rest of the read/write surface.
+		r.With(scope).Post("/reports/subscriptions", h.CreateReportSubscription)
+		get("/reports/subscriptions", h.ListReportSubscriptions)
+		r.With(scope).Delete("/reports/subscriptions/{id}", h.DeleteReportSubscription)
+		get("/reports/unsubscribe", h.UnsubscribeReport)
+
+		// Alert notification subscriptions (issue #127). They hold
+		// integration secrets, so reading them also needs contributor.
+		r.With(scope, contributor).Post("/watchdog/subscriptions", h.CreateSubscription)
+		r.With(scope, contributor).Get("/watchdog/subscriptions", h.ListSubscriptions)
+		r.With(scope, contributor).Delete("/watchdog/subscriptions/{id}", h.DeleteSubscription)
+		// Signing-secret reveal/rotate touch signing key material, so they are
+		// admin-gated on top of the scope check.
+		r.With(scope, admin).Get("/watchdog/subscriptions/{id}/signing-secret", h.GetSubscriptionSigningSecret)
+		r.With(scope, admin).Post("/watchdog/subscriptions/{id}/rotate", h.RotateSubscriptionSigningSecret)
+	})
+
+	// API v2 (issue #144). A parallel namespace carrying the same resources
+	// with a consistent envelope (data/pagination), RFC 3339 timestamps, and
+	// uniform field names. v1 is untouched; see docs/api-v2.md for the
+	// field-by-field mapping.
+	//
+	// The scope and role middleware are the same as v1, so an API key or role
+	// that works against v1 works identically against v2.
+	r.Route("/api/v2", func(r chi.Router) {
+		r.Use(middleware.ContentTypeJSON)
+
+		scope := middleware.RequireScopes(h.Logger)
+		contributor := middleware.RequireRole(h.Logger, middleware.RoleContributor)
+		admin := middleware.RequireRole(h.Logger, middleware.RoleAdmin)
+
+		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
+
+		// Live dashboard feeds (#139).
+		get("/events/recent", h.V2RecentEvents)
+		get("/stats/activity", h.V2LiveActivity)
+
+		// Stats
+		get("/stats/global", h.V2GlobalStats)
+
+		// Contracts
+		r.With(scope).Post("/contracts/validate", h.V2ValidateContract)
+		r.With(scope, contributor).Post("/contracts", h.V2RegisterContract)
+		get("/contracts", h.V2ListContracts)
+		get("/contracts/{id}", h.V2GetContract)
+		get("/contracts/{id}/events", h.V2ListEvents)
+		get("/contracts/{id}/invocations", h.V2ListInvocations)
+		get("/contracts/{id}/storage", h.V2ListStorageEntries)
+		get("/contracts/{id}/stats", h.V2ContractStats)
+		get("/contracts/{id}/forecast", h.V2ContractForecast)
+		get("/contracts/{id}/snapshot", h.V2ContractSnapshot)
+		get("/contracts/{id}/upgrades", h.V2ListContractUpgrades)
+		get("/contracts/{id}/health-score", h.V2GetContractHealthScore)
+		get("/contracts/{id}/stream", h.V2StreamEvents)
+		get("/contracts/{id}/graph", h.V2ContractGraph)
+
+		// API keys (admin scope + admin role). These reuse the v1 handlers and
+		// are declared passthrough in docs/api-v2.md.
+		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
+		r.With(scope, admin).Post("/api-keys", h.CreateAPIKey)
+		r.With(scope, admin).Get("/api-keys/{id}", h.GetAPIKey)
+		r.With(scope, admin).Delete("/api-keys/{id}", h.RevokeAPIKey)
+		r.With(scope, admin).Post("/api-keys/{id}/rotate", h.RotateAPIKey)
+
+		// Admin surface, mirroring v1 so v2 has a 1:1 route map.
+		r.With(admin).Route("/admin", func(r chi.Router) {
+			r.Get("/keys", h.ListAPIKeys)
+			r.Post("/keys", h.CreateAPIKey)
+			r.Get("/keys/{id}", h.GetAPIKey)
+			r.Delete("/keys/{id}", h.RevokeAPIKey)
+			r.Post("/keys/{id}/rotate", h.RotateAPIKey)
+		})
+
+		// Watchlist
+		r.Route("/watchlist", func(r chi.Router) {
+			r.Post("/", h.V2AddToWatchlist)
+			r.Delete("/{contractId}", h.V2RemoveFromWatchlist)
+			r.Get("/", h.V2ListWatchlist)
+			r.Get("/{contractId}/status", h.V2WatchlistStatus)
+		})
+
+		// Watchdog
+		get("/watchdog/stats", h.V2WatchdogStats)
+		get("/watchdog/alerts", h.V2ListWatchdogAlerts)
+		get("/watchdog/contracts", h.V2ListMonitoredContracts)
+		get("/watchdog/contracts/{id}", h.V2GetMonitoredContract)
+		get("/watchdog/contracts/{id}/health", h.V2ListHealthChecks)
+		get("/watchdog/contracts/{id}/alerts", h.V2ListWatchdogAlerts)
 	})
 
 	return r

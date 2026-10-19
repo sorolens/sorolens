@@ -1,7 +1,20 @@
 import { expect, type Page, type Route } from "@playwright/test";
 
+// A well-formed Soroban contract id: exactly 56 characters, leading 'C',
+// A-Z0-9 only. The tracking wizard validates this client-side (issue #140), so
+// the fixture has to be the right length.
 export const CONTRACT_ID =
-  "CAVRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C33";
+  "CAVRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5";
+
+// Well-formed 64-hex transaction hashes for the cross-contract call-trace
+// fixture (issue #264). The dashboard validates this shape client-side, so the
+// fixture has to be the right length as well as valid hex.
+export const TRACE_TX_HASH =
+  "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
+
+// A second valid transaction hash, used by the newer live event.
+export const NEWER_TRACE_TX_HASH =
+  "b1c2d3e4f5061728394a5b6c7d8e9f01b1c2d3e4f5061728394a5b6c7d8e9f01";
 
 type Handler = (
   route: Route,
@@ -14,18 +27,75 @@ type Handler = (
 /** Overridable per-endpoint handlers, matched by pathname substring. */
 export function defaultHandlers(): Record<string, Handler> {
   return {
+    // Workspace session mint (issue #518). The dashboard sends the returned
+    // token as a bearer credential on identity-scoped calls.
+    "api/v1/auth/session": () => ({
+      status: 201,
+      body: {
+        user_id: "user_e2e",
+        token: "sls_e2e_test_token",
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    }),
     "watchdog/contracts/": defaultContract,
     "watchdog/contracts": () => ({
       status: 200,
       body: { contracts: [monitoredContract()], next_cursor: "" },
     }),
     "watchdog/alerts": () => ({ status: 200, body: { alerts: [] } }),
-    "watchdog/stats": () => ({ status: 200, body: watchdogStats() }),
-    "contracts/": defaultContract,
-    contracts: () => ({
+    // Grouped, deduplicated alert feed (GET /api/v1/alerts, issue #269).
+    // Keyed on "api/v1/alerts" so it never shadows "watchdog/alerts": handler
+    // lookup is by pathname substring and /api/v1/watchdog/alerts does not
+    // contain "api/v1/alerts".
+    "api/v1/alerts": () => ({
       status: 200,
-      body: { contracts: [contractSummary()], cursor: null, has_more: false },
+      body: { groups: [], next_cursor: "" },
     }),
+    "watchdog/stats": () => ({ status: 200, body: watchdogStats() }),
+    // Must precede "contracts/" so the wizard's pre-flight check is not answered
+    // by the contract-detail handler.
+    "contracts/validate": (route) => {
+      if (route.request().method() !== "POST") {
+        return { status: 404, body: { error: "not mocked" } };
+      }
+      return {
+        status: 200,
+        body: {
+          valid: true,
+          contract_id: CONTRACT_ID,
+          network: "testnet",
+          already_tracked: false,
+          label: null,
+          reason: null,
+        },
+      };
+    },
+    // Live dashboard feeds (#139).
+    "events/recent": () => ({
+      status: 200,
+      body: { events: [contractEvent()] },
+    }),
+    "stats/activity": () => ({
+      status: 200,
+      body: {
+        minutes: 30,
+        window_start: "2026-07-03T08:00:00Z",
+        contracts: [contractEventRate()],
+      },
+    }),
+    // Must precede "contracts/": the contract page's changelog panel (#601)
+    // expects an array, not the contract-detail body.
+    "/changelog": () => ({ status: 200, body: [] }),
+    "contracts/": defaultContract,
+    contracts: (route) => {
+      if (route.request().method() === "POST") {
+        return { status: 201, body: contractSummary() };
+      }
+      return {
+        status: 200,
+        body: { contracts: [contractSummary()], cursor: null, has_more: false },
+      };
+    },
     "stats/global": () => ({
       status: 200,
       body: {
@@ -35,26 +105,30 @@ export function defaultHandlers(): Record<string, Handler> {
         total_storage_entries: 128,
       },
     }),
+    // Cross-contract call trace for a transaction (issue #264).
+    "invocations/": () => ({ status: 200, body: traceResponse() }),
   };
 }
 
 function defaultContract(route: Route): { status: number; body: unknown } {
   const path = new URL(route.request().url()).pathname;
+  const qs = new URL(route.request().url()).searchParams;
   if (path.endsWith("/events")) {
     return {
       status: 200,
-      body: { events: [contractEvent()], cursor: null, has_more: false },
+      body: { events: [contractEvent()], next_cursor: "" },
+    };
+  }
+  if (path.endsWith("/invocations")) {
+    return {
+      status: 200,
+      body: { invocations: [contractInvocation()], next_cursor: "" },
     };
   }
   if (path.endsWith("/storage")) {
     return {
       status: 200,
-      body: {
-        current_ledger: 42,
-        entries: [storageEntry()],
-        cursor: null,
-        has_more: false,
-      },
+      body: { storage: [storageEntry()], next_cursor: "" },
     };
   }
   if (path.endsWith("/stats")) {
@@ -65,6 +139,19 @@ function defaultContract(route: Route): { status: number; body: unknown } {
   }
   if (path.endsWith("/snapshot")) {
     return { status: 404, body: { error: "not found" } };
+  }
+  if (path.endsWith("/uptime")) {
+    const window = qs.get("window") ?? "24h";
+    return {
+      status: 200,
+      body: { contract_id: CONTRACT_ID, window, uptime_pct: 99.85 },
+    };
+  }
+  if (path.endsWith("/health")) {
+    return { status: 200, body: { health_checks: [] } };
+  }
+  if (path.endsWith("/alerts")) {
+    return { status: 200, body: { alerts: [] } };
   }
   return { status: 200, body: contractDetail() };
 }
@@ -113,6 +200,97 @@ export function emptyWatchdogHandlers(): Record<string, Handler> {
   return {
     "watchdog/contracts": emptyWatchdogContracts,
     "watchdog/alerts": emptyWatchdogAlerts,
+    "api/v1/alerts": () => ({
+      status: 200,
+      body: { groups: [], next_cursor: "" },
+    }),
+  };
+}
+
+/**
+ * One deduplicated row from the grouped alert feed (GET /api/v1/alerts):
+ * count plus first/last seen bounds for a (contract, severity, rule) group.
+ */
+export function alertGroup(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    group_key: `${CONTRACT_ID}|Critical|`,
+    contract_id: CONTRACT_ID,
+    severity: "Critical",
+    rule: "",
+    count: 3,
+    dedupe_window_secs: 300,
+    first_seen: "2026-07-03T08:00:00Z",
+    last_seen: "2026-07-03T08:10:00Z",
+    last_message: "storage entry expiring",
+    backfill_eligible: false,
+    ...overrides,
+  };
+}
+
+/** A raw ContractAlert, as returned by the flat watchdog feed. */
+export function contractAlert(message: string) {
+  return {
+    contract_id: CONTRACT_ID,
+    severity: "Critical",
+    message,
+    ledger: 120_400,
+    tx_hash: TRACE_TX_HASH,
+    timestamp: "2026-07-03T08:10:00Z",
+  };
+}
+
+/**
+ * Watchdog contract-detail endpoints. The contract itself, its health-check
+ * history, and its alerts all live under `/watchdog/contracts/{id}`, so one
+ * handler branches on the path suffix.
+ */
+export function watchdogDetailHandlers(
+  healthChecks: unknown[]
+): Record<string, Handler> {
+  return {
+    "watchdog/contracts/": (route) => {
+      const url = new URL(route.request().url());
+      const path = url.pathname;
+      if (path.endsWith("/health")) {
+        return { status: 200, body: { health_checks: healthChecks } };
+      }
+      if (path.endsWith("/alerts")) {
+        return { status: 200, body: { alerts: [] } };
+      }
+      if (path.endsWith("/uptime")) {
+        const window = url.searchParams.get("window") ?? "24h";
+        return {
+          status: 200,
+          body: { contract_id: CONTRACT_ID, window, uptime_pct: 99.85 },
+        };
+      }
+      return { status: 200, body: monitoredContract() };
+    },
+  };
+}
+
+/** One saved bookmark row (GET /api/v1/watchlist). */
+export function watchlistItem(overrides: Record<string, unknown> = {}) {
+  return {
+    contract_id: CONTRACT_ID,
+    added_at: "2026-07-02T12:00:00Z",
+    ...overrides,
+  };
+}
+
+/** One alert-channel subscription (GET/POST /watchdog/subscriptions). */
+export function alertSubscription(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "sub_1",
+    contract_id: CONTRACT_ID,
+    channel_type: "slack",
+    webhook_url: "https://hooks.slack.com/services/T000/B000/xyz",
+    has_routing_key: false,
+    severity_filter: "Critical",
+    created_at: "2026-07-02T12:00:00Z",
+    updated_at: "2026-07-02T12:00:00Z",
+    ...overrides,
   };
 }
 
@@ -124,16 +302,15 @@ export function contractSummary() {
     status: "active",
     wasm_hash: "3c1b2d9f",
     added_at: "2026-07-02T10:15:00Z",
+    last_activity_at: "2026-07-02T10:14:00Z",
   };
 }
 
 export function contractDetail() {
   return {
     ...contractSummary(),
+    created_at_ledger: 119_000,
     backfill_complete_at: null,
-    sync: { last_ledger: 120_400, last_run_at: "2026-07-03T08:00:00Z" },
-    storage_entry_count: 128,
-    expiring_entry_count: 3,
   };
 }
 
@@ -151,12 +328,19 @@ export function monitoredContract() {
   };
 }
 
+/** A recent timestamp so activity windows always include the fixture. */
+function recentTimestamp(minutesAgo = 1): string {
+  return new Date(Date.now() - minutesAgo * 60 * 1000).toISOString();
+}
+
 export function contractEvent() {
   return {
     id: "evt_1",
+    contract_id: CONTRACT_ID,
+    network: "testnet",
     ledger: 120_400,
-    ledger_closed_at: "2026-07-03T08:00:00Z",
-    tx_hash: "a1b2c3",
+    ledger_closed_at: recentTimestamp(2),
+    tx_hash: TRACE_TX_HASH,
     type: "transfer",
     topic_decoded: [
       "transfer",
@@ -166,6 +350,87 @@ export function contractEvent() {
     value_decoded: { amount: 1000 },
     value_xdr: "AAAAAw==",
     in_successful_call: true,
+  };
+}
+
+/** A second, newer event, for ticker-update assertions. */
+export function newerContractEvent() {
+  return {
+    ...contractEvent(),
+    id: "evt_2",
+    ledger: 120_401,
+    ledger_closed_at: recentTimestamp(1),
+    tx_hash: NEWER_TRACE_TX_HASH,
+  };
+}
+
+/** One invocation, used by the contract detail's invocation chart. */
+export function contractInvocation() {
+  return {
+    tx_hash: TRACE_TX_HASH,
+    contract_id: CONTRACT_ID,
+    network: "testnet",
+    ledger: 120_400,
+    ledger_closed_at: recentTimestamp(3),
+    status: "SUCCESS",
+    function_name: "swap",
+    args_decoded: null,
+    result_decoded: null,
+    resource_fee_charged: 1200,
+    cpu_insn: 140_000,
+    mem_byte: 64_000,
+    ledger_read_byte: 2048,
+    ledger_write_byte: 512,
+  };
+}
+
+/**
+ * A transaction's cross-contract call tree, as returned by
+ * `GET /api/v1/invocations/{tx_hash}/trace` (issue #264). The root is the
+ * transaction's own invocation; `transfer` is a cross-contract sub-invocation.
+ */
+export function traceResponse() {
+  return {
+    tx_hash: TRACE_TX_HASH,
+    status: "SUCCESS",
+    network: "testnet",
+    ledger: 120_400,
+    root: {
+      span_id: "0",
+      contract_id: CONTRACT_ID,
+      function_name: "swap",
+      cpu: 0,
+      mem: 0,
+      fee_share: 0,
+      depth: 0,
+      children: [
+        {
+          span_id: "0.0",
+          parent_span_id: "0",
+          contract_id: CONTRACT_ID,
+          function_name: "transfer",
+          cpu: 0,
+          mem: 0,
+          fee_share: 100,
+          depth: 1,
+          children: [],
+        },
+      ],
+    },
+    edge_count: 1,
+    has_edges: true,
+    truncated: false,
+  };
+}
+
+/** One contract's live activity row, with a full 30-bucket series. */
+export function contractEventRate() {
+  return {
+    contract_id: CONTRACT_ID,
+    label: "Escrow DEX",
+    network: "testnet",
+    total: 6,
+    per_minute: [...Array(29).fill(0), 6],
   };
 }
 
@@ -185,14 +450,13 @@ export function storageEntry() {
 
 export function statsResponse() {
   return {
-    event_volume: [{ date: "2026-07-03", ledger: 120_400, count: 12 }],
-    invocation_count: [{ date: "2026-07-03", ledger: 120_400, count: 4 }],
-    stats: {
-      total_events: 5041,
-      total_invocations: 390,
-      storage_entry_count: 128,
-      expiring_entry_count: 3,
-    },
+    event_count: 5041,
+    invocation_count: 390,
+    storage_count: 128,
+    last_synced_ledger: 120_400,
+    window_event_count: 1200,
+    window_invocation_count: 90,
+    window_duration: "7d",
   };
 }
 

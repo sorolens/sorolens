@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Test artifacts
+coverage/
+test-results/
+playwright-report/
+
+# Caches
+.turbo/
+.cache/
+
+# Environment files
+.env
+.env.*
+
+# Lockfiles are generated and maintained by the package manager
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Generated or vendored code
+packages/go-client/internal/
+apps/api/internal/db/migrations/
+*.min.js
+*.min.css

@@ -42,6 +42,7 @@ import (
 // XDR discriminants used by this package (Protocol 20+).
 const (
 	ledgerEntryTypeContractData  = 6  // LedgerEntryType.CONTRACT_DATA
+	ledgerEntryTypeContractCode  = 7  // LedgerEntryType.CONTRACT_CODE
 	scAddressTypeContract        = 1  // SCAddressType.SCADDRESS_TYPE_CONTRACT
 	scvLedgerKeyContractInstance = 20 // SCValType.scvLedgerKeyContractInstance
 	scvContractInstance          = 19 // SCValType.scvContractInstance
@@ -105,6 +106,68 @@ func WasmHashFromInstanceEntry(entryXDR string) (hash string, ok bool) {
 		return "", false
 	}
 	return hex.EncodeToString(w), true
+}
+
+// ContractCodeKey builds the base64-encoded XDR LedgerKey that selects the
+// ContractCode entry holding the Wasm bytecode for the given 64-hex-char Wasm
+// hash (as returned by WasmHashFromInstanceEntry). Fetching that entry is how
+// the indexer obtains the contract's Wasm, which carries the SEP-48 spec
+// custom section.
+func ContractCodeKey(wasmHashHex string) (string, error) {
+	hash, err := hex.DecodeString(wasmHashHex)
+	if err != nil {
+		return "", fmt.Errorf("wasm: invalid wasm hash %q: %w", wasmHashHex, err)
+	}
+	if len(hash) != 32 {
+		return "", fmt.Errorf("wasm: wasm hash %q is %d bytes, want 32", wasmHashHex, len(hash))
+	}
+
+	buf := make([]byte, 0, 4+32)
+	buf = binary.BigEndian.AppendUint32(buf, ledgerEntryTypeContractCode)
+	buf = append(buf, hash...)
+
+	return base64.StdEncoding.EncodeToString(buf), nil
+}
+
+// WasmCodeFromCodeEntry extracts the raw Wasm bytecode from the base64-encoded
+// XDR of a CONTRACT_CODE ledger entry returned by getLedgerEntries. It returns
+// ok=false when the entry is not a decodable ContractCode entry.
+//
+// Wire layout:
+//
+//	u32 lastModifiedLedgerSeq
+//	u32 LedgerEntryType := CONTRACT_CODE = 7
+//	u32 ContractCodeEntryExt := 0 (void)
+//	opaque uint256[32] hash
+//	opaque code<>          (u32 length, then the Wasm bytes)
+func WasmCodeFromCodeEntry(entryXDR string) ([]byte, bool) {
+	raw, err := base64.StdEncoding.DecodeString(entryXDR)
+	if err != nil {
+		return nil, false
+	}
+
+	c := &cursor{buf: raw}
+	if _, ok := c.u32(); !ok { // lastModifiedLedgerSeq
+		return nil, false
+	}
+	if v, ok := c.u32(); !ok || v != ledgerEntryTypeContractCode {
+		return nil, false
+	}
+	if v, ok := c.u32(); !ok || v != 0 { // ContractCodeEntryExt (V0 = void)
+		return nil, false
+	}
+	if _, ok := c.bytes(32); !ok { // code hash
+		return nil, false
+	}
+	n, ok := c.u32()
+	if !ok {
+		return nil, false
+	}
+	code, ok := c.bytes(int(n))
+	if !ok {
+		return nil, false
+	}
+	return code, true
 }
 
 // ---- tiny XDR cursor -------------------------------------------------------
