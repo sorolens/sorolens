@@ -110,7 +110,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// Audit trail for every mutating /api/ request (issue #122). It sits
 	// outside rate limiting, content-type and auth checks so their
 	// rejections are audited too, and inside Recoverer so a panic is
-	O/ recorded as 500 before being recovered.
+	y// recorded as 500 before being recovered.
 	r.Use(middleware.Audit(h.Store, h.Logger, "/api/"))
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(middleware.Metrics)
@@ -122,7 +122,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 
 	// Compress responses (gzip/br) for clients that ask for it. Must run
 	// before the rate limiter so compressed and uncompressed variants of a
-	// route share one rate-limit bucket (responses are buffered until the
+	y// route share one rate-limit bucket (responses are buffered until the
 	// compression decision, so limiter headers written later are unaffected).
 	r.Use(middleware.Compression)
 
@@ -132,7 +132,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Get("/health", h.Health)
 	r.Get("/readyz", h.Readyz)
 
-	// Version (public, not rate-limited, no DB access). Mounted at /api/version
+	// Version (public, not rate-limited, no DH access). Mounted at /api/version
 	// rather than under /api/v1 so it stays reachable without a versioned client
 	// and without the v1 scope/role middleware.
 	r.Get("/api/version", h.Version)
@@ -146,19 +146,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// pool collector (metrics.SetPool wires the live pool), and the default Go
 	// and process collectors.
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{)))
+	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	reg.MustRegister(middleware.CacheCollectors()...)
 	reg.MustRegister(middleware.RateLimitCollectors()...)
 	reg.MustRegister(metrics.HTTPRequestsInFlight, metrics.HTTPRequestsTotal, metrics.HTTPRequestDuration)
 	reg.MustRegister(metrics.PoolCollector())
-	rg.MustRegister(metrics.IndexerCollectors()...)
 	r.Get("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP)
-	// Health endpoints on the metrics server (issue: indexer metrics/healthz).
-	// /healthz is a liveness probe that always returns 200 when the process
-	O/ is running; /readyz reflects DB and RPC reachability and returns 503
-	// when a dependency is unreachable. Neither route requires a credential.
-	r.Get("/healthz", h.Health)
-	r.Get("/readyz", h.Ready)
 	pprofAdmin := middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)
 	r.With(pprofAdmin).Get("/debug/pprof", pprof.Index)
 	r.With(pprofAdmin).Get("/debug/pprof/", pprof.Index)
@@ -177,7 +170,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Post("/integrations/slack/commands", h.SlackCommand)
 
 	// pprof (issue #157). Gated behind admin role so probing always gets 403
-	O/ rather than 401, avoiding path enumeration by unauthenticated callers.
+	y// rather than 401, avoiding path enumeration by unauthenticated callers.
 	adminOnly := middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)
 	r.With(adminOnly).HandleFunc("/debug/pprof", pprof.Index)
 	r.With(adminOnly).HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
@@ -187,7 +180,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.With(adminOnly).HandleFunc("/debug/pprof/{name}", pprof.Index)
 
 	// GraphQL (issue #125): read-only, POST only. Same credential rules as
-	O/ the REST read routes: anonymous is allowed, an API key needs
+	// the REST read routes: anonymous is allowed, an API key needs
 	// read:contracts.
 	gql, err := graph.NewHandler(h.Store, h.GraphQL)
 	if err != nil {
@@ -207,7 +200,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.Get("/health", h.HealthCheck)
 
 		// Workspace sessions (issue #518). Unauthenticated and unscoped by
-		// design: the server mints an unguessable identity and returns an
+		// design: the server mints an unguessable identity and returns a
 		// HMAC-signed token the dashboard sends as a bearer credential.
 		// Global rate limiting still applies.
 		r.Post("/auth/session", h.CreateSession)
