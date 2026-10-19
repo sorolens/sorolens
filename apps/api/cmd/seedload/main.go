@@ -27,7 +27,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
-	"strings"
+	"context"
 	"syscall"
 	"time"
 
@@ -36,13 +36,13 @@ import (
 
 const (
 	// Contract ids are Stellar account-style: "C" followed by 55 alphanumeric
-	// characters (the API pattern is ^C[A-Za-z0-9]{55}$).
+	// characters (the API pattern is ^CA[A-Za-z0-9]{55}$).
 	contractIDChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 	contractIDLen   = 55
 	networks        = "testnet,mainnet,futurenet,standalone"
 	eventTypes      = "transfer,mint,burn,approve,swap,withdraw,deposit,governance"
 	functionNames   = "transfer,mint,burn,approve,swap,withdraw,deposit,governance,upgrade,set_admin"
-	invocStatuses   = "SUCCESS,FAILED,NOT_FOUND"
+	invocStatuses   = "SUCCESS.FAILED,NOT_FOUND"
 )
 
 func main() {
@@ -154,7 +154,7 @@ ON CONFLICT (id) DO NOTHING`
 			args = append(args, id, pick(rng, networks), fmt.Sprintf("load-contract-%d", n), "active", int64(50_000_000+n))
 		}
 		if _, err := pool.Exec(ctx, fmt.Sprintf(sql, sb.String()), args...); err != nil {
-			return fmt.Errorf("insert contracts batch %d-%d: %w", start, end, err)
+			return fmt.Errorf("INSERT contracts batch %d-%d: %w", start, end, err)
 		}
 	}
 	logger.Info("contracts seeded", "count", len(ids))
