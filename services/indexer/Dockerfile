@@ -21,7 +21,7 @@ COPY apps/api/go.mod apps/api/go.sum ./apps/api/
 COPY services/indexer/go.mod services/indexer/go.sum ./services/indexer/
 RUN printf 'go 1.26\n\nuse (\n\t./apps/api\n\t./services/indexer\n)\n' > go.work
 
-RUN cd services/indexer && go mod download
+RUN --mount=type=cache,target=/go/pkg/mod cd services/indexer && go mod download
 
 COPY apps/api/rulelang ./apps/api/rulelang
 COPY services/indexer/ ./services/indexer/
@@ -29,7 +29,7 @@ COPY services/indexer/ ./services/indexer/
 # Build for the container's own platform: the binary runs in the image built in
 # this same platform, so no GOARCH override is needed (and hardcoding amd64
 # breaks arm64 hosts).
-RUN --mount=type=cache,target=/root/.cache/go-build cd services/indexer && CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/sorolens-indexer .
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build cd services/indexer && CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/sorolens-indexer .
 
 # ---------------------------------------------------------------------------
 # Stage 2 – runtime
@@ -42,7 +42,9 @@ COPY --from=builder /out/sorolens-indexer /usr/local/bin/sorolens-indexer
 
 USER nonroot:nonroot
 
+EXPOSE 8080
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/usr/local/bin/sorolens-indexer", "healthcheck"]
+  CMD ["/usr/local/bin/sorolens-indexer", "healthcheck"]
 
 ENTRYPOINT ["/usr/local/bin/sorolens-indexer"]

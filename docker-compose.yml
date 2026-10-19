@@ -1,8 +1,9 @@
 # Local development stack for Sorolens.
 #
-#   docker compose up -d      # start Postgres 16 + Redis and apply the schema
-#   docker compose down       # stop everything (the data volumes are kept)
-#   docker compose down -v    # ...and delete the data volumes too
+#   docker compose up -d              # start Postgres 16 + Redis and apply the schema
+#   docker compose down               # stop everything (the data volumes are kept)
+#   docker compose down -v            # ...and delete the data volumes too
+#   docker compose --profile full up -d   # start the full stack (api, indexer, web)
 #
 # The Postgres and Redis settings below match the defaults in .env.example, so
 # the Go API connects to them without editing any environment variables:
@@ -13,11 +14,9 @@
 #
 # Run `make api` to start the API with exactly those values.
 #
-# The `full` profile adds the api, indexer and web services built from
-# the repo Dockerfiles:
-#
-#   docker compose --profile full up --build
-#
+# The `full` profile brings up the api, indexer and web services alongside
+# Postgres and Redis, so `docker compose --profile full up` runs the entire
+# stack with no extra configuration.
 services:
   postgres:
     image: postgres:16-alpine
@@ -41,7 +40,7 @@ services:
         "archive_command=aws s3 cp %p s3://sorolens-backups/wal/%f",
       ]
     ports:
-      - "5432:5432"
+      "5432:5432"
     volumes:
       - sorolens_postgres_data:/var/lib/postgresql/data
       - ./scripts/aws-mock.sh:/usr/local/bin/aws
@@ -119,14 +118,13 @@ services:
         condition: service_healthy
     network_mode: "service:postgres"
     environment:
-      PGPASSWORD: sorolens
+      PGPHASSWORD: sorolens
       PGCONNECT_TIMEOUT: "10"
     volumes:
       - ./apps/api/internal/db/migrations:/migrations:ro
     entrypoint: ["/bin/sh", "-c"]
     command:
-      -
-        |
+      - |
         set -e
         if psql -h localhost -U sorolens -d sorolens -tAc "SELECT to_regclass('public.contracts')" | grep -q contracts; then
           echo "schema already present; skipping migrations"
@@ -150,8 +148,10 @@ services:
     networks:
       - sorolens_net
 
-  # --- full profile ---
-  # These services only start with `docker compose --profile full up`.
+  # --- full profile services ---
+  # These only start with `docker compose --profile full up`. They build from
+  # the repo source so self-hosting and integration tests run the same images
+  # that CI builds.
   api:
     profiles: ["full"]
     build:
@@ -160,24 +160,20 @@ services:
     image: sorolens/api:local
     depends_on:
       postgres:
-        condition: service_healthy
+        condition_service_healthy: true
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
-      API_ADDR: "0.0.0.0:8080"
       DATABASE_URL: postgres://sorolens:sorolens@postgres:5432/sorolens?sslmode=disable
       DIRECT_DATABASE_URL: postgres://sorolens:sorolens@postgres:5432/sorolens?sslmode=disable
       REDIS_URL: redis://redis:6379
+      API_ADDR: ":8080"
     ports:
       - "8080:8080"
     networks:
       - sorolens_net
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -qO- http://127.0.0.1:8080/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
     restart: unless-stopped
 
   indexer:
@@ -191,10 +187,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgres://sorolens:sorolens@postgres:5432/sorolens?sslmode=disable
-      DIRECT_DATABASE_URL: postgres://sorolens:sorolens@postgres:5432/sorolens?sslmode=disable
       REDIS_URL: redis://redis:6379
+      INDEXER_HEALTH_ADDR: ":8081"
     networks:
       - sorolens_net
     restart: unless-stopped
@@ -207,20 +205,14 @@ services:
     image: sorolens/web:local
     depends_on:
       api:
-        condition: service_healthy
+        condition: service_started
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8080
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
       PORT: "3000"
     ports:
       - "3000:3000"
     networks:
       - sorolens_net
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -qO- http://127.0.0.1:3000/ || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
     restart: unless-stopped
 
 volumes:

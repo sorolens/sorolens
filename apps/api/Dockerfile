@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1
 #
 # Build context: the monorepo root (.).
 #
@@ -69,9 +69,8 @@ USER nonroot:nonroot
 ENV PORT=8080
 EXPOSE 8080
 
-# Healthcheck against the /healthz endpoint using the distroless-friendly
-# built-in health probe (no shell/curl available in the image).
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+# Healthcheck hits the API's /health endpoint using the built-in probe binary.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD ["/usr/local/bin/sorolens-api", "healthcheck"]
 
 ENTRYPOINT ["/usr/local/bin/sorolens-api"]
