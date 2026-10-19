@@ -342,7 +342,7 @@ func (c *Client) doOnce(ctx context.Context, body []byte, result any) error {
 	if err != nil {
 		return &networkError{err: err}
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // close is best-effort
 
 	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 		io.Copy(io.Discard, resp.Body) //nolint:errcheck

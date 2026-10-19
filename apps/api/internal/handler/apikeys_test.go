@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -167,7 +168,7 @@ func TestAPIKeyInvalidOrRevokedIsUnauthorized(t *testing.T) {
 	}
 
 	// Revoke a valid key, then reuse it.
-	if err := ms.RevokeAPIKey(nil, "key-read-contracts"); err != nil {
+	if err := ms.RevokeAPIKey(context.Background(), "key-read-contracts"); err != nil {
 		t.Fatal(err)
 	}
 	w = doRequest(srv, http.MethodGet, "/api/v1/contracts", readContractsKey, "")

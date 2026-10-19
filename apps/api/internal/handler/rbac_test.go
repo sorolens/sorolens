@@ -64,12 +64,14 @@ func TestRBACRoleEndpointMatrix(t *testing.T) {
 // admin-scoped API key. The role check gates these routes independently of
 // the API key scope.
 func TestRBACAdminWritesOnlyForAdmin(t *testing.T) {
-	srv := newTestHandler(seedRBACUsers(t), true, true)
+	// Seed the RBAC users first, then build the handler under test on top of
+	// the admin-scoped store.
+	seedRBACUsers(t)
 
 	// Contributor armed with an admin-scoped key must still be denied the
 	// admin surface: roles gate these routes regardless of API key scope.
 	adminKeyStore := adminScopedStore(t)
-	srv = newTestHandler(adminKeyStore, true, true)
+	srv := newTestHandler(adminKeyStore, true, true)
 
 	w := doRequestAsUser(srv, http.MethodPost, "/api/v1/admin/keys", adminToken, contributorUser,
 		`{"name":"x","scopes":["read:watchdog"]}`)

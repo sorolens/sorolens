@@ -13,7 +13,7 @@ func TestOTelMiddleware(t *testing.T) {
 		t.Fatalf("InitTracer failed: %v", err)
 	}
 	if tp != nil {
-		defer tp.Shutdown(context.Background())
+		defer tp.Shutdown(context.Background()) //nolint:errcheck // best-effort shutdown
 	}
 
 	handler := OTelMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

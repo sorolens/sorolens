@@ -290,7 +290,7 @@ func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) e
 	}
 
 	br := s.pool.SendBatch(ctx, batch)
-	defer br.Close()
+	defer br.Close() //nolint:errcheck // batch results are consumed by the loop below
 	for range events {
 		if _, err := br.Exec(); err != nil {
 			return fmt.Errorf("batch insert events: %w", err)
@@ -327,7 +327,7 @@ func (s *postgresStore) BatchInsertInvocations(ctx context.Context, invocations 
 	}
 
 	br := s.pool.SendBatch(ctx, batch)
-	defer br.Close()
+	defer br.Close() //nolint:errcheck // batch results are consumed by the loop below
 	for range invocations {
 		if _, err := br.Exec(); err != nil {
 			return fmt.Errorf("batch insert invocations: %w", err)
@@ -432,7 +432,7 @@ func (s *postgresStore) UpsertStorageEntries(ctx context.Context, entries []Stor
 	}
 
 	br := s.pool.SendBatch(ctx, batch)
-	defer br.Close()
+	defer br.Close() //nolint:errcheck // batch results are consumed by the loop below
 	for range entries {
 		if _, err := br.Exec(); err != nil {
 			return fmt.Errorf("upsert storage entries: %w", err)

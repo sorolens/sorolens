@@ -56,11 +56,7 @@ func (h *Handler) ContractGraph(w http.ResponseWriter, r *http.Request) {
 	limit := 100
 	maxFetch := 1000
 
-	for {
-		if fetched >= maxFetch {
-			break
-		}
-
+	for fetched < maxFetch {
 		invocations, nextCursor, err := h.Store.ListInvocations(r.Context(), contractID, cursor, limit, store.InvocationFilters{})
 		if err != nil {
 			writeError(w, r, http.StatusInternalServerError, CodeInternal, err.Error())
@@ -120,12 +116,16 @@ func (h *Handler) ContractGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"nodes": nodes,
 		"edges": edges,
 		"metadata": map[string]interface{}{
 			"heuristic_used": true,
 			"warning":        "Edges are inferred from argument inspection due to lack of deep trace context.",
 		},
-	})
+	}); err != nil {
+		// Headers are already flushed, so the client almost certainly
+		// disconnected mid-stream; there is nothing left to write.
+		return
+	}
 }

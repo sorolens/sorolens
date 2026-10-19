@@ -134,9 +134,8 @@ func TestRegisterContractInvalidID(t *testing.T) {
 
 func TestRegisterContractSuccess(t *testing.T) {
 	srv := newTestHandler(seedRoleStore(t), true, true)
-	validID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB2" + "22"
 	// Use a well-formed 56-char contract ID starting with C
-	validID = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	validID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	body, _ := json.Marshal(map[string]string{
 		"id":      validID,
 		"network": "testnet",

@@ -12,12 +12,6 @@ import (
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
-const (
-	rateLimit  = 100.0
-	rateBurst  = 100
-	refillRate = rateLimit / 60.0 // tokens per second
-)
-
 type RedisClient interface {
 	Incr(ctx context.Context, key string) (int64, error)
 	Expire(ctx context.Context, key string, expiration time.Duration) (bool, error)
@@ -92,7 +86,7 @@ func RateLimit(rc RedisClient, lookup APIKeyLookup) func(http.Handler) http.Hand
 				return
 			}
 			if count == 1 {
-				rc.Expire(r.Context(), redisKey, time.Minute)
+				_, _ = rc.Expire(r.Context(), redisKey, time.Minute)
 			}
 
 			if count > int64(limit) {

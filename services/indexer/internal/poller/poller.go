@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
@@ -49,6 +51,19 @@ type Config struct {
 	// MaxDuration is the wall-clock budget for a single once-mode pass.
 	// If a pass exceeds this, the poller logs a warning and exits cleanly.
 	MaxDuration time.Duration
+
+	// Concurrency is how many contracts a single pass indexes in parallel
+	// (the semaphore size, ROADMAP v0.4 "indexer parallelism"). Values
+	// below 1 are treated as 1, i.e. the historical sequential behavior.
+	// Wired from INDEXER_CONCURRENCY.
+	Concurrency int
+	// RPCRateLimits is the per-network Soroban RPC request budget in
+	// requests per second, shared by every worker on that network. The ""
+	// key is the budget for networks without an explicit entry, and an
+	// entry of 0 disables limiting for that key (a "" entry of 0 disables
+	// limiting entirely). A nil map falls back to DefaultRPCRateRPS for
+	// every network. Wired from INDEXER_RPC_RPS and INDEXER_RPC_RPS_<NETWORK>.
+	RPCRateLimits map[string]float64
 
 	// AnomalyEnabled turns the per-pass anomaly detection job on (default off;
 	// issue #136). Indexer main.go wires it via env.
@@ -121,8 +136,17 @@ func New(rpc RPCClient, store Store, redis RedisClient, cfg Config, log *slog.Lo
 // NewWithRPCClients returns a Poller that routes each contract to the RPC
 // client matching its network. Contracts with an unconfigured network are
 // skipped with a warning.
+//
+// Each client is wrapped in a shared per-network rate limiter built from
+// Config.RPCRateLimits, so concurrent workers on one network draw from the
+// same budget instead of multiplying their request rate by Concurrency.
 func NewWithRPCClients(rpcClients map[string]RPCClient, store Store, redis RedisClient, cfg Config, log *slog.Logger) *Poller {
-	return &Poller{rpcClients: rpcClients, store: store, redis: redis, cfg: cfg, log: log}
+	limiters := buildRateLimiters(cfg.RPCRateLimits)
+	limited := make(map[string]RPCClient, len(rpcClients))
+	for network, client := range rpcClients {
+		limited[network] = rateLimitedClient(client, limiterFor(limiters, network))
+	}
+	return &Poller{rpcClients: limited, store: store, redis: redis, cfg: cfg, log: log}
 }
 
 // Run starts the poller in the given mode.
@@ -183,6 +207,12 @@ func (p *Poller) runContinuous(ctx context.Context) error {
 }
 
 // processAll fetches and indexes events for every active contract.
+//
+// Contracts are fanned out under a semaphore: at most cfg.Concurrency
+// contracts are in flight at once (1 when Concurrency is unset, preserving
+// the sequential behavior). A contract that fails is logged and dropped so
+// one broken or slow contract can never block the rest of the pass; only a
+// failure to list contracts fails the pass itself.
 func (p *Poller) processAll(ctx context.Context) error {
 	// Ensure the next month's partition exists before processing.
 	if err := partition.EnsureNextMonthPartition(ctx, p.store); err != nil {
@@ -222,6 +252,13 @@ func (p *Poller) processAll(ctx context.Context) error {
 	// Track contracts deployed by watched accounts first so they are
 	// indexed in this same pass (issue #123).
 	p.runDiscovery(ctx)
+
+	// Semaphore size: g.SetLimit makes g.Go block once the limit is reached,
+	// so the fan-out can never spawn unbounded goroutines.
+	limit := p.cfg.Concurrency
+	if limit < 1 {
+		limit = 1
+	}
 
 	var cursor string
 	for {

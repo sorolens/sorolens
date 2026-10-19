@@ -9,13 +9,6 @@ type rpcRequest struct {
 	Params  any    `json:"params"`
 }
 
-type rpcResponse[T any] struct {
-	JSONRPC string    `json:"jsonrpc"`
-	ID      int       `json:"id"`
-	Result  T         `json:"result,omitempty"`
-	Error   *RPCError `json:"error,omitempty"`
-}
-
 // RPCError is an application-level JSON-RPC error returned by the node.
 type RPCError struct {
 	Code    int    `json:"code"`

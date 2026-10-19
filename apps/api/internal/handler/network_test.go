@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,7 @@ const (
 func seedMultiNetworkStore(t *testing.T) *store.MockStore {
 	t.Helper()
 	ms := store.NewMockStore()
-	if err := ms.UpsertContract(nil, store.Contract{
+	if err := ms.UpsertContract(context.Background(), store.Contract{
 		ID:      netContractA,
 		Network: "testnet",
 		Label:   "testnet contract",
@@ -26,7 +27,7 @@ func seedMultiNetworkStore(t *testing.T) *store.MockStore {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ms.UpsertContract(nil, store.Contract{
+	if err := ms.UpsertContract(context.Background(), store.Contract{
 		ID:      netContractB,
 		Network: "mainnet",
 		Label:   "mainnet contract",
@@ -34,7 +35,7 @@ func seedMultiNetworkStore(t *testing.T) *store.MockStore {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ms.UpsertContract(nil, store.Contract{
+	if err := ms.UpsertContract(context.Background(), store.Contract{
 		ID:      "CFUTURENETCONTRACT0000000000000000000000000000000000000",
 		Network: "futurenet",
 		Label:   "futurenet contract",
@@ -45,7 +46,7 @@ func seedMultiNetworkStore(t *testing.T) *store.MockStore {
 
 	// Two events on the same contract, one per network, so the network
 	// filter is exercised independently of the contract.
-	if err := ms.BatchInsertEvents(nil, []store.Event{
+	if err := ms.BatchInsertEvents(context.Background(), []store.Event{
 		{
 			ID: "evt-testnet", ContractID: netContractA, Network: "testnet",
 			Ledger: 100, LedgerClosedAt: time.Now().UTC(), TxHash: "tx1", Type: "contract",
@@ -58,13 +59,13 @@ func seedMultiNetworkStore(t *testing.T) *store.MockStore {
 		t.Fatal(err)
 	}
 
-	if err := ms.UpsertMonitoredContract(nil, store.MonitoredContract{
+	if err := ms.UpsertMonitoredContract(context.Background(), store.MonitoredContract{
 		ContractID: "CWATCHTESTNET", Network: "testnet", Name: "tn", Owner: "G",
 		Status: "Healthy", RegisteredAt: time.Now().UTC(),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ms.UpsertMonitoredContract(nil, store.MonitoredContract{
+	if err := ms.UpsertMonitoredContract(context.Background(), store.MonitoredContract{
 		ContractID: "CWATCHMAINNET", Network: "mainnet", Name: "mn", Owner: "G",
 		Status: "Degraded", RegisteredAt: time.Now().UTC(),
 	}); err != nil {

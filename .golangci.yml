@@ -1,10 +1,13 @@
+version: "2"
+
 run:
   timeout: 5m
 
+# golangci-lint v2 merged `gosimple` into `staticcheck`, so the v1 five
+# (errcheck, govet, staticcheck, gosimple, unused) are these four.
 linters:
   enable:
     - errcheck
     - govet
     - staticcheck
-    - gosimple
     - unused

@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +16,7 @@ const snapshotContract = "CSNAPSHOTCONTRACT0000000000000000000000000000000000000
 func seedSnapshotStore(t *testing.T) *store.MockStore {
 	t.Helper()
 	ms := store.NewMockStore()
-	if err := ms.UpsertContract(nil, store.Contract{
+	if err := ms.UpsertContract(context.Background(), store.Contract{
 		ID:      snapshotContract,
 		Network: "testnet",
 		Status:  "active",
@@ -24,7 +25,7 @@ func seedSnapshotStore(t *testing.T) *store.MockStore {
 	}
 
 	// The contract was first tracked at ledger 1000.
-	if err := ms.BatchInsertEvents(nil, []store.Event{
+	if err := ms.BatchInsertEvents(context.Background(), []store.Event{
 		{
 			ID: "e1", ContractID: snapshotContract, Network: "testnet",
 			Ledger: 1000, LedgerClosedAt: time.Now().UTC(), TxHash: "tx1", Type: "contract",
@@ -41,7 +42,7 @@ func seedSnapshotStore(t *testing.T) *store.MockStore {
 
 	// key1 was written at 1000 then overwritten at 3000.
 	// key2 only appeared at 3000.
-	if err := ms.UpsertStorageEntries(nil, []store.StorageEntry{
+	if err := ms.UpsertStorageEntries(context.Background(), []store.StorageEntry{
 		{
 			ContractID: snapshotContract, Network: "testnet", KeyXDR: "key1",
 			ValueXDR: "v1", Durability: "persistent",

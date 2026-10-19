@@ -71,7 +71,7 @@ func main() {
 		os.Exit(1)
 	}
 	redisClient := redis.NewClient(redisOpts)
-	defer redisClient.Close()
+	defer redisClient.Close() //nolint:errcheck // best-effort close on shutdown
 
 	// Source verification runs builds on the API host, so it is only wired in
 	// the long-running server (not the Vercel serverless entrypoint) and is

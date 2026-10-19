@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,14 +14,14 @@ import (
 func seededUpgradeStore(t *testing.T) *store.MockStore {
 	t.Helper()
 	ms := store.NewMockStore()
-	if err := ms.UpsertContract(nil, store.Contract{ID: "CONTRACT_A", Network: "testnet", Status: "active"}); err != nil {
+	if err := ms.UpsertContract(context.Background(), store.Contract{ID: "CONTRACT_A", Network: "testnet", Status: "active"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, u := range []store.ContractUpgrade{
 		{ContractID: "CONTRACT_A", FromHash: "aaa", ToHash: "bbb", Ledger: 300, TxHash: "tx_older", At: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
 		{ContractID: "CONTRACT_A", FromHash: "bbb", ToHash: "ccc", Ledger: 500, TxHash: "tx_newer", At: time.Date(2025, 1, 3, 0, 0, 0, 0, time.UTC)},
 	} {
-		if err := ms.InsertContractUpgrade(nil, u); err != nil {
+		if err := ms.InsertContractUpgrade(context.Background(), u); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -86,7 +87,7 @@ func TestListContractUpgrades_NotFound(t *testing.T) {
 
 func TestListContractUpgrades_EmptyHistory(t *testing.T) {
 	ms := store.NewMockStore()
-	if err := ms.UpsertContract(nil, store.Contract{ID: "CONTRACT_A", Network: "testnet", Status: "active"}); err != nil {
+	if err := ms.UpsertContract(context.Background(), store.Contract{ID: "CONTRACT_A", Network: "testnet", Status: "active"}); err != nil {
 		t.Fatal(err)
 	}
 	srv := newTestHandler(ms, true, true)

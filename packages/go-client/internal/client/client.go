@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 )
@@ -228,23 +227,4 @@ func withBearerToken(token string) ClientOption {
 		req.Header.Set("Authorization", "Bearer "+token)
 		return nil
 	})
-}
-
-// decodeError is a convenience helper that maps a non-2xx response to a
-// descriptive error carrying the HTTP status. Many callers only care about
-// the overall outcome, so this keeps the generated verbose types out of
-// their way.
-func decodeError(status string, body []byte) error {
-	if status == "" {
-		return errors.New("go-client: empty HTTP response")
-	}
-	return fmt.Errorf("go-client: API returned %s: %s", status, truncate(body, 200))
-}
-
-func truncate(b []byte, n int) string {
-	s := string(b)
-	if len(s) > n {
-		return s[:n] + "..."
-	}
-	return s
 }

@@ -25,12 +25,17 @@ import (
 	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
 )
 
+// defaultConcurrency is the default INDEXER_CONCURRENCY: how many contracts a
+// single indexer pass processes in parallel. Values below 1 fall back to
+// sequential processing inside the poller.
+const defaultConcurrency = 4
+
 func main() {
 	defer reportPanic()
 
 	tp, _ := poller.InitTracer()
 	if tp != nil {
-		defer tp.Shutdown(context.Background())
+		defer tp.Shutdown(context.Background()) //nolint:errcheck // best-effort shutdown
 	}
 
 	mode := flag.String("mode", "once", "Run mode: once or continuous")
@@ -70,6 +75,8 @@ func main() {
 		LedgerWindow:         uint32(*ledgerWindow),
 		PollInterval:         *pollInterval,
 		MaxDuration:          *maxDuration,
+		Concurrency:          envInt("INDEXER_CONCURRENCY", defaultConcurrency),
+		RPCRateLimits:        rpcRateLimits(),
 		AnomalyEnabled:       envBool("INDEXER_ANOMALY_ENABLED", false),
 		AnomalyLookbackHours: envInt("INDEXER_ANOMALY_LOOKBACK_HOURS", 168),
 		AnomalySigma:         envFloat("INDEXER_ANOMALY_SIGMA", 3),
@@ -409,6 +416,21 @@ func envString(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// rpcRateLimits builds the per-network Soroban RPC budget (requests per
+// second) from INDEXER_RPC_RPS and its per-network overrides. Networks
+// without an override inherit the global value, and 0 disables limiting.
+func rpcRateLimits() map[string]float64 {
+	global := envFloat("INDEXER_RPC_RPS", poller.DefaultRPCRateRPS)
+	limits := map[string]float64{"": global}
+	for _, network := range []string{"testnet", "mainnet", "futurenet"} {
+		key := "INDEXER_RPC_RPS_" + strings.ToUpper(network)
+		if os.Getenv(key) != "" {
+			limits[network] = envFloat(key, global)
+		}
+	}
+	return limits
 }
 
 // envBool reads a boolean env var with a default.

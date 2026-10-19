@@ -36,15 +36,15 @@ const (
 // RawEvent is the minimal shape of a Soroban event the classifier needs.
 // The poller can provide it without importing the full store package.
 type RawEvent struct {
-	ContractID       string
-	Ledger           int64
-	LedgerClosedAt   time.Time
-	TxHash           string
+	ContractID     string
+	Ledger         int64
+	LedgerClosedAt time.Time
+	TxHash         string
 	// Decoded topic ScVals as strings; first topic is the event type, second
 	// is the monitored contract id, third (when present) is severity.
-	Topics           []string
+	Topics []string
 	// Decoded value payload, keyed by field name from the Rust struct.
-	Value            map[string]any
+	Value map[string]any
 }
 
 // ClassifyKind returns the EventKind for a raw event by inspecting its first

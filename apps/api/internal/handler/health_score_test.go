@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -15,10 +16,10 @@ import (
 func seededHealthScoreStore(t *testing.T, contractID string) *store.MockStore {
 	t.Helper()
 	ms := store.NewMockStore()
-	if err := ms.UpsertContract(nil, store.Contract{ID: contractID, Network: "testnet", Status: "active"}); err != nil {
+	if err := ms.UpsertContract(context.Background(), store.Contract{ID: contractID, Network: "testnet", Status: "active"}); err != nil {
 		t.Fatal(err)
 	}
-	err := ms.UpsertContractHealthScore(nil, store.ContractHealthScore{
+	err := ms.UpsertContractHealthScore(context.Background(), store.ContractHealthScore{
 		ContractID:           contractID,
 		Score:                73,
 		ComponentUptime:      80,
@@ -88,7 +89,7 @@ func TestGetContractHealthScore_UnknownContract(t *testing.T) {
 
 func TestGetContractHealthScore_NotYetComputed(t *testing.T) {
 	ms := store.NewMockStore()
-	if err := ms.UpsertContract(nil, store.Contract{ID: "CONTRACT_B", Network: "testnet", Status: "active"}); err != nil {
+	if err := ms.UpsertContract(context.Background(), store.Contract{ID: "CONTRACT_B", Network: "testnet", Status: "active"}); err != nil {
 		t.Fatal(err)
 	}
 	srv := newTestHandler(ms, true, true)

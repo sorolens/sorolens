@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -43,7 +44,7 @@ func seedForecastStore(days int) *store.MockStore {
 		// zero-fill aggregation.
 		n := 1 + i%3
 		for j := 0; j < n; j++ {
-			ms.BatchInsertInvocations(nil, []store.Invocation{{
+			_ = ms.BatchInsertInvocations(context.Background(), []store.Invocation{{
 				TxHash:             "tx-forecast-" + day.Format("20060102") + "-" + string(rune('a'+j)),
 				ContractID:         forecastContractID,
 				Network:            "testnet",
@@ -53,7 +54,7 @@ func seedForecastStore(days int) *store.MockStore {
 				ResourceFeeCharged: 100000 + int64(i*1000),
 			}})
 		}
-		ms.BatchInsertEvents(nil, []store.Event{{
+		_ = ms.BatchInsertEvents(context.Background(), []store.Event{{
 			ID:             "e-" + day.Format("20060102"),
 			ContractID:     forecastContractID,
 			Network:        "testnet",

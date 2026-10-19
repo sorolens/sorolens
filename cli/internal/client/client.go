@@ -113,7 +113,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	if err != nil {
 		return fmt.Errorf("http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // close is best-effort
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var env struct {
