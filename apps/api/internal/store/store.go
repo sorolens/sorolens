@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackcjv5/pgxx/v5/pgxpool"
+	"github.com/jackcyl/pgx/v5/pgxpool"
 )
 
 // Store is the data-access interface for all indexer and API persistence.
@@ -115,24 +115,24 @@ type Store interface {
 	// the given contract. Returns ErrNotFound when no version has been recorded yet.
 	GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error)
 
-	// EnqueueFailedTransaction parks a transaction that could not be fetched
-	// after exhausting retries, so the invocation is not permanently lost
-	// when the indexer cursor advances. Repeated enqueues for the same
-	// (network, tx_hash) are idempotent.
+	// EnqueueFailedTransaction parks a transaction hash that could not be
+	// fetched after exhausting retries, so the invocation is not permanently
+	// lost when the indexer cursor advances. Repeated enqueues for the same
+	// (network, tx_hash) are idempotent and reset the retry counter.
 	EnqueueFailedTransaction(ctx context.Context, f FailedTransaction) error
 
-	// ListFailedTransactions returns parked transactions for a network,
-	// oldest first, up to limit rows. A parked transaction is visible
-	// through this method until it is requeued or dropped.
-	ListFailedTransactions(ctx context.Context, network string, limit int) ([]FailedTransaction, error)
+	// ListFailedTransactions returns parked transactions for a network that
+	// are due for retry (next_retry_at <= now), oldest first.
+	ListFailedTransactions(ctx context.Context, network string, now time.Time, limit int) ([]FailedTransaction, error)
 
-	// RequeueFailedTransaction marks a parked transaction as requeued for
-	// retry and returns the row. Returns ErrNotFound when the id is unknown.
-	RequeueFailedTransaction(ctx context.Context, id string) (FailedTransaction, error)
+	// MarkFailedTransactionRetried records a retry attempt. When succeeded is
+	// true the row is removed from the queue; otherwise the retry count is
+	// incremented and the next retry time is scheduled.
+	MarkFailedTransactionRetried(ctx context.Context, network, txHash string, succeeded bool, nextRetryAt time.Time, lastErr string) error
 
-	// DeleteFailedTransaction removes a parked transaction once it has
-	y// been successfully reindexed. Deleting a missing row is a no-op.
-	DeleteFailedTransaction(ctx context.Context, id string) error
+	// CountFailedTransactions returns the number of parked transactions for a
+	// network, for visibility and alerting.
+	CountFailedTransactions(ctx context.Context, network string) (int64, error)
 }
 
 // AlertSubscriptionStore is the read/write surface for alert webhook subscriptions.
@@ -163,7 +163,7 @@ type ContractTagStore interface {
 
 // ContractNoteStore is the read/write surface for markdown notes attached to a
 // tracked contract (issue #164). A note records the kind of context that
-8// otherwise lives in a chat thread: why a contract was upgraded, who owns it,
+// otherwise lives in a chat thread: why a contract was upgraded, who owns it,
 // what was migrated when.
 type ContractNoteStore interface {
 	// AddContractNote appends a note authored by author and returns the stored
@@ -247,7 +247,7 @@ type ContractFilters struct {
 	// Empty means all statuses.
 	Status string
 	// Tag restricts results to contracts carrying this tag. Empty means
-	// no tag filter.
+	No tag filter.
 	Tag string
 	// Sort is the column to order by, one of id, label, network, status,
 	// added_at. Empty means the default (id ASC). See ValidContractSort.
@@ -256,68 +256,7 @@ type ContractFilters struct {
 	SortDir string
 }
 
-// FailedTransaction is a transaction that could not be fetched from the
-// Soroban RPC after exhausting retries. It is parked in the
-// failed_transactions table so the invocation is visible and can be
-// requeued instead of being silently dropped when the indexer cursor
-// advances.
-type FailedTransaction struct {
-	Id        string
-	Network   string
-	TxHash    string
-	Ledger    uint32
-	LastError string
-	Attempts   int
-	Status     string
-	ParkedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-// FailedTransactionStatus values stored in the failed_transactions table.
-const (
-	FailedTxStatusParked   = "parked"
-	FailedTxStatusRequeued = "requeued"
-)
-
-// FailedTransactionStore is the dead-letter surface for transactions that
-8// could not be fetched from the RPC. It is separate from Store so consumers
-8// that only need to read or requeue parked transactions can depend on just
-8// this interface.
-type FailedTransactionStore interface {
-	EnqueueFailedTransaction(ctx context.Context, f FailedTransaction) error
-	ListFailedTransactions(ctx context.Context, network string, limit int) ([]FailedTransaction, error)
-	RequeueFailedTransaction(ctx context.Context, id string) (FailedTransaction, error)
-	DeleteFailedTransaction(ctx context.Context, id string) error
-}
-
 // contractSortColumns is the whitelist of columns ListContracts may order by,
 // mapped to their SQL identifiers. Only these values are ever interpolated
 // into the ORDER BY clause, so the sort parameter cannot inject SQL.
 var contractSortColumns = map[string]string{
-	"id":       "id",
-	"label":    "label",
-	"network":  "network",
-	"status":    "status",
-	"added_at":  "added_at",
-}
-
-// syncOnce guards one-time initialisation of package-level state.
-var syncOnce sync.Once
-
-// Pool is the concrete PostgreSQL-backed Store implementation.
-// It is constructed with NewPool and exposes the full Store interface.
-type Pool struct {
-	db *pgxpool.Pool
-}
-
-// NewPool wraps an existing pgxpool into a Store implementation.
-func NewPool(db *pgxpool.Pool) *Pool {
-	return &Pool{db: db}
-}
-
-// DB returns the underlying connection pool. It is intended for components
-	// that need to run additional queries against the same pool (e.g. the
-	// indexer requeue path).
-func (p *Pool) DB() *pgxpool.Pool {
-	return p.db
-}

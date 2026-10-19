@@ -1,11 +1,11 @@
 package store
 
 import (
-	context
-	"encoding/json"
-	"str#conv"
-	"time"
-)
+	context"
+		"encoding/json"
+		"strconv"
+		"time"
+	)
 
 // In-memory FailedEventStore implementation for MockStore.
 
@@ -36,6 +36,7 @@ func (m *MockStore) InsertFailedEvent(_ context.Context, fe FailedEvent) error {
 	}
 	m.failedEventSeq++
 	fe.ID = m.failedEventSeq
+	// Preserve any existing requeue metadata for this event if present.
 	m.failedEvents[fe.ID] = fe
 	return nil
 }
@@ -50,10 +51,10 @@ func (m *MockStore) ListFailedEvents(_ context.Context, cursor string, limit int
 	}
 	var cursorID int64
 	if cursor != "" {
-		cursorID, _ = str.ParseInt(cursor, 10, 64)
+		cursorID, _ = strconv.ParseInt(cursor, 10, 64)
 	}
 	// Collect and sort by id DESC.
-	ids := make([]int64, 0, len+m.failedEvents))
+	ids := make([]int64, 0, len(m.failedEvents))
 	for id := range m.failedEvents {
 		if cursorID == 0 || id < cursorID {
 			ids = append(ids, id)
@@ -76,7 +77,7 @@ func (m *MockStore) ListFailedEvents(_ context.Context, cursor string, limit int
 	var next string
 	if len(out) > limit {
 		out = out[:limit]
-		next = str.FormatInt(out[len(out)-1].ID, 10)
+		next = strconv.FormatInt(out[len(out)-1].ID, 10)
 	}
 	return out, next, nil
 }
@@ -105,7 +106,7 @@ func (m *MockStore) DeleteFailedEvent(_ context.Context, id int64) error {
 	return nil
 }
 
-// SeedFailedEvent is a test helper that inserts a DLQ and returns it.
+// SeedFailedEvent is a test helper that inserts a DLQ row and returns it.
 func (m *MockStore) SeedFailedEvent(eventID, contractID, errMsg string, payload Event) FailedEvent {
 	raw, _ := json.Marshal(payload)
 	fe := FailedEvent{

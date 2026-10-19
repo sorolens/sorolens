@@ -1,7 +1,6 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,20 +24,6 @@ type FailedEvent struct {
 	CreatedAt    time.Time
 }
 
-// TransactionFailure is one parked getTransaction failure (issue #<this issue>).
-// Unlike FailedEvent, the payload here is a transaction hash that could not be
-// fetched from the RPC, so requeue re-fetches the transaction and re-indexes it.
-type TransactionFailure struct {
-	ID           int64
-	TxHash       string
-	ContractID   string
-	Network      string
-	Ledger       int64
-	ErrorMessage string
-	Attempts     int
-	CreatedAt    time.Time
-}
-
 // FailedEventStore is the read/write surface for the event DLQ.
 // Kept as its own interface so the API and indexer adapter can be
 // wired independently, mirroring HealthScoreStore.
@@ -55,22 +40,13 @@ type FailedEventStore interface {
 	GetFailedEvent(ctx context.Context, id int64) (FailedEvent, error)
 	// DeleteFailedEvent removes a DLQ row (used after successful requeue).
 	DeleteFailedEvent(ctx context.Context, id int64) error
-}
-
-// TransactionFailureStore is the read/write surface for the getTransaction
-// retry/park table (issue #<this issue>). It mirrors FailedEventStore so the
-// indexer can park exhausted getTransaction calls and a requeue path can
-// drain them later.
-type TransactionFailureStore interface {
-	// InsertTransactionFailure parks a tx hash that exhausted retries.
-	// On conflict of tx_hash the existing row is updated with the latest
-	// error, ledger and attempt count.
-	InsertTransactionFailure(ctx context.Context, tf TransactionFailure) error
-	// ListTransactionFailures returns parked rows oldest-first (FIFO for
-	// requeue). limit defaults to 50.
-	ListTransactionFailures(ctx context.Context, limit int) ([]TransactionFailure, error)
-	// DeleteTransactionFailure removes a parked row after successful requeue.
-	DeleteTransactionFailure(ctx context.Context, id int64) error
+	// GetFailedEventByEventID returns one DLQ row by its event_id.
+	// Used by the indexer to check whether a transaction was already
+	// parked before re-attempting it.
+	GetFailedEventByEventID(ctx context.Context, eventID string) (FailedEvent, error)
+	// IncrementFailedEventAttempts bumps the attempts counter on an
+	// existing DLQ row so requeue retries are observable.
+	IncrementFailedEventAttempts(ctx context.Context, id int64, errMsg string) error
 }
 
 // ---- postgres implementation ----------------------------------------------
@@ -101,79 +77,6 @@ func (s *postgresStore) InsertFailedEvent(ctx context.Context, fe FailedEvent) e
 	}
 	return nil
 }
-
-func (s *postgresStore) InsertTransactionFailure(ctx context.Context, tf TransactionFailure) error {
-	if tf.Attempts <= 0 {
-		tf.Attempts = 3
-	}
-	if tf.CreatedAt.IsZero() {
-		tf.CreatedAt = time.Now().UTC()
-	}
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO transaction_failures
-			(tx_hash, contract_id, network, ledger, error_message, attempts, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
-		ON CONFLICT (tx_hash) DO UPDATE SET
-			contract_id    = EXCLUDED.contract_id,
-			network        = EXCLUDED.network,
-			ledger         = EXCLUDED.ledger,
-			error_message  = EXCLUDED.error_message,
-			attempts       = EXCLUDED.attempts,
-			created_at     = EXCLUDED.created_at`,
-		tf.TxHash, tf.ContractID, networkOrDefault(tf.Network), tf.Ledger,
-		tf.ErrorMessage, tf.Attempts, tf.CreatedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("insert transaction failure: %w", err)
-	}
-	return nil
-}
-
-func (s *postgresStore) ListTransactionFailures(ctx context.Context, limit int) ([]TransactionFailure, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	rows, err := s.pool.Query(ctx, `
-		SELECT id, tx_hash, contract_id, network, ledger,
-		       error_message, attempts, created_at
-		FROM transaction_failures
-		ORDER BY id ASC
-		LIMIT $1`, limit)
-	if err != nil {
-		return nil, fmt.Errorf("list transaction failures: %w", err)
-	}
-	defer rows.Close()
-
-	var out []TransactionFailure
-	for rows.Next() {
-		var tf TransactionFailure
-		if err := rows.Scan(
-			&tf.ID, &tf.TxHash, &tf.ContractID, &tf.Network, &tf.Ledger,
-			&tf.ErrorMessage, &tf.Attempts, &tf.CreatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("scan transaction failure: %w", err)
-		}
-		out = append(out, tf)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (s *postgresStore) DeleteTransactionFailure(ctx context.Context, id int64) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM transaction_failures WHERE id = $1`, id)
-	if err != nil {
-		return fmt.Errorf("delete transaction failure: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// ensure bytes import is used by future payload helpers without churn.
-var _ = bytes.MinRead
 
 func (s *postgresStore) ListFailedEvents(ctx context.Context, cursor string, limit int) ([]FailedEvent, string, error) {
 	if limit <= 0 {
@@ -245,10 +148,46 @@ func (s *postgresStore) GetFailedEvent(ctx context.Context, id int64) (FailedEve
 	return fe, nil
 }
 
+func (s *postgresStore) GetFailedEventByEventID(ctx context.Context, eventID string) (FailedEvent, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, event_id, contract_id, network, event_payload,
+		       error_message, attempts, created_at
+		FROM failed_events
+		WHERE event_id = $1`, eventID)
+	var fe FailedEvent
+	err := row.Scan(
+		&fe.ID, &fe.EventID, &fe.ContractID, &fe.Network, &fe.EventPayload,
+		&fe.ErrorMessage, &fe.Attempts, &fe.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return FailedEvent{}, ErrNotFound
+	}
+	if err != nil {
+		return FailedEvent{}, fmt.Errorf("get failed event by event id: %w", err)
+	}
+	return fe, nil
+}
+
 func (s *postgresStore) DeleteFailedEvent(ctx context.Context, id int64) error {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM failed_events WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete failed event: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *postgresStore) IncrementFailedEventAttempts(ctx context.Context, id int64, errMsg string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE failed_events
+		SET attempts      = attempts + 1,
+		    error_message = $2,
+		    created_at    = $3
+		WHERE id = $1`, id, errMsg, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("increment failed event attempts: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
