@@ -5,7 +5,9 @@ const ID = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 
 describe("shortContractId", () => {
   it("truncates long contract IDs", () => {
-    expect(shortContractId(ID)).toBe("CDLZFC…GCYSC");
+    // Convention across the dashboard: first 6 … last 4 (see
+    // components/compare/ContractSelector.tsx, the contract layout headers).
+    expect(shortContractId(ID)).toBe("CDLZFC…CYSC");
   });
 
   it("keeps short IDs intact", () => {
@@ -54,9 +56,9 @@ describe("contractOgCard", () => {
   it("falls back gracefully without contract data", () => {
     const card = contractOgCard({ id: ID, label: null, network: null });
 
-    expect(card.title).toBe("Contract CDLZFC…GCYSC");
+    expect(card.title).toBe("Contract CDLZFC…CYSC");
     expect(card.subtitle).toBe("Soroban contract");
     expect(card.stats).toEqual([]);
-    expect(card.alt).toContain("Contract CDLZFC…GCYSC");
+    expect(card.alt).toContain("Contract CDLZFC…CYSC");
   });
 });

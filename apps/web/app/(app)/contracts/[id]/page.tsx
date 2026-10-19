@@ -137,7 +137,11 @@ function ContractDetailContent({ id }: { id: string }) {
       }
     }
 
-    load();
+    // On a 404 the catch above calls notFound(), which throws
+    // NEXT_NOT_FOUND to raise the not-found boundary. This effect's promise
+    // is floating — nothing can await it — so that one intentional throw must
+    // be handled here or it surfaces as an unhandled promise rejection.
+    load().catch(() => {});
     return () => {
       cancelled = true;
     };
