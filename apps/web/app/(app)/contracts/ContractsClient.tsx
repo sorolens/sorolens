@@ -496,7 +496,10 @@ export default function ContractsClient({
   });
 
   const contracts: ContractRow[] = data?.contracts ?? [];
-  const hasMore = data?.has_more ?? false;
+  // The API (docs/openapi.yaml) returns `next_cursor` and no `has_more`, so
+  // "there is another page" is exactly "the cursor came back non-empty".
+  const nextCursor = data?.next_cursor ?? "";
+  const hasMore = nextCursor !== "";
   const loading = isLoading;
   const loadFailed = !loading && Boolean(error);
 
@@ -535,7 +538,8 @@ export default function ContractsClient({
 
   const handleNext = () => {
     if (!hasMore || contracts.length === 0) return;
-    const nextCursor = contracts[contracts.length - 1].id;
+    // Continue from the API's opaque cursor, not a cursor invented client-side:
+    // the store expects the base64 keyset it returned as `next_cursor`.
     const newCursors = [...cursors.slice(0, cursorIndex + 1), nextCursor];
     setCursors(newCursors);
     setCursorIndex(cursorIndex + 1);

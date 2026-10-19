@@ -16,6 +16,29 @@ import { expect } from "vitest";
 
 expect.extend(matchers);
 
+// jsdom does not implement ResizeObserver, but cmdk (and any component that
+// measures its layout on mount) calls it, so rendering those components in a
+// test would crash with "ReferenceError: ResizeObserver is not defined".
+// A no-op stub is enough: tests never assert on observed sizes.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  class ResizeObserverStub implements ResizeObserver {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  globalThis.ResizeObserver =
+    ResizeObserverStub as unknown as typeof ResizeObserver;
+}
+
+// jsdom does not implement scrollIntoView (cmdk scrolls the active option
+// into view when the palette opens), so stub it with a no-op.
+if (
+  typeof Element !== "undefined" &&
+  typeof Element.prototype.scrollIntoView !== "function"
+) {
+  Element.prototype.scrollIntoView = function (): void {};
+}
+
 class MockStorage implements Storage {
   private store = new Map<string, string>();
   get length() {

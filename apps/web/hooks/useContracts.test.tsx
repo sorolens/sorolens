@@ -66,8 +66,7 @@ const contractB: ContractSummary = {
 
 const listFixture: ContractsListResponse = {
   contracts: [contractA, contractB],
-  cursor: null,
-  has_more: false,
+  next_cursor: "",
 };
 
 const detailFixture: ContractDetail = {

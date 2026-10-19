@@ -117,12 +117,10 @@ describe("getResourceTrend", () => {
       .mockResolvedValueOnce({
         invocations: [invocation({ ledger_closed_at: "2026-07-01T08:00:00Z" })],
         next_cursor: "next",
-        has_more: true,
       })
       .mockResolvedValueOnce({
         invocations: [invocation({ ledger_closed_at: "2026-07-02T08:00:00Z" })],
         next_cursor: null,
-        has_more: false,
       });
 
     const points = await getResourceTrend("CCONTRACT", 30);

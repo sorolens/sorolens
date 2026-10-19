@@ -153,7 +153,7 @@ test("a failed creation keeps the user on step 3 and shows the API error", async
         ? { status: 409, body: { error: "contract already being tracked" } }
         : {
             status: 200,
-            body: { contracts: [], cursor: null, has_more: false },
+            body: { contracts: [], next_cursor: "" },
           },
   });
 

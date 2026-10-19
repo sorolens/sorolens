@@ -145,12 +145,21 @@ export function CmdkSearch() {
           />
 
           <Command.List className="max-h-[60vh] overflow-y-auto p-2">
-            <Command.Empty
-              role={loading ? "status" : undefined}
-              aria-busy={loading || undefined}
-              className="p-6 text-center text-sm text-[var(--color-text-secondary)]"
-            >
-              {loading ? "Searching..." : error ? error : "No results found."}
+            {/* cmdk hides <Command.Empty> as soon as any <Command.Item>
+                matches the query — and the "Pages" shortcut below always does
+                — so the loading and error states must render outside of it or
+                they never appear. */}
+            {(loading || error) && (
+              <div
+                role={loading ? "status" : "alert"}
+                aria-busy={loading || undefined}
+                className="p-6 text-center text-sm text-[var(--color-text-secondary)]"
+              >
+                {loading ? "Searching..." : error}
+              </div>
+            )}
+            <Command.Empty className="p-6 text-center text-sm text-[var(--color-text-secondary)]">
+              No results found.
             </Command.Empty>
 
             <Command.Group

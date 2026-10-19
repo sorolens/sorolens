@@ -27,6 +27,27 @@ vi.mock("@/components/ThemeToggle", () => ({
   ThemeToggle: () => <div data-testid="theme-toggle" />,
 }));
 
+// The AppLayout is rendered standalone here (the root layout's ThemeProvider
+// is not in the tree), and CmdkSearch consumes useTheme directly.
+vi.mock("@/components/ThemeProvider", () => ({
+  useTheme: () => ({ theme: "light", setTheme: vi.fn() }),
+}));
+
+// The AppLayout below renders Breadcrumbs (useParams/usePathname) and
+// CmdkSearch (useRouter); without an app-router context Next throws
+// "invariant expected app router to be mounted".
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/",
+  useParams: () => ({}),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 describe("LastUpdated", () => {
   beforeEach(() => {
     resetLastUpdated();

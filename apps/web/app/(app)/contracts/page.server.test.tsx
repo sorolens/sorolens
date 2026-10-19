@@ -63,8 +63,7 @@ describe("server-rendered contracts page", () => {
           last_activity_at: null,
         },
       ],
-      cursor: null,
-      has_more: false,
+      next_cursor: "",
     });
 
     const page = await ContractsPage({
