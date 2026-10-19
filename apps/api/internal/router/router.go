@@ -294,7 +294,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, cacheContracts).Get("/contracts/{id}", h.GetContract)
 		get("/contracts/{id}/events", h.ListEvents)
 		get("/contracts/{id}/events.csv", h.ExportEventsCSV)
+		get("/contracts/{id}/invocations/stats", h.ContractInvocationStats)
 		get("/contracts/{id}/invocations", h.ListInvocations)
+		get("/contracts/{id}/invocations/{tx_hash}", h.GetInvocation)
 		// Global invocation explorer: resource usage across every contract.
 		get("/invocations", h.ListAllInvocations)
 

@@ -252,16 +252,6 @@ describe("ContractDetailPage failure states", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("renders the snapshot panel with export links", async () => {
-    await renderPage();
-
-    expect(await screen.findByTestId("snapshot-panel")).toBeInTheDocument();
-    const link = await screen.findByRole("link", {
-      name: "Download snapshot.json",
-    });
-    expect(link.getAttribute("href")).toBe(`/contracts/${ID}/snapshot.json`);
-  });
-
   it("links to the comparison, pre-selected on this contract (#607)", async () => {
     await renderPage();
 

@@ -23,7 +23,7 @@ graph TB
     end
 
     subgraph "GitHub Actions"
-        I[Go Indexer\ncron every 5 min\nbackfill + catch-up]
+        I[Go Indexer\nsharded cron every 5 min\nbackfill + catch-up]
     end
 
     subgraph "Stellar Network"

@@ -47,6 +47,7 @@ export default function EventsPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">Live Events</h1>
             <span
+              role="status"
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
                 paused
                   ? "bg-white/10 text-[var(--color-text-secondary)]"

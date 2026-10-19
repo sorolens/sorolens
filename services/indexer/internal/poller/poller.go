@@ -9,7 +9,6 @@ package poller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -24,10 +23,6 @@ import (
 )
 
 const (
-	// maxEventRetries is how many times a single event is retried before
-	// it is parked in the dead-letter queue (issue #202).
-	maxEventRetries = 3
-
 	// lockTTL is the Redis advisory lock lifetime per contract.
 	// Set to twice the expected maximum per-contract processing time.
 	lockTTL = 60 * time.Second
@@ -591,20 +586,22 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return err
 	}
 
-	if len(events) > 0 {
-		if err := p.insertEventsWithDLQ(ctx, events); err != nil {
-			return fmt.Errorf("insert events: %w", err)
-		}
-	}
-	if len(invocations) > 0 {
-		if err := p.store.BatchInsertInvocations(ctx, invocations); err != nil {
-			return fmt.Errorf("batch insert invocations: %w", err)
-		}
-	}
-
+	// One transaction for the whole window: events, invocations, the
+	// contract cursor and the network cursor commit together. A failure
+	// anywhere rolls the batch back and leaves the cursor on the previous
+	// ledger, so a retry re-reads the same window instead of skipping it.
 	newState := SyncState{ContractID: contractID, LastLedger: endLedger}
-	if err := p.store.UpsertSyncState(ctx, newState); err != nil {
-		return fmt.Errorf("upsert sync state: %w", err)
+	parked, err := p.store.BatchInsertWithCursor(ctx, network, endLedger, events, invocations, newState)
+	if err != nil {
+		return fmt.Errorf("commit index batch: %w", err)
+	}
+	for _, fe := range parked {
+		p.log.Warn("event parked in DLQ",
+			"event_id", fe.EventID,
+			"contract_id", fe.ContractID,
+			"attempts", fe.Attempts,
+			"err", fe.ErrorMessage,
+		)
 	}
 
 	// Only count work that was actually committed: a failed insert returns
@@ -619,65 +616,6 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		"invocations", len(invocations),
 		"duration", time.Since(runStart),
 	)
-	return nil
-}
-
-// insertEventsWithDLQ persists events one at a time, retrying each up to
-// maxEventRetries times. An event that still cannot be stored is parked in the
-// dead-letter queue (issue #202) and the remaining events are still processed,
-// so a single bad event can no longer block a contract's indexing pass.
-//
-// Per-event rather than per-batch by design: BatchInsertEvents rejects the
-// whole slice when any one element is bad, so retrying as a batch would park
-// the good events alongside the bad one.
-func (p *Poller) insertEventsWithDLQ(ctx context.Context, events []Event) error {
-	for _, ev := range events {
-		var lastErr error
-		stored := false
-		for attempt := 1; attempt <= maxEventRetries; attempt++ {
-			if err := p.store.BatchInsertEvents(ctx, []Event{ev}); err != nil {
-				lastErr = err
-				continue
-			}
-			stored = true
-			break
-		}
-		if stored {
-			continue
-		}
-
-		// EventPayload is what the requeue endpoint re-inserts, so it must be a
-		// JSON-serialized Event: handler/dlq.go unmarshals it back into
-		// store.Event. Event holds only plain fields, so a marshal failure is
-		// unreachable in practice — park the row anyway rather than drop it.
-		payload, marshalErr := json.Marshal(ev)
-		msg := "insert retries exhausted"
-		switch {
-		case marshalErr != nil:
-			p.log.Error("marshal event for DLQ", "event_id", ev.ID, "err", marshalErr)
-			payload, msg = nil, "marshal payload: "+marshalErr.Error()
-		case lastErr != nil:
-			msg = lastErr.Error()
-		}
-
-		if err := p.store.InsertFailedEvent(ctx, FailedEvent{
-			EventID:      ev.ID,
-			ContractID:   ev.ContractID,
-			Network:      ev.Network,
-			EventPayload: payload,
-			ErrorMessage: msg,
-			Attempts:     maxEventRetries,
-		}); err != nil {
-			// The event is now stored nowhere, which the caller must know about.
-			return fmt.Errorf("park event %s in DLQ: %w", ev.ID, err)
-		}
-		p.log.Warn("event parked in DLQ",
-			"event_id", ev.ID,
-			"contract_id", ev.ContractID,
-			"attempts", maxEventRetries,
-			"err", msg,
-		)
-	}
 	return nil
 }
 

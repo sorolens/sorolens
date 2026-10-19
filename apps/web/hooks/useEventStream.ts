@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { ContractEvent } from "@/lib/types";
 import { getContractEvents } from "@/lib/api";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import { API_URL } from "@/lib/config";
 
 export interface UseEventStreamOptions {
   contractId?: string;

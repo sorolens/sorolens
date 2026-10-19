@@ -35,6 +35,8 @@ from .contract_event_rate import ContractEventRate
 from .contract_graph import ContractGraph
 from .contract_graph_edges_type_0_item import ContractGraphEdgesType0Item
 from .contract_graph_nodes_type_0_item import ContractGraphNodesType0Item
+from .contract_invocation_stats import ContractInvocationStats
+from .contract_invocation_stats_windows import ContractInvocationStatsWindows
 from .contract_note import ContractNote
 from .contract_note_list import ContractNoteList
 from .contract_note_request import ContractNoteRequest
@@ -116,6 +118,8 @@ from .health_score_components import HealthScoreComponents
 from .in_watchlist import InWatchlist
 from .invocation import Invocation
 from .invocation_args_decoded import InvocationArgsDecoded
+from .invocation_detail import InvocationDetail
+from .invocation_window_stats import InvocationWindowStats
 from .list_alert_rules_response_200 import ListAlertRulesResponse200
 from .list_alert_subscriptions_response_200 import ListAlertSubscriptionsResponse200
 from .list_alerts_network import ListAlertsNetwork
@@ -312,6 +316,8 @@ __all__ = (
     "ContractGraph",
     "ContractGraphEdgesType0Item",
     "ContractGraphNodesType0Item",
+    "ContractInvocationStats",
+    "ContractInvocationStatsWindows",
     "ContractNote",
     "ContractNoteList",
     "ContractNoteRequest",
@@ -387,6 +393,8 @@ __all__ = (
     "InWatchlist",
     "Invocation",
     "InvocationArgsDecoded",
+    "InvocationDetail",
+    "InvocationWindowStats",
     "ListAlertRulesResponse200",
     "ListAlertSubscriptionsResponse200",
     "ListAlertsNetwork",

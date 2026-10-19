@@ -7,7 +7,13 @@
  */
 
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockReplace = vi.fn();
@@ -18,10 +24,16 @@ vi.mock("next/navigation", () => ({
 
 const mockListContractsAll = vi.fn();
 const mockGetCompare = vi.fn();
+const mockGetCompareAllEntries = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   listContractsAll: (...args: unknown[]) => mockListContractsAll(...args),
   getCompare: (...args: unknown[]) => mockGetCompare(...args),
+}));
+
+vi.mock("@/lib/compareAll", () => ({
+  getCompareAllEntries: (...args: unknown[]) =>
+    mockGetCompareAllEntries(...args),
 }));
 
 vi.mock("recharts", () => ({
@@ -85,6 +97,8 @@ describe("CompareView", () => {
     mockReplace.mockReset();
     mockListContractsAll.mockReset();
     mockGetCompare.mockReset();
+    mockGetCompareAllEntries.mockReset();
+    mockGetCompareAllEntries.mockResolvedValue([]);
     mockListContractsAll.mockResolvedValue({ contracts: CONTRACTS });
     mockGetCompare.mockResolvedValue({
       window: "7d",
@@ -160,5 +174,69 @@ describe("CompareView", () => {
       ).toBeInTheDocument()
     );
     expect(screen.getByTestId("sparkline-empty")).toBeInTheDocument();
+  });
+
+  it("offers every time window, including All", () => {
+    render(<CompareView initialIds={[ID_A]} initialWindow="7d" />);
+    for (const label of ["24h", "7d", "30d", "All"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it("assembles the All window client-side instead of asking the API for it", async () => {
+    mockGetCompareAllEntries.mockResolvedValue([
+      entry({
+        event_count: 9000,
+        invocation_count: 4000,
+        avg_cpu: null,
+        avg_fee: null,
+      }),
+      entry({
+        id: ID_B,
+        network: "mainnet",
+        label: "Beta",
+        event_count: 800,
+        invocation_count: 300,
+        avg_cpu: null,
+        avg_fee: null,
+      }),
+    ]);
+    render(<CompareView initialIds={[ID_A, ID_B]} initialWindow="7d" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+
+    await waitFor(() =>
+      expect(mockGetCompareAllEntries).toHaveBeenCalledWith([ID_A, ID_B])
+    );
+    // The All window never hits /api/v1/compare, which would normalise it
+    // to 24h and label 24h data as lifetime totals.
+    expect(mockGetCompare).not.toHaveBeenCalledWith([ID_A, ID_B], "all");
+    // Null lifetime averages render as em dashes, not zeros.
+    await waitFor(() => expect(screen.getAllByText("—").length).toBe(4));
+  });
+
+  it("surfaces malformed ids from the URL instead of failing silently", () => {
+    render(
+      <CompareView
+        initialIds={[ID_A, ID_B]}
+        initialWindow="7d"
+        droppedInvalid={2}
+      />
+    );
+    const note = screen.getByTestId("compare-url-note");
+    expect(note).toHaveTextContent("2 invalid contract IDs were ignored");
+  });
+
+  it("notes when more than four contracts were requested", () => {
+    render(
+      <CompareView
+        initialIds={[ID_A, ID_B]}
+        initialWindow="7d"
+        truncatedExtra={1}
+      />
+    );
+    expect(screen.getByTestId("compare-url-note")).toHaveTextContent(
+      "1 more was dropped"
+    );
   });
 });

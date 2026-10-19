@@ -488,8 +488,13 @@ export interface CompareContractEntry {
   has_data: boolean;
   event_count: number;
   invocation_count: number;
-  avg_cpu: number;
-  avg_fee: number;
+  /**
+   * Window averages. Null when the selected window has no lifetime source
+   * (the "all" comparison, issue #607): they render as "—" instead of a
+   * misleading zero. The API always sends numbers for 24h/7d/30d.
+   */
+  avg_cpu: number | null;
+  avg_fee: number | null;
   /** Cached composite health score, or null when not computed yet. */
   health_score: number | null;
   last_synced_ledger: number;

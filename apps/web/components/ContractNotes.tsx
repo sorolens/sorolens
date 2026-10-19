@@ -124,7 +124,11 @@ export function ContractNotes({
       </div>
 
       {loading ? (
-        <p className="text-sm text-[var(--color-text-secondary)]">
+        <p
+          role="status"
+          aria-busy="true"
+          className="text-sm text-[var(--color-text-secondary)]"
+        >
           Loading notes…
         </p>
       ) : notes.length === 0 ? (

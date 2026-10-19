@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"sort"
 	"time"
 )
 
@@ -42,17 +43,31 @@ func condenseMockHealthInputs(m *MockStore, contractID string) HealthScoreInputs
 	if mc, ok := m.monitored[contractID]; ok {
 		in.WatchdogStatus = mc.Status
 	}
+
+	// The postgres query reads only the last 100 checks, newest first.
+	recent := make([]HealthCheck, 0, len(m.healthChecks))
 	for _, hc := range m.healthChecks {
-		if hc.ContractID != contractID {
-			continue
+		if hc.ContractID == contractID {
+			recent = append(recent, hc)
 		}
+	}
+	sort.SliceStable(recent, func(i, j int) bool {
+		return recent[i].Timestamp.After(recent[j].Timestamp)
+	})
+	if len(recent) > 100 {
+		recent = recent[:100]
+	}
+	for _, hc := range recent {
 		in.TotalChecks++
 		if hc.Status == "Healthy" {
 			in.HealthyChecks++
 		}
 	}
+
+	// Invocation error rate over the trailing 24 hours.
+	since := time.Now().UTC().Add(-24 * time.Hour)
 	for _, inv := range m.invocations {
-		if inv.ContractID != contractID {
+		if inv.ContractID != contractID || inv.LedgerClosedAt.Before(since) {
 			continue
 		}
 		in.TotalInvocations++
@@ -60,17 +75,22 @@ func condenseMockHealthInputs(m *MockStore, contractID string) HealthScoreInputs
 			in.FailedInvocations++
 		}
 	}
+
+	// TTL headroom is measured against the contract's last known ledger,
+	// matching the postgres storage query.
+	threshold := int64(m.syncStates[contractID].LastLedger) + storageHealthyHorizonLedgers
 	for _, se := range m.storageEntries {
-		if se.ContractID != contractID {
-			continue
-		}
-		if se.Status != "live" {
+		if se.ContractID != contractID || se.Status != "live" {
 			continue
 		}
 		in.TotalStorage++
-		if se.LiveUntilLedger > 0 && se.LiveUntilLedger <= storageHealthyHorizonLedgers {
+		if se.LiveUntilLedger > 0 && se.LiveUntilLedger <= threshold {
 			in.ExpiringStorage++
 		}
+	}
+
+	if activity, err := m.RecentHourlyActivity(context.Background(), contractID, 24); err == nil {
+		in.Activity = activity
 	}
 	return in
 }

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "prebuild": "pnpm openapi:generate",
     "test": "pnpm openapi:check && vitest run --environment jsdom",
+    "test:coverage": "pnpm openapi:check && vitest run --coverage",
     "openapi:generate": "node scripts/generate-openapi.mjs",
     "openapi:check": "node scripts/generate-openapi.mjs --check",
     "test:e2e": "playwright test"
@@ -40,6 +41,7 @@
     "@types/react-dom": "^19.1.6",
     "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/coverage-v8": "2.1.9",
     "fake-indexeddb": "^6.2.5",
     "js-yaml": "^4.3.2",
     "jsdom": "^26.1.0",

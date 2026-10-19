@@ -19,9 +19,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/sorolens/sorolens/services/indexer/internal/poller"
+	"github.com/sorolens/sorolens/services/indexer/internal/scval"
 )
 
 // storageHealthyHorizonLedgers mirrors the constant in
@@ -45,6 +47,10 @@ const (
 
 // connectTimeout bounds the startup connectivity check.
 const connectTimeout = 10 * time.Second
+
+// maxEventInsertAttempts is how many times one event is retried inside the
+// batch transaction before it is parked in the DLQ.
+const maxEventInsertAttempts = 3
 
 // Compile-time check that Store satisfies the poller's interface.
 var _ poller.Store = (*Store)(nil)
@@ -162,25 +168,71 @@ func (s *Store) BatchInsertEvents(ctx context.Context, events []poller.Event) er
 	batch := &pgx.Batch{}
 	now := time.Now()
 	for _, e := range events {
-		topics := e.TopicXDR
-		if topics == nil {
-			topics = []string{}
+		if err := queueEvent(batch, e, now); err != nil {
+			return err
 		}
-		topicJSON, err := json.Marshal(topics)
-		if err != nil {
-			return fmt.Errorf("marshal topic_xdr for event %s: %w", e.ID, err)
-		}
-		batch.Queue(`
-			INSERT INTO events
-				(id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
-				 topic_xdr, value_xdr, in_successful_call, inserted_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-			ON CONFLICT DO NOTHING`,
-			e.ID, e.ContractID, networkOrDefault(e.Network), int64(e.Ledger), e.LedgerClosedAt, e.TxHash, e.Type,
-			topicJSON, e.ValueXDR, e.InSuccessfulCall, now,
-		)
 	}
 	return execBatch(ctx, s.pool, batch, "batch insert events")
+}
+
+// queueEvent adds one idempotent event insert to batch.
+func queueEvent(batch *pgx.Batch, e poller.Event, now time.Time) error {
+	topics := e.TopicXDR
+	if topics == nil {
+		topics = []string{}
+	}
+	topicJSON, err := json.Marshal(topics)
+	if err != nil {
+		return fmt.Errorf("marshal topic_xdr for event %s: %w", e.ID, err)
+	}
+
+	// Decode topics for topic_decoded
+	var topicDecoded []any
+	var decodeErr error
+	for _, topic := range topics {
+		sc, err := scval.Decode(topic)
+		if err != nil {
+			decodeErr = err
+			break
+		}
+		topicDecoded = append(topicDecoded, sc.Value)
+	}
+	var topicDecodedJSON []byte
+	if decodeErr == nil {
+		topicDecodedJSON, err = json.Marshal(topicDecoded)
+		if err != nil {
+			return fmt.Errorf("marshal topic_decoded for event %s: %w", e.ID, err)
+		}
+	}
+
+	// Decode value for value_decoded
+	var valueDecoded any
+	if e.ValueXDR != "" {
+		sc, err := scval.Decode(e.ValueXDR)
+		if err != nil {
+			valueDecoded = nil
+		} else {
+			valueDecoded = sc.Value
+		}
+	}
+	var valueDecodedJSON []byte
+	if valueDecoded != nil {
+		valueDecodedJSON, err = json.Marshal(valueDecoded)
+		if err != nil {
+			return fmt.Errorf("marshal value_decoded for event %s: %w", e.ID, err)
+		}
+	}
+
+	batch.Queue(`
+		INSERT INTO events
+			(id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+			 topic_xdr, value_xdr, topic_decoded, value_decoded, in_successful_call, inserted_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		ON CONFLICT DO NOTHING`,
+		e.ID, e.ContractID, networkOrDefault(e.Network), int64(e.Ledger), e.LedgerClosedAt, e.TxHash, e.Type,
+		topicJSON, e.ValueXDR, topicDecodedJSON, valueDecodedJSON, e.InSuccessfulCall, now,
+	)
+	return nil
 }
 
 // BatchInsertInvocations inserts invocations, ignoring tx hashes already
@@ -192,21 +244,30 @@ func (s *Store) BatchInsertInvocations(ctx context.Context, invocations []poller
 	batch := &pgx.Batch{}
 	now := time.Now()
 	for _, inv := range invocations {
-		batch.Queue(`
-			INSERT INTO invocations
-				(tx_hash, contract_id, network, ledger, ledger_closed_at, status,
-				 result_xdr, application_order, inserted_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-			ON CONFLICT (tx_hash) DO NOTHING`,
-			inv.TxHash, inv.ContractID, networkOrDefault(inv.Network), int64(inv.Ledger), inv.LedgerClosedAt, inv.Status,
-			inv.ResultXDR, inv.ApplicationOrder, now,
-		)
+		queueInvocation(batch, inv, now)
 	}
 	return execBatch(ctx, s.pool, batch, "batch insert invocations")
 }
 
-func execBatch(ctx context.Context, pool *pgxpool.Pool, batch *pgx.Batch, what string) error {
-	br := pool.SendBatch(ctx, batch)
+func queueInvocation(batch *pgx.Batch, inv poller.Invocation, now time.Time) {
+	batch.Queue(`
+		INSERT INTO invocations
+			(tx_hash, contract_id, network, ledger, ledger_closed_at, status,
+			 result_xdr, application_order, inserted_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		ON CONFLICT (tx_hash) DO NOTHING`,
+		inv.TxHash, inv.ContractID, networkOrDefault(inv.Network), int64(inv.Ledger), inv.LedgerClosedAt, inv.Status,
+		inv.ResultXDR, inv.ApplicationOrder, now,
+	)
+}
+
+// batchSender is the shared statement surface of a pool and a transaction.
+type batchSender interface {
+	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
+}
+
+func execBatch(ctx context.Context, sender batchSender, batch *pgx.Batch, what string) error {
+	br := sender.SendBatch(ctx, batch)
 	for i := 0; i < batch.Len(); i++ {
 		if _, err := br.Exec(); err != nil {
 			br.Close() //nolint:errcheck
@@ -219,14 +280,134 @@ func execBatch(ctx context.Context, pool *pgxpool.Pool, batch *pgx.Batch, what s
 	return nil
 }
 
+// BatchInsertWithCursor commits a poll window as one transaction: events,
+// invocations, the contract's sync state and the network cursor either all
+// persist or none do. A rejected event is retried inside a savepoint, then
+// parked in the dead-letter queue within the same transaction, so the cursor
+// only moves past a window whose rows are all durable somewhere.
+func (s *Store) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []poller.Event, invocations []poller.Invocation, syncState poller.SyncState) ([]poller.FailedEvent, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("batch insert with cursor: begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	now := time.Now()
+	var parked []poller.FailedEvent
+	for _, e := range events {
+		rejected, cause, err := insertEventAttempts(ctx, tx, e, now)
+		if err != nil {
+			return nil, err
+		}
+		if !rejected {
+			continue
+		}
+		fe, err := parkedEvent(e, cause)
+		if err != nil {
+			return nil, err
+		}
+		if err := insertFailedEvent(ctx, tx, fe); err != nil {
+			return nil, fmt.Errorf("park event %s in DLQ: %w", e.ID, err)
+		}
+		parked = append(parked, fe)
+	}
+
+	if len(invocations) > 0 {
+		batch := &pgx.Batch{}
+		for _, inv := range invocations {
+			queueInvocation(batch, inv, now)
+		}
+		if err := execBatch(ctx, tx, batch, "batch insert invocations"); err != nil {
+			return nil, err
+		}
+	}
+
+	if syncState.ContractID != "" {
+		if err := upsertSyncState(ctx, tx, syncState, now); err != nil {
+			return nil, err
+		}
+	}
+	if err := setIndexerCursor(ctx, tx, network, ledger); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("batch insert with cursor: commit: %w", err)
+	}
+	return parked, nil
+}
+
+// insertEventAttempts tries one event up to maxEventInsertAttempts times,
+// each inside its own savepoint. A failed statement leaves the surrounding
+// transaction aborted until the savepoint is rolled back, so isolating each
+// attempt is what lets one bad event be parked without discarding the rest of
+// the window. rejected reports that the event should be parked; cause is the
+// last insert error.
+func insertEventAttempts(ctx context.Context, tx pgx.Tx, e poller.Event, now time.Time) (rejected bool, cause, err error) {
+	for attempt := 1; attempt <= maxEventInsertAttempts; attempt++ {
+		sp, err := tx.Begin(ctx)
+		if err != nil {
+			return false, nil, fmt.Errorf("create event savepoint: %w", err)
+		}
+		batch := &pgx.Batch{}
+		if qerr := queueEvent(batch, e, now); qerr != nil {
+			_ = sp.Rollback(ctx)
+			return true, qerr, nil
+		}
+		if ierr := execBatch(ctx, sp, batch, "insert event"); ierr != nil {
+			if rbErr := sp.Rollback(ctx); rbErr != nil {
+				return false, nil, fmt.Errorf("roll back event %s: %w", e.ID, rbErr)
+			}
+			cause = ierr
+			continue
+		}
+		if cerr := sp.Commit(ctx); cerr != nil {
+			return false, nil, fmt.Errorf("release event savepoint %s: %w", e.ID, cerr)
+		}
+		return false, nil, nil
+	}
+	return true, cause, nil
+}
+
+// parkedEvent builds the DLQ row for an event that exhausted its retries.
+// EventPayload is what the requeue endpoint re-inserts, so it carries the
+// JSON-serialized poller Event.
+func parkedEvent(e poller.Event, cause error) (poller.FailedEvent, error) {
+	payload, err := json.Marshal(e)
+	if err != nil {
+		return poller.FailedEvent{}, fmt.Errorf("marshal event %s for DLQ: %w", e.ID, err)
+	}
+	msg := "insert retries exhausted"
+	if cause != nil {
+		msg = cause.Error()
+	}
+	return poller.FailedEvent{
+		EventID:      e.ID,
+		ContractID:   e.ContractID,
+		Network:      e.Network,
+		EventPayload: payload,
+		ErrorMessage: msg,
+		Attempts:     maxEventInsertAttempts,
+	}, nil
+}
+
+// execer is the shared statement surface of a pool and a transaction.
+type execer interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
 // InsertFailedEvent parks an event in the dead-letter queue, replacing an
 // earlier failure of the same event.
 func (s *Store) InsertFailedEvent(ctx context.Context, fe poller.FailedEvent) error {
+	return insertFailedEvent(ctx, s.pool, fe)
+}
+
+func insertFailedEvent(ctx context.Context, q execer, fe poller.FailedEvent) error {
 	attempts := fe.Attempts
 	if attempts <= 0 {
 		attempts = 3
 	}
-	_, err := s.pool.Exec(ctx, `
+	_, err := q.Exec(ctx, `
 		INSERT INTO failed_events
 			(event_id, contract_id, network, event_payload, error_message, attempts, created_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -265,8 +446,11 @@ func (s *Store) GetSyncState(ctx context.Context, contractID string) (poller.Syn
 // UpsertSyncState records the last fully indexed ledger for a contract and
 // clears any previous error.
 func (s *Store) UpsertSyncState(ctx context.Context, st poller.SyncState) error {
-	now := time.Now()
-	_, err := s.pool.Exec(ctx, `
+	return upsertSyncState(ctx, s.pool, st, time.Now())
+}
+
+func upsertSyncState(ctx context.Context, q execer, st poller.SyncState, now time.Time) error {
+	_, err := q.Exec(ctx, `
 		INSERT INTO sync_state (contract_id, last_ledger, last_run_at, error_message, updated_at)
 		VALUES ($1, $2, $3, NULL, $3)
 		ON CONFLICT (contract_id) DO UPDATE SET
@@ -297,7 +481,11 @@ func (s *Store) GetIndexerCursor(ctx context.Context, network string) (uint32, e
 
 // SetIndexerCursor advances the network cursor; it never moves backwards.
 func (s *Store) SetIndexerCursor(ctx context.Context, network string, ledger uint32) error {
-	_, err := s.pool.Exec(ctx, `
+	return setIndexerCursor(ctx, s.pool, network, ledger)
+}
+
+func setIndexerCursor(ctx context.Context, q execer, network string, ledger uint32) error {
+	_, err := q.Exec(ctx, `
 		INSERT INTO indexer_cursors (network, ledger, updated_at)
 		VALUES ($1, $2, NOW())
 		ON CONFLICT (network) DO UPDATE SET

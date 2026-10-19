@@ -41,6 +41,19 @@ The same binary runs all three roles.
 `--worker-id` must be unique per process. It always is under Kubernetes if you
 derive it from the pod name, e.g. `--worker-id=$(POD_NAME)`.
 
+On a shared deployment every replica points at the same Postgres database and
+uses the Postgres shard store:
+
+```bash
+# Coordinator replica. Run one or several; the advisory lock elects one leader.
+INDEXER_ROLE=coordinator INDEXER_WORKER_ID=coordinator-0 \
+INDEXER_SHARD_STORE=postgres DATABASE_URL=postgres://... ./indexer
+
+# Worker replica. Scale freely.
+INDEXER_ROLE=worker INDEXER_WORKER_ID="$POD_NAME" \
+INDEXER_SHARD_STORE=postgres DATABASE_URL=postgres://... ./indexer
+```
+
 ### Leader election
 
 The coordinator takes a Postgres advisory lock, `pg_try_advisory_lock
@@ -49,7 +62,9 @@ The coordinator takes a Postgres advisory lock, `pg_try_advisory_lock
 long as it leads; if the connection returns to a pool the lock is released and
 another replica can (correctly) take over. `TryAdvisoryLock` never blocks: a
 `false` result means another process is already leading, which is a normal state
-and not an error.
+and not an error. `pgstore.CoordinatorStore` pins that dedicated connection and
+destroys it (rather than returning it to the pool) if the lock cannot be
+released cleanly, so an idle pooled session can never hold a stale lock.
 
 Only the leader writes `indexer_shards`. Workers read it. This is what keeps
 assignment deterministic — two leaders cannot disagree if only one can write.
@@ -92,7 +107,7 @@ in-flight pass cannot duplicate rows.
 | `--role`        | `INDEXER_ROLE`               | `all`   | `all`, `coordinator`, or `worker`.              |
 | `--worker-id`   | `INDEXER_WORKER_ID`          | —       | Unique id. Required for coordinator and worker. |
 | `--shard-count` | `INDEXER_SHARD_COUNT`        | `64`    | Total shards. Must match across all processes.  |
-| `--shard-store` | `INDEXER_SHARD_STORE`        | —       | Shard store backend, see below.                 |
+| `--shard-store` | `INDEXER_SHARD_STORE`        | —       | `postgres` (shared) or `memory` (single node).  |
 | —               | `INDEXER_HEARTBEAT_INTERVAL` | `5s`    | Worker heartbeat cadence.                       |
 | —               | `INDEXER_WORKER_STALE_AFTER` | `30s`   | Silence before a worker is presumed dead.       |
 | —               | `INDEXER_REBALANCE_INTERVAL` | `10s`   | Leader reconciliation cadence.                  |
@@ -128,9 +143,9 @@ a row.
 Run exactly one coordinator replica, or several for failover — the advisory lock
 guarantees only one leads at a time. Workers scale freely.
 
-## Current status and the one remaining adapter
+## Current status
 
-What is implemented here:
+What is implemented:
 
 - The sharding algorithm — `ShardForContract`, `ContractsForShards`.
 - Leader election, assignment, staleness detection and reassignment —
@@ -139,19 +154,22 @@ What is implemented here:
 - The poller scope wrapper that makes a worker index only its contracts —
   `scopedStore` in `services/indexer`.
 - The schema — migration `000011`.
-- Tests covering assignment, reassignment after a worker goes stale, and a
-  4-worker / 100-contract end-to-end assignment check —
-  `coordinator_test.go`.
+- Both store backends:
+  - `pgstore.CoordinatorStore` (`--shard-store=postgres`) persists workers and
+    shards in the tables above and holds the leader lock on a pinned
+    connection, so every replica shares one view of ownership.
+  - `coordinator.MemStore` (`--shard-store=memory`) keeps the same state in
+    one process for local runs and tests.
+- Tests covering assignment, reassignment after a worker goes stale, a
+  4-worker / 100-contract end-to-end assignment check (`coordinator_test.go`),
+  and a two-replica failover against real Postgres plus per-transaction
+  idempotency (`internal/pgstore/coordinator_test.go`).
 
-**What is not wired: the shared `coordinator.Store`.** The indexer module
-currently depends on no database driver — `main.go` wires a `stubStore` for
-exactly this reason — so `--shard-store memory` is the only backend available
-today. The in-memory store keeps the shard table inside one process, which is
-fine for exercising the topology on a single node but is **not safe for
-replicas**: each process would hold its own table and believe it owned every
-shard. Multi-replica sharding needs a `coordinator.Store` backed by Postgres,
-implementing the schema above plus the contract list. That is a self-contained
-adapter; adding it means taking the `pgx` dependency in the indexer module.
+The coordinator and worker roles require `--shard-store`. A multi-replica
+deployment must use `postgres`; `memory` is only safe for a single node because
+each process would hold its own table and believe it owned every shard.
 
-Until then, `--role coordinator` and `--role worker` fail fast without
-`--shard-store memory` rather than silently doing the wrong thing.
+Per-contract progress is committed in the same transaction as the events and
+invocations it covers (issue #506), so a crashed worker resumes from exactly
+the last fully written ledger rather than from a cursor written ahead of its
+data.

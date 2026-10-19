@@ -82,7 +82,7 @@ jobs:
           PGPASSWORD: sorolens
         run: |
           for f in $(ls apps/api/internal/db/migrations/*.up.sql | sort); do
-            psql -h 127.0.0.1 -U sorolens -d sorolens -f "$f"
+            psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U sorolens -d sorolens -f "$f"
           done
       - name: go test
         working-directory: ${{ matrix.module }}
@@ -231,7 +231,6 @@ jobs:
   next-build:
     name: Next.js build
     runs-on: ubuntu-latest
-    if: ${{ false }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -255,6 +254,8 @@ jobs:
             pnpm-node22-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Lint
+        run: pnpm lint
       - name: Build dashboard
         working-directory: apps/web
         env:

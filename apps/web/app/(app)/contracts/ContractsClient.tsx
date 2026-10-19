@@ -36,6 +36,11 @@ const DEFAULT_SORT_DIRECTION = "desc" as const;
 // uses the base32 alphabet. Mirrors the tracking wizard's client-side check.
 const PASTE_CONTRACT_ID_RE = /^C[A-Z0-9]{55}$/;
 
+// The bulk "Compare" action (#607) links into /compare. The whole selection
+// travels in the URL; the compare page caps the view at four contracts and
+// tells the user about any extras, so the list does not drop ids silently.
+const MIN_COMPARE = 2;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -588,6 +593,12 @@ export default function ContractsClient({
 
   const clearSelection = useCallback(() => setSelected(new Set()), []);
 
+  // Bulk "Compare" entry point (#607): the selection travels in the shared
+  // /compare?ids= URL, which validates and renders it on first paint.
+  const compareHref = `/compare?ids=${encodeURIComponent(
+    Array.from(selected).join(",")
+  )}`;
+
   // runBulkAction calls the batch endpoint, then refreshes the current page and
   // clears the selection. Errors surface as a toast rather than being swallowed.
   const runBulkAction = async (
@@ -808,6 +819,25 @@ export default function ContractsClient({
               {selected.size} selected
             </span>
             <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+              {selected.size >= MIN_COMPARE ? (
+                <Link
+                  id="bulk-compare-btn"
+                  href={compareHref}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] hover:border-[var(--color-accent)]"
+                >
+                  Compare {selected.size} contracts
+                </Link>
+              ) : (
+                <button
+                  id="bulk-compare-btn"
+                  type="button"
+                  disabled
+                  title={`Select at least ${MIN_COMPARE} contracts to compare`}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-secondary)] opacity-50"
+                >
+                  Compare
+                </button>
+              )}
               <button
                 id="bulk-tag-btn"
                 type="button"
