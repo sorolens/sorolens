@@ -1,6 +1,6 @@
 /**
  * Tests for apps/web/app/(app)/live/page.tsx — the real-time dashboard
- * (issue #139).
+ * (issues #139 and #150).
  *
  * Recharts is mocked: ResponsiveContainer measures its parent and jsdom has no
  * layout, so the real chart would render nothing measurable. The mock keeps
@@ -183,6 +183,85 @@ describe("LivePage", () => {
 
     await waitFor(() => expect(screen.getByTestId("live-error")).toBeDefined());
     expect(screen.getByTestId("live-error").textContent).toContain("boom");
+  });
+
+  // ── Loading, stale, and unavailable states ────────────────────────────────
+
+  it("shows a loading state before the first fetch resolves", async () => {
+    let resolveEvents: (value: unknown) => void = () => {};
+    let resolveActivity: (value: unknown) => void = () => {};
+    mockGetRecentEvents.mockReturnValue(
+      new Promise((resolve) => {
+        resolveEvents = resolve;
+      })
+    );
+    mockGetLiveActivity.mockReturnValue(
+      new Promise((resolve) => {
+        resolveActivity = resolve;
+      })
+    );
+
+    render(<LivePage />);
+
+    expect(screen.getByTestId("live-loading")).toBeDefined();
+    expect(screen.queryByTestId("ticker")).toBeNull();
+
+    await act(async () => {
+      resolveEvents({ events: [liveEvent("evt_1")] });
+      resolveActivity(liveActivity());
+    });
+
+    await waitFor(() => expect(screen.getByTestId("ticker")).toBeDefined());
+    expect(screen.queryByTestId("live-loading")).toBeNull();
+  });
+
+  it("shows an unavailable state when the feed fails with no prior data", async () => {
+    mockGetRecentEvents.mockRejectedValue(new Error("boom"));
+    mockGetLiveActivity.mockRejectedValue(new Error("boom"));
+    render(<LivePage />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("live-unavailable")).toBeDefined()
+    );
+    expect(screen.getByTestId("live-unavailable").textContent).toContain(
+      "unavailable"
+    );
+    expect(screen.queryByTestId("ticker")).toBeNull();
+  });
+
+  it("keeps showing stale data with a stale banner when a refresh fails", async () => {
+    render(<LivePage />);
+    await waitFor(() => expect(screen.getByTestId("ticker")).toBeDefined());
+
+    mockGetRecentEvents.mockRejectedValue(new Error("boom"));
+    mockGetLiveActivity.mockRejectedValue(new Error("boom"));
+
+    fireEvent.click(screen.getByTestId("live-refresh"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("live-stale")).toBeDefined()
+    );
+    // The previously fetched data is still on screen, not replaced by zeros.
+    expect(screen.getAllByTestId("ticker-row")).toHaveLength(1);
+    expect(screen.getAllByTestId("hot-contract-row")).toHaveLength(1);
+    expect(screen.queryByTestId("live-unavailable")).toBeNull();
+  });
+
+  it("clears the stale banner once a refresh succeeds", async () => {
+    render(<LivePage />);
+    await waitFor(() => expect(screen.getByTestId("ticker")).toBeDefined());
+
+    mockGetRecentEvents.mockRejectedValueOnce(new Error("boom"));
+    mockGetLiveActivity.mockRejectedValueOnce(new Error("boom"));
+    fireEvent.click(screen.getByTestId("live-refresh"));
+    await waitFor(() =>
+      expect(screen.getByTestId("live-stale")).toBeDefined()
+    );
+
+    fireEvent.click(screen.getByTestId("live-refresh"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("live-stale")).toBeNull()
+    );
   });
 
   // ── Fullscreen (Chrome and Safari) ────────────────────────────────────────
