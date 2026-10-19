@@ -165,7 +165,7 @@ func insertEvents(ctx context.Context, pool *pgxpool.Pool, contractIDs []string,
 	const cols = "(id, contract_id, ledger, ledger_closed_at, tx_hash, type, topic_xdr, value_xdr, in_successful_call)"
 	const sql = `INSERT INTO events ` + cols + `
 VALUES %s
-ON CONFLICT (id) DO NOTHING`
+ON CONFLICT DO NOTHING`
 	if len(contractIDs) == 0 {
 		return errors.New("no contracts to attach events to")
 	}

@@ -23,6 +23,7 @@ jobs:
             feat
             fix
             chore
+            ci
             docs
             refactor
             test

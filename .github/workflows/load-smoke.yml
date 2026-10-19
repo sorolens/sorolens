@@ -74,7 +74,7 @@ jobs:
           PGPASSWORD: sorolens
         run: |
           for f in $(ls apps/api/internal/db/migrations/*.up.sql | sort); do
-            psql -h 127.0.0.1 -U sorolens -d sorolens -f "$f"
+              psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U sorolens -d sorolens -f "$f"
           done
       - name: Seed load data
         working-directory: apps/api

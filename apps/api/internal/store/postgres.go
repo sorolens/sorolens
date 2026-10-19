@@ -250,10 +250,22 @@ func networkOrDefault(network string) string {
 	return network
 }
 
-// BatchInsertEvents inserts multiple events in a single batch operation. It ignores duplicate events based on the primary key (id).
+// BatchInsertEvents inserts multiple events in a single batch operation and ignores duplicates.
 func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) error {
 	if len(events) == 0 {
 		return nil
+	}
+	months := make(map[[2]int]struct{})
+	for _, e := range events {
+		at := e.LedgerClosedAt.UTC()
+		month := [2]int{at.Year(), int(at.Month())}
+		if _, ok := months[month]; ok {
+			continue
+		}
+		if err := s.CreateMonthlyPartitionIfNotExists(ctx, month[0], month[1]); err != nil {
+			return fmt.Errorf("create events partition for %04d-%02d: %w", month[0], month[1], err)
+		}
+		months[month] = struct{}{}
 	}
 	batch := &pgx.Batch{}
 	for _, e := range events {
@@ -270,7 +282,7 @@ func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) e
 				 topic_xdr, value_xdr, topic_decoded, value_decoded,
 				 in_successful_call, inserted_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-			ON CONFLICT (id) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 			e.ID, e.ContractID, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
 			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
 			e.InSuccessfulCall, time.Now(),
@@ -517,7 +529,7 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 				 topic_xdr, value_xdr, topic_decoded, value_decoded,
 				 in_successful_call, inserted_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-			ON CONFLICT (id) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 			e.ID, e.ContractID, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
 			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
 			e.InSuccessfulCall, time.Now(),

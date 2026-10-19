@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { parseIds, parseWindow } from "./page";
+import { parseIds, parseWindow } from "@/lib/compareParams";
 
 // 56-char Soroban ids: "C" + 55 base32 characters.
 const id = (letter: string) => "C" + letter.repeat(55);

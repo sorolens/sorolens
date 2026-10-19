@@ -460,6 +460,7 @@ func alertGroupContractScenario() contractScenario {
 }
 
 func healthScoreContractScenario() contractScenario {
+	now := time.Now().UTC().Truncate(time.Second)
 	return contractScenario{
 		name: "health_score",
 		tables: []string{
@@ -468,7 +469,6 @@ func healthScoreContractScenario() contractScenario {
 		},
 		run: func(ctx context.Context, s store.FullStore) []string {
 			var obs []string
-			now := time.Now().UTC().Truncate(time.Second)
 			base := now.Add(-72 * time.Hour)
 			obs = append(obs, "contract:"+contractErr(s.UpsertContract(ctx, store.Contract{
 				ID: "CHS", Network: "testnet", Label: "health", Status: "active", AddedAt: base,
