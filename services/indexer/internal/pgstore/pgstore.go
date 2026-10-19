@@ -492,6 +492,10 @@ type AlertSubscription struct {
 	ChannelType string
 	// RoutingKey is the PagerDuty integration key (pagerduty only).
 	RoutingKey string
+	// SigningSecret is the "whsec_..." HMAC-SHA256 key used to sign webhook
+	// deliveries (migration 000027). Empty for subscriptions created before
+	// the migration, which are delivered unsigned.
+	SigningSecret string
 }
 
 // ListAlertSubscriptions returns the alert subscriptions configured for a
@@ -503,7 +507,8 @@ type AlertSubscription struct {
 // never registered with the watchdog simply have nothing to list.
 func (s *Store) ListAlertSubscriptions(ctx context.Context, contractID string) ([]AlertSubscription, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, contract_id, webhook_url, severity_filter, channel_type, routing_key
+		SELECT id, contract_id, webhook_url, severity_filter, channel_type, routing_key,
+		       COALESCE(signing_secret, '')
 		FROM alert_subscriptions
 		WHERE contract_id = $1
 		ORDER BY created_at ASC`, contractID,
@@ -517,7 +522,7 @@ func (s *Store) ListAlertSubscriptions(ctx context.Context, contractID string) (
 	for rows.Next() {
 		var sub AlertSubscription
 		if err := rows.Scan(&sub.ID, &sub.ContractID, &sub.WebhookURL,
-			&sub.SeverityFilter, &sub.ChannelType, &sub.RoutingKey); err != nil {
+			&sub.SeverityFilter, &sub.ChannelType, &sub.RoutingKey, &sub.SigningSecret); err != nil {
 			return nil, fmt.Errorf("list alert subscriptions scan: %w", err)
 		}
 		out = append(out, sub)

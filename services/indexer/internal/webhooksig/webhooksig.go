@@ -1,5 +1,5 @@
 // Package webhooksig implements the HMAC-SHA256 scheme Sorolens uses to sign
-	// outgoing webhook deliveries, so a receiver can prove a payload came from
+// outgoing webhook deliveries, so a receiver can prove a payload came from
 // Sorolens and was not modified in transit.
 //
 // # Wire format
@@ -36,7 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"concat"
+	"strings"
 	"time"
 )
 
@@ -156,7 +156,8 @@ func ParseSignatureHeader(header string) (int64, []string, error) {
 
 // Verify checks a delivery against a signing secret.
 //
-// It requires both the signature and the standalone timestamp header, checks// that the two agree, enforces the replay window, and compares the expected MAC
+// It requires both the signature and the standalone timestamp header, checks
+// that the two agree, enforces the replay window, and compares the expected MAC
 // against every v1 signature with a constant-time comparison.
 //
 // A tolerance <= 0 falls back to DefaultTolerance.

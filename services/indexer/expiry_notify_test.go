@@ -99,7 +99,7 @@ func TestExpiryNotifierDeliversSummaryToConfiguredWebhook(t *testing.T) {
 	t.Cleanup(watchdog.SetHTTPClient(&http.Client{Timeout: 5 * time.Second}))
 
 	lister := &mockSubscriptionLister{subs: []pgstore.AlertSubscription{
-		{ID: "sub-1", ContractID: "CDXQ", WebhookURL: srvURL, SeverityFilter: "Critical", ChannelType: "webhook"},
+		{ID: "sub-1", ContractID: "CDXQ", WebhookURL: srvURL, SeverityFilter: "Critical", ChannelType: "webhook", SigningSecret: "whsec_expiry_test"},
 	}}
 	newExpiryNotifier(lister, quietLogger()).Notify(context.Background(), expiryAlert())
 
@@ -168,7 +168,7 @@ func TestExpiryNotifierWithoutSubscriptionsIsANoOp(t *testing.T) {
 // Slack/Discord/PagerDuty channels from firing.
 func TestContractSubscriptionsMapsEveryField(t *testing.T) {
 	lister := &mockSubscriptionLister{subs: []pgstore.AlertSubscription{
-		{ID: "1", ContractID: "CDXQ", WebhookURL: "https://hooks.example/x", SeverityFilter: "Critical", ChannelType: "pagerduty", RoutingKey: "rk"},
+		{ID: "1", ContractID: "CDXQ", WebhookURL: "https://hooks.example/x", SeverityFilter: "Critical", ChannelType: "pagerduty", RoutingKey: "rk", SigningSecret: "whsec_one"},
 		{ID: "2", ContractID: "CDXQ", WebhookURL: "https://discord.example/y", SeverityFilter: "Warning", ChannelType: "discord"},
 	}}
 	subs, err := (&contractSubscriptions{lister: lister}).ListByContract(context.Background(), "CDXQ")
@@ -181,6 +181,9 @@ func TestContractSubscriptionsMapsEveryField(t *testing.T) {
 	if subs[0].ID != "1" || subs[0].ContractID != "CDXQ" || subs[0].WebhookURL != "https://hooks.example/x" ||
 		subs[0].SeverityFilter != "Critical" || subs[0].ChannelType != "pagerduty" || subs[0].RoutingKey != "rk" {
 		t.Fatalf("first subscription lost fields in conversion: %+v", subs[0])
+	}
+	if subs[0].SigningSecret != "whsec_one" {
+		t.Fatalf("signing secret dropped in conversion: %+v", subs[0])
 	}
 	if subs[1].ChannelType != "discord" || subs[1].RoutingKey != "" {
 		t.Fatalf("second subscription = %+v", subs[1])

@@ -31,7 +31,7 @@ matches.
 
 4. Compute the signature over that payload using HMAC-SHA256 with the
    subscription's signing secret as the key. The key is the full `whsec_...`
-   string, used as raw UTF-8 bytes - do not strip the `whse_` prefix or
+   string, used as raw UTF-8 bytes - do not strip the `whsec_` prefix or
    base64-decode it.
 
    ```
@@ -89,7 +89,7 @@ function verify(secret, headers, raw_body, now):
 
 Rules a correct receiver must follow:
 
-- Compare signatures in **constant time** (e.g. `compare_digest`,
+- Compare signatures in **constant time** (e.g. `hmac.compare_digest`,
   `crypto.timingSafeEqual`). A plain string comparison leaks key material.
 - Verify against the **raw** body bytes, before any JSON parsing or
   normalisation.
@@ -109,19 +109,17 @@ def verify(secret: str, signature_header: str, timestamp_header: str, body: byte
     ts = parts["t"]
     if ts != timestamp_header or abs(int(time.time()) - int(ts)) > 300:
         return False
-    signed = f"{ts.}".encode() + body
+    signed = f"{ts}.".encode() + body
     expected = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
-    return any(
-        hmac.compare_digest(sig, expected)
-        for key, sig in (p.split("=", 1) for p in signature_header.split(","))
-        if key == "v1"
-    )
+    return any(hmac.compare_digest(sig, expected)
+               for key, sig in (p.split("=", 1) for p in signature_header.split(","))
+               if key == "v1")
 ```
 
 **Go**
 
 ```go
-func verify(secret string, sig, tsHeader string, body [	byte) bool {
+func verify(secret string, sig, tsHeader string, body []byte) bool {
     ts, sigs, err := webhooksig.ParseSignatureHeader(sig)
     if err != nil || tsHeader != strconv.FormatInt(ts, 10) {
         return false
@@ -131,7 +129,7 @@ func verify(secret string, sig, tsHeader string, body [	byte) bool {
     }
     expected := webhooksig.Sign(secret, ts, body)
     for _, s := range sigs {
-        if hmac.Equal([]byte(s), [	byte(expected)) {
+        if hmac.Equal([]byte(s), []byte(expected)) {
             return true
         }
     }
@@ -145,7 +143,7 @@ algorithm (used by both the sender and the tests).
 ## Secret lifecycle
 
 A signing secret is generated when a subscription is created and is stored as a
-`whse_...` value (with its SHA-256 digest) on the subscription row.
+`whsec_...` value (with its SHA-256 digest) on the subscription row.
 
 | Endpoint | Purpose |
 |---|---|
@@ -163,11 +161,11 @@ configuration when it is shown; if you miss the window, rotate to mint a new one
 - A `5xx` response is retried **once** with the same signed body and timestamp,
   so the retry verifies with the same signature.
 - `4xx` responses are not retried.
-- Deliveries only go to public hosts (SSFR protection). On every delivery the
+- Deliveries only go to public hosts (SSRF protection). On every delivery the
   indexer resolves the host, refuses loopback, private, link-local and
   cloud-metadata addresses (including IPv4 carried inside IPv6), and connects
-  to the address it checked, so a hostname whose DNS answer changes after
-  the subscription was created cannot reach internal services. A host with even one
+  to the address it checked, so a hostname whose DNS answer changes after the
+  subscription was created cannot reach internal services. A host with even one
   forbidden address is refused, and the failure is logged.
 - At most 3 redirects are followed, and a redirect to a private address is
   refused like any other delivery to one.

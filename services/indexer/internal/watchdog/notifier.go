@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,8 +47,10 @@ type AlertSubscription struct {
 	ChannelType string
 	// RoutingKey is the PagerDuty integration key (pagerduty only).
 	RoutingKey string
-	// Secret is the HMAC-SHA256 signing secret for webhook deliveries.
-	Secret string
+	// SigningSecret is the "whsec_..." HMAC-SHA256 key used to sign webhook
+	// deliveries (watchdog). It is empty for subscriptions created before
+	// migration 000027, which are delivered unsigned.
+	SigningSecret string
 }
 
 // explorerURL links an alert to the transaction that raised it.
@@ -245,18 +248,19 @@ func pagerDutyPayload(a Alert, routingKey string) map[string]any {
 	}
 }
 
-// signHeaders returns the signature and timestamp headers for body using the
-// subscription secret, per docs/webhooks.md. It returns nil when the
-// subscription has no secret.
+// signHeaders returns the signature headers for a delivery body, per
+// docs/webhooks.md: X-Sorolens-Signature holds "t=<ts>,v1=<hex HMAC-SHA256>"
+// over "<ts>.<body>" and X-Sorolens-Timestamp repeats the timestamp so a
+// receiver can apply the replay window before parsing the signature.
+//
+// Both come from the webhooksig package so the sender and the receiver cannot
+// drift apart: the signature value is built by SignatureHeaderValue, not by
+// hand-formatting here.
 func signHeaders(secret string, body []byte, now time.Time) map[string]string {
-	if secret == "" {
-		return nil
-	}
 	ts := now.Unix()
-	sig := webhooksig.Sign(secret, ts, body)
 	return map[string]string{
-		webhooksig.HeaderSignature: sig,
-		webhooksig.HeaderTimestamp: fmt.Sprintf("%d", ts),
+		webhooksig.SignatureHeader: webhooksig.SignatureHeaderValue(ts, webhooksig.Sign(secret, ts, body)),
+		webhooksig.TimestampHeader: strconv.FormatInt(ts, 10),
 	}
 }
 
@@ -495,15 +499,27 @@ func DispatchAlerts(ctx context.Context, alert Alert, subStore AlertSubscription
 }
 
 // deliver sends one notification, retrying once on a 5xx. Each attempt
-// builds a fresh request so the body is re-sent in full.
+// builds a fresh request so the body is re-sent in full. The signature is
+// computed once, before the loop: a retry reuses the same body and the same
+// timestamp, so both attempts verify with the same signature (docs/webhooks.md
+// promises exactly that).
+//
+// A subscription without a signing secret is not delivered to at all: the
+// published contract is that unsigned payloads are never sent, so a row that
+// somehow lacks a secret is logged instead of being posted unauthenticated.
 func deliver(ctx context.Context, sub AlertSubscription, alert Alert, logger *slog.Logger) {
+	if sub.SigningSecret == "" {
+		logger.Error("dispatch alerts: subscription has no signing secret", "subscription_id", sub.ID)
+		return
+	}
 	url, body, err := FormatNotification(sub, alert)
 	if err != nil {
 		logger.Error("dispatch alerts: format", "err", err, "subscription_id", sub.ID, "channel", sub.ChannelType)
 		return
 	}
+	headers := signHeaders(sub.SigningSecret, body, time.Now())
 	for attempt := 1; attempt <= 2; attempt++ {
-		status, err := post(ctx, url, body, signHeaders(sub.Secret, body, time.Now()))
+		status, err := post(ctx, url, body, headers)
 		switch {
 		case err != nil:
 			logger.Error("dispatch alerts: request failed", "err", err, "subscription_id", sub.ID, "attempt", attempt)
