@@ -521,3 +521,76 @@ func TestUpdateContractWasmHash(t *testing.T) {
 		t.Fatal("updating an unknown contract should fail")
 	}
 }
+
+// TestArchiveOldPartitions moves an aged monthly partition out of the live
+// events table and into events_archive, leaving its rows queryable (issue #514).
+// It runs only against a database where events is actually partitioned and
+// migration 000038 has been applied (CI); otherwise it skips.
+func TestArchiveOldPartitions(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	prefix := uniquePrefix(t)
+
+	// A month ~24 months back: entirely older than the 12-month retention
+	// window the test asks for.
+	aged := time.Now().UTC().AddDate(-2, 0, 0)
+	year, month := aged.Year(), int(aged.Month())
+	monthStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	partName := fmt.Sprintf("events_%04d_%02d", year, month)
+
+	// Requires partition maintenance to be in place; skip when it isn't.
+	if err := s.CreateMonthlyPartitionIfNotExists(ctx, year, month); err != nil {
+		t.Skipf("partition maintenance unavailable: %v", err)
+	}
+	// Register cleanup after seedContracts so it runs first (LIFO): the detached
+	// archive table still carries the contracts FK, so the seeded contract
+	// cannot be deleted until the archive table is gone.
+	t.Cleanup(func() {
+		s.pool.Exec(ctx, "DROP TABLE IF EXISTS events_archive."+partName) //nolint:errcheck
+	})
+
+	cid := seedContracts(t, s, prefix, "arc")[0]
+
+	// One event inside the aged partition.
+	eventID := prefix + "evt1"
+	if _, err := s.pool.Exec(ctx, `
+		INSERT INTO events (id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+		                    topic_xdr, value_xdr, in_successful_call, inserted_at)
+		VALUES ($1,$2,'testnet',100,$3,'tx-arc','test','[]','x',true,now())`,
+		eventID, cid, monthStart.AddDate(0, 0, 1)); err != nil {
+		t.Fatalf("seed aged event: %v", err)
+	}
+
+	moved, err := s.ArchiveOldPartitions(ctx, 12)
+	if err != nil {
+		t.Fatalf("ArchiveOldPartitions: %v", err)
+	}
+	var found bool
+	for _, n := range moved {
+		if n == partName {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("archived partitions %v, want %q among them", moved, partName)
+	}
+
+	// The row must no longer be reachable through the live parent...
+	var live int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM events WHERE contract_id = $1`, cid).Scan(&live); err != nil {
+		t.Fatalf("count live: %v", err)
+	}
+	if live != 0 {
+		t.Errorf("live events still holds %d rows after archiving, want 0", live)
+	}
+
+	// ...but is still queryable in the archive schema.
+	var archived int
+	if err := s.pool.QueryRow(ctx,
+		fmt.Sprintf("SELECT count(*) FROM events_archive.%s WHERE contract_id = $1", partName), cid).Scan(&archived); err != nil {
+		t.Fatalf("count archived: %v", err)
+	}
+	if archived != 1 {
+		t.Errorf("events_archive.%s holds %d rows, want 1", partName, archived)
+	}
+}

@@ -31,6 +31,10 @@ type Store interface {
 	UpsertSyncState(ctx context.Context, s SyncState) error
 	CreateNextMonthPartition(ctx context.Context) error
 	CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error
+	// ArchiveOldPartitions detaches monthly event partitions entirely older
+	// than retainMonths and moves them to the events_archive schema,
+	// returning the partition names moved (issue #514).
+	ArchiveOldPartitions(ctx context.Context, retainMonths int) ([]string, error)
 
 	// GetIndexerCursor returns the last committed ledger for a network, or 0 if none.
 	GetIndexerCursor(ctx context.Context, network string) (uint32, error)

@@ -124,13 +124,35 @@ test.describe("Settings", () => {
     await expect(page.getByLabel("Health changes")).not.toBeChecked();
   });
 
-  test("generates, saves, and revokes an API key", async ({ page }) => {
+  test("generates a real key via the API, saves id and prefix, then revokes", async ({
+    page,
+  }) => {
+    // Issue #613: the card now calls POST/DELETE /api/v1/api-keys. Playwright
+    // consults the most recently added route first, so this route wins over
+    // the catch-all **/api/v1/** registered in beforeEach.
+    await page.route("**/api/v1/api-keys**", (route) => {
+      if (route.request().method() === "POST") {
+        return route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: "key_e2e",
+            name: "Sorolens settings key",
+            key_prefix: "sl_e2epref",
+            created_at: new Date().toISOString(),
+            key: "sl_e2epref_full_plaintext",
+          }),
+        });
+      }
+      return route.fulfill({ status: 204, body: "" });
+    });
+
     await page
       .getByTestId("settings-api-key")
       .getByRole("button", { name: "Generate key" })
       .click();
-    await expect(page.getByTestId("settings-api-key-value")).toContainText(
-      "sl_live_"
+    await expect(page.getByTestId("settings-api-key-value")).toHaveText(
+      "sl_e2epref_full_plaintext"
     );
 
     await page
@@ -140,13 +162,21 @@ test.describe("Settings", () => {
     await expect(page.getByTestId("settings-api-key-status")).toHaveText(
       "Saved"
     );
+    const saved = await page.evaluate(
+      (key) => window.localStorage.getItem(key),
+      SETTINGS_KEY
+    );
+    const stored = JSON.parse(saved as string);
+    expect(stored.apiKeyId).toBe("key_e2e");
+    expect(stored.apiKeyPrefix).toBe("sl_e2epref");
+    // The one-time plaintext is never persisted (issue #613).
+    expect(saved).not.toContain("sl_e2epref_full_plaintext");
 
-    // Reloading masks the token again, but the key is still stored.
+    // After a reload the plaintext is gone for good; only the prefix shows.
     await page.reload();
     await expect(page.getByTestId("settings-theme")).toBeVisible();
-    await expect(page.getByTestId("settings-api-key-value")).toContainText("•");
     await expect(page.getByTestId("settings-api-key-value")).toContainText(
-      "sl_live_"
+      "sl_e2epref"
     );
 
     await page
@@ -162,11 +192,11 @@ test.describe("Settings", () => {
     await page.reload();
     await expect(page.getByTestId("settings-theme")).toBeVisible();
     await expect(page.getByTestId("settings-api-key-value")).toHaveText("—");
-    const stored = await page.evaluate(
+    const cleared = await page.evaluate(
       (key) => window.localStorage.getItem(key),
       SETTINGS_KEY
     );
-    expect(JSON.parse(stored as string).apiKey).toBeNull();
+    expect(JSON.parse(cleared as string).apiKeyId).toBeNull();
   });
 
   test("is reachable from the header navigation", async ({ page }) => {

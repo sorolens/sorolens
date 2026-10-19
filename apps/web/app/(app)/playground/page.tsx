@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { EndpointEntry, endpointsByTag } from "@/lib/openapi";
-import { loadSettings } from "@/lib/settings";
 import { useLocale } from "@/lib/i18n";
 import {
   buildCurl,
@@ -28,11 +27,10 @@ export default function PlaygroundPage() {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
-  useEffect(() => {
-    const savedApiKey = loadSettings().apiKey;
-    if (savedApiKey) setApiKey(savedApiKey);
-  }, []);
-
+  // Issue #613: settings used to persist a fabricated `sl_live_...` token in
+  // localStorage. That field is gone, so the playground no longer prefills
+  // from it; paste a real API key issued by POST /api/v1/api-keys to test
+  // authenticated calls.
   const curl = buildCurl(
     selected.method,
     buildUrl(

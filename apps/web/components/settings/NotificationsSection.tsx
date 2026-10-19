@@ -28,7 +28,7 @@ export function NotificationsSection({
     <SettingsCard
       testId="settings-notifications"
       title="Notification preferences"
-      description="Which emails Sorolens sends you about the contracts you track."
+      description="Which emails Sorolens sends you about the contracts you track. Stored in this browser only — the API has no notification-preference endpoint yet, so these settings do not follow you to another device."
       status={status}
       onSave={onSave}
     >

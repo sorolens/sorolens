@@ -33,7 +33,7 @@ const messages = {
     "preferences.utc": "UTC",
     "playground.title": "API Playground",
     "playground.description":
-      "Pick an endpoint, fill in the parameters, and send a request. A saved API key from Settings is pre-filled.",
+      "Pick an endpoint, fill in the parameters, and send a request. Paste an API key issued by the API to test authenticated endpoints.",
     "playground.request": "Request",
     "playground.noParameters": "This endpoint has no parameters.",
     "playground.body": "Request body (JSON)",
@@ -66,7 +66,7 @@ const messages = {
     "preferences.utc": "UTC",
     "playground.title": "Explorador de API",
     "playground.description":
-      "Elige un endpoint, completa los parámetros y envía una solicitud. La clave guardada en Configuración se completa automáticamente.",
+      "Elige un endpoint, completa los parámetros y envía una solicitud. Pega una clave emitida por la API para probar endpoints autenticados.",
     "playground.request": "Solicitud",
     "playground.noParameters": "Este endpoint no tiene parámetros.",
     "playground.body": "Cuerpo de la solicitud (JSON)",

@@ -90,7 +90,11 @@ test("fills path parameters and API key into the curl preview", async ({
   );
 });
 
-test("pre-fills the API key saved in Settings", async ({ page }) => {
+test("does not pre-fill a legacy key persisted by Settings", async ({
+  page,
+}) => {
+  // Issue #613 removed the plaintext apiKey from settings storage, so the
+  // playground no longer carries one over; the operator pastes a real key.
   await page.addInitScript((key) => {
     window.localStorage.setItem(
       key,
@@ -102,12 +106,7 @@ test("pre-fills the API key saved in Settings", async ({ page }) => {
   await page.goto("/playground");
   await expectHeading(page, "API Playground");
 
-  await expect(page.getByLabel("API key (optional)")).toHaveValue(
-    "sl_live_saved_key"
-  );
-  await expect(curlPreview(page)).toContainText(
-    "-H 'Authorization: Bearer sl_live_saved_key'"
-  );
+  await expect(page.getByLabel("API key (optional)")).toHaveValue("");
 });
 
 test("sends a request and renders status, headers and body", async ({

@@ -74,6 +74,12 @@ func main() {
 		AnomalyLookbackHours: envInt("INDEXER_ANOMALY_LOOKBACK_HOURS", 168),
 		AnomalySigma:         envFloat("INDEXER_ANOMALY_SIGMA", 3),
 		AnomalyMinHistory:    envInt("INDEXER_ANOMALY_MIN_HISTORY", 12),
+		// Partition maintenance (issue #514). Pre-create this many months of
+		// `events` partitions ahead of the current month; aged partitions are
+		// detached into the events_archive schema once they fall out of the
+		// retention window. Retention is disabled when the window is 0.
+		PartitionMonthsAhead:  envInt("INDEXER_PARTITION_PRECREATE_MONTHS", 3),
+		EventsRetentionMonths: envInt("INDEXER_EVENTS_RETENTION_MONTHS", 0),
 	}
 
 	// Soroban RPC: one client per configured network (issue #499).

@@ -515,6 +515,28 @@ func (s *Store) CreateMonthlyPartitionIfNotExists(ctx context.Context, year int,
 	return nil
 }
 
+// ArchiveOldPartitions detaches monthly partitions entirely older than
+// retainMonths and moves them into the events_archive schema, returning the
+// names moved. Backed by the archive_old_partitions() function added in
+// migration 000038 (issue #514). Rows stay queryable as
+// events_archive.events_YYYY_MM; the live table stops growing.
+func (s *Store) ArchiveOldPartitions(ctx context.Context, retainMonths int) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT archive_old_partitions($1)`, retainMonths)
+	if err != nil {
+		return nil, fmt.Errorf("archive old partitions: %w", err)
+	}
+	defer rows.Close()
+	var moved []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan archived partition name: %w", err)
+		}
+		moved = append(moved, name)
+	}
+	return moved, rows.Err()
+}
+
 // ---- anomaly and health -----------------------------------------------------
 
 // RecentHourlyActivity returns one bucket per hour for the last `hours`

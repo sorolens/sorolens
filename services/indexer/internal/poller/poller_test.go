@@ -126,6 +126,12 @@ type fakeStore struct {
 	// indexerCursors maps network -> last committed ledger (the indexer
 	// cursor) shared by Get/SetIndexerCursor and BatchInsertWithCursor.
 	indexerCursors map[string]uint32
+	// archived holds the retainMonths argument of each ArchiveOldPartitions
+	// call, so tests can assert the retention pass ran (issue #514).
+	// archiveResult/archiveErr configure its return.
+	archived      []int
+	archiveResult []string
+	archiveErr    error
 	// eventInsertErrs maps event ID -> error returned by BatchInsertEvents.
 	// Used to simulate deliberately bad events for the DLQ path (issue #202).
 	eventInsertErrs map[string]error
@@ -213,6 +219,15 @@ func (f *fakeStore) UpsertSyncState(_ context.Context, s SyncState) error {
 func (f *fakeStore) CreateNextMonthPartition(_ context.Context) error { return nil }
 func (f *fakeStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error {
 	return nil
+}
+
+// ArchiveOldPartitions records each call's retainMonths so tests can assert
+// the partition retention pass ran (issue #514).
+func (f *fakeStore) ArchiveOldPartitions(_ context.Context, retainMonths int) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.archived = append(f.archived, retainMonths)
+	return f.archiveResult, f.archiveErr
 }
 
 func (f *fakeStore) GetIndexerCursor(_ context.Context, network string) (uint32, error) {
@@ -1114,5 +1129,63 @@ func TestBatchInsertWithCursor_RetryThenSuccess(t *testing.T) {
 	}
 	if st.syncStates["C1"].LastLedger != 10 || st.indexerCursors["testnet"] != 10 {
 		t.Fatalf("cursors = %+v / %+v, want both at 10", st.syncStates["C1"], st.indexerCursors["testnet"])
+	}
+}
+
+// ---- partition maintenance (issue #514) ---------------------------------------
+
+func TestProcessAllPartitionRetentionCadence(t *testing.T) {
+	st := newFakeStore(nil)
+	cfg := testConfig()
+	cfg.PartitionMonthsAhead = 2
+	cfg.EventsRetentionMonths = 12
+	p := New(&fakeRPC{}, st, newFakeRedis(), cfg, testLogger())
+
+	if err := p.processAll(context.Background()); err != nil {
+		t.Fatalf("processAll: %v", err)
+	}
+	st.mu.Lock()
+	ran := append([]int(nil), st.archived...)
+	st.mu.Unlock()
+	if len(ran) != 1 || ran[0] != 12 {
+		t.Fatalf("retention calls = %v, want [12] on the first pass", ran)
+	}
+
+	// A second pass right away must not re-run the job: the archive cadence
+	// is daily regardless of pass frequency.
+	if err := p.processAll(context.Background()); err != nil {
+		t.Fatalf("processAll (second pass): %v", err)
+	}
+	st.mu.Lock()
+	ran2 := len(st.archived)
+	st.mu.Unlock()
+	if ran2 != 1 {
+		t.Fatalf("retention ran %d times within the interval, want 1", ran2)
+	}
+
+	// Once the interval elapsed, the job runs again.
+	p.lastRetentionAt = time.Now().Add(-retentionInterval - time.Minute)
+	if err := p.processAll(context.Background()); err != nil {
+		t.Fatalf("processAll (after interval): %v", err)
+	}
+	st.mu.Lock()
+	ran3 := len(st.archived)
+	st.mu.Unlock()
+	if ran3 != 2 {
+		t.Fatalf("retention ran %d times after the interval elapsed, want 2", ran3)
+	}
+}
+
+func TestProcessAllRetentionDisabledByDefault(t *testing.T) {
+	st := newFakeStore(nil)
+	p := New(&fakeRPC{}, st, newFakeRedis(), testConfig(), testLogger())
+	if err := p.processAll(context.Background()); err != nil {
+		t.Fatalf("processAll: %v", err)
+	}
+	st.mu.Lock()
+	ran := len(st.archived)
+	st.mu.Unlock()
+	if ran != 0 {
+		t.Fatalf("retention ran %d times with EventsRetentionMonths=0, want 0 (opt-in)", ran)
 	}
 }

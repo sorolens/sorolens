@@ -59,6 +59,14 @@ type Config struct {
 	AnomalySigma float64
 	// AnomalyMinHistory is the minimum samples before detection starts.
 	AnomalyMinHistory int
+
+	// PartitionMonthsAhead is how many months past the current one the
+	// per-pass partition job pre-creates (issue #514). Values < 1 clamp to 1.
+	PartitionMonthsAhead int
+	// EventsRetentionMonths detaches monthly partitions older than the window
+	// into events_archive on a daily cadence. 0 (default) disables the job;
+	// archiving is strictly opt-in.
+	EventsRetentionMonths int
 }
 
 // Poller fetches and persists events and invocations for all tracked contracts.
@@ -79,7 +87,14 @@ type Poller struct {
 	// (issue #510). It is nil unless SetExpiryAlerter is called, so
 	// deployments without the feature enabled are unaffected.
 	expiryAlerter ExpiryAlerter
+	// lastRetentionAt is when the partition retention job last ran; the zero
+	// value makes the first pass execute it (issue #514).
+	lastRetentionAt time.Time
 }
+
+// retentionInterval throttles the partition archive job to roughly daily no
+// matter how fast the pass cadence is.
+const retentionInterval = 24 * time.Hour
 
 // RuleEvaluator is the rule engine the poller invokes at the end of a pass
 // (see the rulesengine package).
@@ -184,9 +199,19 @@ func (p *Poller) runContinuous(ctx context.Context) error {
 
 // processAll fetches and indexes events for every active contract.
 func (p *Poller) processAll(ctx context.Context) error {
-	// Ensure the next month's partition exists before processing.
-	if err := partition.EnsureNextMonthPartition(ctx, p.store); err != nil {
-		p.log.Warn("failed to ensure next month partition", "err", err)
+	// Ensure this month and the configured months ahead exist before
+	// processing, and run the retention/archive job at most once a day.
+	if err := partition.EnsureCoverage(ctx, p.store, time.Now(), p.cfg.PartitionMonthsAhead); err != nil {
+		p.log.Warn("failed to ensure event partition coverage", "err", err)
+	}
+	if p.cfg.EventsRetentionMonths > 0 && time.Since(p.lastRetentionAt) >= retentionInterval {
+		p.lastRetentionAt = time.Now()
+		moved, err := partition.Retain(ctx, p.store, p.cfg.EventsRetentionMonths)
+		if err != nil {
+			p.log.Warn("partition retention job failed", "err", err)
+		} else if len(moved) > 0 {
+			p.log.Info("archived aged event partitions", "count", len(moved), "partitions", moved)
+		}
 	}
 	workerCount := p.cfg.Workers
 	if workerCount < 1 {

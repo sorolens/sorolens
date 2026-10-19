@@ -48,8 +48,15 @@ export interface UserSettings {
   /** Network pre-selected in the header selector on first load. */
   defaultNetwork: string;
   notifications: NotificationPreferences;
-  /** Plaintext token shown once after generation; null when revoked. */
-  apiKey: string | null;
+  /**
+   * Server-issued key reference (issue #613). The API keeps only a hash of
+   * the token and returns the plaintext once at creation, so the plaintext is
+   * never persisted here — just the id and non-secret prefix needed to show
+   * and revoke the key. Null when no key exists.
+   */
+  apiKeyId: string | null;
+  /** Non-secret key prefix echoed by the API, e.g. "sl_ab12cd3". */
+  apiKeyPrefix: string | null;
   apiKeyCreatedAt: string | null;
 }
 
@@ -66,7 +73,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
       weekly_digest: false,
     },
   },
-  apiKey: null,
+  apiKeyId: null,
+  apiKeyPrefix: null,
   apiKeyCreatedAt: null,
 };
 
@@ -76,23 +84,6 @@ export function isValidEmail(value: string): boolean {
   if (trimmed.length === 0 || trimmed.length > 254) return false;
   if (/\s/.test(trimmed)) return false;
   return /^[^@.]+(\.[^@.]+)*@[^@.]+(\.[^@.]+)+$/.test(trimmed);
-}
-
-/** Generates a display-once API token. Not a real credential yet. */
-export function generateApiKey(): string {
-  const bytes = new Uint8Array(24);
-  globalThis.crypto.getRandomValues(bytes);
-  const body = Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, "0")
-  ).join("");
-  return `sl_live_${body}`;
-}
-
-/** Renders a token for display without revealing the whole secret. */
-export function maskApiKey(key: string | null): string {
-  if (!key) return "";
-  if (key.length <= 12) return "•".repeat(key.length);
-  return `${key.slice(0, 8)}${"•".repeat(8)}${key.slice(-4)}`;
 }
 
 function coerceSettings(raw: unknown): UserSettings {
@@ -126,7 +117,19 @@ function coerceSettings(raw: unknown): UserSettings {
           DEFAULT_SETTINGS.notifications.channels.weekly_digest,
       },
     },
-    apiKey: typeof value.apiKey === "string" ? value.apiKey : null,
+    // Issue #613: a pre-#613 blob stored a plaintext `apiKey` string that was
+    // never a real credential (nothing on the server knew about it). Reading
+    // it into the new shape drops the fake key entirely rather than displaying
+    // it as if it authenticated anything, and the next save persists the
+    // corrected shape. Only the server-issued id and non-secret prefix survive.
+    apiKeyId:
+      typeof value.apiKeyId === "string" && value.apiKeyId
+        ? value.apiKeyId
+        : null,
+    apiKeyPrefix:
+      typeof value.apiKeyPrefix === "string" && value.apiKeyPrefix
+        ? value.apiKeyPrefix
+        : null,
     apiKeyCreatedAt:
       typeof value.apiKeyCreatedAt === "string" ? value.apiKeyCreatedAt : null,
   };

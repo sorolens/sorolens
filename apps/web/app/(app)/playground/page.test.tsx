@@ -77,19 +77,19 @@ describe("PlaygroundPage", () => {
     expect(keyInput.value).toBe("");
   });
 
-  it("pre-fills the API key saved in Settings", async () => {
+  it("does not pre-fill a legacy key persisted by Settings", async () => {
+    // Issue #613 removed the fabricated apiKey from settings storage; even a
+    // pre-#613 blob left on disk must not carry a key into the playground.
     localStorage.setItem(
       SETTINGS_STORAGE_KEY,
       JSON.stringify({ apiKey: "sl_saved_key" })
     );
     render(<PlaygroundPage />);
 
-    await waitFor(() => {
-      expect(
-        (document.getElementById("playground-api-key") as HTMLInputElement)
-          .value
-      ).toBe("sl_saved_key");
-    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(
+      (document.getElementById("playground-api-key") as HTMLInputElement).value
+    ).toBe("");
   });
 
   it("sends a request and renders status, headers, and body", async () => {

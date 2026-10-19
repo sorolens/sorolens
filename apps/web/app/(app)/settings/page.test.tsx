@@ -33,6 +33,7 @@ vi.mock("@/lib/network", () => ({
 }));
 
 import { SETTINGS_STORAGE_KEY } from "@/lib/settings";
+import { SESSION_STORAGE_KEY } from "@/lib/user";
 
 async function renderPage() {
   const { default: SettingsPage } = await import("@/app/(app)/settings/page");
@@ -66,15 +67,17 @@ describe("SettingsPage", () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
-  it("renders all four sections", async () => {
+  it("renders all sections including the API-issued identity card", async () => {
     await renderPage();
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
     expect(screen.getByTestId("settings-theme")).toBeTruthy();
     expect(screen.getByTestId("settings-network")).toBeTruthy();
     expect(screen.getByTestId("settings-notifications")).toBeTruthy();
+    expect(screen.getByTestId("settings-identity")).toBeTruthy();
     expect(screen.getByTestId("settings-api-key")).toBeTruthy();
   });
 
@@ -108,9 +111,9 @@ describe("SettingsPage", () => {
     expect(
       (screen.getByLabelText("Health changes") as HTMLInputElement).checked
     ).toBe(false);
-    expect(screen.getByTestId("settings-api-key-value").textContent).toContain(
-      "sl_live_"
-    );
+    // Issue #613: a stored pre-#613 plaintext `apiKey` was a fabricated local
+    // string, so coerceSettings drops it; the card shows no key.
+    expect(screen.getByTestId("settings-api-key-value").textContent).toBe("—");
   });
 
   it("saves the default network and switches the header selector", async () => {
@@ -165,7 +168,44 @@ describe("SettingsPage", () => {
     expect(stored.notifications.channels.weekly_digest).toBe(true);
   });
 
-  it("generates an API key, persists it, then revokes it", async () => {
+  it("generates a real key through the API, persists only id and prefix, then revokes", async () => {
+    // Issue #613: the card must talk to POST/DELETE /api/v1/api-keys with the
+    // session bearer, keep the one-time plaintext in memory only, and persist
+    // nothing but the server-issued id and non-secret prefix.
+    localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({
+        user_id: "u_42",
+        token: "sls_sig",
+        expires_at: new Date(Date.now() + 3600_000).toISOString(),
+      })
+    );
+    const plaintext = "sl_ab12cd3_7f4bd2a1e5c9330f";
+    const fetchMock = vi.fn(
+      async (
+        input: string,
+        init?: { method?: string; headers?: Record<string, string> }
+      ) => {
+        if (init?.method === "POST") {
+          return new Response(
+            JSON.stringify({
+              id: "key_1",
+              name: "Sorolens settings key",
+              key_prefix: "sl_ab12cd3",
+              created_at: "2026-10-01T00:00:00.000Z",
+              key: plaintext,
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        if (init?.method === "DELETE") {
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`unexpected fetch: ${init?.method} ${input}`);
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
     await renderPage();
 
     expect(screen.getByTestId("settings-api-key-value").textContent).toBe("—");
@@ -175,32 +215,47 @@ describe("SettingsPage", () => {
         name: "Generate key",
       })
     );
-    const generated = screen
-      .getByTestId("settings-api-key-value")
-      .textContent?.trim() as string;
-    expect(generated.startsWith("sl_live_")).toBe(true);
+    await waitFor(() =>
+      expect(screen.getByTestId("settings-api-key-value").textContent).toBe(
+        plaintext
+      )
+    );
+    const [postUrl, postInit] = fetchMock.mock.calls[0]!;
+    expect(String(postUrl)).toContain("/api/v1/api-keys");
+    expect(postInit?.headers?.Authorization).toBe("Bearer sls_sig");
 
     fireEvent.click(cardSave("settings-api-key"));
     await waitFor(() =>
       expect(screen.getByTestId("settings-api-key-status")).toBeTruthy()
     );
-    expect(
-      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).apiKey
-    ).toBe(generated);
+    const persisted = localStorage.getItem(SETTINGS_STORAGE_KEY) as string;
+    const stored = JSON.parse(persisted);
+    expect(stored.apiKeyId).toBe("key_1");
+    expect(stored.apiKeyPrefix).toBe("sl_ab12cd3");
+    // The one-time plaintext must never reach storage (issue #613).
+    expect(persisted).not.toContain(plaintext);
 
     fireEvent.click(
       within(screen.getByTestId("settings-api-key")).getByRole("button", {
         name: "Revoke",
       })
     );
-    fireEvent.click(cardSave("settings-api-key"));
-
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("DELETE");
+    // Let the DELETE settle before saving: the card only clears the draft
+    // after the API confirms, same as a real operator's click order.
     await waitFor(() =>
       expect(screen.getByTestId("settings-api-key-value").textContent).toBe("—")
     );
+    fireEvent.click(cardSave("settings-api-key"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("settings-api-key-status")).toBeTruthy()
+    );
     expect(
-      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).apiKey
+      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).apiKeyId
     ).toBeNull();
+
+    vi.unstubAllGlobals();
   });
 
   it("applies a theme change through the provider", async () => {

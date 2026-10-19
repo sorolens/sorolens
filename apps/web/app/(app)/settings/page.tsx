@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiKeySection } from "@/components/settings/ApiKeySection";
+import { IdentitySection } from "@/components/settings/IdentitySection";
 import { NetworkSection } from "@/components/settings/NetworkSection";
 import { NotificationsSection } from "@/components/settings/NotificationsSection";
 import type { SaveState } from "@/components/settings/SettingsCard";
 import { ThemeSection } from "@/components/settings/ThemeSection";
 import { useNetwork } from "@/lib/network";
+import { useSessionUserId } from "@/lib/useSession";
 import {
   DEFAULT_SETTINGS,
   isValidEmail,
@@ -28,6 +30,9 @@ type SectionId = "theme" | "network" | "notifications" | "apiKey";
  */
 export default function SettingsPage() {
   const { setNetwork } = useNetwork();
+  // The verified workspace ID minted by POST /api/v1/auth/session (issue #613);
+  // also the bearer-token owner for the API-key calls.
+  const userId = useSessionUserId();
   const [saved, setSaved] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [draft, setDraft] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
@@ -63,7 +68,8 @@ export default function SettingsPage() {
       : null;
 
   const apiKeyDirty =
-    draft.apiKey !== saved.apiKey ||
+    draft.apiKeyId !== saved.apiKeyId ||
+    draft.apiKeyPrefix !== saved.apiKeyPrefix ||
     draft.apiKeyCreatedAt !== saved.apiKeyCreatedAt;
 
   return (
@@ -119,13 +125,22 @@ export default function SettingsPage() {
               }}
             />
 
+            <IdentitySection userId={userId} />
+
             <ApiKeySection
-              apiKey={draft.apiKey}
+              apiKeyId={draft.apiKeyId}
+              apiKeyPrefix={draft.apiKeyPrefix}
               apiKeyCreatedAt={draft.apiKeyCreatedAt}
+              userId={userId}
               dirty={apiKeyDirty}
               status={status.apiKey ?? "idle"}
-              onChange={(apiKey, apiKeyCreatedAt) =>
-                setDraft((current) => ({ ...current, apiKey, apiKeyCreatedAt }))
+              onChange={(apiKeyId, apiKeyPrefix, apiKeyCreatedAt) =>
+                setDraft((current) => ({
+                  ...current,
+                  apiKeyId,
+                  apiKeyPrefix,
+                  apiKeyCreatedAt,
+                }))
               }
               onSave={() => commit(draft, "apiKey")}
             />

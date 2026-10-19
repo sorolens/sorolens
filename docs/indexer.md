@@ -52,3 +52,42 @@ The store tests run when `POSTGRES_TEST_URL` points at a migrated database:
 POSTGRES_TEST_URL=postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable \
   go test ./services/indexer/internal/pgstore/...
 ```
+
+## Event partition maintenance (issue #514)
+
+`events` is range-partitioned by month on `ledger_closed_at`
+(`apps/api/internal/db/migrations/000005_partition_events.up.sql`). Two things
+keep it healthy:
+
+**Pre-created partitions.** On every indexer pass,
+`services/indexer/internal/partition` ensures the current month plus
+`INDEXER_PARTITION_PRECREATE_MONTHS` (default 3) future months exist, so an
+indexer stopped across a month boundary comes back to coverage rather than a
+gap. If a row still lands outside every monthly range — a backfill of a month
+that was never provisioned — the DEFAULT partition `events_default`
+(migration `000038_partition_default_and_archive`) catches it: an insert never
+fails for lack of a partition. Writes into `events_default` are a signal to run
+the maintenance job; they are visible via
+`SELECT count(*) FROM events_default`.
+
+**Retention (opt-in).** With `INDEXER_EVENTS_RETENTION_MONTHS` set to a
+positive window, the job runs at most once a day and detaches every monthly
+partition whose entire range is older than the window, moving it to the
+`events_archive` schema via `archive_old_partitions()` — the rows stay
+queryable as `events_archive.events_YYYY_MM`, the live table stops growing,
+and nothing is deleted. `events_default` is never archived (it has no month
+boundary to age out). Retention is disabled when the window is `0`.
+
+| Variable | Default | Description |
+| ------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| `INDEXER_PARTITION_PRECREATE_MONTHS` | `3` | Months past the current one to pre-create on each pass. Clamped to at least 1. |
+| `INDEXER_EVENTS_RETENTION_MONTHS` | `0` | Retention window in whole months. Aged partitions are detached into `events_archive`. `0` keeps every partition live. |
+
+To restore an archived month, re-attach it (after re-creating any overlapping
+default-partition rows handling):
+
+```sql
+ALTER TABLE events_archive.events_2025_01 SET SCHEMA public;
+ALTER TABLE events ATTACH PARTITION events_2025_01
+  FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
+```
