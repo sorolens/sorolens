@@ -264,11 +264,17 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8080
         run: pnpm build
   # ------------------------------------------------------------
-  # Rust: fixture contract
+  # Rust: fixture and watchdog contracts
   # ------------------------------------------------------------
   rust:
-    name: Rust (contracts/counter)
+    name: Rust (${{ matrix.contract }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        contract:
+          - contracts/counter
+          - contracts/watchdog
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -284,22 +290,26 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            contracts/counter/target/
-          key: cargo-${{ hashFiles('contracts/counter/Cargo.lock') }}
+            ${{ matrix.contract }}/target/
+          key: cargo-${{ matrix.contract }}-${{ hashFiles(format('{0}/Cargo.lock', matrix.contract)) }}
           restore-keys: |
-            cargo-
+            cargo-${{ matrix.contract }}-
       - name: cargo fmt --check
-        working-directory: contracts/counter
+        working-directory: ${{ matrix.contract }}
         run: cargo fmt --check
-      - name: cargo check (native)
-        working-directory: contracts/counter
-        run: cargo check
-      - name: cargo check (wasm32)
-        working-directory: contracts/counter
-        run: cargo check --target wasm32v1-none
+      - name: cargo clippy
+        working-directory: ${{ matrix.contract }}
+        run: cargo clippy --all-targets -- -D warnings
       - name: cargo test
-        working-directory: contracts/counter
+        working-directory: ${{ matrix.contract }}
         run: cargo test
+      - name: Build optimized WASM and report size
+        working-directory: ${{ matrix.contract }}
+        run: |
+          cargo build --release --target wasm32v1-none
+          wasm_file="target/wasm32v1-none/release/${{ matrix.contract == 'contracts/watchdog' && 'sorolens_watchdog' || 'sorolens_counter' }}.wasm"
+          test -f "$wasm_file"
+          echo "${{ matrix.contract }} WASM size: $(wc -c < "$wasm_file" | tr -d ' ') bytes"
 
   # ------------------------------------------------------------
   # Backup & Restore Scripts Test
