@@ -225,8 +225,7 @@ describe("ContractsPage", () => {
     });
     mockListContracts.mockResolvedValue({
       contracts: [CONTRACT_A, CONTRACT_B],
-      cursor: null,
-      has_more: false,
+      next_cursor: "",
     });
   });
 
@@ -322,8 +321,7 @@ describe("ContractsPage", () => {
   it("shows empty state when no contracts are tracked", async () => {
     mockListContracts.mockResolvedValue({
       contracts: [],
-      cursor: null,
-      has_more: false,
+      next_cursor: "",
     });
     await renderPage();
     await waitFor(() =>
@@ -348,8 +346,7 @@ describe("ContractsPage", () => {
   it("links the empty-state prompt to the wizard route", async () => {
     mockListContracts.mockResolvedValue({
       contracts: [],
-      cursor: null,
-      has_more: false,
+      next_cursor: "",
     });
     await renderPage();
     await waitFor(() =>
@@ -372,7 +369,7 @@ describe("ContractsPage", () => {
     expect(prevBtn?.disabled).toBe(true);
   });
 
-  // ── Pagination: next disabled when has_more=false ─────────────────────────
+  // ── Pagination: next disabled when next_cursor is empty ──────────────────
 
   it("Next button is disabled when there is no next page", async () => {
     await renderPage();
@@ -451,13 +448,11 @@ describe("ContractsPage", () => {
     mockListContracts
       .mockResolvedValueOnce({
         contracts: [CONTRACT_A, CONTRACT_B],
-        cursor: null,
-        has_more: false,
+        next_cursor: "",
       })
       .mockResolvedValue({
         contracts: [CONTRACT_B],
-        cursor: null,
-        has_more: false,
+        next_cursor: "",
       });
     mockBatchContracts.mockResolvedValue({
       action: "untrack",
@@ -554,18 +549,16 @@ describe("ContractsPage", () => {
     expect(screen.getByText(/1 selected/i)).toBeDefined();
   });
 
-  // ── Pagination: next enabled and advances when has_more=true ─────────────
-  it("Next button is enabled and triggers next page fetch when has_more=true", async () => {
+  // ── Pagination: next enabled and advances when next_cursor is non-empty ──
+  it("Next button is enabled and advances with the API next_cursor", async () => {
     mockListContracts
       .mockResolvedValueOnce({
         contracts: [CONTRACT_A, CONTRACT_B],
-        cursor: CONTRACT_B.id,
-        has_more: true,
+        next_cursor: "bmV4dC1wYWdl",
       })
       .mockResolvedValueOnce({
         contracts: [],
-        cursor: null,
-        has_more: false,
+        next_cursor: "",
       });
 
     await renderPage();
@@ -578,8 +571,12 @@ describe("ContractsPage", () => {
 
     fireEvent.click(nextBtn);
 
-    // listContracts should be called a second time for page 2
+    // listContracts should be called a second time for page 2, continuing
+    // from the opaque cursor the API returned — not a client-invented one.
     await waitFor(() => expect(mockListContracts).toHaveBeenCalledTimes(2));
+    expect(mockListContracts.mock.calls[1][0]).toEqual(
+      expect.objectContaining({ cursor: "bmV4dC1wYWdl" })
+    );
   });
 
   // ── The list never keeps a stale page after a network switch ───────────────
@@ -611,8 +608,7 @@ describe("ContractsPage", () => {
   it("filters by tag when a tag chip is clicked", async () => {
     mockListContracts.mockResolvedValue({
       contracts: [{ ...CONTRACT_A, tags: ["prod"] }, CONTRACT_B],
-      cursor: null,
-      has_more: false,
+      next_cursor: "",
     });
     await renderPage();
     await waitFor(() => screen.getByTestId("data-table"));
@@ -631,8 +627,7 @@ describe("ContractsPage", () => {
   it("renders a chip for each contract tag", async () => {
     mockListContracts.mockResolvedValue({
       contracts: [{ ...CONTRACT_A, tags: ["prod", "defi"] }, CONTRACT_B],
-      cursor: null,
-      has_more: false,
+      next_cursor: "",
     });
     await renderPage();
     await waitFor(() => screen.getByTestId("data-table"));
@@ -772,8 +767,7 @@ describe("ContractsPage", () => {
   it("still shows the empty state when the request succeeds with no contracts", async () => {
     mockListContracts.mockResolvedValue({
       contracts: [],
-      cursor: null,
-      has_more: false,
+      next_cursor: "",
     });
     await renderPage();
 

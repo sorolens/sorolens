@@ -181,8 +181,8 @@ export interface ContractSummary {
 
 export interface ContractsListResponse {
   contracts: ContractSummary[];
-  cursor: string | null;
-  has_more: boolean;
+  /** Opaque cursor for the next page; empty on the last page. */
+  next_cursor: string;
 }
 
 /** One contract as returned by GET /api/v1/search (OpenAPI `Contract`, issue #619). */

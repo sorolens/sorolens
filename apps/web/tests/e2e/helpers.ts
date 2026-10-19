@@ -93,7 +93,7 @@ export function defaultHandlers(): Record<string, Handler> {
       }
       return {
         status: 200,
-        body: { contracts: [contractSummary()], cursor: null, has_more: false },
+        body: { contracts: [contractSummary()], next_cursor: "" },
       };
     },
     "stats/global": () => ({
