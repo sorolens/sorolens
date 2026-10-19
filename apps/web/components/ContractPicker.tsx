@@ -206,6 +206,8 @@ export function ContractPicker({
             {loading ? (
               <div
                 data-testid="contract-picker-loading"
+                role="status"
+                aria-busy="true"
                 className="py-6 text-center text-[var(--color-text-secondary)]"
               >
                 Loading monitored contracts…

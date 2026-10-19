@@ -41,6 +41,7 @@ const mockGetContractEvents = vi.fn();
 const mockGetContractStorage = vi.fn();
 const mockGetContractStats = vi.fn();
 const mockGetActivitySeries = vi.fn();
+const mockGetContractSummary = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
@@ -57,6 +58,7 @@ vi.mock("@/lib/api", () => ({
   getContractStorage: (...a: unknown[]) => mockGetContractStorage(...a),
   getContractStats: (...a: unknown[]) => mockGetContractStats(...a),
   getContractSnapshot: vi.fn(),
+  getContractSummary: (...a: unknown[]) => mockGetContractSummary(...a),
   addContractTag: vi.fn(),
   removeContractTag: vi.fn(),
 }));
@@ -146,7 +148,9 @@ vi.mock("@/components/StoragePanel", () => ({
 vi.mock("@/components/ContractNotesPanel", () => ({
   ContractNotesPanel: () => <div />,
 }));
-vi.mock("@/components/SnapshotPanel", () => ({ SnapshotPanel: () => <div /> }));
+vi.mock("@/components/SnapshotPanel", () => ({
+  SnapshotPanel: () => <div data-testid="snapshot-panel" />,
+}));
 vi.mock("@/components/HealthScoreCard", () => ({
   HealthScoreCard: () => <div />,
 }));
@@ -160,6 +164,9 @@ vi.mock("@/components/ContractChangelogPanel", () => ({
 }));
 vi.mock("@/components/ContractForecastChart", () => ({
   ContractForecastChart: () => <div />,
+}));
+vi.mock("@/components/ContractSummaryCard", () => ({
+  ContractSummaryCard: () => <div data-testid="summary-card" />,
 }));
 
 expect.extend(matchers);
@@ -181,6 +188,14 @@ const STATS = {
   window_event_count: 10,
   window_invocation_count: 2,
   window_duration: "7d",
+};
+const SUMMARY = {
+  contract_id: ID,
+  network: "testnet",
+  event_count: 1234,
+  invocation_count: 99,
+  storage_count: 5,
+  last_synced_ledger: 777,
 };
 
 // One promise for the whole run (a new one per render would suspend forever),
@@ -213,6 +228,7 @@ describe("ContractDetailPage failure states", () => {
     mockGetContract.mockResolvedValue(CONTRACT);
     mockGetContractStats.mockResolvedValue(STATS);
     mockGetActivitySeries.mockResolvedValue({ events: [], invocations: [] });
+    mockGetContractSummary.mockResolvedValue(SUMMARY);
     mockGetContractEvents.mockResolvedValue({
       events: [{ id: "evt-1" }],
       next_cursor: "",
@@ -234,6 +250,16 @@ describe("ContractDetailPage failure states", () => {
     expect(await screen.findByText("evt-1")).toBeInTheDocument();
     expect(await screen.findByText("storage-1")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("links to the comparison, pre-selected on this contract (#607)", async () => {
+    await renderPage();
+
+    // The test's next/link mock only forwards href/children, so query by role.
+    const link = await screen.findByRole("link", { name: "Compare" });
+    expect(link.getAttribute("href")).toBe(
+      `/compare?ids=${encodeURIComponent(ID)}`
+    );
   });
 
   it("shows a retryable error, not 'Contract not found', when the contract request fails", async () => {
@@ -323,6 +349,28 @@ describe("ContractDetailPage failure states", () => {
 
     expect(await screen.findByText("storage-1")).toBeInTheDocument();
     expect(screen.queryByText("Couldn't load storage entries.")).toBeNull();
+  });
+
+  it("renders the contract summary card", async () => {
+    await renderPage();
+
+    expect(await screen.findByTestId("summary-card")).toBeInTheDocument();
+  });
+
+  it("shows a retryable error when the summary request fails, and retries", async () => {
+    mockGetContractSummary.mockRejectedValueOnce(new Error("summary down"));
+    await renderPage();
+
+    expect(
+      await screen.findByText("Couldn't load contract summary.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("summary down")).toBeInTheDocument();
+    expect(screen.queryByTestId("summary-card")).toBeNull();
+
+    fireEvent.click(await retryButtonFor("Couldn't load contract summary."));
+
+    expect(await screen.findByTestId("summary-card")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load contract summary.")).toBeNull();
   });
 
   it("keeps loaded events and offers a retry when 'load more' fails", async () => {

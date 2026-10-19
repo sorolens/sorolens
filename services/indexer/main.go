@@ -21,6 +21,7 @@ import (
 	"github.com/sorolens/sorolens/services/indexer/internal/pgstore"
 	"github.com/sorolens/sorolens/services/indexer/internal/poller"
 	"github.com/sorolens/sorolens/services/indexer/internal/rulesengine"
+	"github.com/sorolens/sorolens/services/indexer/internal/scval"
 	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
 )
 
@@ -43,7 +44,7 @@ func main() {
 	role := flag.String("role", envString("INDEXER_ROLE", "all"), "Role: all, coordinator, or worker")
 	shardCount := flag.Int("shard-count", envInt("INDEXER_SHARD_COUNT", coordinator.DefaultShardCount), "Number of shards contracts are spread across")
 	workerID := flag.String("worker-id", envString("INDEXER_WORKER_ID", ""), "Unique id for this process (required for coordinator and worker roles)")
-	shardStoreKind := flag.String("shard-store", envString("INDEXER_SHARD_STORE", ""), "Shard store backend: memory (single node only)")
+	shardStoreKind := flag.String("shard-store", envString("INDEXER_SHARD_STORE", ""), "Shard store backend: postgres (shared) or memory (single node only)")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -207,7 +208,7 @@ func main() {
 		}
 
 	case "coordinator", "worker":
-		shardStore, err := buildShardStore(*shardStoreKind)
+		shardStore, err := buildShardStore(*shardStoreKind, st)
 		if err != nil {
 			log.Error("indexer: shard store unavailable", "role", *role, "err", err)
 			os.Exit(1)
@@ -264,7 +265,7 @@ func decodeWatchdogValue(valueXDR string) map[string]any {
 	if valueXDR == "" {
 		return out
 	}
-	sc, err := decodeScVal(valueXDR)
+	sc, err := scval.Decode(valueXDR)
 	if err != nil {
 		return out
 	}
@@ -465,20 +466,23 @@ func envDuration(key string, def time.Duration) time.Duration {
 
 // buildShardStore resolves the store the coordinator and workers share.
 //
-// Only the in-memory backend is wired today. It keeps the shard table inside
-// one process, which is enough to exercise the topology on a single node but is
-// NOT safe for replicas: each process would hold its own table and believe it
-// owned every shard. Real horizontal scaling needs a coordinator.Store backed
-// by Postgres; the schema it must write is
-// apps/api/internal/db/migrations/000030_indexer_shards.up.sql. It fails fast
-// rather than silently degrading to per-process ownership.
-func buildShardStore(kind string) (coordinator.Store, error) {
+// postgres is the multi-replica backend: every process reads and writes the
+// indexer_shards / indexer_workers tables in the database the indexer already
+// uses, and leadership is a session-scoped advisory lock (see
+// docs/indexer-sharding.md). memory keeps the shard table inside one process,
+// which is enough to exercise the topology on a single node but is NOT safe for
+// replicas: each process would hold its own table and believe it owned every
+// shard. Anything else fails fast rather than silently degrading to
+// per-process ownership.
+func buildShardStore(kind string, st *pgstore.Store) (coordinator.Store, error) {
 	switch kind {
+	case "postgres":
+		return pgstore.NewCoordinatorStore(st.Pool()), nil
 	case "memory":
 		return coordinator.NewMemStore(), nil
 	default:
 		return nil, fmt.Errorf(
-			"set --shard-store=memory for a single-node run; multi-replica sharding requires a shared coordinator.Store (see docs/indexer-sharding.md), got %q",
+			"set --shard-store=postgres for a shared deployment or --shard-store=memory for a single-node run (see docs/indexer-sharding.md), got %q",
 			kind,
 		)
 	}

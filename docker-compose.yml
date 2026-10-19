@@ -98,10 +98,8 @@ services:
   # (baseline one once with `make migrate-force` before switching it to
   # golang-migrate).
   #
-  # Like CI, psql is run without ON_ERROR_STOP so that one failing statement does
-  # not stop the remaining migrations; 000005_partition_events logs a pre-existing
-  # "idx_events_contract_ledger already exists" error that CI's migration step
-  # logs as well and that does not affect the resulting schema.
+  # Stop on the first SQL error so incomplete schemas are never treated as
+  # successfully migrated.
   #
   # It shares the Postgres network namespace and connects over localhost, so it
   # does not depend on service-name DNS or on inter-container networking being
@@ -127,7 +125,7 @@ services:
         fi
         for f in $$(ls /migrations/*.up.sql | sort); do
           echo "applying $$f"
-          psql -q -h localhost -U sorolens -d sorolens -f "$$f"
+          psql -q -v ON_ERROR_STOP=1 -h localhost -U sorolens -d sorolens -f "$$f"
         done
         echo "migrations applied"
     restart: "no"

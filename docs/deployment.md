@@ -66,7 +66,7 @@ A production SoroLens deployment consists of four distinct operational layers:
 
 Before starting, ensure you have:
 - [Docker Engine](https://docs.docker.com/engine/install/) 24+ and [Docker Compose](https://docs.docker.com/compose/) v2.20+ (for self-hosting).
-- [Go](https://go.dev/) 1.23+ and [Node.js](https://nodejs.org/) 22+ with [pnpm](https://pnpm.io/) 9+ (for local builds and migration CLI).
+- [Go](https://go.dev/) 1.26+ and [Node.js](https://nodejs.org/) 22+ with [pnpm](https://pnpm.io/) 9+ (for local builds and migration CLI).
 - Accounts on [Neon](https://neon.tech), [Upstash](https://upstash.com), and [Vercel](https://vercel.com) (if using managed services).
 - A Stellar Soroban RPC endpoint for your target network (Mainnet or Testnet).
 

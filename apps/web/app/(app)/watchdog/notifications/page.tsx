@@ -19,10 +19,10 @@ import {
 import { ensureSession, getUserId } from "@/lib/user";
 import { TableSkeleton } from "@/components/Skeleton";
 import { ContractPicker } from "@/components/ContractPicker";
+import { API_URL } from "@/lib/config";
 import type { AlertSubscription, ChannelType } from "@/lib/types";
 
 const STORAGE_KEY = "sorolens_user_id";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 const inputClass =
   "w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]";

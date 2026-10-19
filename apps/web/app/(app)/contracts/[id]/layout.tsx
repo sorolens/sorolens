@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+
+import { ContractSummaryCard } from "./ContractSummaryCard";
 import { getContractForMetadata } from "@/lib/serverData";
 
 type Props = {
@@ -30,10 +32,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default function ContractDetailLayout({
+export default async function ContractDetailLayout({
   children,
+  params,
 }: {
   children: React.ReactNode;
+  params: Promise<{ id: string }>;
 }) {
-  return children;
+  const { id } = await params;
+
+  return (
+    <>
+      <ContractSummaryCard contractId={id} />
+      {children}
+    </>
+  );
 }

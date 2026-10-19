@@ -28,7 +28,7 @@ Soroban's public RPC retains events for 24 hours and transaction data for up to 
 - **Custom alert rules**: a small expression language lets each team encode its own SLOs without a code change — `fee_per_invocation > 0.5 XLM for 5m on network testnet`. Rules are validated on save, editable with syntax highlighting and a live preview in the dashboard, and evaluated by the indexer every pass. See [`docs/rule-language.md`](docs/rule-language.md).
 - **Multi-network**: track and query testnet, mainnet, and futurenet contracts side by side, with a network selector in the dashboard header and a `?network=` filter on every list endpoint.
 - **Snapshot / replay**: `GET /api/v1/contracts/:id/snapshot?ledger=N` replays a contract's storage state and last known event as of any ledger, with a ledger scrubber on the contract page for time-travel debugging.
-- **Scoped API keys**: per-key permissions (`read:contracts`, `write:contracts`, `read:watchdog`, `admin:*`) enforced by route metadata, so a monitoring bot can hold a read-only watchdog key.
+- **Scoped API keys**: per-key permissions (`read:contracts`, `write:contracts`, `read:watchdog`, `admin:*`) enforced by route metadata, so a monitoring bot can hold a read-only watchdog key. See [`docs/authentication.md`](docs/authentication.md) for the complete authentication guide, scopes, roles, and API key management.
 - **API playground**: an interactive `/playground` page to explore every endpoint, send requests, and copy them as curl.
 - **Build introspection**: `GET /api/version` returns the running API's `version`, `git_sha`, and `built_at` (injected at build time via `-ldflags`, falling back to `dev` locally). It is unauthenticated and does no database or Redis work, so deploy checks and uptime monitors can poll it cheaply.
 
@@ -37,7 +37,7 @@ Soroban's public RPC retains events for 24 hours and transaction data for up to 
 ### Prerequisites
 
 - Docker and Docker Compose
-- Go 1.23+
+- Go 1.26+
 - Node 22+ and pnpm 9+
 
 ### 1. Start local dependencies
@@ -56,9 +56,9 @@ The one-shot `migrate` service applies `apps/api/internal/db/migrations/*.up.sql
 
 ```bash
 # Register a contract (uses the local API)
-go run ./cmd/sorolens track CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC --network testnet
+go run ./cli track CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC --network testnet
 # Run one indexer cycle manually
-go run ./cmd/sorolens index --once
+go run ./services/indexer --mode once
 ```
 
 The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
@@ -149,6 +149,8 @@ The **watchdog contract** at `contracts/watchdog/` is the piece that makes Sorol
 ### API reference
 
 The REST API is described by an OpenAPI 3.0 spec at [`docs/openapi.yaml`](docs/openapi.yaml). Load it into Swagger UI, Redoc or Postman, or generate a client from it (the Go client in `packages/go-client` is generated this way). Run `make openapi` after changing a route: it fails if any route is undocumented, lints the spec with Redocly, and regenerates the Go client.
+
+For full details on authentication, scopes, roles, and how to create or rotate API keys with curl examples, see the [Authentication and API Keys Guide](docs/authentication.md).
 
 ---
 
@@ -245,13 +247,13 @@ See also [`docs/metrics.md`](docs/metrics.md) for Prometheus metrics and alertin
 
 | Layer             | Technology                                                                                                                         |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| API               | Go 1.23, chi, pgx v5, deployed as Vercel serverless functions                                                                      |
-| Indexer           | Go 1.23, runs as a GitHub Actions scheduled workflow (5-minute cron)                                                               |
+| API               | Go 1.26, chi, pgx v5, deployed as Vercel serverless functions                                                                      |
+| Indexer           | Go 1.26, runs as a GitHub Actions scheduled workflow (5-minute cron)                                                               |
 | Database          | Postgres 16, hosted on Neon                                                                                                        |
 | Cache / locks     | Redis, hosted on Upstash                                                                                                           |
 | Dashboard         | Next.js 15, TypeScript, Tailwind CSS, deployed on Vercel                                                                           |
 | XDR decoder       | TypeScript package (`packages/xdr`), wraps `@stellar/stellar-sdk`                                                                  |
-| CLI               | Go 1.23, cobra                                                                                                                     |
+| CLI               | Go 1.26, cobra                                                                                                                     |
 | Go client         | Generated from [`docs/openapi.yaml`](docs/openapi.yaml) into `packages/go-client`                                                  |
 | Python client     | Generated from [`docs/openapi.yaml`](docs/openapi.yaml) into `packages/python-sdk` (sync + async, published to PyPI as `sorolens`) |
 | Fixture contract  | Rust (stable), Soroban SDK, deployed to Stellar testnet                                                                            |
@@ -282,6 +284,7 @@ sorolens/
     terraform/    Self-hosting Terraform modules (AWS; see docs/self-hosting/aws.md)
     pulumi/       Self-hosting Pulumi (TypeScript) components, mirroring terraform/
   docs/
+    authentication.md Authentication & API keys guide (scopes, roles, sessions, curl examples)
     deployment.md Deployment guide (Neon, Upstash, Vercel, Docker, Mainnet)
     runbook.md    Incident response & operations runbook (lag, DLQ, restore, key rotation)
     screenshots/  Screenshot placeholders

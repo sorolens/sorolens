@@ -75,6 +75,7 @@ export function SnapshotPanel({
           type="button"
           onClick={handleLoad}
           disabled={loading || !ledger}
+          aria-busy={loading}
           className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {loading ? "Loading…" : "View snapshot"}

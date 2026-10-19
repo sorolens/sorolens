@@ -10,8 +10,7 @@ import {
   highlightJson,
   type ResponseState,
 } from "@/lib/playground";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import { API_URL } from "@/lib/config";
 
 export default function PlaygroundPage() {
   const { t } = useLocale();

@@ -250,10 +250,22 @@ func networkOrDefault(network string) string {
 	return network
 }
 
-// BatchInsertEvents inserts multiple events in a single batch operation. It ignores duplicate events based on the primary key (id).
+// BatchInsertEvents inserts multiple events in a single batch operation and ignores duplicates.
 func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) error {
 	if len(events) == 0 {
 		return nil
+	}
+	months := make(map[[2]int]struct{})
+	for _, e := range events {
+		at := e.LedgerClosedAt.UTC()
+		month := [2]int{at.Year(), int(at.Month())}
+		if _, ok := months[month]; ok {
+			continue
+		}
+		if err := s.CreateMonthlyPartitionIfNotExists(ctx, month[0], month[1]); err != nil {
+			return fmt.Errorf("create events partition for %04d-%02d: %w", month[0], month[1], err)
+		}
+		months[month] = struct{}{}
 	}
 	batch := &pgx.Batch{}
 	for _, e := range events {
@@ -270,7 +282,7 @@ func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) e
 				 topic_xdr, value_xdr, topic_decoded, value_decoded,
 				 in_successful_call, inserted_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-			ON CONFLICT (id) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 			e.ID, e.ContractID, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
 			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
 			e.InSuccessfulCall, time.Now(),
@@ -517,7 +529,7 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 				 topic_xdr, value_xdr, topic_decoded, value_decoded,
 				 in_successful_call, inserted_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-			ON CONFLICT (id) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 			e.ID, e.ContractID, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
 			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
 			e.InSuccessfulCall, time.Now(),
@@ -781,11 +793,20 @@ func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit
 	}
 
 	q := `
-		SELECT
-			id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at, last_activity_at
-		FROM contracts
-		WHERE id ILIKE $1 OR label ILIKE $1
-		ORDER BY added_at DESC
+		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at
+		FROM contracts c
+		LEFT JOIN (
+			SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
+			FROM (
+				SELECT contract_id, ledger_closed_at FROM events
+				UNION ALL
+				SELECT contract_id, ledger_closed_at FROM invocations
+			) activity_rows
+			GROUP BY contract_id
+		) activity ON activity.contract_id = c.id
+		WHERE c.id ILIKE $1 OR c.label ILIKE $1
+		ORDER BY c.added_at DESC
 		LIMIT $2
 	`
 

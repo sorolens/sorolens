@@ -28,3 +28,13 @@ body {
   background-color: var(--color-bg-page);
   color: var(--color-text-primary);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
