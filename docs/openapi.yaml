@@ -596,6 +596,33 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Contracts]
+      summary: Untrack a contract
+      operationId: untrackContract
+      description: |
+        Stops indexing a contract. This is a soft delete by policy: the
+        contract row and all indexed history (events, invocations, storage
+        entries) are retained, the contract's status becomes `paused`, and
+        the indexer stops polling it (only `active`/`backfilling` contracts
+        are polled). Re-registering the contract with
+        `POST /api/v1/contracts` resumes tracking.
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked; indexing stopped, history retained.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/contracts/{id}/tags:
     post:

@@ -2,6 +2,12 @@ package store
 
 import "time"
 
+// ContractStatusPaused is the soft-delete status written by UntrackContract.
+// The indexer only polls contracts whose status is "active" or "backfilling",
+// so a paused contract keeps its row and all indexed history without being
+// polled further. Re-registering via UpsertContract resumes tracking.
+const ContractStatusPaused = "paused"
+
 // Contract is a Soroban contract being tracked by the indexer.
 type Contract struct {
 	ID                 string

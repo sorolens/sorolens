@@ -511,7 +511,17 @@ Get a single contract's metadata and sync state.
 
 Stop tracking a contract. Data is retained but the indexer stops polling.
 
-**Response:** `204 No Content`.
+Untracking is a **soft delete** by policy: the contract row and all indexed
+data (events, invocations, storage entries, sync state) are kept. The
+contract's `status` is set to `paused`, and because the poller only indexes
+contracts whose status is `active` or `backfilling`, the contract is skipped
+from the next polling cycle onward. Re-registering the contract with
+`POST /api/v1/contracts` resumes tracking (the status flips back to `pending`
+and the retained history is preserved). Requires `write:contracts` scope and
+the contributor role (the same gate as registration).
+
+**Response:** `204 No Content`, or `404 Not Found` when the contract is not
+tracked.
 
 ---
 
