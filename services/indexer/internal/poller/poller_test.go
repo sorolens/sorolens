@@ -753,7 +753,7 @@ type cursorCtxCapturingStore struct {
 	batchInsertCtxErr error
 }
 
-func (s *cursorCtxCapturingStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) error {
+func (s *cursorCtxCapturingStore) BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) ([]FailedEvent, error) {
 	s.batchInsertCalled = true
 	s.batchInsertCtxErr = ctx.Err()
 	return s.fakeStore.BatchInsertWithCursor(ctx, network, ledger, events, invocations, syncState)
