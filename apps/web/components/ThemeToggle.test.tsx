@@ -1,52 +1,154 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+/**
+ * Tests for apps/web/components/ThemeToggle.tsx (issue #627).
+ */
+
+// Registers jest-dom matchers with vitest, including their types.
+import "@testing-library/jest-dom/vitest";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeToggle } from "./ThemeToggle";
+import { ThemeProvider } from "./ThemeProvider";
+import { renderToStaticMarkup } from "react-dom/server";
 
-const mockSetTheme = vi.fn();
-let mockTheme: "system" | "light" | "dark" = "system";
+// jsdom has no matchMedia; the provider only asks whether the OS prefers dark.
+function stubMatchMedia(dark: boolean) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: dark && query.includes("dark"),
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    onchange: null,
+  }));
+}
 
-vi.mock("./ThemeProvider", () => ({
-  useTheme: () => ({
-    theme: mockTheme,
-    setTheme: mockSetTheme,
-  }),
-}));
+function renderToggle() {
+  return render(
+    <ThemeProvider>
+      <ThemeToggle />
+    </ThemeProvider>
+  );
+}
+
+beforeEach(() => {
+  stubMatchMedia(false);
+  window.localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
+});
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
+  vi.restoreAllMocks();
+});
 
 describe("ThemeToggle", () => {
-  beforeEach(() => {
-    mockTheme = "system";
-    mockSetTheme.mockClear();
+  it("reserves space with an empty placeholder during server render", () => {
+    // The toggle renders a fixed-size placeholder on the server so the
+    // header does not shift once the buttons mount after hydration.
+    const markup = renderToStaticMarkup(
+      <ThemeProvider>
+        <ThemeToggle />
+      </ThemeProvider>
+    );
+
+    expect(markup).toContain("h-8 w-24");
+    expect(markup).not.toContain("Light");
+    expect(markup).not.toContain("Dark");
+    expect(markup).not.toContain("System");
   });
 
-  it("renders a labelled group of theme buttons", () => {
-    render(<ThemeToggle />);
+  it("renders the three labelled theme buttons after hydration", async () => {
+    renderToggle();
+    await act(async () => {}); // flush the mounted effect
 
-    const group = screen.getByRole("group", { name: /theme selection/i });
-    expect(group).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /light mode/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /dark mode/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /system mode/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Light mode" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Dark mode" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "System mode" })).toBeVisible();
   });
 
-  it("sets aria-pressed true only on the active theme", () => {
-    mockTheme = "dark";
-    render(<ThemeToggle />);
+  it("exposes a labelled group for the theme buttons", async () => {
+    renderToggle();
+    await act(async () => {});
 
-    expect(screen.getButtonName(/dark mode/i)).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getButtonName(/light mode/i)).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getButtonName(/system mode/i)).toHaveAttribute("aria-pressed", "false");
+    const group = screen.getByRole("group", { name: "Theme selector" });
+    expect(group).toBeVisible();
+    expect(group).toContainElement(
+      screen.getByRole("button", { name: "Light mode" })
+    );
   });
 
-  it("calls setTheme when a theme button is clicked", () => {
-    render(<ThemeToggle />);
+  it("marks the active theme button as pressed", async () => {
+    renderToggle();
+    await act(async () => {});
 
-    fireEvent.click(screen.getButtonName(/light mode/i));
-    expect(mockSetTheme).toHaveBeenCalledWith("light");
+    const light = screen.getByRole("button", { name: "Light mode" });
+    const dark = screen.getByRole("button", { name: "Dark mode" });
+    const system = screen.getByRole("button", { name: "System mode" });
 
-    fireEvent.click(screen.getButtonName(/dark mode/i));
-    expect(mockSetTheme).toHaveBeenCalledWith("dark");
+    // Default theme is "system".
+    expect(system).toHaveAttribute("aria-pressed", "true");
+    expect(light).toHaveAttribute("aria-pressed", "false");
+    expect(dark).toHaveAttribute("aria-pressed", "false");
 
-    fireEvent.click(screen.getButtonName(/system mode/i));
-    expect(mockSetTheme).toHaveBeenCalledWith("system");
+    fireEvent.click(dark);
+    await waitFor(() =>
+      expect(dark).toHaveAttribute("aria-pressed", "true")
+    );
+    expect(light).toHaveAttribute("aria-pressed", "false");
+    expect(system).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("switches the document theme and persists the choice", async () => {
+    renderToggle();
+    await act(async () => {});
+
+    fireEvent.click(screen.getByRole("button", { name: "Dark mode" }));
+
+    await waitFor(() =>
+      expect(document.documentElement.getAttribute("data-theme")).toBe("dark")
+    );
+    expect(window.localStorage.getItem("theme")).toBe("dark");
+  });
+
+  it("applies a stored theme and switches back to light", async () => {
+    window.localStorage.setItem("theme", "dark");
+    renderToggle();
+    await act(async () => {});
+
+    await waitFor(() =>
+      expect(document.documentElement.getAttribute("data-theme")).toBe("dark")
+    );
+
+    const dark = screen.getByRole("button", { name: "Dark mode" });
+    expect(dark).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Light mode" }));
+    await waitFor(() =>
+      expect(document.documentElement.getAttribute("data-theme")).toBe("light")
+    );
+    expect(window.localStorage.getItem("theme")).toBe("light");
+  });
+
+  it("falls back to the system theme", async () => {
+    stubMatchMedia(true); // OS prefers dark
+    renderToggle();
+    await act(async () => {});
+
+    fireEvent.click(screen.getByRole("button", { name: "System mode" }));
+    await waitFor(() =>
+      expect(document.documentElement.getAttribute("data-theme")).toBe("dark")
+    );
+    expect(window.localStorage.getItem("theme")).toBe("system");
   });
 });
