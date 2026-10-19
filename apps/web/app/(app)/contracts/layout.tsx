@@ -20,9 +20,5 @@ export default function ContractsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <main id="main" tabIndex={-1}>
-      {children}
-    </main>
-  );
+  return <main id="main">{children}</main>;
 }
