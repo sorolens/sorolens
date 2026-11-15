@@ -9,11 +9,6 @@ on:
       - ".github/workflows/python-sdk.yml"
     tags:
       - "python-sdk-v*"
-  pull_request:
-    paths:
-      - "packages/python-sdk/**"
-      - "docs/openapi.yaml"
-      - ".github/workflows/python-sdk.yml"
 
 jobs:
   test:

@@ -1,32 +1,48 @@
 name: CI
+
+# Pull requests run exactly five checks: the four jobs below (Go, Web,
+# End-to-end, SDKs and contracts) plus "Validate PR title" (pr-title.yml).
+#
+# Keep it at five. When something new needs checking, add a step to one of
+# these jobs. Do not add a job here or a workflow that triggers on
+# pull_request. Slower or less important checks run after merge or on a
+# schedule in their own workflows:
+#   - integration.yml  nightly mock RPC -> indexer -> Postgres -> API suite
+#   - python-sdk.yml   Python 3.11 to 3.13 matrix, build and publish
+#   - iac.yml          Terraform and Pulumi validation for deploy/**
+#   - cli-release.yml  GoReleaser snapshot and release
+#
+# The e2e and sdks jobs only run their expensive steps when the pull request
+# touches the relevant paths; on pushes to main they run everything.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # ------------------------------------------------------------
-  # Go: API, indexer, CLI
+  # Go: API, indexer, CLI and Go client, generated-client drift,
+  # SDK coverage and the backup/restore scripts.
   # ------------------------------------------------------------
   go:
-    name: Go (${{ matrix.module }}) - ${{ matrix.go-version }}
+    name: Go
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go-version: ["1.26"]
-        module:
-          - apps/api
-          - services/indexer
-          - cli
-          - packages/go-client
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up Go ${{ matrix.go-version }}
+      - name: Set up Go 1.26
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: "1.26"
           cache: false
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -34,37 +50,16 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-${{ matrix.go-version }}-${{ matrix.module }}-${{ hashFiles(format('{0}/go.sum', matrix.module)) }}
+          key: go-1.26-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            go-${{ matrix.go-version }}-${{ matrix.module }}-
-            go-${{ matrix.go-version }}-
-      - name: go vet
-        working-directory: ${{ matrix.module }}
-        run: go vet ./...
-      - name: Run go-client examples (offline)
-        if: matrix.module == 'packages/go-client'
-        working-directory: ${{ matrix.module }}
-        run: |
-          for example in pagination errors sse webhooks; do
-            echo "==> examples/$example"
-            go run "./examples/$example"
-          done
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        continue-on-error: true
-        with:
-          version: latest
-          working-directory: ${{ matrix.module }}
-          args: --timeout=10m
+            go-1.26-
       - name: Start Postgres
-        working-directory: ./
         run: |
           chmod +x scripts/aws-mock.sh
           docker compose up -d postgres
           DB_CONTAINER=$(docker compose ps -q postgres)
           docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
       - name: Wait for Postgres
-        working-directory: ./
         run: |
           echo "Waiting for PostgreSQL..."
           DB_CONTAINER=$(docker compose ps -q postgres)
@@ -77,256 +72,85 @@ jobs:
           until docker exec "$DB_CONTAINER" pg_isready -h 127.0.0.1 -p 5432 -U sorolens -d sorolens; do sleep 1; done
       - name: Run DB migrations
         # services/indexer's pgstore tests write to the same schema the API reads.
-        if: matrix.module == 'apps/api' || matrix.module == 'services/indexer'
         env:
           PGPASSWORD: sorolens
         run: |
           for f in $(ls apps/api/internal/db/migrations/*.up.sql | sort); do
             psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U sorolens -d sorolens -f "$f"
           done
-      - name: go test
-        working-directory: ${{ matrix.module }}
+      - name: go vet and go test (all modules)
         env:
           POSTGRES_TEST_URL: postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable
-        run: go test -race -timeout 120s -coverprofile=coverage.out ./...
+        run: |
+          rc=0
+          for module in apps/api services/indexer cli packages/go-client; do
+            echo "::group::$module"
+            (cd "$module" && go vet ./... && go test -race -timeout 120s -coverprofile=coverage.out ./...) \
+              || { echo "::error::$module failed"; rc=1; }
+            echo "::endgroup::"
+          done
+          exit "$rc"
+      - name: Run go-client examples (offline)
+        working-directory: packages/go-client
+        run: |
+          for example in pagination errors sse webhooks; do
+            echo "==> examples/$example"
+            go run "./examples/$example"
+          done
+      - name: golangci-lint (apps/api)
+        uses: golangci/golangci-lint-action@v6
+        continue-on-error: true
+        with:
+          version: latest
+          working-directory: apps/api
+          args: --timeout=10m
+      - name: golangci-lint (services/indexer)
+        uses: golangci/golangci-lint-action@v6
+        continue-on-error: true
+        with:
+          version: latest
+          working-directory: services/indexer
+          args: --timeout=10m
+      - name: golangci-lint (cli)
+        uses: golangci/golangci-lint-action@v6
+        continue-on-error: true
+        with:
+          version: latest
+          working-directory: cli
+          args: --timeout=10m
+      - name: golangci-lint (packages/go-client)
+        uses: golangci/golangci-lint-action@v6
+        continue-on-error: true
+        with:
+          version: latest
+          working-directory: packages/go-client
+          args: --timeout=10m
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: ${{ matrix.module }}/coverage.out
+          files: apps/api/coverage.out,services/indexer/coverage.out,cli/coverage.out,packages/go-client/coverage.out
           flags: go
           token: ${{ secrets.CODECOV_TOKEN }}
-  # ------------------------------------------------------------
-  # Go client regeneration (issue #149): fail if the checked-in generated
-  # code under packages/go-client is out of date with docs/openapi.yaml.
-  # ------------------------------------------------------------
-  go-client-stale:
-    name: Go client up-to-date
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Go 1.26
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.26"
-          cache: false
+      # Go client regeneration (issue #149): fail if the checked-in generated
+      # code under packages/go-client is out of date with docs/openapi.yaml.
       - name: Install oapi-codegen
         run: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1
-      - name: Regenerate client
+      - name: Regenerate Go client
         working-directory: packages/go-client
         run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
-      - name: Verify no diff
+      - name: Verify Go client has no diff
         run: git diff --exit-code -- packages/go-client/internal
-  # ------------------------------------------------------------
-  # SDK coverage guard (issue #556): every operation declared in
-  # docs/openapi.yaml must be exposed by each SDK, or be documented as an
-  # intentional exclusion in scripts/sdk_coverage_allowlist.json. Fails when a
-  # new operation lands without SDK support, or when an allowlisted operation
-  # has since become covered (stale exemption).
-  # ------------------------------------------------------------
-  sdk-coverage:
-    name: SDK OpenAPI coverage
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      # SDK coverage guard (issue #556): every operation declared in
+      # docs/openapi.yaml must be exposed by each SDK, or be documented as an
+      # intentional exclusion in scripts/sdk_coverage_allowlist.json.
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Verify SDK coverage against OpenAPI spec
         run: python3 scripts/check_sdk_coverage.py
-  # ------------------------------------------------------------
-  # Node: XDR decoder package and shared packages
-  # ------------------------------------------------------------
-  node:
-    name: Node (packages)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Set up pnpm 11
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.17.0
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        run: echo "store=$(pnpm store path)" >> "$GITHUB_OUTPUT"
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-cache.outputs.store }}
-          key: pnpm-node22-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-node22-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Lint
-        run: pnpm --filter "./packages/**" lint
-  # ------------------------------------------------------------
-  # Prettier formatting (issue #216). Runs the acceptance criterion
-  # verbatim: `pnpm prettier --check` must pass in CI.
-  # ------------------------------------------------------------
-  format:
-    name: Prettier format check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Set up pnpm 11
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.17.0
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: prettier --check
-        run: pnpm exec prettier --check apps/web package.json eslint.config.mjs
-
-  # ------------------------------------------------------------
-  # TypeScript type-check (fast, no build output needed)
-  # ------------------------------------------------------------
-  typecheck:
-    name: TypeScript type-check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Set up pnpm 11
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.17.0
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        run: echo "store=$(pnpm store path)" >> "$GITHUB_OUTPUT"
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-cache.outputs.store }}
-          key: pnpm-node22-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-node22-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Verify web OpenAPI playground catalog
-        working-directory: apps/web
-        run: pnpm openapi:check
-      - name: Type-check dashboard
-        working-directory: apps/web
-        run: pnpm exec tsc --noEmit
-  # ------------------------------------------------------------
-  # Next.js dashboard build
-  # ------------------------------------------------------------
-  next-build:
-    name: Next.js build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Set up pnpm 11
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.17.0
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        run: echo "store=$(pnpm store path)" >> "$GITHUB_OUTPUT"
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-cache.outputs.store }}
-          key: pnpm-node22-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-node22-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Lint
-        run: pnpm lint
-      - name: Build dashboard
-        working-directory: apps/web
-        env:
-          # Provide a placeholder so Next.js does not fail on missing env vars
-          # at build time. Real values are set in Vercel project settings.
-          NEXT_PUBLIC_API_URL: http://localhost:8080
-        run: pnpm build
-  # ------------------------------------------------------------
-  # Rust: fixture contract
-  # ------------------------------------------------------------
-  rust:
-    name: Rust (contracts/counter)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32v1-none
-          components: rustfmt
-      - name: Cache cargo registry and build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            contracts/counter/target/
-          key: cargo-${{ hashFiles('contracts/counter/Cargo.lock') }}
-          restore-keys: |
-            cargo-
-      - name: cargo fmt --check
-        working-directory: contracts/counter
-        run: cargo fmt --check
-      - name: cargo check (native)
-        working-directory: contracts/counter
-        run: cargo check
-      - name: cargo check (wasm32)
-        working-directory: contracts/counter
-        run: cargo check --target wasm32v1-none
-      - name: cargo test
-        working-directory: contracts/counter
-        run: cargo test
-
-  # ------------------------------------------------------------
-  # Backup & Restore Scripts Test
-  # ------------------------------------------------------------
-  backup-test:
-    name: Backup and Restore Scripts
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Start Postgres
-        run: |
-          chmod +x scripts/aws-mock.sh
-          docker compose up -d postgres
-          DB_CONTAINER=$(docker compose ps -q postgres)
-          docker exec "$DB_CONTAINER" mkdir -p /tmp/s3/sorolens-backups/wal
-      - name: Wait for Postgres
-        run: |
-          echo "Waiting for PostgreSQL..."
-          DB_CONTAINER=$(docker compose ps -q postgres)
-          # Probe over TCP, not the unix socket: the postgres entrypoint first
-          # runs a temporary, socket-only init server, so a socket pg_isready
-          # can succeed and then that server shuts down before the real one is
-          # up (the cause of the intermittent "database system is shutting
-          # down" failure from pg_basebackup). The temp server listens on no
-          # TCP address, so 127.0.0.1 only answers once the final server is up.
-          until docker exec "$DB_CONTAINER" pg_isready -h 127.0.0.1 -p 5432 -U sorolens -d sorolens; do sleep 1; done
+      # Backup & restore scripts run last because the restore replaces the
+      # database contents the tests above used.
       - name: Setup Mock S3 Bucket
         run: |
           mkdir -p /tmp/s3/sorolens-backups/logical /tmp/s3/sorolens-backups/base /tmp/s3/sorolens-backups/wal
@@ -340,3 +164,260 @@ jobs:
           LATEST_BASE=$(ls /tmp/s3/sorolens-backups/base/base_*.tar.gz | head -n 1)
           LATEST_BASE_S3="s3://${LATEST_BASE/\/tmp\/s3\//}"
           ./scripts/restore.sh "$LATEST_BASE_S3" "2026-09-23 13:00:00"
+
+  # ------------------------------------------------------------
+  # Web: formatting, lint, type-check, unit tests and the production build.
+  # ------------------------------------------------------------
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 11
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "store=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.store }}
+          key: pnpm-node22-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-node22-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      # Issue #216: `pnpm prettier --check` must pass in CI.
+      - name: prettier --check
+        run: pnpm exec prettier --check apps/web package.json eslint.config.mjs
+      - name: Lint shared packages
+        run: pnpm --filter "./packages/**" lint
+      - name: Verify web OpenAPI playground catalog
+        working-directory: apps/web
+        run: pnpm openapi:check
+      - name: Type-check dashboard
+        working-directory: apps/web
+        run: pnpm exec tsc --noEmit
+      - name: Lint dashboard
+        run: pnpm lint
+      - name: Unit tests
+        working-directory: apps/web
+        run: pnpm test
+      - name: Build dashboard
+        working-directory: apps/web
+        env:
+          # Provide a placeholder so Next.js does not fail on missing env vars
+          # at build time. Real values are set in Vercel project settings.
+          NEXT_PUBLIC_API_URL: http://localhost:8080
+        run: pnpm build
+
+  # ------------------------------------------------------------
+  # End-to-end: Playwright for the dashboard and the mock RPC -> indexer ->
+  # Postgres -> API suite. Each part runs only when its paths changed.
+  # ------------------------------------------------------------
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed areas
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          web=true
+          integration=true
+          if [ "$EVENT" = "pull_request" ]; then
+            files=$(git diff --name-only "$BASE_SHA"...HEAD)
+            web=false
+            integration=false
+            echo "$files" | grep -qE '^(apps/web/|packages/ui/|packages/xdr/|\.github/workflows/ci\.yml)' && web=true
+            echo "$files" | grep -qE '^(apps/api/|services/indexer/|tests/integration/|packages/go-client/|docs/openapi\.yaml|\.github/workflows/ci\.yml)' && integration=true
+          fi
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "integration=$integration" >> "$GITHUB_OUTPUT"
+          echo "web=$web integration=$integration"
+      - name: Set up Node 22
+        if: steps.changes.outputs.web == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Set up pnpm 11
+        if: steps.changes.outputs.web == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - name: Install dependencies
+        if: steps.changes.outputs.web == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        if: steps.changes.outputs.web == 'true'
+        working-directory: apps/web
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run Playwright tests
+        if: steps.changes.outputs.web == 'true'
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8080
+        run: pnpm exec playwright test
+      - name: Upload Playwright report
+        if: ${{ failure() && steps.changes.outputs.web == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
+      - name: Set up Go 1.26
+        if: steps.changes.outputs.integration == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: false
+      - name: Run integration suite
+        if: steps.changes.outputs.integration == 'true'
+        working-directory: tests/integration
+        run: make integration-test
+
+  # ------------------------------------------------------------
+  # SDKs and contracts: Python SDK, Rust SDK and the fixture contract. Each
+  # part runs only when its paths changed.
+  # ------------------------------------------------------------
+  sdks:
+    name: SDKs and contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed areas
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          python=true
+          rustsdk=true
+          contracts=true
+          if [ "$EVENT" = "pull_request" ]; then
+            files=$(git diff --name-only "$BASE_SHA"...HEAD)
+            python=false
+            rustsdk=false
+            contracts=false
+            echo "$files" | grep -qE '^(packages/python-sdk/|docs/openapi\.yaml|\.github/workflows/ci\.yml)' && python=true
+            echo "$files" | grep -qE '^(packages/rust-sdk/|\.github/workflows/ci\.yml)' && rustsdk=true
+            echo "$files" | grep -qE '^(contracts/|\.github/workflows/ci\.yml)' && contracts=true
+          fi
+          echo "python=$python" >> "$GITHUB_OUTPUT"
+          echo "rustsdk=$rustsdk" >> "$GITHUB_OUTPUT"
+          echo "contracts=$contracts" >> "$GITHUB_OUTPUT"
+          echo "python=$python rustsdk=$rustsdk contracts=$contracts"
+      # Python SDK. The full 3.11 to 3.13 matrix runs in python-sdk.yml after
+      # merge; pull requests test the middle version.
+      - name: Set up Python 3.12
+        if: steps.changes.outputs.python == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python SDK
+        if: steps.changes.outputs.python == 'true'
+        working-directory: packages/python-sdk
+        run: python -m pip install -e ".[dev]"
+      - name: Ruff
+        if: steps.changes.outputs.python == 'true'
+        working-directory: packages/python-sdk
+        run: ruff check src tests
+      - name: Pytest
+        if: steps.changes.outputs.python == 'true'
+        working-directory: packages/python-sdk
+        run: pytest
+      - name: Run Python examples (offline)
+        if: steps.changes.outputs.python == 'true'
+        working-directory: packages/python-sdk
+        run: |
+          for example in examples/*.py; do
+            echo "==> $example"
+            python "$example"
+          done
+      - name: Regenerate Python client from docs/openapi.yaml
+        if: steps.changes.outputs.python == 'true'
+        run: bash packages/python-sdk/scripts/generate_client.sh
+      - name: Verify Python client has no diff
+        if: steps.changes.outputs.python == 'true'
+        run: git diff --exit-code -- packages/python-sdk/src/sorolens/_generated
+      # Rust toolchain for the Rust SDK and the fixture contract.
+      - name: Install Rust stable
+        if: steps.changes.outputs.rustsdk == 'true' || steps.changes.outputs.contracts == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: rustfmt
+      - name: Cache cargo registry and build
+        if: steps.changes.outputs.rustsdk == 'true' || steps.changes.outputs.contracts == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            packages/rust-sdk/target/
+            contracts/counter/target/
+          key: cargo-${{ hashFiles('packages/rust-sdk/Cargo.lock', 'contracts/counter/Cargo.lock') }}
+          restore-keys: |
+            cargo-
+      # Rust SDK (async and blocking transports).
+      - name: Rust SDK - cargo fmt --check
+        if: steps.changes.outputs.rustsdk == 'true'
+        working-directory: packages/rust-sdk
+        run: cargo fmt --check
+      - name: Rust SDK - cargo build --all-features
+        if: steps.changes.outputs.rustsdk == 'true'
+        working-directory: packages/rust-sdk
+        run: cargo build --all-features
+      - name: Rust SDK - cargo test --all-features
+        if: steps.changes.outputs.rustsdk == 'true'
+        working-directory: packages/rust-sdk
+        run: cargo test --all-features
+      - name: Rust SDK - run examples (offline)
+        if: steps.changes.outputs.rustsdk == 'true'
+        working-directory: packages/rust-sdk
+        run: |
+          for example in pagination errors sse webhooks; do
+            echo "==> examples/$example"
+            cargo run --quiet --example "$example"
+          done
+      - name: Rust SDK - cargo test --doc
+        if: steps.changes.outputs.rustsdk == 'true'
+        working-directory: packages/rust-sdk
+        run: cargo test --doc
+      # Fixture contract.
+      - name: Contract - cargo fmt --check
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/counter
+        run: cargo fmt --check
+      - name: Contract - cargo check (native)
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/counter
+        run: cargo check
+      - name: Contract - cargo check (wasm32)
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/counter
+        run: cargo check --target wasm32v1-none
+      - name: Contract - cargo test
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/counter
+        run: cargo test
