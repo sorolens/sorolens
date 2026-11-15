@@ -6,11 +6,6 @@ name: IaC
 # is ever created (no apply / up).
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "deploy/**"
-      - ".github/workflows/iac.yml"
   push:
     branches: [main]
     paths:

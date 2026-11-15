@@ -2,7 +2,7 @@ name: CLI Release
 
 # Pushes a `cli-v*` tag build binaries with GoReleaser, publish them to a GitHub
 # release together with checksums and per-archive SBOMs, and update the Homebrew
-# tap. Pull requests and manual runs exercise the exact same pipeline as a
+# tap. Manual runs exercise the exact same pipeline as a
 # snapshot: `goreleaser check` plus `goreleaser release --snapshot --clean`,
 # which builds every target and generates the checksums/SBOMs but publishes
 # nothing.
@@ -15,10 +15,6 @@ on:
   push:
     tags:
       - "cli-v*"
-  pull_request:
-    paths:
-      - "cli/**"
-      - ".github/workflows/cli-release.yml"
   workflow_dispatch:
 
 permissions:
