@@ -130,6 +130,9 @@ type Config struct {
 	// GraphQLPersistedOnly restricts /graphql to the embedded persisted
 	// queries (GRAPHQL_PERSISTED_ONLY).
 	GraphQLPersistedOnly bool
+	// RequireAuth enforces authentication across all endpoints except health
+	// checks when set to true (API_REQUIRE_AUTH).
+	RequireAuth bool
 }
 
 // Load reads configuration from environment variables and returns an error
@@ -195,6 +198,13 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("GRAPHQL_PERSISTED_ONLY: invalid boolean %q: %w", v, err)
 		}
 		cfg.GraphQLPersistedOnly = b
+	}
+	if v := os.Getenv("API_REQUIRE_AUTH"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, fmt.Errorf("API_REQUIRE_AUTH: invalid boolean %q: %w", v, err)
+		}
+		cfg.RequireAuth = b
 	}
 
 	cfg.VerifyBuildCommand = strings.Fields(getEnvDefault("VERIFY_BUILD_COMMAND", "stellar contract build"))
