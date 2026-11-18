@@ -183,7 +183,7 @@ export function ContractInvocationsPanel({ contractId }: Props) {
             data-testid="invocation-status-filter"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Filter invocations by status"
+            aria-label="Filter by status"
             className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
           >
             <option value="">All statuses</option>
