@@ -36,13 +36,14 @@ test("contract detail renders Events and Storage TTL sections", async ({
   await mockApi(page);
   await page.goto(`/contracts/${CONTRACT_ID}`);
 
-  await page.getByRole("tab", { name: "Events" }).click();
+  const tabs = page.getByRole("tablist", { name: "Contract sections" });
+  await tabs.getByRole("tab", { name: "Events" }).click();
   await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
   await expect(
     page.getByText("transfer", { exact: false }).first()
   ).toBeVisible();
 
-  await page.getByRole("tab", { name: "Storage" }).click();
+  await tabs.getByRole("tab", { name: "Storage" }).click();
   await expect(
     page.getByRole("heading", { name: "Storage TTL" })
   ).toBeVisible();
@@ -89,7 +90,8 @@ test("contract detail switches to Invocations tab and renders invocations", asyn
   await mockApi(page);
   await page.goto(`/contracts/${CONTRACT_ID}`);
 
-  await page.getByRole("tab", { name: "Invocations" }).click();
+  const tabs = page.getByRole("tablist", { name: "Contract sections" });
+  await tabs.getByRole("tab", { name: "Invocations" }).click();
   await expect(
     page.getByRole("combobox", { name: "Filter by status" })
   ).toBeVisible();
