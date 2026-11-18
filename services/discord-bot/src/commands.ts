@@ -13,6 +13,7 @@
  */
 
 import type {
+  AutocompleteInteraction,
   ChatInputCommandInteraction,
   Client,
   Interaction,
@@ -35,8 +36,9 @@ import {
   SorolensApi,
   isValidContractId,
   type ApiCredentials,
+  type ContractSearchResult,
 } from "./api.js";
-import { alertsEmbed, statusEmbed, watchlistEmbed } from "./embeds.js";
+import { alertsEmbed, shortId, statusEmbed, watchlistEmbed } from "./embeds.js";
 import { describeRetry, SlidingWindowRateLimiter } from "./ratelimit.js";
 import { ensureUserApiKey, revokeUserApiKey } from "./apikey.js";
 import type { Config } from "./config.js";
@@ -53,6 +55,121 @@ interface CommandContext {
   tiers: Tiers;
 }
 
+const CONTRACT_AUTOCOMPLETE_COMMANDS = new Set([
+  "status",
+  "alerts",
+  "watch",
+  "unwatch",
+]);
+const AUTOCOMPLETE_LIMIT = 25;
+const AUTOCOMPLETE_CACHE_TTL_MS = 5_000;
+
+export interface ContractAutocompleteChoice {
+  name: string;
+  value: string;
+}
+
+/** Convert API search results to Discord choices without exposing full IDs. */
+export function contractAutocompleteChoices(
+  results: readonly ContractSearchResult[]
+): ContractAutocompleteChoice[] {
+  const seen = new Set<string>();
+  return results
+    .filter((result) => {
+      if (!result.id || seen.has(result.id)) return false;
+      seen.add(result.id);
+      return true;
+    })
+    .slice(0, AUTOCOMPLETE_LIMIT)
+    .map((result) => {
+      const label = result.label?.trim();
+      const id = shortId(result.id);
+      const suffix = label ? ` (${id})` : "";
+      const maxLabelLength = 100 - suffix.length;
+      const displayLabel = label
+        ? label.length > maxLabelLength
+          ? `${label.slice(0, maxLabelLength - 1)}…`
+          : label
+        : id;
+      return {
+        name: `${displayLabel}${suffix}`,
+        value: result.id,
+      };
+    });
+}
+
+interface AutocompleteCacheEntry {
+  expiresAt: number;
+  choices?: ContractAutocompleteChoice[];
+  pending?: Promise<ContractAutocompleteChoice[]>;
+}
+
+/**
+ * Build the autocomplete responder. Discord already debounces typing events;
+ * this short cache also coalesces identical in-flight requests and avoids
+ * repeatedly searching while a user moves through a query.
+ */
+export function createContractAutocompleteHandler(
+  api: Pick<SorolensApi, "searchContracts">
+) {
+  const cache = new Map<string, AutocompleteCacheEntry>();
+
+  async function choicesFor(
+    query: string
+  ): Promise<ContractAutocompleteChoice[]> {
+    const key = query.toLowerCase();
+    const now = Date.now();
+    const cached = cache.get(key);
+    if (cached && cached.expiresAt > now) {
+      if (cached.choices) return cached.choices;
+      if (cached.pending) return cached.pending;
+    }
+
+    const pending = Promise.resolve()
+      .then(() => api.searchContracts(query, AUTOCOMPLETE_LIMIT))
+      .then(contractAutocompleteChoices);
+    cache.set(key, { expiresAt: now + AUTOCOMPLETE_CACHE_TTL_MS, pending });
+
+    try {
+      const choices = await pending;
+      if (cache.get(key)?.pending === pending) {
+        cache.set(key, {
+          expiresAt: Date.now() + AUTOCOMPLETE_CACHE_TTL_MS,
+          choices,
+        });
+      }
+      return choices;
+    } catch {
+      // Do not cache failures: the next keystroke should be able to recover.
+      if (cache.get(key)?.pending === pending) cache.delete(key);
+      return [];
+    }
+  }
+
+  return async function handleAutocomplete(
+    interaction: AutocompleteInteraction
+  ): Promise<void> {
+    const focused = interaction.options.getFocused(true);
+    const optionName = typeof focused === "string" ? "" : focused.name;
+    if (
+      !CONTRACT_AUTOCOMPLETE_COMMANDS.has(interaction.commandName) ||
+      optionName !== "contract"
+    ) {
+      await interaction.respond([]);
+      return;
+    }
+
+    const rawQuery = interaction.options.getFocused();
+    const query = String(rawQuery).trim();
+    if (!query) {
+      await interaction.respond([]);
+      return;
+    }
+
+    await interaction.respond(await choicesFor(query));
+  };
+}
+
 export function registerHandlers(client: Client, ctx: CommandContext) {
   const api = new SorolensApi({
     baseUrl: ctx.config.sorolensApiBaseUrl,
@@ -61,8 +178,22 @@ export function registerHandlers(client: Client, ctx: CommandContext) {
   const limiter = new SlidingWindowRateLimiter(
     ctx.config.commandRateLimitPerMinute
   );
+  const handleAutocomplete = createContractAutocompleteHandler(api);
 
   client.on("interactionCreate", async (interaction: Interaction) => {
+    if (interaction.isAutocomplete()) {
+      try {
+        await handleAutocomplete(interaction);
+      } catch (err) {
+        console.warn("autocomplete failed:", err);
+        try {
+          await interaction.respond([]);
+        } catch {
+          // The interaction may have expired while the API was unavailable.
+        }
+      }
+      return;
+    }
     if (!interaction.isChatInputCommand()) return;
     try {
       await handle(interaction, ctx, api, limiter);
