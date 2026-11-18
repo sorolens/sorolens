@@ -5,13 +5,26 @@ import (
 	"time"
 )
 
-// EnsureNextMonthPartition checks if the next month's partition exists
-// and creates it if needed. This should be called on each indexer cycle.
-func EnsureNextMonthPartition(ctx context.Context, store Store) error {
+// MaintainPartitions pre-creates partitions for the current month and up to
+// monthsAhead future months if they do not exist.
+func MaintainPartitions(ctx context.Context, store Store, monthsAhead int) error {
+	if monthsAhead < 1 {
+		monthsAhead = 6
+	}
 	now := time.Now()
-	year := int(now.AddDate(0, 1, 0).Year())
-	month := int(now.AddDate(0, 1, 0).Month())
-	return store.CreateMonthlyPartitionIfNotExists(ctx, year, month)
+	for i := 0; i <= monthsAhead; i++ {
+		t := now.AddDate(0, i, 0)
+		if err := store.CreateMonthlyPartitionIfNotExists(ctx, t.Year(), int(t.Month())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// EnsureNextMonthPartition ensures future monthly partitions exist.
+// This is called on each indexer cycle.
+func EnsureNextMonthPartition(ctx context.Context, store Store) error {
+	return MaintainPartitions(ctx, store, 6)
 }
 
 // Store is the subset of the data store the partition checker needs.
