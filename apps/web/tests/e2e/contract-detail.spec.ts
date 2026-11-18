@@ -36,15 +36,19 @@ test("contract detail renders Events and Storage TTL sections", async ({
   await mockApi(page);
   await page.goto(`/contracts/${CONTRACT_ID}`);
 
+  const tabs = page.getByRole("tablist", { name: "Contract sections" });
+  await tabs.getByRole("tab", { name: "Events" }).click();
   await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(
+    page.getByText("transfer", { exact: false }).first()
+  ).toBeVisible();
+
+  await tabs.getByRole("tab", { name: "Storage" }).click();
   await expect(
     page.getByRole("heading", { name: "Storage TTL" })
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Snapshot / replay" })
-  ).toBeVisible();
-  await expect(
-    page.getByText("transfer", { exact: false }).first()
   ).toBeVisible();
   await expect(
     page.getByText("balance", { exact: false }).first()
@@ -67,7 +71,7 @@ test("contract detail renders the cross-contract call trace", async ({
   page,
 }) => {
   await mockApi(page);
-  await page.goto(`/contracts/${CONTRACT_ID}`);
+  await page.goto(`/contracts/${CONTRACT_ID}#events`);
 
   await expect(page.getByRole("heading", { name: "Call trace" })).toBeVisible();
 
@@ -78,4 +82,20 @@ test("contract detail renders the cross-contract call trace", async ({
   await expect(flame.getByText("swap")).toBeVisible();
   await expect(flame.getByText("transfer")).toBeVisible();
   await expect(page.getByText("1 cross-contract call")).toBeVisible();
+});
+
+test("contract detail switches to Invocations tab and renders invocations", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.goto(`/contracts/${CONTRACT_ID}`);
+
+  const tabs = page.getByRole("tablist", { name: "Contract sections" });
+  await tabs.getByRole("tab", { name: "Invocations" }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Filter by status" })
+  ).toBeVisible();
+  await expect(
+    page.getByPlaceholder("Filter by function name...")
+  ).toBeVisible();
 });

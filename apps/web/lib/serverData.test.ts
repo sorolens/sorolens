@@ -7,7 +7,7 @@ describe("server-rendered page data", () => {
   it("requests a revalidated first contracts page", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ contracts: [], cursor: null, has_more: false }),
+      json: async () => ({ contracts: [], next_cursor: "" }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -22,7 +22,7 @@ describe("server-rendered page data", () => {
   it("requests the selected contracts sort from the server", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ contracts: [], cursor: null, has_more: false }),
+      json: async () => ({ contracts: [], next_cursor: "" }),
     });
     vi.stubGlobal("fetch", fetchMock);
 

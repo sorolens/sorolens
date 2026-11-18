@@ -210,6 +210,9 @@ async function retryButtonFor(title: string): Promise<HTMLElement> {
 describe("ContractDetailPage failure states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    if (typeof window !== "undefined" && window.location) {
+      window.location.hash = "";
+    }
     mockGetContract.mockResolvedValue(CONTRACT);
     mockGetContractStats.mockResolvedValue(STATS);
     mockGetActivitySeries.mockResolvedValue({ events: [], invocations: [] });
@@ -231,7 +234,9 @@ describe("ContractDetailPage failure states", () => {
     await renderPage();
 
     expect(await screen.findByText("My Contract")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Events" }));
     expect(await screen.findByText("evt-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Storage" }));
     expect(await screen.findByText("storage-1")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -242,6 +247,45 @@ describe("ContractDetailPage failure states", () => {
     // The test's next/link mock only forwards href/children, so query by role.
     const link = await screen.findByRole("link", { name: "Compare" });
     expect(link.getAttribute("href")).toBe(
+      `/compare?ids=${encodeURIComponent(ID)}`
+    );
+  });
+
+  it("renders tabs (Overview, Events, Invocations, Storage, Watchdog) with accessibility attributes", async () => {
+    await renderPage();
+
+    const tablist = await screen.findByRole("tablist", {
+      name: "Contract sections",
+    });
+    expect(tablist).toBeInTheDocument();
+
+    const overviewTab = screen.getByRole("tab", { name: "Overview" });
+    const eventsTab = screen.getByRole("tab", { name: "Events" });
+    const invocationsTab = screen.getByRole("tab", { name: "Invocations" });
+    const storageTab = screen.getByRole("tab", { name: "Storage" });
+    const watchdogTab = screen.getByRole("tab", { name: "Watchdog" });
+
+    expect(overviewTab).toHaveAttribute("aria-selected", "true");
+    expect(eventsTab).toHaveAttribute("aria-selected", "false");
+    expect(invocationsTab).toHaveAttribute("aria-selected", "false");
+    expect(storageTab).toHaveAttribute("aria-selected", "false");
+    expect(watchdogTab).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.click(invocationsTab);
+    expect(overviewTab).toHaveAttribute("aria-selected", "false");
+    expect(invocationsTab).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("links to Watchdog and Compare in header", async () => {
+    await renderPage();
+
+    const watchdogLink = await screen.findByRole("link", { name: "Watchdog" });
+    expect(watchdogLink.getAttribute("href")).toBe(
+      `/watchdog?contract=${encodeURIComponent(ID)}`
+    );
+
+    const compareLink = await screen.findByRole("link", { name: "Compare" });
+    expect(compareLink.getAttribute("href")).toBe(
       `/compare?ids=${encodeURIComponent(ID)}`
     );
   });
@@ -308,6 +352,7 @@ describe("ContractDetailPage failure states", () => {
   it("shows an error instead of an empty events table when events fail, and retries", async () => {
     mockGetContractEvents.mockRejectedValueOnce(new Error("events down"));
     await renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Events" }));
 
     expect(
       await screen.findByText("Couldn't load events.")
@@ -323,6 +368,7 @@ describe("ContractDetailPage failure states", () => {
   it("shows an error instead of an empty storage panel when storage fails, and retries", async () => {
     mockGetContractStorage.mockRejectedValueOnce(new Error("storage down"));
     await renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Storage" }));
 
     expect(
       await screen.findByText("Couldn't load storage entries.")
@@ -341,6 +387,7 @@ describe("ContractDetailPage failure states", () => {
       .mockRejectedValueOnce(new Error("page 2 down"))
       .mockResolvedValueOnce({ events: [{ id: "evt-2" }], next_cursor: "" });
     await renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Events" }));
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Load more events" })
@@ -369,6 +416,7 @@ describe("ContractDetailPage failure states", () => {
         next_cursor: "",
       });
     await renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Storage" }));
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Load more storage" })
