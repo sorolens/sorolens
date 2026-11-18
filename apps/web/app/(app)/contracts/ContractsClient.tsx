@@ -496,7 +496,10 @@ export default function ContractsClient({
   });
 
   const contracts: ContractRow[] = data?.contracts ?? [];
-  const hasMore = data?.has_more ?? false;
+  const hasMore = Boolean(
+    (data?.next_cursor && data.next_cursor !== "") ||
+    data?.has_more
+  );
   const loading = isLoading;
   const loadFailed = !loading && Boolean(error);
 
@@ -534,8 +537,11 @@ export default function ContractsClient({
   // ---------------------------------------------------------------------------
 
   const handleNext = () => {
-    if (!hasMore || contracts.length === 0) return;
-    const nextCursor = contracts[contracts.length - 1].id;
+    if (!hasMore) return;
+    const nextCursor =
+      data?.next_cursor ||
+      (contracts.length > 0 ? contracts[contracts.length - 1].id : null);
+    if (!nextCursor) return;
     const newCursors = [...cursors.slice(0, cursorIndex + 1), nextCursor];
     setCursors(newCursors);
     setCursorIndex(cursorIndex + 1);
