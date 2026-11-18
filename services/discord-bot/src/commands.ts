@@ -107,6 +107,8 @@ async function handle(
       return handleWhoAmI(interaction);
     case "mypr":
       return handleMyPR(interaction, ctx);
+    case "contributions":
+      return handleContributions(interaction, ctx);
     case "members":
       return handleMembers(interaction, ctx);
     case "status":
@@ -236,6 +238,53 @@ async function handleMyPR(
   const tier = tierFor(count, ctx.tiers);
   await interaction.editReply({
     content: `\`${link.githubLogin}\` has **${count}** merged PR${count === 1 ? "" : "s"} in ${ctx.config.githubRepo}. Current tier: **${tier}**.`,
+  });
+}
+
+async function handleContributions(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext
+) {
+  const user = interaction.options.getUser("user");
+  const github = interaction.options.getString("github")?.trim();
+
+  if ((user && github) || (!user && !github)) {
+    await interaction.reply({
+      content: "Provide exactly one of `user` or `github`.",
+      flags: 64,
+    });
+    return;
+  }
+
+  let login: string;
+  if (user) {
+    const link = getByDiscord(user.id);
+    if (!link) {
+      await interaction.reply({
+        content: `${user.tag} has not linked a GitHub account.`,
+        flags: 64,
+      });
+      return;
+    }
+    login = link.githubLogin;
+  } else {
+    // GitHub logins are alphanumeric with single hyphens, max 39 chars.
+    // Validating also keeps the value safe to embed in a search query.
+    if (!/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(github!)) {
+      await interaction.reply({
+        content: "That is not a valid GitHub username.",
+        flags: 64,
+      });
+      return;
+    }
+    login = github!;
+  }
+
+  await interaction.deferReply({ flags: 64 });
+  const count = await countMergedPRs(login, ctx.config.githubRepo);
+  const tier = tierFor(count, ctx.tiers);
+  await interaction.editReply({
+    content: `\`${login}\` has **${count}** merged PR${count === 1 ? "" : "s"} in ${ctx.config.githubRepo}. Tier: **${tier}**.`,
   });
 }
 

@@ -39,6 +39,22 @@ export const commandDefinitions = [
       "Show your merged PR count and current tier for sorolens/sorolens"
     ),
   new SlashCommandBuilder()
+    .setName("contributions")
+    .setDescription("(Admin) Show a person's merged PR count and tier")
+    .setDefaultMemberPermissions("0")
+    .addUserOption((o) =>
+      o
+        .setName("user")
+        .setDescription("A Discord member with a linked GitHub account")
+        .setRequired(false)
+    )
+    .addStringOption((o) =>
+      o
+        .setName("github")
+        .setDescription("A GitHub username (use instead of user)")
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
     .setName("members")
     .setDescription("(Admin) List linked members and their roles")
     .setDefaultMemberPermissions("0")
