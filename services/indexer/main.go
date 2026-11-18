@@ -38,7 +38,8 @@ func main() {
 	pollInterval := flag.Duration("poll-interval", 5*time.Minute, "Sleep between passes (continuous mode)")
 	ledgerWindow := flag.Uint("ledger-window", 120960, "Ledger window per getEvents call")
 	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics HTTP server (empty disables it)")
-	workers := envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))
+	concurrency := flag.Int("concurrency", envInt("INDEXER_CONCURRENCY", envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))), "Bounded worker pool concurrency for contract processing")
+	workers := *concurrency
 	// Sharded topology (issue #272). The default role preserves the original
 	// single-process behaviour: index every contract in this process.
 	role := flag.String("role", envString("INDEXER_ROLE", "all"), "Role: all, coordinator, or worker")
@@ -67,6 +68,7 @@ func main() {
 
 	cfg := poller.Config{
 		Workers:              workers,
+		Concurrency:          *concurrency,
 		LedgerWindow:         uint32(*ledgerWindow),
 		PollInterval:         *pollInterval,
 		MaxDuration:          *maxDuration,
