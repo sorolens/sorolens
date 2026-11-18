@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class ListAllEventsType(StrEnum):
     CONTRACT = "contract"
     DIAGNOSTIC = "diagnostic"

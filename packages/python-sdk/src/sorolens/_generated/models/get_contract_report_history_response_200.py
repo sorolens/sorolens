@@ -1,32 +1,45 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+
 if TYPE_CHECKING:
-    from ..models.monthly_sla import MonthlySLA
+  from ..models.monthly_sla import MonthlySLA
+
+
+
 
 
 T = TypeVar("T", bound="GetContractReportHistoryResponse200")
 
 
+
 @_attrs_define
 class GetContractReportHistoryResponse200:
-    """
-    Attributes:
-        contract_id (str):
-        months (list[MonthlySLA]):
-    """
+    """ 
+        Attributes:
+            contract_id (str):
+            months (list[MonthlySLA]):
+     """
 
     contract_id: str
     months: list[MonthlySLA]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.monthly_sla import MonthlySLA # noqa: PLC0415
         contract_id = self.contract_id
 
         months = []
@@ -34,35 +47,41 @@ class GetContractReportHistoryResponse200:
             months_item = months_item_data.to_dict()
             months.append(months_item)
 
+
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "contract_id": contract_id,
-                "months": months,
-            }
-        )
+        field_dict.update({
+            "contract_id": contract_id,
+            "months": months,
+        })
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.monthly_sla import MonthlySLA
-
+        from ..models.monthly_sla import MonthlySLA # noqa: PLC0415
         d = dict(src_dict)
         contract_id = d.pop("contract_id")
 
         months = []
         _months = d.pop("months")
-        for months_item_data in _months:
+        for months_item_data in (_months):
             months_item = MonthlySLA.from_dict(months_item_data)
 
+
+
             months.append(months_item)
+
 
         get_contract_report_history_response_200 = cls(
             contract_id=contract_id,
             months=months,
         )
+
 
         get_contract_report_history_response_200.additional_properties = d
         return get_contract_report_history_response_200

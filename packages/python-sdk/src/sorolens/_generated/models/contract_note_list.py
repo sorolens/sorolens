@@ -1,32 +1,45 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+
 if TYPE_CHECKING:
-    from ..models.contract_note import ContractNote
+  from ..models.contract_note import ContractNote
+
+
+
 
 
 T = TypeVar("T", bound="ContractNoteList")
 
 
+
 @_attrs_define
 class ContractNoteList:
-    """
-    Attributes:
-        contract_id (str):
-        notes (list[ContractNote]):
-    """
+    """ 
+        Attributes:
+            contract_id (str):
+            notes (list[ContractNote]):
+     """
 
     contract_id: str
     notes: list[ContractNote]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.contract_note import ContractNote # noqa: PLC0415
         contract_id = self.contract_id
 
         notes = []
@@ -34,35 +47,41 @@ class ContractNoteList:
             notes_item = notes_item_data.to_dict()
             notes.append(notes_item)
 
+
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "contract_id": contract_id,
-                "notes": notes,
-            }
-        )
+        field_dict.update({
+            "contract_id": contract_id,
+            "notes": notes,
+        })
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.contract_note import ContractNote
-
+        from ..models.contract_note import ContractNote # noqa: PLC0415
         d = dict(src_dict)
         contract_id = d.pop("contract_id")
 
         notes = []
         _notes = d.pop("notes")
-        for notes_item_data in _notes:
+        for notes_item_data in (_notes):
             notes_item = ContractNote.from_dict(notes_item_data)
 
+
+
             notes.append(notes_item)
+
 
         contract_note_list = cls(
             contract_id=contract_id,
             notes=notes,
         )
+
 
         contract_note_list.additional_properties = d
         return contract_note_list

@@ -1,22 +1,31 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
 from ..models.alert_subscription_channel_type import AlertSubscriptionChannelType
 from ..models.alert_subscription_severity_filter import AlertSubscriptionSeverityFilter
+from typing import cast
+import datetime
+
+
+
+
+
 
 T = TypeVar("T", bound="AlertSubscription")
 
 
+
 @_attrs_define
 class AlertSubscription:
-    """A notification channel subscribed to a contract's alerts. Secrets are
+    """ A notification channel subscribed to a contract's alerts. Secrets are
     never returned: Slack and Discord webhook URLs are masked
     (e.g. `https://hooks.slack.com/services/***`) and the PagerDuty
     routing key is reported only via `has_routing_key`.
@@ -30,7 +39,7 @@ class AlertSubscription:
             severity_filter (AlertSubscriptionSeverityFilter):
             created_at (datetime.datetime):
             updated_at (datetime.datetime):
-    """
+     """
 
     id: str
     contract_id: str
@@ -41,6 +50,10 @@ class AlertSubscription:
     created_at: datetime.datetime
     updated_at: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         id = self.id
@@ -59,22 +72,23 @@ class AlertSubscription:
 
         updated_at = self.updated_at.isoformat()
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "id": id,
-                "contract_id": contract_id,
-                "channel_type": channel_type,
-                "webhook_url": webhook_url,
-                "has_routing_key": has_routing_key,
-                "severity_filter": severity_filter,
-                "created_at": created_at,
-                "updated_at": updated_at,
-            }
-        )
+        field_dict.update({
+            "id": id,
+            "contract_id": contract_id,
+            "channel_type": channel_type,
+            "webhook_url": webhook_url,
+            "has_routing_key": has_routing_key,
+            "severity_filter": severity_filter,
+            "created_at": created_at,
+            "updated_at": updated_at,
+        })
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -85,15 +99,27 @@ class AlertSubscription:
 
         channel_type = AlertSubscriptionChannelType(d.pop("channel_type"))
 
+
+
+
         webhook_url = d.pop("webhook_url")
 
         has_routing_key = d.pop("has_routing_key")
 
         severity_filter = AlertSubscriptionSeverityFilter(d.pop("severity_filter"))
 
+
+
+
         created_at = datetime.datetime.fromisoformat(d.pop("created_at"))
 
+
+
+
         updated_at = datetime.datetime.fromisoformat(d.pop("updated_at"))
+
+
+
 
         alert_subscription = cls(
             id=id,
@@ -105,6 +131,7 @@ class AlertSubscription:
             created_at=created_at,
             updated_at=updated_at,
         )
+
 
         alert_subscription.additional_properties = d
         return alert_subscription

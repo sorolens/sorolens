@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class V2InvocationStatus(StrEnum):
     FAILED = "FAILED"
     NOT_FOUND = "NOT_FOUND"

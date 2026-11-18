@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class AlertGroupSeverity(StrEnum):
     CRITICAL = "Critical"
     INFO = "Info"

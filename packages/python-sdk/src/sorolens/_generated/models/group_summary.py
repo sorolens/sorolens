@@ -1,31 +1,39 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
-from uuid import UUID
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+from uuid import UUID
+import datetime
+
 if TYPE_CHECKING:
-    from ..models.group_stats import GroupStats
+  from ..models.group_stats import GroupStats
+
+
+
 
 
 T = TypeVar("T", bound="GroupSummary")
 
 
+
 @_attrs_define
 class GroupSummary:
-    """
-    Attributes:
-        id (UUID):
-        owner_id (str):
-        name (str):
-        created_at (datetime.datetime):
-        stats (GroupStats):
-    """
+    """ 
+        Attributes:
+            id (UUID):
+            owner_id (str):
+            name (str):
+            created_at (datetime.datetime):
+            stats (GroupStats):
+     """
 
     id: UUID
     owner_id: str
@@ -34,7 +42,12 @@ class GroupSummary:
     stats: GroupStats
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.group_stats import GroupStats # noqa: PLC0415
         id = str(self.id)
 
         owner_id = self.owner_id
@@ -45,26 +58,29 @@ class GroupSummary:
 
         stats = self.stats.to_dict()
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "id": id,
-                "owner_id": owner_id,
-                "name": name,
-                "created_at": created_at,
-                "stats": stats,
-            }
-        )
+        field_dict.update({
+            "id": id,
+            "owner_id": owner_id,
+            "name": name,
+            "created_at": created_at,
+            "stats": stats,
+        })
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.group_stats import GroupStats
-
+        from ..models.group_stats import GroupStats # noqa: PLC0415
         d = dict(src_dict)
         id = UUID(d.pop("id"))
+
+
+
 
         owner_id = d.pop("owner_id")
 
@@ -72,7 +88,13 @@ class GroupSummary:
 
         created_at = datetime.datetime.fromisoformat(d.pop("created_at"))
 
+
+
+
         stats = GroupStats.from_dict(d.pop("stats"))
+
+
+
 
         group_summary = cls(
             id=id,
@@ -81,6 +103,7 @@ class GroupSummary:
             created_at=created_at,
             stats=stats,
         )
+
 
         group_summary.additional_properties = d
         return group_summary

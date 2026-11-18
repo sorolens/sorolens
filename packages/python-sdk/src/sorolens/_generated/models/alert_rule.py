@@ -1,34 +1,43 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
 from ..models.alert_rule_severity import AlertRuleSeverity
 from ..types import UNSET, Unset
+from typing import cast
+import datetime
+
+
+
+
+
 
 T = TypeVar("T", bound="AlertRule")
 
 
+
 @_attrs_define
 class AlertRule:
-    """
-    Attributes:
-        id (int | Unset):
-        name (str | Unset):
-        source (str | Unset): Rule text in the Sorolens rule language. Example: error_rate > 5% for 15m.
-        severity (AlertRuleSeverity | Unset):
-        contract_id (str | Unset):
-        network (str | Unset):
-        window (str | Unset):  Example: 15m.
-        enabled (bool | Unset):
-        created_at (datetime.datetime | Unset):
-        updated_at (datetime.datetime | Unset):
-    """
+    """ 
+        Attributes:
+            id (int | Unset):
+            name (str | Unset):
+            source (str | Unset): Rule text in the Sorolens rule language. Example: error_rate > 5% for 15m.
+            severity (AlertRuleSeverity | Unset):
+            contract_id (str | Unset):
+            network (str | Unset):
+            window (str | Unset):  Example: 15m.
+            enabled (bool | Unset):
+            created_at (datetime.datetime | Unset):
+            updated_at (datetime.datetime | Unset):
+     """
 
     id: int | Unset = UNSET
     name: str | Unset = UNSET
@@ -42,6 +51,10 @@ class AlertRule:
     updated_at: datetime.datetime | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
         id = self.id
 
@@ -52,6 +65,7 @@ class AlertRule:
         severity: str | Unset = UNSET
         if not isinstance(self.severity, Unset):
             severity = self.severity.value
+
 
         contract_id = self.contract_id
 
@@ -69,9 +83,11 @@ class AlertRule:
         if not isinstance(self.updated_at, Unset):
             updated_at = self.updated_at.isoformat()
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({})
+        field_dict.update({
+        })
         if id is not UNSET:
             field_dict["id"] = id
         if name is not UNSET:
@@ -95,6 +111,8 @@ class AlertRule:
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
@@ -106,10 +124,13 @@ class AlertRule:
 
         _severity = d.pop("severity", UNSET)
         severity: AlertRuleSeverity | Unset
-        if isinstance(_severity, Unset):
+        if isinstance(_severity,  Unset):
             severity = UNSET
         else:
             severity = AlertRuleSeverity(_severity)
+
+
+
 
         contract_id = d.pop("contract_id", UNSET)
 
@@ -121,17 +142,23 @@ class AlertRule:
 
         _created_at = d.pop("created_at", UNSET)
         created_at: datetime.datetime | Unset
-        if isinstance(_created_at, Unset):
+        if isinstance(_created_at,  Unset):
             created_at = UNSET
         else:
             created_at = datetime.datetime.fromisoformat(_created_at)
 
+
+
+
         _updated_at = d.pop("updated_at", UNSET)
         updated_at: datetime.datetime | Unset
-        if isinstance(_updated_at, Unset):
+        if isinstance(_updated_at,  Unset):
             updated_at = UNSET
         else:
             updated_at = datetime.datetime.fromisoformat(_updated_at)
+
+
+
 
         alert_rule = cls(
             id=id,
@@ -145,6 +172,7 @@ class AlertRule:
             created_at=created_at,
             updated_at=updated_at,
         )
+
 
         alert_rule.additional_properties = d
         return alert_rule

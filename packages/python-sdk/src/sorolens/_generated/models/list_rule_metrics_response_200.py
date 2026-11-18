@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar, cast
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,30 +9,40 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
+from typing import cast
+
 if TYPE_CHECKING:
-    from ..models.list_rule_metrics_response_200_metrics_item import (
-        ListRuleMetricsResponse200MetricsItem,
-    )
+  from ..models.list_rule_metrics_response_200_metrics_item import ListRuleMetricsResponse200MetricsItem
+
+
+
 
 
 T = TypeVar("T", bound="ListRuleMetricsResponse200")
 
 
+
 @_attrs_define
 class ListRuleMetricsResponse200:
-    """
-    Attributes:
-        metrics (list[ListRuleMetricsResponse200MetricsItem] | Unset):
-        aggregations (list[str] | Unset):
-        networks (list[str] | Unset):
-    """
+    """ 
+        Attributes:
+            metrics (list[ListRuleMetricsResponse200MetricsItem] | Unset):
+            aggregations (list[str] | Unset):
+            networks (list[str] | Unset):
+     """
 
     metrics: list[ListRuleMetricsResponse200MetricsItem] | Unset = UNSET
     aggregations: list[str] | Unset = UNSET
     networks: list[str] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.list_rule_metrics_response_200_metrics_item import ListRuleMetricsResponse200MetricsItem # noqa: PLC0415
         metrics: list[dict[str, Any]] | Unset = UNSET
         if not isinstance(self.metrics, Unset):
             metrics = []
@@ -40,17 +50,25 @@ class ListRuleMetricsResponse200:
                 metrics_item = metrics_item_data.to_dict()
                 metrics.append(metrics_item)
 
+
+
         aggregations: list[str] | Unset = UNSET
         if not isinstance(self.aggregations, Unset):
             aggregations = self.aggregations
+
+
 
         networks: list[str] | Unset = UNSET
         if not isinstance(self.networks, Unset):
             networks = self.networks
 
+
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({})
+        field_dict.update({
+        })
         if metrics is not UNSET:
             field_dict["metrics"] = metrics
         if aggregations is not UNSET:
@@ -60,33 +78,36 @@ class ListRuleMetricsResponse200:
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.list_rule_metrics_response_200_metrics_item import (
-            ListRuleMetricsResponse200MetricsItem,
-        )
-
+        from ..models.list_rule_metrics_response_200_metrics_item import ListRuleMetricsResponse200MetricsItem # noqa: PLC0415
         d = dict(src_dict)
         _metrics = d.pop("metrics", UNSET)
         metrics: list[ListRuleMetricsResponse200MetricsItem] | Unset = UNSET
         if _metrics is not UNSET:
             metrics = []
             for metrics_item_data in _metrics:
-                metrics_item = ListRuleMetricsResponse200MetricsItem.from_dict(
-                    metrics_item_data
-                )
+                metrics_item = ListRuleMetricsResponse200MetricsItem.from_dict(metrics_item_data)
+
+
 
                 metrics.append(metrics_item)
 
+
         aggregations = cast(list[str], d.pop("aggregations", UNSET))
 
+
         networks = cast(list[str], d.pop("networks", UNSET))
+
 
         list_rule_metrics_response_200 = cls(
             metrics=metrics,
             aggregations=aggregations,
             networks=networks,
         )
+
 
         list_rule_metrics_response_200.additional_properties = d
         return list_rule_metrics_response_200

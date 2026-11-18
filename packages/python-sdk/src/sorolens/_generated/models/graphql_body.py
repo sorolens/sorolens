@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,28 +9,40 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
+from typing import cast
+
 if TYPE_CHECKING:
-    from ..models.graphql_body_variables import GraphqlBodyVariables
+  from ..models.graphql_body_variables import GraphqlBodyVariables
+
+
+
 
 
 T = TypeVar("T", bound="GraphqlBody")
 
 
+
 @_attrs_define
 class GraphqlBody:
-    """
-    Attributes:
-        query (str): GraphQL query document.
-        operation_name (str | Unset): Name of the operation to execute, for multi-operation documents.
-        variables (GraphqlBodyVariables | Unset): Values for the query's GraphQL variables.
-    """
+    """ 
+        Attributes:
+            query (str): GraphQL query document.
+            operation_name (str | Unset): Name of the operation to execute, for multi-operation documents.
+            variables (GraphqlBodyVariables | Unset): Values for the query's GraphQL variables.
+     """
 
     query: str
     operation_name: str | Unset = UNSET
     variables: GraphqlBodyVariables | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.graphql_body_variables import GraphqlBodyVariables # noqa: PLC0415
         query = self.query
 
         operation_name = self.operation_name
@@ -39,13 +51,12 @@ class GraphqlBody:
         if not isinstance(self.variables, Unset):
             variables = self.variables.to_dict()
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "query": query,
-            }
-        )
+        field_dict.update({
+            "query": query,
+        })
         if operation_name is not UNSET:
             field_dict["operationName"] = operation_name
         if variables is not UNSET:
@@ -53,10 +64,11 @@ class GraphqlBody:
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.graphql_body_variables import GraphqlBodyVariables
-
+        from ..models.graphql_body_variables import GraphqlBodyVariables # noqa: PLC0415
         d = dict(src_dict)
         query = d.pop("query")
 
@@ -64,16 +76,20 @@ class GraphqlBody:
 
         _variables = d.pop("variables", UNSET)
         variables: GraphqlBodyVariables | Unset
-        if isinstance(_variables, Unset):
+        if isinstance(_variables,  Unset):
             variables = UNSET
         else:
             variables = GraphqlBodyVariables.from_dict(_variables)
+
+
+
 
         graphql_body = cls(
             query=query,
             operation_name=operation_name,
             variables=variables,
         )
+
 
         graphql_body.additional_properties = d
         return graphql_body

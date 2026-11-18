@@ -1,43 +1,51 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+import datetime
+
 if TYPE_CHECKING:
-    from ..models.event import Event
-    from ..models.invocation_args_decoded import InvocationArgsDecoded
+  from ..models.event import Event
+  from ..models.invocation_args_decoded import InvocationArgsDecoded
+
+
+
 
 
 T = TypeVar("T", bound="InvocationDetail")
 
 
+
 @_attrs_define
 class InvocationDetail:
-    """
-    Attributes:
-        tx_hash (str):
-        contract_id (str):
-        network (str):
-        ledger (int):
-        ledger_closed_at (datetime.datetime):
-        status (str):
-        function_name (str):
-        args_decoded (InvocationArgsDecoded):
-        result_decoded (Any):
-        result_xdr (str):
-        resource_fee_charged (int):
-        cpu_insn (int):
-        mem_byte (int):
-        ledger_read_byte (int):
-        ledger_write_byte (int):
-        application_order (int):
-        events (list[Event]):
-    """
+    """ 
+        Attributes:
+            tx_hash (str):
+            contract_id (str):
+            network (str):
+            ledger (int):
+            ledger_closed_at (datetime.datetime):
+            status (str):
+            function_name (str):
+            args_decoded (InvocationArgsDecoded):
+            result_decoded (Any):
+            result_xdr (str):
+            resource_fee_charged (int):
+            cpu_insn (int):
+            mem_byte (int):
+            ledger_read_byte (int):
+            ledger_write_byte (int):
+            application_order (int):
+            events (list[Event]):
+     """
 
     tx_hash: str
     contract_id: str
@@ -58,7 +66,13 @@ class InvocationDetail:
     events: list[Event]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.event import Event # noqa: PLC0415
+        from ..models.invocation_args_decoded import InvocationArgsDecoded # noqa: PLC0415
         tx_hash = self.tx_hash
 
         contract_id = self.contract_id
@@ -96,37 +110,39 @@ class InvocationDetail:
             events_item = events_item_data.to_dict()
             events.append(events_item)
 
+
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "tx_hash": tx_hash,
-                "contract_id": contract_id,
-                "network": network,
-                "ledger": ledger,
-                "ledger_closed_at": ledger_closed_at,
-                "status": status,
-                "function_name": function_name,
-                "args_decoded": args_decoded,
-                "result_decoded": result_decoded,
-                "result_xdr": result_xdr,
-                "resource_fee_charged": resource_fee_charged,
-                "cpu_insn": cpu_insn,
-                "mem_byte": mem_byte,
-                "ledger_read_byte": ledger_read_byte,
-                "ledger_write_byte": ledger_write_byte,
-                "application_order": application_order,
-                "events": events,
-            }
-        )
+        field_dict.update({
+            "tx_hash": tx_hash,
+            "contract_id": contract_id,
+            "network": network,
+            "ledger": ledger,
+            "ledger_closed_at": ledger_closed_at,
+            "status": status,
+            "function_name": function_name,
+            "args_decoded": args_decoded,
+            "result_decoded": result_decoded,
+            "result_xdr": result_xdr,
+            "resource_fee_charged": resource_fee_charged,
+            "cpu_insn": cpu_insn,
+            "mem_byte": mem_byte,
+            "ledger_read_byte": ledger_read_byte,
+            "ledger_write_byte": ledger_write_byte,
+            "application_order": application_order,
+            "events": events,
+        })
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.event import Event
-        from ..models.invocation_args_decoded import InvocationArgsDecoded
-
+        from ..models.event import Event # noqa: PLC0415
+        from ..models.invocation_args_decoded import InvocationArgsDecoded # noqa: PLC0415
         d = dict(src_dict)
         tx_hash = d.pop("tx_hash")
 
@@ -138,11 +154,17 @@ class InvocationDetail:
 
         ledger_closed_at = datetime.datetime.fromisoformat(d.pop("ledger_closed_at"))
 
+
+
+
         status = d.pop("status")
 
         function_name = d.pop("function_name")
 
         args_decoded = InvocationArgsDecoded.from_dict(d.pop("args_decoded"))
+
+
+
 
         result_decoded = d.pop("result_decoded")
 
@@ -162,10 +184,13 @@ class InvocationDetail:
 
         events = []
         _events = d.pop("events")
-        for events_item_data in _events:
+        for events_item_data in (_events):
             events_item = Event.from_dict(events_item_data)
 
+
+
             events.append(events_item)
+
 
         invocation_detail = cls(
             tx_hash=tx_hash,
@@ -186,6 +211,7 @@ class InvocationDetail:
             application_order=application_order,
             events=events,
         )
+
 
         invocation_detail.additional_properties = d
         return invocation_detail

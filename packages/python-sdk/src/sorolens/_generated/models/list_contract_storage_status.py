@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class ListContractStorageStatus(StrEnum):
     ARCHIVED = "archived"
     DELETED = "deleted"

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar, cast
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -10,22 +9,36 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
+from typing import cast
+import datetime
+
+
+
+
+
+
 T = TypeVar("T", bound="PreviewAlertRuleResponse200PointsItem")
+
 
 
 @_attrs_define
 class PreviewAlertRuleResponse200PointsItem:
-    """
-    Attributes:
-        at (datetime.datetime | Unset):
-        value (float | None | Unset):
-        fired (bool | Unset):
-    """
+    """ 
+        Attributes:
+            at (datetime.datetime | Unset):
+            value (float | None | Unset):
+            fired (bool | Unset):
+     """
 
     at: datetime.datetime | Unset = UNSET
     value: float | None | Unset = UNSET
     fired: bool | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         at: str | Unset = UNSET
@@ -40,9 +53,11 @@ class PreviewAlertRuleResponse200PointsItem:
 
         fired = self.fired
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({})
+        field_dict.update({
+        })
         if at is not UNSET:
             field_dict["at"] = at
         if value is not UNSET:
@@ -52,15 +67,20 @@ class PreviewAlertRuleResponse200PointsItem:
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
         _at = d.pop("at", UNSET)
         at: datetime.datetime | Unset
-        if isinstance(_at, Unset):
+        if isinstance(_at,  Unset):
             at = UNSET
         else:
             at = datetime.datetime.fromisoformat(_at)
+
+
+
 
         def _parse_value(data: object) -> float | None | Unset:
             if data is None:
@@ -71,6 +91,7 @@ class PreviewAlertRuleResponse200PointsItem:
 
         value = _parse_value(d.pop("value", UNSET))
 
+
         fired = d.pop("fired", UNSET)
 
         preview_alert_rule_response_200_points_item = cls(
@@ -78,6 +99,7 @@ class PreviewAlertRuleResponse200PointsItem:
             value=value,
             fired=fired,
         )
+
 
         preview_alert_rule_response_200_points_item.additional_properties = d
         return preview_alert_rule_response_200_points_item

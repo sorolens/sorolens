@@ -1,60 +1,79 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+
 if TYPE_CHECKING:
-    from ..models.event import Event
+  from ..models.event import Event
+
+
+
 
 
 T = TypeVar("T", bound="RecentEventsResponse200")
 
 
+
 @_attrs_define
 class RecentEventsResponse200:
-    """
-    Attributes:
-        events (list[Event]):
-    """
+    """ 
+        Attributes:
+            events (list[Event]):
+     """
 
     events: list[Event]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.event import Event # noqa: PLC0415
         events = []
         for events_item_data in self.events:
             events_item = events_item_data.to_dict()
             events.append(events_item)
 
+
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "events": events,
-            }
-        )
+        field_dict.update({
+            "events": events,
+        })
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.event import Event
-
+        from ..models.event import Event # noqa: PLC0415
         d = dict(src_dict)
         events = []
         _events = d.pop("events")
-        for events_item_data in _events:
+        for events_item_data in (_events):
             events_item = Event.from_dict(events_item_data)
 
+
+
             events.append(events_item)
+
 
         recent_events_response_200 = cls(
             events=events,
         )
+
 
         recent_events_response_200.additional_properties = d
         return recent_events_response_200

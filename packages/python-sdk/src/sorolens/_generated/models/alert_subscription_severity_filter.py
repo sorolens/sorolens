@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class AlertSubscriptionSeverityFilter(StrEnum):
     CRITICAL = "Critical"
     INFO = "Info"

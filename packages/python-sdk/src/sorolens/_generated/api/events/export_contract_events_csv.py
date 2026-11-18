@@ -1,14 +1,18 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...types import Response, UNSET
+from ... import errors
+
 from ...models.error import Error
 from ...models.export_contract_events_csv_network import ExportContractEventsCsvNetwork
-from ...types import UNSET, Response, Unset
+from ...types import UNSET, Unset
+from typing import cast
+
 
 
 def _get_kwargs(
@@ -18,7 +22,11 @@ def _get_kwargs(
     type_: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+
 ) -> dict[str, Any]:
+    
+
+    
 
     params: dict[str, Any] = {}
 
@@ -34,22 +42,22 @@ def _get_kwargs(
 
     params["to"] = to
 
+
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
+
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/api/v1/contracts/{id}/events.csv".format(
-            id=quote(str(id), safe=""),
-        ),
+        "url": "/api/v1/contracts/{id}/events.csv".format(id=quote(str(id), safe=""),),
         "params": params,
     }
+
 
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Error | str | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | str | None:
     if response.status_code == 200:
         response_200 = response.text
         return response_200
@@ -57,10 +65,14 @@ def _parse_response(
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())
 
+
+
         return response_422
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
+
+
 
         return response_500
 
@@ -70,9 +82,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Error | str]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | str]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -89,8 +99,9 @@ def sync_detailed(
     type_: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+
 ) -> Response[Error | str]:
-    """Export contract events as CSV
+    """ Export contract events as CSV
 
      Streams every matching event as CSV instead of paginating them, so a large contract can be handed to
     a spreadsheet or an analyst in one request. Rows are ordered by ledger ascending, then event id, and
@@ -115,14 +126,16 @@ def sync_detailed(
 
     Returns:
         Response[Error | str]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         id=id,
-        network=network,
-        type_=type_,
-        from_=from_,
-        to=to,
+network=network,
+type_=type_,
+from_=from_,
+to=to,
+
     )
 
     response = client.get_httpx_client().request(
@@ -130,7 +143,6 @@ def sync_detailed(
     )
 
     return _build_response(client=client, response=response)
-
 
 def sync(
     id: str,
@@ -140,8 +152,9 @@ def sync(
     type_: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+
 ) -> Error | str | None:
-    """Export contract events as CSV
+    """ Export contract events as CSV
 
      Streams every matching event as CSV instead of paginating them, so a large contract can be handed to
     a spreadsheet or an analyst in one request. Rows are ordered by ledger ascending, then event id, and
@@ -166,17 +179,18 @@ def sync(
 
     Returns:
         Error | str
-    """
+     """
+
 
     return sync_detailed(
         id=id,
-        client=client,
-        network=network,
-        type_=type_,
-        from_=from_,
-        to=to,
-    ).parsed
+client=client,
+network=network,
+type_=type_,
+from_=from_,
+to=to,
 
+    ).parsed
 
 async def asyncio_detailed(
     id: str,
@@ -186,8 +200,9 @@ async def asyncio_detailed(
     type_: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+
 ) -> Response[Error | str]:
-    """Export contract events as CSV
+    """ Export contract events as CSV
 
      Streams every matching event as CSV instead of paginating them, so a large contract can be handed to
     a spreadsheet or an analyst in one request. Rows are ordered by ledger ascending, then event id, and
@@ -212,20 +227,23 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | str]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         id=id,
-        network=network,
-        type_=type_,
-        from_=from_,
-        to=to,
+network=network,
+type_=type_,
+from_=from_,
+to=to,
+
     )
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
-
 
 async def asyncio(
     id: str,
@@ -235,8 +253,9 @@ async def asyncio(
     type_: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+
 ) -> Error | str | None:
-    """Export contract events as CSV
+    """ Export contract events as CSV
 
      Streams every matching event as CSV instead of paginating them, so a large contract can be handed to
     a spreadsheet or an analyst in one request. Rows are ordered by ledger ascending, then event id, and
@@ -261,15 +280,15 @@ async def asyncio(
 
     Returns:
         Error | str
-    """
+     """
 
-    return (
-        await asyncio_detailed(
-            id=id,
-            client=client,
-            network=network,
-            type_=type_,
-            from_=from_,
-            to=to,
-        )
-    ).parsed
+
+    return (await asyncio_detailed(
+        id=id,
+client=client,
+network=network,
+type_=type_,
+from_=from_,
+to=to,
+
+    )).parsed

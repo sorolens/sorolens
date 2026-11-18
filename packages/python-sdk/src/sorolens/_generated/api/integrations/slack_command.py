@@ -1,14 +1,18 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
+from urllib.parse import quote
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...types import Response, UNSET
+from ... import errors
+
 from ...models.error import Error
 from ...models.slack_command_body import SlackCommandBody
 from ...models.slack_message import SlackMessage
-from ...types import Response
+from typing import cast
+
 
 
 def _get_kwargs(
@@ -16,11 +20,18 @@ def _get_kwargs(
     body: SlackCommandBody,
     x_slack_signature: str,
     x_slack_request_timestamp: str,
+
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
     headers["X-Slack-Signature"] = x_slack_signature
 
     headers["X-Slack-Request-Timestamp"] = x_slack_request_timestamp
+
+
+
+    
+
+    
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -34,26 +45,33 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Error | SlackMessage | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | SlackMessage | None:
     if response.status_code == 200:
         response_200 = SlackMessage.from_dict(response.json())
+
+
 
         return response_200
 
     if response.status_code == 400:
         response_400 = Error.from_dict(response.json())
 
+
+
         return response_400
 
     if response.status_code == 401:
         response_401 = Error.from_dict(response.json())
 
+
+
         return response_401
 
     if response.status_code == 404:
         response_404 = Error.from_dict(response.json())
+
+
 
         return response_404
 
@@ -63,9 +81,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Error | SlackMessage]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | SlackMessage]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -80,8 +96,9 @@ def sync_detailed(
     body: SlackCommandBody,
     x_slack_signature: str,
     x_slack_request_timestamp: str,
+
 ) -> Response[Error | SlackMessage]:
-    """Slack slash command
+    """ Slack slash command
 
      Endpoint for a Slack slash command such as `/sorolens <contract_id>`.
     Every request must carry a valid Slack signature
@@ -103,12 +120,14 @@ def sync_detailed(
 
     Returns:
         Response[Error | SlackMessage]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         body=body,
-        x_slack_signature=x_slack_signature,
-        x_slack_request_timestamp=x_slack_request_timestamp,
+x_slack_signature=x_slack_signature,
+x_slack_request_timestamp=x_slack_request_timestamp,
+
     )
 
     response = client.get_httpx_client().request(
@@ -117,15 +136,15 @@ def sync_detailed(
 
     return _build_response(client=client, response=response)
 
-
 def sync(
     *,
     client: AuthenticatedClient | Client,
     body: SlackCommandBody,
     x_slack_signature: str,
     x_slack_request_timestamp: str,
+
 ) -> Error | SlackMessage | None:
-    """Slack slash command
+    """ Slack slash command
 
      Endpoint for a Slack slash command such as `/sorolens <contract_id>`.
     Every request must carry a valid Slack signature
@@ -147,15 +166,16 @@ def sync(
 
     Returns:
         Error | SlackMessage
-    """
+     """
+
 
     return sync_detailed(
         client=client,
-        body=body,
-        x_slack_signature=x_slack_signature,
-        x_slack_request_timestamp=x_slack_request_timestamp,
-    ).parsed
+body=body,
+x_slack_signature=x_slack_signature,
+x_slack_request_timestamp=x_slack_request_timestamp,
 
+    ).parsed
 
 async def asyncio_detailed(
     *,
@@ -163,8 +183,9 @@ async def asyncio_detailed(
     body: SlackCommandBody,
     x_slack_signature: str,
     x_slack_request_timestamp: str,
+
 ) -> Response[Error | SlackMessage]:
-    """Slack slash command
+    """ Slack slash command
 
      Endpoint for a Slack slash command such as `/sorolens <contract_id>`.
     Every request must carry a valid Slack signature
@@ -186,18 +207,21 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | SlackMessage]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         body=body,
-        x_slack_signature=x_slack_signature,
-        x_slack_request_timestamp=x_slack_request_timestamp,
+x_slack_signature=x_slack_signature,
+x_slack_request_timestamp=x_slack_request_timestamp,
+
     )
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
-
 
 async def asyncio(
     *,
@@ -205,8 +229,9 @@ async def asyncio(
     body: SlackCommandBody,
     x_slack_signature: str,
     x_slack_request_timestamp: str,
+
 ) -> Error | SlackMessage | None:
-    """Slack slash command
+    """ Slack slash command
 
      Endpoint for a Slack slash command such as `/sorolens <contract_id>`.
     Every request must carry a valid Slack signature
@@ -228,13 +253,13 @@ async def asyncio(
 
     Returns:
         Error | SlackMessage
-    """
+     """
 
-    return (
-        await asyncio_detailed(
-            client=client,
-            body=body,
-            x_slack_signature=x_slack_signature,
-            x_slack_request_timestamp=x_slack_request_timestamp,
-        )
-    ).parsed
+
+    return (await asyncio_detailed(
+        client=client,
+body=body,
+x_slack_signature=x_slack_signature,
+x_slack_request_timestamp=x_slack_request_timestamp,
+
+    )).parsed

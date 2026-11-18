@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class CreateApiKeyBodyScopesItem(StrEnum):
     ADMIN = "admin:*"
     READCONTRACTS = "read:contracts"

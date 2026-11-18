@@ -1,23 +1,34 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
+from urllib.parse import quote
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...types import Response, UNSET
+from ... import errors
+
 from ...models.add_to_watchlist_body import AddToWatchlistBody
 from ...models.error import Error
 from ...models.in_watchlist import InWatchlist
-from ...types import Response
+from typing import cast
+
 
 
 def _get_kwargs(
     *,
     body: AddToWatchlistBody,
     x_user_id: str,
+
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
     headers["X-User-ID"] = x_user_id
+
+
+
+    
+
+    
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -32,31 +43,40 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Error | InWatchlist | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | InWatchlist | None:
     if response.status_code == 201:
         response_201 = InWatchlist.from_dict(response.json())
+
+
 
         return response_201
 
     if response.status_code == 401:
         response_401 = Error.from_dict(response.json())
 
+
+
         return response_401
 
     if response.status_code == 415:
         response_415 = Error.from_dict(response.json())
+
+
 
         return response_415
 
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())
 
+
+
         return response_422
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
+
+
 
         return response_500
 
@@ -66,9 +86,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Error | InWatchlist]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | InWatchlist]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -82,8 +100,9 @@ def sync_detailed(
     client: AuthenticatedClient,
     body: AddToWatchlistBody,
     x_user_id: str,
+
 ) -> Response[Error | InWatchlist]:
-    """Add a contract to the caller's watchlist
+    """ Add a contract to the caller's watchlist
 
     Args:
         x_user_id (str):
@@ -95,11 +114,13 @@ def sync_detailed(
 
     Returns:
         Response[Error | InWatchlist]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         body=body,
-        x_user_id=x_user_id,
+x_user_id=x_user_id,
+
     )
 
     response = client.get_httpx_client().request(
@@ -108,14 +129,14 @@ def sync_detailed(
 
     return _build_response(client=client, response=response)
 
-
 def sync(
     *,
     client: AuthenticatedClient,
     body: AddToWatchlistBody,
     x_user_id: str,
+
 ) -> Error | InWatchlist | None:
-    """Add a contract to the caller's watchlist
+    """ Add a contract to the caller's watchlist
 
     Args:
         x_user_id (str):
@@ -127,22 +148,24 @@ def sync(
 
     Returns:
         Error | InWatchlist
-    """
+     """
+
 
     return sync_detailed(
         client=client,
-        body=body,
-        x_user_id=x_user_id,
-    ).parsed
+body=body,
+x_user_id=x_user_id,
 
+    ).parsed
 
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
     body: AddToWatchlistBody,
     x_user_id: str,
+
 ) -> Response[Error | InWatchlist]:
-    """Add a contract to the caller's watchlist
+    """ Add a contract to the caller's watchlist
 
     Args:
         x_user_id (str):
@@ -154,25 +177,29 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | InWatchlist]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         body=body,
-        x_user_id=x_user_id,
+x_user_id=x_user_id,
+
     )
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
-
 
 async def asyncio(
     *,
     client: AuthenticatedClient,
     body: AddToWatchlistBody,
     x_user_id: str,
+
 ) -> Error | InWatchlist | None:
-    """Add a contract to the caller's watchlist
+    """ Add a contract to the caller's watchlist
 
     Args:
         x_user_id (str):
@@ -184,12 +211,12 @@ async def asyncio(
 
     Returns:
         Error | InWatchlist
-    """
+     """
 
-    return (
-        await asyncio_detailed(
-            client=client,
-            body=body,
-            x_user_id=x_user_id,
-        )
-    ).parsed
+
+    return (await asyncio_detailed(
+        client=client,
+body=body,
+x_user_id=x_user_id,
+
+    )).parsed

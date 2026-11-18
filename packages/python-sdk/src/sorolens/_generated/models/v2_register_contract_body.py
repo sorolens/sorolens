@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,22 +9,34 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
+
+
+
+
+
+
 T = TypeVar("T", bound="V2RegisterContractBody")
+
 
 
 @_attrs_define
 class V2RegisterContractBody:
-    """
-    Attributes:
-        id (str):
-        network (str):
-        label (str | Unset):
-    """
+    """ 
+        Attributes:
+            id (str):
+            network (str):
+            label (str | Unset):
+     """
 
     id: str
     network: str
     label: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         id = self.id
@@ -33,18 +45,19 @@ class V2RegisterContractBody:
 
         label = self.label
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "id": id,
-                "network": network,
-            }
-        )
+        field_dict.update({
+            "id": id,
+            "network": network,
+        })
         if label is not UNSET:
             field_dict["label"] = label
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -60,6 +73,7 @@ class V2RegisterContractBody:
             network=network,
             label=label,
         )
+
 
         v2_register_contract_body.additional_properties = d
         return v2_register_contract_body

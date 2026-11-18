@@ -1,26 +1,36 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar, cast
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+
+
+
+
+
+
 T = TypeVar("T", bound="ContractValidationResult")
+
 
 
 @_attrs_define
 class ContractValidationResult:
-    """
-    Attributes:
-        valid (bool):
-        contract_id (str):
-        network (str):
-        already_tracked (bool):
-        label (None | str):
-        reason (None | str):
-    """
+    """ 
+        Attributes:
+            valid (bool):
+            contract_id (str):
+            network (str):
+            already_tracked (bool):
+            label (None | str):
+            reason (None | str):
+     """
 
     valid: bool
     contract_id: str
@@ -29,6 +39,10 @@ class ContractValidationResult:
     label: None | str
     reason: None | str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         valid = self.valid
@@ -45,20 +59,21 @@ class ContractValidationResult:
         reason: None | str
         reason = self.reason
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "valid": valid,
-                "contract_id": contract_id,
-                "network": network,
-                "already_tracked": already_tracked,
-                "label": label,
-                "reason": reason,
-            }
-        )
+        field_dict.update({
+            "valid": valid,
+            "contract_id": contract_id,
+            "network": network,
+            "already_tracked": already_tracked,
+            "label": label,
+            "reason": reason,
+        })
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -78,12 +93,14 @@ class ContractValidationResult:
 
         label = _parse_label(d.pop("label"))
 
+
         def _parse_reason(data: object) -> None | str:
             if data is None:
                 return data
             return cast(None | str, data)
 
         reason = _parse_reason(d.pop("reason"))
+
 
         contract_validation_result = cls(
             valid=valid,
@@ -93,6 +110,7 @@ class ContractValidationResult:
             label=label,
             reason=reason,
         )
+
 
         contract_validation_result.additional_properties = d
         return contract_validation_result

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar, cast
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -10,34 +9,44 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
+from typing import cast
+import datetime
+
+
+
+
+
+
 T = TypeVar("T", bound="ContractReport")
+
 
 
 @_attrs_define
 class ContractReport:
-    """
-    Attributes:
-        contract_id (str):
-        month (str): Reporting period, YYYY-MM (UTC).
-        uptime_pct (float): healthy_checks / total_checks * 100; 0 when there were no checks.
-        total_checks (int):
-        healthy_checks (int):
-        incidents (int): Outages (a transition from Healthy into any other status) in the month.
-        mttr_seconds (float): Mean time to recovery across incidents that recovered within the month.
-        total_downtime_seconds (float):
-        longest_outage_seconds (float):
-        ongoing_outage (bool): True when the month ends mid-incident (MTTR then understates reality).
-        critical_alerts (int):
-        warning_alerts (int):
-        info_alerts (int):
-        total_alerts (int):
-        first_check (datetime.datetime | None):
-        last_check (datetime.datetime | None):
-        signed (bool): False when no REPORT_SIGNING_KEY is configured.
-        signature (str | Unset): Hex HMAC-SHA256 over the canonical report text; empty when unsigned.
-        signature_algorithm (str | Unset):
-        sampling_note (str | Unset):
-    """
+    """ 
+        Attributes:
+            contract_id (str):
+            month (str): Reporting period, YYYY-MM (UTC).
+            uptime_pct (float): healthy_checks / total_checks * 100; 0 when there were no checks.
+            total_checks (int):
+            healthy_checks (int):
+            incidents (int): Outages (a transition from Healthy into any other status) in the month.
+            mttr_seconds (float): Mean time to recovery across incidents that recovered within the month.
+            total_downtime_seconds (float):
+            longest_outage_seconds (float):
+            ongoing_outage (bool): True when the month ends mid-incident (MTTR then understates reality).
+            critical_alerts (int):
+            warning_alerts (int):
+            info_alerts (int):
+            total_alerts (int):
+            first_check (datetime.datetime | None):
+            last_check (datetime.datetime | None):
+            signed (bool): False when no REPORT_SIGNING_KEY is configured.
+            signature (str | Unset): Hex HMAC-SHA256 over the canonical report text; empty when unsigned.
+            signature_algorithm (str | Unset):
+            sampling_note (str | Unset):
+     """
 
     contract_id: str
     month: str
@@ -60,6 +69,10 @@ class ContractReport:
     signature_algorithm: str | Unset = UNSET
     sampling_note: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         contract_id = self.contract_id
@@ -110,29 +123,28 @@ class ContractReport:
 
         sampling_note = self.sampling_note
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "contract_id": contract_id,
-                "month": month,
-                "uptime_pct": uptime_pct,
-                "total_checks": total_checks,
-                "healthy_checks": healthy_checks,
-                "incidents": incidents,
-                "mttr_seconds": mttr_seconds,
-                "total_downtime_seconds": total_downtime_seconds,
-                "longest_outage_seconds": longest_outage_seconds,
-                "ongoing_outage": ongoing_outage,
-                "critical_alerts": critical_alerts,
-                "warning_alerts": warning_alerts,
-                "info_alerts": info_alerts,
-                "total_alerts": total_alerts,
-                "first_check": first_check,
-                "last_check": last_check,
-                "signed": signed,
-            }
-        )
+        field_dict.update({
+            "contract_id": contract_id,
+            "month": month,
+            "uptime_pct": uptime_pct,
+            "total_checks": total_checks,
+            "healthy_checks": healthy_checks,
+            "incidents": incidents,
+            "mttr_seconds": mttr_seconds,
+            "total_downtime_seconds": total_downtime_seconds,
+            "longest_outage_seconds": longest_outage_seconds,
+            "ongoing_outage": ongoing_outage,
+            "critical_alerts": critical_alerts,
+            "warning_alerts": warning_alerts,
+            "info_alerts": info_alerts,
+            "total_alerts": total_alerts,
+            "first_check": first_check,
+            "last_check": last_check,
+            "signed": signed,
+        })
         if signature is not UNSET:
             field_dict["signature"] = signature
         if signature_algorithm is not UNSET:
@@ -141,6 +153,8 @@ class ContractReport:
             field_dict["sampling_note"] = sampling_note
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -181,12 +195,15 @@ class ContractReport:
                     raise TypeError()
                 first_check_type_0 = datetime.datetime.fromisoformat(data)
 
+
+
                 return first_check_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None, data)
 
         first_check = _parse_first_check(d.pop("first_check"))
+
 
         def _parse_last_check(data: object) -> datetime.datetime | None:
             if data is None:
@@ -196,12 +213,15 @@ class ContractReport:
                     raise TypeError()
                 last_check_type_0 = datetime.datetime.fromisoformat(data)
 
+
+
                 return last_check_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None, data)
 
         last_check = _parse_last_check(d.pop("last_check"))
+
 
         signed = d.pop("signed")
 
@@ -233,6 +253,7 @@ class ContractReport:
             signature_algorithm=signature_algorithm,
             sampling_note=sampling_note,
         )
+
 
         contract_report.additional_properties = d
         return contract_report

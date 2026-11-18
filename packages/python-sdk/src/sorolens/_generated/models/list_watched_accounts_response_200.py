@@ -1,60 +1,79 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+
 if TYPE_CHECKING:
-    from ..models.watched_account import WatchedAccount
+  from ..models.watched_account import WatchedAccount
+
+
+
 
 
 T = TypeVar("T", bound="ListWatchedAccountsResponse200")
 
 
+
 @_attrs_define
 class ListWatchedAccountsResponse200:
-    """
-    Attributes:
-        watched_accounts (list[WatchedAccount]):
-    """
+    """ 
+        Attributes:
+            watched_accounts (list[WatchedAccount]):
+     """
 
     watched_accounts: list[WatchedAccount]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.watched_account import WatchedAccount # noqa: PLC0415
         watched_accounts = []
         for watched_accounts_item_data in self.watched_accounts:
             watched_accounts_item = watched_accounts_item_data.to_dict()
             watched_accounts.append(watched_accounts_item)
 
+
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "watched_accounts": watched_accounts,
-            }
-        )
+        field_dict.update({
+            "watched_accounts": watched_accounts,
+        })
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.watched_account import WatchedAccount
-
+        from ..models.watched_account import WatchedAccount # noqa: PLC0415
         d = dict(src_dict)
         watched_accounts = []
         _watched_accounts = d.pop("watched_accounts")
-        for watched_accounts_item_data in _watched_accounts:
+        for watched_accounts_item_data in (_watched_accounts):
             watched_accounts_item = WatchedAccount.from_dict(watched_accounts_item_data)
 
+
+
             watched_accounts.append(watched_accounts_item)
+
 
         list_watched_accounts_response_200 = cls(
             watched_accounts=watched_accounts,
         )
+
 
         list_watched_accounts_response_200.additional_properties = d
         return list_watched_accounts_response_200

@@ -1,31 +1,45 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+import datetime
+
+
+
+
+
+
 T = TypeVar("T", bound="ForecastPoint")
+
 
 
 @_attrs_define
 class ForecastPoint:
-    """
-    Attributes:
-        date (datetime.date):
-        value (float):
-        lower (float):
-        upper (float):
-    """
+    """ 
+        Attributes:
+            date (datetime.date):
+            value (float):
+            lower (float):
+            upper (float):
+     """
 
     date: datetime.date
     value: float
     lower: float
     upper: float
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         date = self.date.isoformat()
@@ -36,23 +50,27 @@ class ForecastPoint:
 
         upper = self.upper
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "date": date,
-                "value": value,
-                "lower": lower,
-                "upper": upper,
-            }
-        )
+        field_dict.update({
+            "date": date,
+            "value": value,
+            "lower": lower,
+            "upper": upper,
+        })
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
         date = datetime.date.fromisoformat(d.pop("date"))
+
+
+
 
         value = d.pop("value")
 
@@ -66,6 +84,7 @@ class ForecastPoint:
             lower=lower,
             upper=upper,
         )
+
 
         forecast_point.additional_properties = d
         return forecast_point

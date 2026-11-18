@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,25 +9,37 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
+
+
+
+
+
+
 T = TypeVar("T", bound="RuleDiagnostic")
+
 
 
 @_attrs_define
 class RuleDiagnostic:
-    """A rule validation problem, positioned for the dashboard editor.
+    """ A rule validation problem, positioned for the dashboard editor.
 
-    Attributes:
-        message (str | Unset):
-        hint (str | Unset):
-        line (int | Unset):
-        column (int | Unset):
-    """
+        Attributes:
+            message (str | Unset):
+            hint (str | Unset):
+            line (int | Unset):
+            column (int | Unset):
+     """
 
     message: str | Unset = UNSET
     hint: str | Unset = UNSET
     line: int | Unset = UNSET
     column: int | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         message = self.message
@@ -38,9 +50,11 @@ class RuleDiagnostic:
 
         column = self.column
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({})
+        field_dict.update({
+        })
         if message is not UNSET:
             field_dict["message"] = message
         if hint is not UNSET:
@@ -51,6 +65,8 @@ class RuleDiagnostic:
             field_dict["column"] = column
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -69,6 +85,7 @@ class RuleDiagnostic:
             line=line,
             column=column,
         )
+
 
         rule_diagnostic.additional_properties = d
         return rule_diagnostic

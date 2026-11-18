@@ -1,43 +1,50 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..models.contract_verification_status import ContractVerificationStatus
 from ..types import UNSET, Unset
 
+from ..models.contract_verification_status import ContractVerificationStatus
+from ..types import UNSET, Unset
+from typing import cast
+import datetime
+
 if TYPE_CHECKING:
-    from ..models.verification_diagnostic import VerificationDiagnostic
-    from ..models.verification_source import VerificationSource
-    from ..models.verification_toolchain import VerificationToolchain
+  from ..models.verification_diagnostic import VerificationDiagnostic
+  from ..models.verification_source import VerificationSource
+  from ..models.verification_toolchain import VerificationToolchain
+
+
+
 
 
 T = TypeVar("T", bound="ContractVerification")
 
 
+
 @_attrs_define
 class ContractVerification:
-    """
-    Attributes:
-        contract_id (str):
-        status (ContractVerificationStatus): `verified` when the recompiled hash matches the on-chain hash,
-            `failed` otherwise. Diagnostics explain a failure.
-        matched (bool):
-        source (VerificationSource):
-        toolchain (VerificationToolchain):
-        diagnostics (list[VerificationDiagnostic]):
-        submitted_at (datetime.datetime):
-        updated_at (datetime.datetime):
-        on_chain_hash (str | Unset): Wasm hash recorded on-chain for the contract (hex).
-        compiled_wasm_hash (str | Unset): SHA-256 hash produced by the rebuild (hex).
-        build_log (str | Unset): Captured build output, truncated when very large.
-        verified_at (datetime.datetime | Unset):
-    """
+    """ 
+        Attributes:
+            contract_id (str):
+            status (ContractVerificationStatus): `verified` when the recompiled hash matches the on-chain hash,
+                `failed` otherwise. Diagnostics explain a failure.
+            matched (bool):
+            source (VerificationSource):
+            toolchain (VerificationToolchain):
+            diagnostics (list[VerificationDiagnostic]):
+            submitted_at (datetime.datetime):
+            updated_at (datetime.datetime):
+            on_chain_hash (str | Unset): Wasm hash recorded on-chain for the contract (hex).
+            compiled_wasm_hash (str | Unset): SHA-256 hash produced by the rebuild (hex).
+            build_log (str | Unset): Captured build output, truncated when very large.
+            verified_at (datetime.datetime | Unset):
+     """
 
     contract_id: str
     status: ContractVerificationStatus
@@ -53,7 +60,14 @@ class ContractVerification:
     verified_at: datetime.datetime | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.verification_diagnostic import VerificationDiagnostic # noqa: PLC0415
+        from ..models.verification_source import VerificationSource # noqa: PLC0415
+        from ..models.verification_toolchain import VerificationToolchain # noqa: PLC0415
         contract_id = self.contract_id
 
         status = self.status.value
@@ -69,6 +83,8 @@ class ContractVerification:
             diagnostics_item = diagnostics_item_data.to_dict()
             diagnostics.append(diagnostics_item)
 
+
+
         submitted_at = self.submitted_at.isoformat()
 
         updated_at = self.updated_at.isoformat()
@@ -83,20 +99,19 @@ class ContractVerification:
         if not isinstance(self.verified_at, Unset):
             verified_at = self.verified_at.isoformat()
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "contract_id": contract_id,
-                "status": status,
-                "matched": matched,
-                "source": source,
-                "toolchain": toolchain,
-                "diagnostics": diagnostics,
-                "submitted_at": submitted_at,
-                "updated_at": updated_at,
-            }
-        )
+        field_dict.update({
+            "contract_id": contract_id,
+            "status": status,
+            "matched": matched,
+            "source": source,
+            "toolchain": toolchain,
+            "diagnostics": diagnostics,
+            "submitted_at": submitted_at,
+            "updated_at": updated_at,
+        })
         if on_chain_hash is not UNSET:
             field_dict["on_chain_hash"] = on_chain_hash
         if compiled_wasm_hash is not UNSET:
@@ -108,33 +123,52 @@ class ContractVerification:
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.verification_diagnostic import VerificationDiagnostic
-        from ..models.verification_source import VerificationSource
-        from ..models.verification_toolchain import VerificationToolchain
-
+        from ..models.verification_diagnostic import VerificationDiagnostic # noqa: PLC0415
+        from ..models.verification_source import VerificationSource # noqa: PLC0415
+        from ..models.verification_toolchain import VerificationToolchain # noqa: PLC0415
         d = dict(src_dict)
         contract_id = d.pop("contract_id")
 
         status = ContractVerificationStatus(d.pop("status"))
 
+
+
+
         matched = d.pop("matched")
 
         source = VerificationSource.from_dict(d.pop("source"))
 
+
+
+
         toolchain = VerificationToolchain.from_dict(d.pop("toolchain"))
+
+
+
 
         diagnostics = []
         _diagnostics = d.pop("diagnostics")
-        for diagnostics_item_data in _diagnostics:
+        for diagnostics_item_data in (_diagnostics):
             diagnostics_item = VerificationDiagnostic.from_dict(diagnostics_item_data)
+
+
 
             diagnostics.append(diagnostics_item)
 
+
         submitted_at = datetime.datetime.fromisoformat(d.pop("submitted_at"))
 
+
+
+
         updated_at = datetime.datetime.fromisoformat(d.pop("updated_at"))
+
+
+
 
         on_chain_hash = d.pop("on_chain_hash", UNSET)
 
@@ -144,10 +178,13 @@ class ContractVerification:
 
         _verified_at = d.pop("verified_at", UNSET)
         verified_at: datetime.datetime | Unset
-        if isinstance(_verified_at, Unset):
+        if isinstance(_verified_at,  Unset):
             verified_at = UNSET
         else:
             verified_at = datetime.datetime.fromisoformat(_verified_at)
+
+
+
 
         contract_verification = cls(
             contract_id=contract_id,
@@ -163,6 +200,7 @@ class ContractVerification:
             build_log=build_log,
             verified_at=verified_at,
         )
+
 
         contract_verification.additional_properties = d
         return contract_verification

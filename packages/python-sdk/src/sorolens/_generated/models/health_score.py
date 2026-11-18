@@ -1,29 +1,37 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+import datetime
+
 if TYPE_CHECKING:
-    from ..models.health_score_components import HealthScoreComponents
+  from ..models.health_score_components import HealthScoreComponents
+
+
+
 
 
 T = TypeVar("T", bound="HealthScore")
 
 
+
 @_attrs_define
 class HealthScore:
-    """
-    Attributes:
-        contract_id (str):
-        score (int):
-        components (HealthScoreComponents):
-        computed_at (datetime.datetime):
-    """
+    """ 
+        Attributes:
+            contract_id (str):
+            score (int):
+            components (HealthScoreComponents):
+            computed_at (datetime.datetime):
+     """
 
     contract_id: str
     score: int
@@ -31,7 +39,12 @@ class HealthScore:
     computed_at: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.health_score_components import HealthScoreComponents # noqa: PLC0415
         contract_id = self.contract_id
 
         score = self.score
@@ -40,23 +53,23 @@ class HealthScore:
 
         computed_at = self.computed_at.isoformat()
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "contract_id": contract_id,
-                "score": score,
-                "components": components,
-                "computed_at": computed_at,
-            }
-        )
+        field_dict.update({
+            "contract_id": contract_id,
+            "score": score,
+            "components": components,
+            "computed_at": computed_at,
+        })
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.health_score_components import HealthScoreComponents
-
+        from ..models.health_score_components import HealthScoreComponents # noqa: PLC0415
         d = dict(src_dict)
         contract_id = d.pop("contract_id")
 
@@ -64,7 +77,13 @@ class HealthScore:
 
         components = HealthScoreComponents.from_dict(d.pop("components"))
 
+
+
+
         computed_at = datetime.datetime.fromisoformat(d.pop("computed_at"))
+
+
+
 
         health_score = cls(
             contract_id=contract_id,
@@ -72,6 +91,7 @@ class HealthScore:
             components=components,
             computed_at=computed_at,
         )
+
 
         health_score.additional_properties = d
         return health_score

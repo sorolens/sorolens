@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class CompareContractsWindow(StrEnum):
     VALUE_0 = "24h"
     VALUE_1 = "7d"

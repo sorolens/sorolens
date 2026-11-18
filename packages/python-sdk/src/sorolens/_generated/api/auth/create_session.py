@@ -1,40 +1,57 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
+from urllib.parse import quote
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...types import Response, UNSET
+from ... import errors
+
 from ...models.error import Error
 from ...models.session import Session
-from ...types import Response
+from typing import cast
 
 
-def _get_kwargs() -> dict[str, Any]:
+
+def _get_kwargs(
+    
+) -> dict[str, Any]:
+    
+
+    
+
+    
 
     _kwargs: dict[str, Any] = {
         "method": "post",
         "url": "/api/v1/auth/session",
     }
 
+
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Error | Session | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | Session | None:
     if response.status_code == 201:
         response_201 = Session.from_dict(response.json())
+
+
 
         return response_201
 
     if response.status_code == 429:
         response_429 = Error.from_dict(response.json())
 
+
+
         return response_429
 
     if response.status_code == 503:
         response_503 = Error.from_dict(response.json())
+
+
 
         return response_503
 
@@ -44,9 +61,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Error | Session]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | Session]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -58,8 +73,9 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
+
 ) -> Response[Error | Session]:
-    """Mint a workspace session token
+    """ Mint a workspace session token
 
      Creates an unguessable workspace user with the contributor role and
     returns an HMAC-signed session token. Send it as
@@ -73,9 +89,12 @@ def sync_detailed(
 
     Returns:
         Response[Error | Session]
-    """
+     """
 
-    kwargs = _get_kwargs()
+
+    kwargs = _get_kwargs(
+        
+    )
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -83,12 +102,12 @@ def sync_detailed(
 
     return _build_response(client=client, response=response)
 
-
 def sync(
     *,
     client: AuthenticatedClient | Client,
+
 ) -> Error | Session | None:
-    """Mint a workspace session token
+    """ Mint a workspace session token
 
      Creates an unguessable workspace user with the contributor role and
     returns an HMAC-signed session token. Send it as
@@ -102,18 +121,20 @@ def sync(
 
     Returns:
         Error | Session
-    """
+     """
+
 
     return sync_detailed(
         client=client,
-    ).parsed
 
+    ).parsed
 
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
+
 ) -> Response[Error | Session]:
-    """Mint a workspace session token
+    """ Mint a workspace session token
 
      Creates an unguessable workspace user with the contributor role and
     returns an HMAC-signed session token. Send it as
@@ -127,20 +148,25 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | Session]
-    """
+     """
 
-    kwargs = _get_kwargs()
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    kwargs = _get_kwargs(
+        
+    )
+
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
-
 
 async def asyncio(
     *,
     client: AuthenticatedClient | Client,
+
 ) -> Error | Session | None:
-    """Mint a workspace session token
+    """ Mint a workspace session token
 
      Creates an unguessable workspace user with the contributor role and
     returns an HMAC-signed session token. Send it as
@@ -154,10 +180,10 @@ async def asyncio(
 
     Returns:
         Error | Session
-    """
+     """
 
-    return (
-        await asyncio_detailed(
-            client=client,
-        )
-    ).parsed
+
+    return (await asyncio_detailed(
+        client=client,
+
+    )).parsed

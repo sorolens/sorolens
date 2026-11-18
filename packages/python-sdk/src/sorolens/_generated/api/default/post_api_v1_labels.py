@@ -1,19 +1,29 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
+from urllib.parse import quote
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...types import Response, UNSET
+from ... import errors
+
 from ...models.post_api_v1_labels_body import PostApiV1LabelsBody
-from ...types import Response
+from typing import cast
+
 
 
 def _get_kwargs(
     *,
     body: PostApiV1LabelsBody,
+
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+
+
+    
+
+    
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -28,9 +38,8 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Any | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Any | None:
     if response.status_code == 201:
         return None
 
@@ -40,9 +49,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Any]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Any]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -55,8 +62,9 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: PostApiV1LabelsBody,
+
 ) -> Response[Any]:
-    """Create or update an account label
+    """ Create or update an account label
 
     Args:
         body (PostApiV1LabelsBody):
@@ -67,10 +75,12 @@ def sync_detailed(
 
     Returns:
         Response[Any]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         body=body,
+
     )
 
     response = client.get_httpx_client().request(
@@ -84,8 +94,9 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: PostApiV1LabelsBody,
+
 ) -> Response[Any]:
-    """Create or update an account label
+    """ Create or update an account label
 
     Args:
         body (PostApiV1LabelsBody):
@@ -96,12 +107,17 @@ async def asyncio_detailed(
 
     Returns:
         Response[Any]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         body=body,
+
     )
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
+

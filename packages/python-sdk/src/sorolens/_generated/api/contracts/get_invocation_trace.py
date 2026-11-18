@@ -1,31 +1,37 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...types import Response
+from ...types import Response, UNSET
+from ... import errors
+
+
 
 
 def _get_kwargs(
     tx_hash: str,
+
 ) -> dict[str, Any]:
+    
+
+    
+
+    
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/api/v1/invocations/{tx_hash}/trace".format(
-            tx_hash=quote(str(tx_hash), safe=""),
-        ),
+        "url": "/api/v1/invocations/{tx_hash}/trace".format(tx_hash=quote(str(tx_hash), safe=""),),
     }
+
 
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Any | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Any | None:
     if response.status_code == 200:
         return None
 
@@ -35,9 +41,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Any]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Any]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -50,8 +54,9 @@ def sync_detailed(
     tx_hash: str,
     *,
     client: AuthenticatedClient | Client,
+
 ) -> Response[Any]:
-    """Cross-contract call graph trace for a transaction
+    """ Cross-contract call graph trace for a transaction
 
     Args:
         tx_hash (str):
@@ -62,10 +67,12 @@ def sync_detailed(
 
     Returns:
         Response[Any]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         tx_hash=tx_hash,
+
     )
 
     response = client.get_httpx_client().request(
@@ -79,8 +86,9 @@ async def asyncio_detailed(
     tx_hash: str,
     *,
     client: AuthenticatedClient | Client,
+
 ) -> Response[Any]:
-    """Cross-contract call graph trace for a transaction
+    """ Cross-contract call graph trace for a transaction
 
     Args:
         tx_hash (str):
@@ -91,12 +99,17 @@ async def asyncio_detailed(
 
     Returns:
         Response[Any]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         tx_hash=tx_hash,
+
     )
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
+

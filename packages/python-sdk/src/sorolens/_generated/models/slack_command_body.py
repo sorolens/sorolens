@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,35 +9,51 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
+
+
+
+
+
+
 T = TypeVar("T", bound="SlackCommandBody")
+
 
 
 @_attrs_define
 class SlackCommandBody:
-    """
-    Attributes:
-        command (str | Unset):  Example: /sorolens.
-        text (str | Unset): Contract ID to look up; empty or `help` returns usage.
-    """
+    """ 
+        Attributes:
+            command (str | Unset):  Example: /sorolens.
+            text (str | Unset): Contract ID to look up; empty or `help` returns usage.
+     """
 
     command: str | Unset = UNSET
     text: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         command = self.command
 
         text = self.text
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({})
+        field_dict.update({
+        })
         if command is not UNSET:
             field_dict["command"] = command
         if text is not UNSET:
             field_dict["text"] = text
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -50,6 +66,7 @@ class SlackCommandBody:
             command=command,
             text=text,
         )
+
 
         slack_command_body.additional_properties = d
         return slack_command_body

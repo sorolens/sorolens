@@ -1,23 +1,32 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
+from urllib.parse import quote
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...types import UNSET, Response
+from ...types import Response, UNSET
+from ... import errors
+
+
 
 
 def _get_kwargs(
     *,
     query: str,
+
 ) -> dict[str, Any]:
+    
+
+    
 
     params: dict[str, Any] = {}
 
     params["query"] = query
 
+
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
+
 
     _kwargs: dict[str, Any] = {
         "method": "get",
@@ -25,12 +34,12 @@ def _get_kwargs(
         "params": params,
     }
 
+
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Any | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Any | None:
     if response.status_code == 200:
         return None
 
@@ -43,9 +52,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Any]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Any]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -58,8 +65,9 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     query: str,
+
 ) -> Response[Any]:
-    """Resolve a visible label to its Stellar identifier
+    """ Resolve a visible label to its Stellar identifier
 
     Args:
         query (str):
@@ -70,10 +78,12 @@ def sync_detailed(
 
     Returns:
         Response[Any]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         query=query,
+
     )
 
     response = client.get_httpx_client().request(
@@ -87,8 +97,9 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     query: str,
+
 ) -> Response[Any]:
-    """Resolve a visible label to its Stellar identifier
+    """ Resolve a visible label to its Stellar identifier
 
     Args:
         query (str):
@@ -99,12 +110,17 @@ async def asyncio_detailed(
 
     Returns:
         Response[Any]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         query=query,
+
     )
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
+

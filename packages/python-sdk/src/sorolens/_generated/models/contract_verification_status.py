@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class ContractVerificationStatus(StrEnum):
     FAILED = "failed"
     VERIFIED = "verified"

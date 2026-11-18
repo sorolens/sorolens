@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class ForecastSeriesMetric(StrEnum):
     EVENTS = "events"
     FEES = "fees"

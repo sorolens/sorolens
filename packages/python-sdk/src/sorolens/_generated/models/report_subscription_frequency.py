@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class ReportSubscriptionFrequency(StrEnum):
     DAILY = "daily"
     WEEKLY = "weekly"

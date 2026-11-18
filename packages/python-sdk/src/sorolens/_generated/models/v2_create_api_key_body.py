@@ -1,42 +1,59 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar, cast
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+
+
+
+
+
+
 T = TypeVar("T", bound="V2CreateApiKeyBody")
+
 
 
 @_attrs_define
 class V2CreateApiKeyBody:
-    """
-    Attributes:
-        name (str):
-        scopes (list[str]):
-    """
+    """ 
+        Attributes:
+            name (str):
+            scopes (list[str]):
+     """
 
     name: str
     scopes: list[str]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         name = self.name
 
         scopes = self.scopes
 
+
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "name": name,
-                "scopes": scopes,
-            }
-        )
+        field_dict.update({
+            "name": name,
+            "scopes": scopes,
+        })
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -45,10 +62,12 @@ class V2CreateApiKeyBody:
 
         scopes = cast(list[str], d.pop("scopes"))
 
+
         v2_create_api_key_body = cls(
             name=name,
             scopes=scopes,
         )
+
 
         v2_create_api_key_body.additional_properties = d
         return v2_create_api_key_body

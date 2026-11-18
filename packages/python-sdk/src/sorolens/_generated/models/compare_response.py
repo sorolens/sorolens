@@ -1,34 +1,46 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
 from ..models.compare_response_window import CompareResponseWindow
+from typing import cast
 
 if TYPE_CHECKING:
-    from ..models.compare_contract_entry import CompareContractEntry
+  from ..models.compare_contract_entry import CompareContractEntry
+
+
+
 
 
 T = TypeVar("T", bound="CompareResponse")
 
 
+
 @_attrs_define
 class CompareResponse:
-    """
-    Attributes:
-        window (CompareResponseWindow):
-        contracts (list[CompareContractEntry]):
-    """
+    """ 
+        Attributes:
+            window (CompareResponseWindow):
+            contracts (list[CompareContractEntry]):
+     """
 
     window: CompareResponseWindow
     contracts: list[CompareContractEntry]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.compare_contract_entry import CompareContractEntry # noqa: PLC0415
         window = self.window.value
 
         contracts = []
@@ -36,35 +48,44 @@ class CompareResponse:
             contracts_item = contracts_item_data.to_dict()
             contracts.append(contracts_item)
 
+
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "window": window,
-                "contracts": contracts,
-            }
-        )
+        field_dict.update({
+            "window": window,
+            "contracts": contracts,
+        })
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.compare_contract_entry import CompareContractEntry
-
+        from ..models.compare_contract_entry import CompareContractEntry # noqa: PLC0415
         d = dict(src_dict)
         window = CompareResponseWindow(d.pop("window"))
 
+
+
+
         contracts = []
         _contracts = d.pop("contracts")
-        for contracts_item_data in _contracts:
+        for contracts_item_data in (_contracts):
             contracts_item = CompareContractEntry.from_dict(contracts_item_data)
 
+
+
             contracts.append(contracts_item)
+
 
         compare_response = cls(
             window=window,
             contracts=contracts,
         )
+
 
         compare_response.additional_properties = d
         return compare_response

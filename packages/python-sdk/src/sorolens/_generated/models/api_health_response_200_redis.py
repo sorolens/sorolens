@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class ApiHealthResponse200Redis(StrEnum):
     CONNECTED = "connected"
     UNREACHABLE = "unreachable"

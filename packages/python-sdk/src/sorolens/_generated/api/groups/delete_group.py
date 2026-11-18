@@ -1,56 +1,72 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
-from uuid import UUID
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...types import Response, UNSET
+from ... import errors
+
 from ...models.error import Error
 from ...models.group_deleted import GroupDeleted
-from ...types import Response
+from typing import cast
+from uuid import UUID
+
 
 
 def _get_kwargs(
     id: UUID,
     *,
     x_user_id: str,
+
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
     headers["X-User-ID"] = x_user_id
 
+
+
+    
+
+    
+
     _kwargs: dict[str, Any] = {
         "method": "delete",
-        "url": "/api/v1/groups/{id}".format(
-            id=quote(str(id), safe=""),
-        ),
+        "url": "/api/v1/groups/{id}".format(id=quote(str(id), safe=""),),
     }
+
 
     _kwargs["headers"] = headers
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Error | GroupDeleted | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | GroupDeleted | None:
     if response.status_code == 200:
         response_200 = GroupDeleted.from_dict(response.json())
+
+
 
         return response_200
 
     if response.status_code == 401:
         response_401 = Error.from_dict(response.json())
 
+
+
         return response_401
 
     if response.status_code == 404:
         response_404 = Error.from_dict(response.json())
 
+
+
         return response_404
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
+
+
 
         return response_500
 
@@ -60,9 +76,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Error | GroupDeleted]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | GroupDeleted]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -76,8 +90,9 @@ def sync_detailed(
     *,
     client: AuthenticatedClient,
     x_user_id: str,
+
 ) -> Response[Error | GroupDeleted]:
-    """Delete a group and its memberships
+    """ Delete a group and its memberships
 
     Args:
         id (UUID):
@@ -89,11 +104,13 @@ def sync_detailed(
 
     Returns:
         Response[Error | GroupDeleted]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         id=id,
-        x_user_id=x_user_id,
+x_user_id=x_user_id,
+
     )
 
     response = client.get_httpx_client().request(
@@ -102,14 +119,14 @@ def sync_detailed(
 
     return _build_response(client=client, response=response)
 
-
 def sync(
     id: UUID,
     *,
     client: AuthenticatedClient,
     x_user_id: str,
+
 ) -> Error | GroupDeleted | None:
-    """Delete a group and its memberships
+    """ Delete a group and its memberships
 
     Args:
         id (UUID):
@@ -121,22 +138,24 @@ def sync(
 
     Returns:
         Error | GroupDeleted
-    """
+     """
+
 
     return sync_detailed(
         id=id,
-        client=client,
-        x_user_id=x_user_id,
-    ).parsed
+client=client,
+x_user_id=x_user_id,
 
+    ).parsed
 
 async def asyncio_detailed(
     id: UUID,
     *,
     client: AuthenticatedClient,
     x_user_id: str,
+
 ) -> Response[Error | GroupDeleted]:
-    """Delete a group and its memberships
+    """ Delete a group and its memberships
 
     Args:
         id (UUID):
@@ -148,25 +167,29 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | GroupDeleted]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         id=id,
-        x_user_id=x_user_id,
+x_user_id=x_user_id,
+
     )
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
-
 
 async def asyncio(
     id: UUID,
     *,
     client: AuthenticatedClient,
     x_user_id: str,
+
 ) -> Error | GroupDeleted | None:
-    """Delete a group and its memberships
+    """ Delete a group and its memberships
 
     Args:
         id (UUID):
@@ -178,12 +201,12 @@ async def asyncio(
 
     Returns:
         Error | GroupDeleted
-    """
+     """
 
-    return (
-        await asyncio_detailed(
-            id=id,
-            client=client,
-            x_user_id=x_user_id,
-        )
-    ).parsed
+
+    return (await asyncio_detailed(
+        id=id,
+client=client,
+x_user_id=x_user_id,
+
+    )).parsed

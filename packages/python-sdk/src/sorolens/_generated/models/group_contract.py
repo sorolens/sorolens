@@ -1,27 +1,37 @@
 from __future__ import annotations
 
-import datetime
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar, cast
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+import datetime
+
+
+
+
+
+
 T = TypeVar("T", bound="GroupContract")
+
 
 
 @_attrs_define
 class GroupContract:
-    """
-    Attributes:
-        contract_id (str):
-        network (str):
-        label (str):
-        status (str):
-        health_score (int | None):
-        last_activity_at (datetime.datetime | None):
-    """
+    """ 
+        Attributes:
+            contract_id (str):
+            network (str):
+            label (str):
+            status (str):
+            health_score (int | None):
+            last_activity_at (datetime.datetime | None):
+     """
 
     contract_id: str
     network: str
@@ -30,6 +40,10 @@ class GroupContract:
     health_score: int | None
     last_activity_at: datetime.datetime | None
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         contract_id = self.contract_id
@@ -49,20 +63,21 @@ class GroupContract:
         else:
             last_activity_at = self.last_activity_at
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "contract_id": contract_id,
-                "network": network,
-                "label": label,
-                "status": status,
-                "health_score": health_score,
-                "last_activity_at": last_activity_at,
-            }
-        )
+        field_dict.update({
+            "contract_id": contract_id,
+            "network": network,
+            "label": label,
+            "status": status,
+            "health_score": health_score,
+            "last_activity_at": last_activity_at,
+        })
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -82,6 +97,7 @@ class GroupContract:
 
         health_score = _parse_health_score(d.pop("health_score"))
 
+
         def _parse_last_activity_at(data: object) -> datetime.datetime | None:
             if data is None:
                 return data
@@ -90,12 +106,15 @@ class GroupContract:
                     raise TypeError()
                 last_activity_at_type_0 = datetime.datetime.fromisoformat(data)
 
+
+
                 return last_activity_at_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None, data)
 
         last_activity_at = _parse_last_activity_at(d.pop("last_activity_at"))
+
 
         group_contract = cls(
             contract_id=contract_id,
@@ -105,6 +124,7 @@ class GroupContract:
             health_score=health_score,
             last_activity_at=last_activity_at,
         )
+
 
         group_contract.additional_properties = d
         return group_contract

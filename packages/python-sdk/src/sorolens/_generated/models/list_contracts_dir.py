@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class ListContractsDir(StrEnum):
     ASC = "asc"
     DESC = "desc"

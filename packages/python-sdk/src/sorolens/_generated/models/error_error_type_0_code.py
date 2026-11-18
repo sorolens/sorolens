@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class ErrorErrorType0Code(StrEnum):
     INTERNAL = "INTERNAL"
     INVALID_INPUT = "INVALID_INPUT"

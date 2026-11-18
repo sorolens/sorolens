@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class SlackMessageResponseType(StrEnum):
     EPHEMERAL = "ephemeral"
 

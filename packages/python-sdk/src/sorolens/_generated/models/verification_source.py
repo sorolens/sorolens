@@ -1,31 +1,43 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
 from ..models.verification_source_kind import VerificationSourceKind
 from ..types import UNSET, Unset
+
+
+
+
+
 
 T = TypeVar("T", bound="VerificationSource")
 
 
+
 @_attrs_define
 class VerificationSource:
-    """
-    Attributes:
-        kind (VerificationSourceKind):
-        ref (str | Unset): Archive filename or resolved Git commit.
-        digest (str | Unset): SHA-256 digest of the submitted source.
-    """
+    """ 
+        Attributes:
+            kind (VerificationSourceKind):
+            ref (str | Unset): Archive filename or resolved Git commit.
+            digest (str | Unset): SHA-256 digest of the submitted source.
+     """
 
     kind: VerificationSourceKind
     ref: str | Unset = UNSET
     digest: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         kind = self.kind.value
@@ -34,13 +46,12 @@ class VerificationSource:
 
         digest = self.digest
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "kind": kind,
-            }
-        )
+        field_dict.update({
+            "kind": kind,
+        })
         if ref is not UNSET:
             field_dict["ref"] = ref
         if digest is not UNSET:
@@ -48,10 +59,15 @@ class VerificationSource:
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
         kind = VerificationSourceKind(d.pop("kind"))
+
+
+
 
         ref = d.pop("ref", UNSET)
 
@@ -62,6 +78,7 @@ class VerificationSource:
             ref=ref,
             digest=digest,
         )
+
 
         verification_source.additional_properties = d
         return verification_source

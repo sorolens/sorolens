@@ -1,22 +1,32 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
+from urllib.parse import quote
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...types import Response, UNSET
+from ... import errors
+
 from ...models.add_watched_account_body import AddWatchedAccountBody
 from ...models.error import Error
 from ...models.role_error import RoleError
 from ...models.watched_account import WatchedAccount
-from ...types import Response
+from typing import cast
+
 
 
 def _get_kwargs(
     *,
     body: AddWatchedAccountBody,
+
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+
+
+    
+
+    
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -31,41 +41,54 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Error | RoleError | WatchedAccount | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | RoleError | WatchedAccount | None:
     if response.status_code == 200:
         response_200 = WatchedAccount.from_dict(response.json())
+
+
 
         return response_200
 
     if response.status_code == 201:
         response_201 = WatchedAccount.from_dict(response.json())
 
+
+
         return response_201
 
     if response.status_code == 401:
         response_401 = Error.from_dict(response.json())
+
+
 
         return response_401
 
     if response.status_code == 403:
         response_403 = RoleError.from_dict(response.json())
 
+
+
         return response_403
 
     if response.status_code == 415:
         response_415 = Error.from_dict(response.json())
+
+
 
         return response_415
 
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())
 
+
+
         return response_422
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
+
+
 
         return response_500
 
@@ -75,9 +98,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Error | RoleError | WatchedAccount]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | RoleError | WatchedAccount]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -90,8 +111,9 @@ def sync_detailed(
     *,
     client: AuthenticatedClient,
     body: AddWatchedAccountBody,
+
 ) -> Response[Error | RoleError | WatchedAccount]:
-    """Watch an account for new contract deployments
+    """ Watch an account for new contract deployments
 
      Idempotent: returns 201 when the account is newly watched and 200 when it already was. Same role
     rules as contract registration.
@@ -105,10 +127,12 @@ def sync_detailed(
 
     Returns:
         Response[Error | RoleError | WatchedAccount]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         body=body,
+
     )
 
     response = client.get_httpx_client().request(
@@ -117,13 +141,13 @@ def sync_detailed(
 
     return _build_response(client=client, response=response)
 
-
 def sync(
     *,
     client: AuthenticatedClient,
     body: AddWatchedAccountBody,
+
 ) -> Error | RoleError | WatchedAccount | None:
-    """Watch an account for new contract deployments
+    """ Watch an account for new contract deployments
 
      Idempotent: returns 201 when the account is newly watched and 200 when it already was. Same role
     rules as contract registration.
@@ -137,20 +161,22 @@ def sync(
 
     Returns:
         Error | RoleError | WatchedAccount
-    """
+     """
+
 
     return sync_detailed(
         client=client,
-        body=body,
-    ).parsed
+body=body,
 
+    ).parsed
 
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
     body: AddWatchedAccountBody,
+
 ) -> Response[Error | RoleError | WatchedAccount]:
-    """Watch an account for new contract deployments
+    """ Watch an account for new contract deployments
 
      Idempotent: returns 201 when the account is newly watched and 200 when it already was. Same role
     rules as contract registration.
@@ -164,23 +190,27 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | RoleError | WatchedAccount]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         body=body,
+
     )
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
-
 
 async def asyncio(
     *,
     client: AuthenticatedClient,
     body: AddWatchedAccountBody,
+
 ) -> Error | RoleError | WatchedAccount | None:
-    """Watch an account for new contract deployments
+    """ Watch an account for new contract deployments
 
      Idempotent: returns 201 when the account is newly watched and 200 when it already was. Same role
     rules as contract registration.
@@ -194,11 +224,11 @@ async def asyncio(
 
     Returns:
         Error | RoleError | WatchedAccount
-    """
+     """
 
-    return (
-        await asyncio_detailed(
-            client=client,
-            body=body,
-        )
-    ).parsed
+
+    return (await asyncio_detailed(
+        client=client,
+body=body,
+
+    )).parsed

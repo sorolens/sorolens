@@ -1,45 +1,58 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...types import Response, UNSET
+from ... import errors
+
 from ...models.contract_spec import ContractSpec
 from ...models.error import Error
-from ...types import Response
+from typing import cast
+
 
 
 def _get_kwargs(
     id: str,
+
 ) -> dict[str, Any]:
+    
+
+    
+
+    
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/api/v1/contracts/{id}/spec".format(
-            id=quote(str(id), safe=""),
-        ),
+        "url": "/api/v1/contracts/{id}/spec".format(id=quote(str(id), safe=""),),
     }
+
 
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> ContractSpec | Error | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> ContractSpec | Error | None:
     if response.status_code == 200:
         response_200 = ContractSpec.from_dict(response.json())
+
+
 
         return response_200
 
     if response.status_code == 404:
         response_404 = Error.from_dict(response.json())
 
+
+
         return response_404
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
+
+
 
         return response_500
 
@@ -49,9 +62,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[ContractSpec | Error]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[ContractSpec | Error]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -64,8 +75,9 @@ def sync_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
+
 ) -> Response[ContractSpec | Error]:
-    """Get a contract's parsed SEP-48 interface spec
+    """ Get a contract's parsed SEP-48 interface spec
 
      The interface spec extracted from the contract's `contractspecv0` Wasm custom section: every
     callable function with its argument and return type tree. Returns 404 both for an untracked contract
@@ -80,10 +92,12 @@ def sync_detailed(
 
     Returns:
         Response[ContractSpec | Error]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         id=id,
+
     )
 
     response = client.get_httpx_client().request(
@@ -92,13 +106,13 @@ def sync_detailed(
 
     return _build_response(client=client, response=response)
 
-
 def sync(
     id: str,
     *,
     client: AuthenticatedClient,
+
 ) -> ContractSpec | Error | None:
-    """Get a contract's parsed SEP-48 interface spec
+    """ Get a contract's parsed SEP-48 interface spec
 
      The interface spec extracted from the contract's `contractspecv0` Wasm custom section: every
     callable function with its argument and return type tree. Returns 404 both for an untracked contract
@@ -113,20 +127,22 @@ def sync(
 
     Returns:
         ContractSpec | Error
-    """
+     """
+
 
     return sync_detailed(
         id=id,
-        client=client,
-    ).parsed
+client=client,
 
+    ).parsed
 
 async def asyncio_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
+
 ) -> Response[ContractSpec | Error]:
-    """Get a contract's parsed SEP-48 interface spec
+    """ Get a contract's parsed SEP-48 interface spec
 
      The interface spec extracted from the contract's `contractspecv0` Wasm custom section: every
     callable function with its argument and return type tree. Returns 404 both for an untracked contract
@@ -141,23 +157,27 @@ async def asyncio_detailed(
 
     Returns:
         Response[ContractSpec | Error]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         id=id,
+
     )
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
-
 
 async def asyncio(
     id: str,
     *,
     client: AuthenticatedClient,
+
 ) -> ContractSpec | Error | None:
-    """Get a contract's parsed SEP-48 interface spec
+    """ Get a contract's parsed SEP-48 interface spec
 
      The interface spec extracted from the contract's `contractspecv0` Wasm custom section: every
     callable function with its argument and return type tree. Returns 404 both for an untracked contract
@@ -172,11 +192,11 @@ async def asyncio(
 
     Returns:
         ContractSpec | Error
-    """
+     """
 
-    return (
-        await asyncio_detailed(
-            id=id,
-            client=client,
-        )
-    ).parsed
+
+    return (await asyncio_detailed(
+        id=id,
+client=client,
+
+    )).parsed

@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class V2StorageEntryDurability(StrEnum):
     INSTANCE = "instance"
     PERSISTENT = "persistent"

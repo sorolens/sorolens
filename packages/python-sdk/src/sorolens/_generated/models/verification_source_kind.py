@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class VerificationSourceKind(StrEnum):
     ARCHIVE = "archive"
     GIT = "git"

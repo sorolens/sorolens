@@ -1,28 +1,37 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+
+
+
+
+
+
 T = TypeVar("T", bound="InvocationWindowStats")
+
 
 
 @_attrs_define
 class InvocationWindowStats:
-    """Fees are measured in stroops, CPU in instructions, and failure_rate is a ratio from 0 to 1.
+    """ Fees are measured in stroops, CPU in instructions, and failure_rate is a ratio from 0 to 1.
 
-    Attributes:
-        invocation_count (int):
-        failed_invocations (int):
-        failure_rate (float):
-        avg_fee (float):
-        p95_fee (float):
-        avg_cpu (float):
-        p95_cpu (float):
-    """
+        Attributes:
+            invocation_count (int):
+            failed_invocations (int):
+            failure_rate (float):
+            avg_fee (float):
+            p95_fee (float):
+            avg_cpu (float):
+            p95_cpu (float):
+     """
 
     invocation_count: int
     failed_invocations: int
@@ -32,6 +41,10 @@ class InvocationWindowStats:
     avg_cpu: float
     p95_cpu: float
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         invocation_count = self.invocation_count
@@ -48,21 +61,22 @@ class InvocationWindowStats:
 
         p95_cpu = self.p95_cpu
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "invocation_count": invocation_count,
-                "failed_invocations": failed_invocations,
-                "failure_rate": failure_rate,
-                "avg_fee": avg_fee,
-                "p95_fee": p95_fee,
-                "avg_cpu": avg_cpu,
-                "p95_cpu": p95_cpu,
-            }
-        )
+        field_dict.update({
+            "invocation_count": invocation_count,
+            "failed_invocations": failed_invocations,
+            "failure_rate": failure_rate,
+            "avg_fee": avg_fee,
+            "p95_fee": p95_fee,
+            "avg_cpu": avg_cpu,
+            "p95_cpu": p95_cpu,
+        })
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -90,6 +104,7 @@ class InvocationWindowStats:
             avg_cpu=avg_cpu,
             p95_cpu=p95_cpu,
         )
+
 
         invocation_window_stats.additional_properties = d
         return invocation_window_stats

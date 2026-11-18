@@ -1,32 +1,40 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
 from ..models.verification_source_input_kind import VerificationSourceInputKind
 from ..types import UNSET, Unset
+
+
+
+
+
 
 T = TypeVar("T", bound="VerificationSourceInput")
 
 
+
 @_attrs_define
 class VerificationSourceInput:
-    """
-    Attributes:
-        kind (VerificationSourceInputKind): `archive` requires `content_base64`; `git` requires `url` and
-            `commit`.
-        filename (str | Unset): Archive name, used in the build log. Archive sources only.
-        content_base64 (str | Unset): Standard-base64 encoded `.tar.gz` of the contract source. Archive
-            sources only. The decoded payload is capped at 8 MiB.
-        url (str | Unset): HTTPS Git URL to clone. Git sources only.
-        commit (str | Unset): Commit, tag, or branch to check out. Git sources only.
-        subdir (str | Unset): Crate directory inside the materialized source, for archives or
-            repositories holding more than one crate.
-    """
+    """ 
+        Attributes:
+            kind (VerificationSourceInputKind): `archive` requires `content_base64`; `git` requires `url` and
+                `commit`.
+            filename (str | Unset): Archive name, used in the build log. Archive sources only.
+            content_base64 (str | Unset): Standard-base64 encoded `.tar.gz` of the contract source. Archive
+                sources only. The decoded payload is capped at 8 MiB.
+            url (str | Unset): HTTPS Git URL to clone. Git sources only.
+            commit (str | Unset): Commit, tag, or branch to check out. Git sources only.
+            subdir (str | Unset): Crate directory inside the materialized source, for archives or
+                repositories holding more than one crate.
+     """
 
     kind: VerificationSourceInputKind
     filename: str | Unset = UNSET
@@ -35,6 +43,10 @@ class VerificationSourceInput:
     commit: str | Unset = UNSET
     subdir: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         kind = self.kind.value
@@ -49,13 +61,12 @@ class VerificationSourceInput:
 
         subdir = self.subdir
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "kind": kind,
-            }
-        )
+        field_dict.update({
+            "kind": kind,
+        })
         if filename is not UNSET:
             field_dict["filename"] = filename
         if content_base64 is not UNSET:
@@ -69,10 +80,15 @@ class VerificationSourceInput:
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
         kind = VerificationSourceInputKind(d.pop("kind"))
+
+
+
 
         filename = d.pop("filename", UNSET)
 
@@ -92,6 +108,7 @@ class VerificationSourceInput:
             commit=commit,
             subdir=subdir,
         )
+
 
         verification_source_input.additional_properties = d
         return verification_source_input

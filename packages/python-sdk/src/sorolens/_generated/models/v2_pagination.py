@@ -1,26 +1,40 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar, cast
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+
+
+
+
+
+
 T = TypeVar("T", bound="V2Pagination")
+
 
 
 @_attrs_define
 class V2Pagination:
-    """
-    Attributes:
-        next_cursor (None | str): Opaque cursor; null on the last page.
-        has_more (bool):
-    """
+    """ 
+        Attributes:
+            next_cursor (None | str): Opaque cursor; null on the last page.
+            has_more (bool):
+     """
 
     next_cursor: None | str
     has_more: bool
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         next_cursor: None | str
@@ -28,21 +42,21 @@ class V2Pagination:
 
         has_more = self.has_more
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "next_cursor": next_cursor,
-                "has_more": has_more,
-            }
-        )
+        field_dict.update({
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+        })
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
-
         def _parse_next_cursor(data: object) -> None | str:
             if data is None:
                 return data
@@ -50,12 +64,14 @@ class V2Pagination:
 
         next_cursor = _parse_next_cursor(d.pop("next_cursor"))
 
+
         has_more = d.pop("has_more")
 
         v2_pagination = cls(
             next_cursor=next_cursor,
             has_more=has_more,
         )
+
 
         v2_pagination.additional_properties = d
         return v2_pagination

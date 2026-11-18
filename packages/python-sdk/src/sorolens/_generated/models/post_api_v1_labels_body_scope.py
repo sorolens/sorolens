@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class PostApiV1LabelsBodyScope(StrEnum):
     PUBLIC = "public"
     WORKSPACE = "workspace"

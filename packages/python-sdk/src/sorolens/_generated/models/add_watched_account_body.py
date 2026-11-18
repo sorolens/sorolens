@@ -1,37 +1,51 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+
+
+
+
+
+
 T = TypeVar("T", bound="AddWatchedAccountBody")
+
 
 
 @_attrs_define
 class AddWatchedAccountBody:
-    """
-    Attributes:
-        account_id (str): Stellar account ID (56 chars, starts with G).
-    """
+    """ 
+        Attributes:
+            account_id (str): Stellar account ID (56 chars, starts with G).
+     """
 
     account_id: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
         account_id = self.account_id
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "account_id": account_id,
-            }
-        )
+        field_dict.update({
+            "account_id": account_id,
+        })
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -41,6 +55,7 @@ class AddWatchedAccountBody:
         add_watched_account_body = cls(
             account_id=account_id,
         )
+
 
         add_watched_account_body.additional_properties = d
         return add_watched_account_body

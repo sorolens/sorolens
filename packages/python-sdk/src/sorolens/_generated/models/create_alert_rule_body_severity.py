@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-
 class CreateAlertRuleBodySeverity(StrEnum):
     CRITICAL = "Critical"
     INFO = "Info"

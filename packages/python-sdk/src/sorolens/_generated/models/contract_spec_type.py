@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,23 +9,32 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
+from typing import cast
+
+
+
+
+
+
 T = TypeVar("T", bound="ContractSpecType")
+
 
 
 @_attrs_define
 class ContractSpecType:
-    """
-    Attributes:
-        kind (str):
-        name (str | Unset):
-        elem (ContractSpecType | Unset):
-        key (ContractSpecType | Unset):
-        value (ContractSpecType | Unset):
-        ok (ContractSpecType | Unset):
-        err (ContractSpecType | Unset):
-        tuple_ (list[ContractSpecType] | Unset):
-        n (int | Unset):
-    """
+    """ 
+        Attributes:
+            kind (str):
+            name (str | Unset):
+            elem (ContractSpecType | Unset):
+            key (ContractSpecType | Unset):
+            value (ContractSpecType | Unset):
+            ok (ContractSpecType | Unset):
+            err (ContractSpecType | Unset):
+            tuple_ (list[ContractSpecType] | Unset):
+            n (int | Unset):
+     """
 
     kind: str
     name: str | Unset = UNSET
@@ -37,6 +46,10 @@ class ContractSpecType:
     tuple_: list[ContractSpecType] | Unset = UNSET
     n: int | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         kind = self.kind
@@ -70,15 +83,16 @@ class ContractSpecType:
                 tuple_item = tuple_item_data.to_dict()
                 tuple_.append(tuple_item)
 
+
+
         n = self.n
+
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "kind": kind,
-            }
-        )
+        field_dict.update({
+            "kind": kind,
+        })
         if name is not UNSET:
             field_dict["name"] = name
         if elem is not UNSET:
@@ -98,6 +112,8 @@ class ContractSpecType:
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
@@ -107,38 +123,53 @@ class ContractSpecType:
 
         _elem = d.pop("elem", UNSET)
         elem: ContractSpecType | Unset
-        if isinstance(_elem, Unset):
+        if isinstance(_elem,  Unset):
             elem = UNSET
         else:
             elem = ContractSpecType.from_dict(_elem)
 
+
+
+
         _key = d.pop("key", UNSET)
         key: ContractSpecType | Unset
-        if isinstance(_key, Unset):
+        if isinstance(_key,  Unset):
             key = UNSET
         else:
             key = ContractSpecType.from_dict(_key)
 
+
+
+
         _value = d.pop("value", UNSET)
         value: ContractSpecType | Unset
-        if isinstance(_value, Unset):
+        if isinstance(_value,  Unset):
             value = UNSET
         else:
             value = ContractSpecType.from_dict(_value)
 
+
+
+
         _ok = d.pop("ok", UNSET)
         ok: ContractSpecType | Unset
-        if isinstance(_ok, Unset):
+        if isinstance(_ok,  Unset):
             ok = UNSET
         else:
             ok = ContractSpecType.from_dict(_ok)
 
+
+
+
         _err = d.pop("err", UNSET)
         err: ContractSpecType | Unset
-        if isinstance(_err, Unset):
+        if isinstance(_err,  Unset):
             err = UNSET
         else:
             err = ContractSpecType.from_dict(_err)
+
+
+
 
         _tuple_ = d.pop("tuple", UNSET)
         tuple_: list[ContractSpecType] | Unset = UNSET
@@ -147,7 +178,10 @@ class ContractSpecType:
             for tuple_item_data in _tuple_:
                 tuple_item = ContractSpecType.from_dict(tuple_item_data)
 
+
+
                 tuple_.append(tuple_item)
+
 
         n = d.pop("n", UNSET)
 
@@ -162,6 +196,7 @@ class ContractSpecType:
             tuple_=tuple_,
             n=n,
         )
+
 
         contract_spec_type.additional_properties = d
         return contract_spec_type

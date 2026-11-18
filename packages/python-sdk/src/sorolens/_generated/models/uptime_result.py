@@ -1,32 +1,44 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
 from ..models.uptime_result_window import UptimeResultWindow
+
+
+
+
+
 
 T = TypeVar("T", bound="UptimeResult")
 
 
+
 @_attrs_define
 class UptimeResult:
-    """
-    Attributes:
-        contract_id (str): The contract ID this uptime figure applies to.
-        window (UptimeResultWindow): The time window over which uptime was computed.
-        uptime_pct (float): Uptime percentage with up to two decimal places.
-            Computed as healthy_checks / total_checks × 100.
-            Returns 0 when no health checks were recorded in the window.
-    """
+    """ 
+        Attributes:
+            contract_id (str): The contract ID this uptime figure applies to.
+            window (UptimeResultWindow): The time window over which uptime was computed.
+            uptime_pct (float): Uptime percentage with up to two decimal places.
+                Computed as healthy_checks / total_checks × 100.
+                Returns 0 when no health checks were recorded in the window.
+     """
 
     contract_id: str
     window: UptimeResultWindow
     uptime_pct: float
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
 
     def to_dict(self) -> dict[str, Any]:
         contract_id = self.contract_id
@@ -35,17 +47,18 @@ class UptimeResult:
 
         uptime_pct = self.uptime_pct
 
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "contract_id": contract_id,
-                "window": window,
-                "uptime_pct": uptime_pct,
-            }
-        )
+        field_dict.update({
+            "contract_id": contract_id,
+            "window": window,
+            "uptime_pct": uptime_pct,
+        })
 
         return field_dict
+
+
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -54,6 +67,9 @@ class UptimeResult:
 
         window = UptimeResultWindow(d.pop("window"))
 
+
+
+
         uptime_pct = d.pop("uptime_pct")
 
         uptime_result = cls(
@@ -61,6 +77,7 @@ class UptimeResult:
             window=window,
             uptime_pct=uptime_pct,
         )
+
 
         uptime_result.additional_properties = d
         return uptime_result

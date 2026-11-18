@@ -1,61 +1,79 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
+from typing import cast
+
 if TYPE_CHECKING:
-    from ..models.audit_event import AuditEvent
+  from ..models.audit_event import AuditEvent
+
+
+
 
 
 T = TypeVar("T", bound="ListAuditEventsResponse200")
 
 
+
 @_attrs_define
 class ListAuditEventsResponse200:
-    """
-    Attributes:
-        events (list[AuditEvent]):
-        next_cursor (str): Opaque cursor for the next page; empty when no more pages.
-    """
+    """ 
+        Attributes:
+            events (list[AuditEvent]):
+            next_cursor (str): Opaque cursor for the next page; empty when no more pages.
+     """
 
     events: list[AuditEvent]
     next_cursor: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
+
+
+
+
     def to_dict(self) -> dict[str, Any]:
+        from ..models.audit_event import AuditEvent # noqa: PLC0415
         events = []
         for events_item_data in self.events:
             events_item = events_item_data.to_dict()
             events.append(events_item)
 
+
+
         next_cursor = self.next_cursor
+
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update(
-            {
-                "events": events,
-                "next_cursor": next_cursor,
-            }
-        )
+        field_dict.update({
+            "events": events,
+            "next_cursor": next_cursor,
+        })
 
         return field_dict
 
+
+
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.audit_event import AuditEvent
-
+        from ..models.audit_event import AuditEvent # noqa: PLC0415
         d = dict(src_dict)
         events = []
         _events = d.pop("events")
-        for events_item_data in _events:
+        for events_item_data in (_events):
             events_item = AuditEvent.from_dict(events_item_data)
 
+
+
             events.append(events_item)
+
 
         next_cursor = d.pop("next_cursor")
 
@@ -63,6 +81,7 @@ class ListAuditEventsResponse200:
             events=events,
             next_cursor=next_cursor,
         )
+
 
         list_audit_events_response_200.additional_properties = d
         return list_audit_events_response_200
