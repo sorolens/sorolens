@@ -1,0 +1,41 @@
+name: Discord register commands
+
+# Registers the Discord bot's slash commands on the guild. Runs when the
+# command definitions change on main, or on demand from the Actions tab.
+# Redeploying the bot itself is a separate step (Render).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - services/discord-bot/src/command-definitions.ts
+      - services/discord-bot/src/register-commands.ts
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discord-register-commands
+  cancel-in-progress: false
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/discord-bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm ci
+      - name: Register slash commands
+        run: npx tsx src/register-commands.ts
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
