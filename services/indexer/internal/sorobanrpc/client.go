@@ -22,9 +22,61 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 )
+
+// Limiter provides shared rate limiting across concurrent RPC requests.
+type Limiter struct {
+	mu       sync.Mutex
+	last     time.Time
+	interval time.Duration
+}
+
+// NewLimiter creates a Limiter for the given requests per second.
+// If rps <= 0, nil is returned (no rate limiting).
+func NewLimiter(rps int) *Limiter {
+	if rps <= 0 {
+		return nil
+	}
+	return &Limiter{
+		interval: time.Second / time.Duration(rps),
+	}
+}
+
+// Wait blocks until the caller is permitted to make a request under the rate limit.
+func (l *Limiter) Wait(ctx context.Context) error {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	now := time.Now()
+	var wait time.Duration
+	if l.last.IsZero() {
+		l.last = now
+	} else {
+		next := l.last.Add(l.interval)
+		if next.After(now) {
+			wait = next.Sub(now)
+			l.last = next
+		} else {
+			l.last = now
+		}
+	}
+	l.mu.Unlock()
+
+	if wait > 0 {
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+		}
+	}
+	return nil
+}
 
 const (
 	// DefaultTimeout bounds a single HTTP round trip.
@@ -93,6 +145,13 @@ func WithHTTPClient(hc *http.Client) Option {
 	}
 }
 
+// WithRateLimiter sets a shared rate limiter for requests made by this client.
+func WithRateLimiter(l *Limiter) Option {
+	return func(c *Client) {
+		c.limiter = l
+	}
+}
+
 // Client calls a single Soroban RPC endpoint. It is safe for concurrent use.
 type Client struct {
 	endpoint    string
@@ -102,6 +161,7 @@ type Client struct {
 	backoffBase time.Duration
 	backoffMax  time.Duration
 	nextID      atomic.Int64
+	limiter     *Limiter
 }
 
 // New returns a Client for endpoint.
@@ -248,6 +308,11 @@ func retriable(err error) bool {
 
 // doOnce performs a single HTTP round trip.
 func (c *Client) doOnce(ctx context.Context, method string, body []byte, out any) error {
+	if c.limiter != nil {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return err
+		}
+	}
 	reqCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
