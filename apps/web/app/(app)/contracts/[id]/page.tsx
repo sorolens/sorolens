@@ -48,7 +48,19 @@ import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { CallTracePanel } from "@/components/CallTracePanel";
 import { ContractChangelogPanel } from "@/components/ContractChangelogPanel";
 import { ContractForecastChart } from "@/components/ContractForecastChart";
+import { ContractInvocationsPanel } from "@/components/ContractInvocationsPanel";
+import { ContractWatchdogPanel } from "@/components/ContractWatchdogPanel";
 import { useEventStream } from "@/hooks/useEventStream";
+
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "events", label: "Events" },
+  { id: "invocations", label: "Invocations" },
+  { id: "storage", label: "Storage" },
+  { id: "watchdog", label: "Watchdog" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -103,6 +115,53 @@ function ContractDetailContent({ id }: { id: string }) {
   const [storageCursor, setStorageCursor] = useState<string | null>(null);
   const [storageHasMore, setStorageHasMore] = useState(false);
 
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    if (typeof globalThis.window !== "undefined" && globalThis.window?.location) {
+      const hash = globalThis.window.location.hash
+        ? globalThis.window.location.hash.replace(/^#/, "")
+        : "";
+      if (TABS.some((t) => t.id === hash)) {
+        return hash as TabId;
+      }
+      const param = globalThis.window.location.search
+        ? new URLSearchParams(globalThis.window.location.search).get("tab")
+        : null;
+      if (param && TABS.some((t) => t.id === param)) {
+        return param as TabId;
+      }
+    }
+    return "overview";
+  });
+
+  useEffect(() => {
+    if (
+      typeof globalThis.window === "undefined" ||
+      !globalThis.window?.addEventListener
+    )
+      return;
+    const onHashChange = () => {
+      const hash = globalThis.window.location?.hash
+        ? globalThis.window.location.hash.replace(/^#/, "")
+        : "";
+      if (TABS.some((t) => t.id === hash)) {
+        setActiveTab(hash as TabId);
+      }
+    };
+    globalThis.window.addEventListener("hashchange", onHashChange);
+    return () =>
+      globalThis.window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const handleSelectTab = (tabId: TabId) => {
+    setActiveTab(tabId);
+    if (
+      typeof globalThis.window !== "undefined" &&
+      globalThis.window?.location
+    ) {
+      globalThis.window.location.hash = tabId;
+    }
+  };
+
   const { isConnected: isStreamConnected } = useEventStream({
     contractId: id,
     onEvent: (newEvent) => {
@@ -126,7 +185,12 @@ function ContractDetailContent({ id }: { id: string }) {
       } catch (err) {
         if (!cancelled) {
           if (err instanceof ApiError && err.status === 404) {
-            notFound();
+            try {
+              notFound();
+            } catch {
+              // notFound throws in Next.js; catch here in client async effect
+            }
+            return;
           }
           // Anything but a 404 is an outage or server error, not a missing
           // contract: say so and let the user retry.
@@ -429,6 +493,14 @@ function ContractDetailContent({ id }: { id: string }) {
           </span>
           <AddToGroup contractId={id} />
           <VerifiedBadge contractId={id} />
+          {/* Watchdog entry point (#617): cross-link to monitored alerts/rules */}
+          <Link
+            data-testid="watchdog-entry-link"
+            href={`/watchdog?contract=${encodeURIComponent(id)}`}
+            className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]"
+          >
+            Watchdog
+          </Link>
           {/* Compare entry point (#607): pre-selects this contract in the
               shared /compare?ids= URL; the picker fills the remaining slots. */}
           <Link
@@ -459,190 +531,266 @@ function ContractDetailContent({ id }: { id: string }) {
         </div>
       </header>
 
-      {statsError && (
-        <ErrorState
-          compact
-          className="mb-4"
-          title="Couldn't load contract stats."
-          message={statsError}
-          onRetry={() => setStatsReload((n) => n + 1)}
-        />
-      )}
-      <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Events"
-          value={stats?.event_count?.toLocaleString() ?? "-"}
-          subtext={
-            stats && windowLabel
-              ? `${stats.window_event_count.toLocaleString()} in ${windowLabel}`
-              : "Total indexed"
-          }
-        />
-        <StatCard
-          label="Invocations"
-          value={stats?.invocation_count?.toLocaleString() ?? "-"}
-          subtext={
-            stats && windowLabel
-              ? `${stats.window_invocation_count.toLocaleString()} in ${windowLabel}`
-              : "Total transactions"
-          }
-        />
-        <StatCard
-          label="Storage Entries"
-          value={stats?.storage_count?.toLocaleString() ?? "-"}
-          subtext="Currently tracked"
-        />
-        <StatCard
-          label="Last Synced Ledger"
-          value={stats?.last_synced_ledger?.toLocaleString() ?? "-"}
-          subtext="Indexer progress"
-        />
-      </section>
+      <div
+        role="tablist"
+        aria-label="Contract sections"
+        className="mb-6 flex border-b border-[var(--color-border)] gap-6"
+      >
+        {TABS.map((tab) => {
+          const selected = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              role="tab"
+              id={`tab-${tab.id}`}
+              aria-selected={selected}
+              aria-controls={`tabpanel-${tab.id}`}
+              onClick={() => handleSelectTab(tab.id)}
+              className={`pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                selected
+                  ? "border-[var(--color-accent)] text-[var(--color-accent)]"
+                  : "border-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:text-[var(--color-text-primary)]"
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
-      <section className="mb-8">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Activity</h2>
-          <WindowSelector selected={window} onChange={setWindow} />
-        </div>
-        {seriesLoading ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <ChartSkeleton />
-            <ChartSkeleton />
-          </div>
-        ) : seriesError ? (
+      {/* Overview Tab */}
+      <div
+        role="tabpanel"
+        id="tabpanel-overview"
+        aria-labelledby="tab-overview"
+        hidden={activeTab !== "overview"}
+        className="space-y-8"
+      >
+        {statsError && (
           <ErrorState
-            title="Couldn't load activity charts."
-            message={seriesError}
-            onRetry={() => setSeriesReload((n) => n + 1)}
+            compact
+            className="mb-4"
+            title="Couldn't load contract stats."
+            message={statsError}
+            onRetry={() => setStatsReload((n) => n + 1)}
           />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-lg bg-[var(--color-bg-card)] p-4">
-              <h3 className="mb-3 text-sm font-medium text-[var(--color-text-secondary)]">
-                Event Volume
-              </h3>
-              <EventVolumeChart data={eventSeries} />
+        )}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Events"
+            value={stats?.event_count?.toLocaleString() ?? "-"}
+            subtext={
+              stats && windowLabel
+                ? `${stats.window_event_count.toLocaleString()} in ${windowLabel}`
+                : "Total indexed"
+            }
+          />
+          <StatCard
+            label="Invocations"
+            value={stats?.invocation_count?.toLocaleString() ?? "-"}
+            subtext={
+              stats && windowLabel
+                ? `${stats.window_invocation_count.toLocaleString()} in ${windowLabel}`
+                : "Total transactions"
+            }
+          />
+          <StatCard
+            label="Storage Entries"
+            value={stats?.storage_count?.toLocaleString() ?? "-"}
+            subtext="Currently tracked"
+          />
+          <StatCard
+            label="Last Synced Ledger"
+            value={stats?.last_synced_ledger?.toLocaleString() ?? "-"}
+            subtext="Indexer progress"
+          />
+        </section>
+
+        <section>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Activity</h2>
+            <WindowSelector selected={window} onChange={setWindow} />
+          </div>
+          {seriesLoading ? (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <ChartSkeleton />
+              <ChartSkeleton />
             </div>
-            <div className="rounded-lg bg-[var(--color-bg-card)] p-4">
-              <h3 className="mb-3 text-sm font-medium text-[var(--color-text-secondary)]">
-                Invocations
-              </h3>
-              <InvocationChart data={invocationSeries} />
+          ) : seriesError ? (
+            <ErrorState
+              title="Couldn't load activity charts."
+              message={seriesError}
+              onRetry={() => setSeriesReload((n) => n + 1)}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-lg bg-[var(--color-bg-card)] p-4">
+                <h3 className="mb-3 text-sm font-medium text-[var(--color-text-secondary)]">
+                  Event Volume
+                </h3>
+                <EventVolumeChart data={eventSeries} />
+              </div>
+              <div className="rounded-lg bg-[var(--color-bg-card)] p-4">
+                <h3 className="mb-3 text-sm font-medium text-[var(--color-text-secondary)]">
+                  Invocations
+                </h3>
+                <InvocationChart data={invocationSeries} />
+              </div>
             </div>
+          )}
+        </section>
+
+        <ContractForecastChart contractId={id} />
+
+        <section>
+          <HealthScoreCard contractId={id} />
+        </section>
+
+        <section id="changelog">
+          <h2 className="mb-4 text-xl font-semibold">Changelog</h2>
+          <ContractChangelogPanel contractId={id} />
+        </section>
+
+        <section>
+          <h2 className="mb-4 text-xl font-semibold">Notes</h2>
+          <ContractNotesPanel contractId={id} />
+        </section>
+      </div>
+
+      {/* Events Tab */}
+      <div
+        role="tabpanel"
+        id="tabpanel-events"
+        aria-labelledby="tab-events"
+        hidden={activeTab !== "events"}
+        className="space-y-8"
+      >
+        <section>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold">Events</h2>
+              {isStreamConnected && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/40 px-2.5 py-0.5 text-xs font-medium text-green-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+                  Live
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowFailedOnly(!showFailedOnly)}
+              className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                showFailedOnly
+                  ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
+                  : "bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] hover:text-[var(--color-text-primary)]"
+              }`}
+            >
+              Failed Only
+            </button>
           </div>
-        )}
-      </section>
-
-      <ContractForecastChart contractId={id} />
-
-      <section className="mb-8">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold">Events</h2>
-            {isStreamConnected && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/40 px-2.5 py-0.5 text-xs font-medium text-green-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-                Live
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowFailedOnly(!showFailedOnly)}
-            className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-              showFailedOnly
-                ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
-                : "bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] hover:text-[var(--color-text-primary)]"
-            }`}
-          >
-            Failed Only
-          </button>
-        </div>
-        {eventsLoading ? (
-          <TableSkeleton />
-        ) : eventsError ? (
-          <ErrorState
-            title="Couldn't load events."
-            message={eventsError}
-            onRetry={() => setEventsReload((n) => n + 1)}
-          />
-        ) : (
-          <>
-            <EventsTable
-              events={events}
-              onLoadMore={handleLoadMoreEvents}
-              hasMore={eventsHasMore}
+          {eventsLoading ? (
+            <TableSkeleton />
+          ) : eventsError ? (
+            <ErrorState
+              title="Couldn't load events."
+              message={eventsError}
+              onRetry={() => setEventsReload((n) => n + 1)}
             />
-            {eventsMoreError && (
-              <ErrorState
-                compact
-                className="mt-4"
-                title="Couldn't load more events."
-                message={eventsMoreError}
-                onRetry={handleLoadMoreEvents}
+          ) : (
+            <>
+              <EventsTable
+                events={events}
+                onLoadMore={handleLoadMoreEvents}
+                hasMore={eventsHasMore}
               />
-            )}
-          </>
-        )}
-      </section>
+              {eventsMoreError && (
+                <ErrorState
+                  compact
+                  className="mt-4"
+                  title="Couldn't load more events."
+                  message={eventsMoreError}
+                  onRetry={handleLoadMoreEvents}
+                />
+              )}
+            </>
+          )}
+        </section>
 
-      <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Call trace</h2>
-        <CallTracePanel initialTxHash={events[0]?.tx_hash} />
-      </section>
+        <section>
+          <h2 className="mb-4 text-xl font-semibold">Call trace</h2>
+          <CallTracePanel initialTxHash={events[0]?.tx_hash} />
+        </section>
+      </div>
 
-      <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Notes</h2>
-        <ContractNotesPanel contractId={id} />
-      </section>
+      {/* Invocations Tab */}
+      <div
+        role="tabpanel"
+        id="tabpanel-invocations"
+        aria-labelledby="tab-invocations"
+        hidden={activeTab !== "invocations"}
+        className="space-y-8"
+      >
+        <ContractInvocationsPanel contractId={id} />
+      </div>
 
-      <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Storage TTL</h2>
-        {storageLoading ? (
-          <TableSkeleton />
-        ) : storageError ? (
-          <ErrorState
-            title="Couldn't load storage entries."
-            message={storageError}
-            onRetry={() => setStorageReload((n) => n + 1)}
-          />
-        ) : (
-          <>
-            <StoragePanel
-              entries={storage}
-              currentLedger={stats?.last_synced_ledger ?? 0}
-              onLoadMore={handleLoadMoreStorage}
-              hasMore={storageHasMore}
+      {/* Storage Tab */}
+      <div
+        role="tabpanel"
+        id="tabpanel-storage"
+        aria-labelledby="tab-storage"
+        hidden={activeTab !== "storage"}
+        className="space-y-8"
+      >
+        <section>
+          <h2 className="mb-4 text-xl font-semibold">Storage TTL</h2>
+          {storageLoading ? (
+            <TableSkeleton />
+          ) : storageError ? (
+            <ErrorState
+              title="Couldn't load storage entries."
+              message={storageError}
+              onRetry={() => setStorageReload((n) => n + 1)}
             />
-            {storageMoreError && (
-              <ErrorState
-                compact
-                className="mt-4"
-                title="Couldn't load more storage entries."
-                message={storageMoreError}
-                onRetry={handleLoadMoreStorage}
+          ) : (
+            <>
+              <StoragePanel
+                entries={storage}
+                currentLedger={stats?.last_synced_ledger ?? 0}
+                onLoadMore={handleLoadMoreStorage}
+                hasMore={storageHasMore}
               />
-            )}
-          </>
-        )}
-      </section>
+              {storageMoreError && (
+                <ErrorState
+                  compact
+                  className="mt-4"
+                  title="Couldn't load more storage entries."
+                  message={storageMoreError}
+                  onRetry={handleLoadMoreStorage}
+                />
+              )}
+            </>
+          )}
+        </section>
 
-      <section className="mb-8" id="changelog">
-        <h2 className="mb-4 text-xl font-semibold">Changelog</h2>
-        <ContractChangelogPanel contractId={id} />
-      </section>
+        <section>
+          <h2 className="mb-4 text-xl font-semibold">Snapshot / replay</h2>
+          <SnapshotPanel
+            contractId={id}
+            currentLedger={stats?.last_synced_ledger ?? 0}
+          />
+        </section>
+      </div>
 
-      <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold">Snapshot / replay</h2>
-        <SnapshotPanel
-          contractId={id}
-          currentLedger={stats?.last_synced_ledger ?? 0}
-        />
-      </section>
-
-      <section className="mb-8">
-        <HealthScoreCard contractId={id} />
-      </section>
+      {/* Watchdog Tab */}
+      <div
+        role="tabpanel"
+        id="tabpanel-watchdog"
+        aria-labelledby="tab-watchdog"
+        hidden={activeTab !== "watchdog"}
+        className="space-y-8"
+      >
+        <ContractWatchdogPanel contractId={id} />
+      </div>
     </div>
   );
 }
