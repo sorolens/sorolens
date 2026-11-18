@@ -16,7 +16,8 @@ export function ContractWatchdogPanel({ contractId }: Props) {
             Watchdog Monitoring & Alerts
           </h3>
           <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-            Configure automated health probes, anomaly detection, and alert rules for this contract.
+            Configure automated health probes, anomaly detection, and alert
+            rules for this contract.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

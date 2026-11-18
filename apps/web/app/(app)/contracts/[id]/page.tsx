@@ -116,7 +116,10 @@ function ContractDetailContent({ id }: { id: string }) {
   const [storageHasMore, setStorageHasMore] = useState(false);
 
   const [activeTab, setActiveTab] = useState<TabId>(() => {
-    if (typeof globalThis.window !== "undefined" && globalThis.window?.location) {
+    if (
+      typeof globalThis.window !== "undefined" &&
+      globalThis.window?.location
+    ) {
       const hash = globalThis.window.location.hash
         ? globalThis.window.location.hash.replace(/^#/, "")
         : "";
@@ -564,7 +567,7 @@ function ContractDetailContent({ id }: { id: string }) {
         id="tabpanel-overview"
         aria-labelledby="tab-overview"
         hidden={activeTab !== "overview"}
-        className="space-y-8"
+        className={activeTab === "overview" ? "space-y-8" : "hidden"}
       >
         {statsError && (
           <ErrorState
@@ -663,7 +666,7 @@ function ContractDetailContent({ id }: { id: string }) {
         id="tabpanel-events"
         aria-labelledby="tab-events"
         hidden={activeTab !== "events"}
-        className="space-y-8"
+        className={activeTab === "events" ? "space-y-8" : "hidden"}
       >
         <section>
           <div className="mb-4 flex items-center justify-between">
@@ -728,9 +731,11 @@ function ContractDetailContent({ id }: { id: string }) {
         id="tabpanel-invocations"
         aria-labelledby="tab-invocations"
         hidden={activeTab !== "invocations"}
-        className="space-y-8"
+        className={activeTab === "invocations" ? "space-y-8" : "hidden"}
       >
-        <ContractInvocationsPanel contractId={id} />
+        {activeTab === "invocations" && (
+          <ContractInvocationsPanel contractId={id} />
+        )}
       </div>
 
       {/* Storage Tab */}
@@ -739,7 +744,7 @@ function ContractDetailContent({ id }: { id: string }) {
         id="tabpanel-storage"
         aria-labelledby="tab-storage"
         hidden={activeTab !== "storage"}
-        className="space-y-8"
+        className={activeTab === "storage" ? "space-y-8" : "hidden"}
       >
         <section>
           <h2 className="mb-4 text-xl font-semibold">Storage TTL</h2>
@@ -787,7 +792,7 @@ function ContractDetailContent({ id }: { id: string }) {
         id="tabpanel-watchdog"
         aria-labelledby="tab-watchdog"
         hidden={activeTab !== "watchdog"}
-        className="space-y-8"
+        className={activeTab === "watchdog" ? "space-y-8" : "hidden"}
       >
         <ContractWatchdogPanel contractId={id} />
       </div>

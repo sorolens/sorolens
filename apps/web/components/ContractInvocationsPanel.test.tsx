@@ -1,5 +1,11 @@
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContractInvocationsPanel } from "./ContractInvocationsPanel";
 import type { Invocation } from "@/lib/types";
@@ -9,7 +15,8 @@ expect.extend(matchers);
 const mockGetContractInvocations = vi.fn();
 
 vi.mock("@/lib/api", () => ({
-  getContractInvocations: (...args: unknown[]) => mockGetContractInvocations(...args),
+  getContractInvocations: (...args: unknown[]) =>
+    mockGetContractInvocations(...args),
 }));
 
 vi.mock("@sorolens/ui", () => ({
@@ -19,7 +26,11 @@ vi.mock("@sorolens/ui", () => ({
     columns,
   }: {
     data: Invocation[];
-    columns: { key: string; header: string; accessor?: (item: Invocation) => React.ReactNode }[];
+    columns: {
+      key: string;
+      header: string;
+      accessor?: (item: Invocation) => React.ReactNode;
+    }[];
   }) => (
     <table data-testid="data-table">
       <thead>
@@ -34,7 +45,11 @@ vi.mock("@sorolens/ui", () => ({
           <tr key={idx} data-testid="invocation-row">
             {columns.map((col) => (
               <td key={col.key}>
-                {col.accessor ? col.accessor(inv) : String((inv as unknown as Record<string, unknown>)[col.key] ?? "")}
+                {col.accessor
+                  ? col.accessor(inv)
+                  : String(
+                      (inv as unknown as Record<string, unknown>)[col.key] ?? ""
+                    )}
               </td>
             ))}
           </tr>
@@ -86,12 +101,16 @@ describe("ContractInvocationsPanel", () => {
   });
 
   it("renders invocations table with data", async () => {
-    render(<ContractInvocationsPanel contractId={mockInvocationA.contract_id} />);
+    render(
+      <ContractInvocationsPanel contractId={mockInvocationA.contract_id} />
+    );
 
     expect(screen.getByTestId("table-skeleton")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByTestId("contract-invocations-panel")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("contract-invocations-panel")
+      ).toBeInTheDocument();
     });
 
     expect(await screen.findByText("deposit")).toBeInTheDocument();
@@ -101,8 +120,14 @@ describe("ContractInvocationsPanel", () => {
   });
 
   it("filters by function name", async () => {
-    render(<ContractInvocationsPanel contractId={mockInvocationA.contract_id} />);
-    await waitFor(() => expect(screen.getByTestId("invocation-function-filter")).toBeInTheDocument());
+    render(
+      <ContractInvocationsPanel contractId={mockInvocationA.contract_id} />
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("invocation-function-filter")
+      ).toBeInTheDocument()
+    );
 
     const input = screen.getByTestId("invocation-function-filter");
     fireEvent.change(input, { target: { value: "deposit" } });
@@ -116,8 +141,12 @@ describe("ContractInvocationsPanel", () => {
   });
 
   it("filters by status", async () => {
-    render(<ContractInvocationsPanel contractId={mockInvocationA.contract_id} />);
-    await waitFor(() => expect(screen.getByTestId("invocation-status-filter")).toBeInTheDocument());
+    render(
+      <ContractInvocationsPanel contractId={mockInvocationA.contract_id} />
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("invocation-status-filter")).toBeInTheDocument()
+    );
 
     const select = screen.getByTestId("invocation-status-filter");
     fireEvent.change(select, { target: { value: "failed" } });
@@ -141,7 +170,9 @@ describe("ContractInvocationsPanel", () => {
         next_cursor: "",
       });
 
-    render(<ContractInvocationsPanel contractId={mockInvocationA.contract_id} />);
+    render(
+      <ContractInvocationsPanel contractId={mockInvocationA.contract_id} />
+    );
 
     const loadMoreBtn = await screen.findByTestId("load-more-invocations");
     expect(loadMoreBtn).toBeInTheDocument();

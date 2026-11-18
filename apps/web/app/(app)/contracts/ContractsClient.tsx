@@ -497,8 +497,7 @@ export default function ContractsClient({
 
   const contracts: ContractRow[] = data?.contracts ?? [];
   const hasMore = Boolean(
-    (data?.next_cursor && data.next_cursor !== "") ||
-    data?.has_more
+    (data?.next_cursor && data.next_cursor !== "") || data?.has_more
   );
   const loading = isLoading;
   const loadFailed = !loading && Boolean(error);
