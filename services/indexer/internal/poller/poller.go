@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
@@ -20,6 +19,7 @@ import (
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
 	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -41,6 +41,9 @@ type Config struct {
 	// Workers is the maximum number of contracts processed concurrently. Values
 	// less than one default to GOMAXPROCS.
 	Workers int
+	// Concurrency sets the bounded worker pool limit (INDEXER_CONCURRENCY).
+	// If set to > 0, it takes precedence over Workers.
+	Concurrency int
 	// LedgerWindow is the maximum number of ledgers to request per getEvents
 	// call. Matches INDEXER_LEDGER_WINDOW from the API config.
 	LedgerWindow uint32
@@ -188,52 +191,31 @@ func (p *Poller) processAll(ctx context.Context) error {
 	if err := partition.EnsureNextMonthPartition(ctx, p.store); err != nil {
 		p.log.Warn("failed to ensure next month partition", "err", err)
 	}
-	workerCount := p.cfg.Workers
-	if workerCount < 1 {
-		workerCount = runtime.GOMAXPROCS(0)
+	limit := p.cfg.Concurrency
+	if limit < 1 {
+		limit = p.cfg.Workers
 	}
-	jobs := make(chan Contract, workerCount)
-	var workers sync.WaitGroup
-	workers.Add(workerCount)
-	for i := 0; i < workerCount; i++ {
-		go func() {
-			defer workers.Done()
-			for contract := range jobs {
-				// Preserve graceful shutdown semantics: contracts already being
-				// processed finish, but queued contracts do not start after cancel.
-				if ctx.Err() != nil {
-					continue
-				}
-				if err := p.processContract(context.WithoutCancel(ctx), contract); err != nil {
-					// One failing contract must not block the rest of the pass.
-					p.log.Error("failed to index contract",
-						"contract_id", contract.ID,
-						"err", err,
-					)
-				}
-			}
-		}()
-	}
-	stopWorkers := func() {
-		close(jobs)
-		workers.Wait()
+	if limit < 1 {
+		limit = runtime.GOMAXPROCS(0)
 	}
 
 	// Track contracts deployed by watched accounts first so they are
 	// indexed in this same pass (issue #123).
 	p.runDiscovery(ctx)
 
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(limit)
+
 	var cursor string
 	for {
 		// Check for shutdown between contract batches.
 		if ctx.Err() != nil {
-			stopWorkers()
-			return nil
+			break
 		}
 
 		contracts, next, err := p.store.ListContracts(ctx, cursor, 50)
 		if err != nil {
-			stopWorkers()
+			_ = g.Wait()
 			return fmt.Errorf("list contracts: %w", err)
 		}
 
@@ -245,11 +227,20 @@ func (p *Poller) processAll(ctx context.Context) error {
 			if c.Status != "active" && c.Status != "backfilling" {
 				continue
 			}
-			select {
-			case <-ctx.Done():
-				break contractBatch
-			case jobs <- c:
-			}
+			contract := c
+			g.Go(func() error {
+				if gctx.Err() != nil {
+					return nil
+				}
+				if err := p.processContract(context.WithoutCancel(gctx), contract); err != nil {
+					// One failing contract must not block the rest of the pass.
+					p.log.Error("failed to index contract",
+						"contract_id", contract.ID,
+						"err", err,
+					)
+				}
+				return nil
+			})
 		}
 		if ctx.Err() != nil {
 			break
@@ -260,7 +251,9 @@ func (p *Poller) processAll(ctx context.Context) error {
 		}
 		cursor = next
 	}
-	stopWorkers()
+	if err := g.Wait(); err != nil {
+		return err
+	}
 
 	if p.cfg.AnomalyEnabled {
 		p.runAnomalyDetection(ctx)
