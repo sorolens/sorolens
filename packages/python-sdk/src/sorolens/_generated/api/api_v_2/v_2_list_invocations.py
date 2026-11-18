@@ -1,16 +1,20 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 import httpx
 
-from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...types import Response, UNSET
+from ... import errors
+
 from ...models.error import Error
 from ...models.v2_invocation_list import V2InvocationList
 from ...models.v2_list_invocations_network import V2ListInvocationsNetwork
 from ...models.v2_list_invocations_status import V2ListInvocationsStatus
-from ...types import UNSET, Response, Unset
+from ...types import UNSET, Unset
+from typing import cast
+
 
 
 def _get_kwargs(
@@ -23,7 +27,11 @@ def _get_kwargs(
     function_name: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+
 ) -> dict[str, Any]:
+    
+
+    
 
     params: dict[str, Any] = {}
 
@@ -49,34 +57,40 @@ def _get_kwargs(
 
     params["to"] = to
 
+
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
+
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/api/v2/contracts/{id}/invocations".format(
-            id=quote(str(id), safe=""),
-        ),
+        "url": "/api/v2/contracts/{id}/invocations".format(id=quote(str(id), safe=""),),
         "params": params,
     }
+
 
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Error | V2InvocationList | None:
+
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | V2InvocationList | None:
     if response.status_code == 200:
         response_200 = V2InvocationList.from_dict(response.json())
+
+
 
         return response_200
 
     if response.status_code == 429:
         response_429 = Error.from_dict(response.json())
 
+
+
         return response_429
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
+
+
 
         return response_500
 
@@ -86,9 +100,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[Error | V2InvocationList]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | V2InvocationList]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -108,8 +120,9 @@ def sync_detailed(
     function_name: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+
 ) -> Response[Error | V2InvocationList]:
-    """List a contract's invocations
+    """ List a contract's invocations
 
     Args:
         id (str):
@@ -127,17 +140,19 @@ def sync_detailed(
 
     Returns:
         Response[Error | V2InvocationList]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         id=id,
-        cursor=cursor,
-        limit=limit,
-        network=network,
-        status=status,
-        function_name=function_name,
-        from_=from_,
-        to=to,
+cursor=cursor,
+limit=limit,
+network=network,
+status=status,
+function_name=function_name,
+from_=from_,
+to=to,
+
     )
 
     response = client.get_httpx_client().request(
@@ -145,7 +160,6 @@ def sync_detailed(
     )
 
     return _build_response(client=client, response=response)
-
 
 def sync(
     id: str,
@@ -158,8 +172,9 @@ def sync(
     function_name: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+
 ) -> Error | V2InvocationList | None:
-    """List a contract's invocations
+    """ List a contract's invocations
 
     Args:
         id (str):
@@ -177,20 +192,21 @@ def sync(
 
     Returns:
         Error | V2InvocationList
-    """
+     """
+
 
     return sync_detailed(
         id=id,
-        client=client,
-        cursor=cursor,
-        limit=limit,
-        network=network,
-        status=status,
-        function_name=function_name,
-        from_=from_,
-        to=to,
-    ).parsed
+client=client,
+cursor=cursor,
+limit=limit,
+network=network,
+status=status,
+function_name=function_name,
+from_=from_,
+to=to,
 
+    ).parsed
 
 async def asyncio_detailed(
     id: str,
@@ -203,8 +219,9 @@ async def asyncio_detailed(
     function_name: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+
 ) -> Response[Error | V2InvocationList]:
-    """List a contract's invocations
+    """ List a contract's invocations
 
     Args:
         id (str):
@@ -222,23 +239,26 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | V2InvocationList]
-    """
+     """
+
 
     kwargs = _get_kwargs(
         id=id,
-        cursor=cursor,
-        limit=limit,
-        network=network,
-        status=status,
-        function_name=function_name,
-        from_=from_,
-        to=to,
+cursor=cursor,
+limit=limit,
+network=network,
+status=status,
+function_name=function_name,
+from_=from_,
+to=to,
+
     )
 
-    response = await client.get_async_httpx_client().request(**kwargs)
+    response = await client.get_async_httpx_client().request(
+        **kwargs
+    )
 
     return _build_response(client=client, response=response)
-
 
 async def asyncio(
     id: str,
@@ -251,8 +271,9 @@ async def asyncio(
     function_name: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+
 ) -> Error | V2InvocationList | None:
-    """List a contract's invocations
+    """ List a contract's invocations
 
     Args:
         id (str):
@@ -270,18 +291,18 @@ async def asyncio(
 
     Returns:
         Error | V2InvocationList
-    """
+     """
 
-    return (
-        await asyncio_detailed(
-            id=id,
-            client=client,
-            cursor=cursor,
-            limit=limit,
-            network=network,
-            status=status,
-            function_name=function_name,
-            from_=from_,
-            to=to,
-        )
-    ).parsed
+
+    return (await asyncio_detailed(
+        id=id,
+client=client,
+cursor=cursor,
+limit=limit,
+network=network,
+status=status,
+function_name=function_name,
+from_=from_,
+to=to,
+
+    )).parsed
