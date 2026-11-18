@@ -76,7 +76,7 @@ Render's free tier sleeps after 15 minutes of inactivity, which breaks the Disco
    | Dockerfile Path    | `./Dockerfile`         |
    | Instance Type      | **Free**               |
 
-4. Under **Environment Variables**, add every entry from `.env.example`. Set `DATABASE_PATH=/tmp/mappings.db` (Render's free tier has no persistent disk; contributors can `/link` again after each redeploy).
+4. Under **Environment Variables**, add every entry from `.env.example`. Set `DATABASE_PATH=/tmp/mappings.db`. Render's free tier has no persistent disk, so also set up the backup in [Keep links across redeploys](#keep-links-across-redeploys) or contributors must `/link` again after every deploy.
 5. Click **Create Web Service** and wait for the green **Live** badge (~4-6 minutes).
 6. Copy the public URL (e.g. `https://sorolens-discord-bot.onrender.com`).
 
@@ -90,7 +90,24 @@ npm run register
 
 Slash commands appear in Discord instantly.
 
-### 3. Keep the service warm with UptimeRobot
+### 3. Keep links across redeploys
+
+The bot stores GitHub links in SQLite. Litestream copies the file to S3-compatible storage and restores it on every start.
+
+1. Create a free bucket, for example Cloudflare R2 (dashboard > R2 > **Create bucket**) and an API token with read and write access to it.
+2. In Render > your service > **Environment**, add:
+
+   | Variable | Value |
+   | --- | --- |
+   | `LITESTREAM_BUCKET` | your bucket name |
+   | `LITESTREAM_ACCESS_KEY_ID` | the token's access key id |
+   | `LITESTREAM_SECRET_ACCESS_KEY` | the token's secret |
+   | `LITESTREAM_ENDPOINT` | R2: `https://<account-id>.r2.cloudflarestorage.com` (leave empty for AWS S3) |
+   | `LITESTREAM_REGION` | R2: `auto`; AWS: your region |
+
+3. Redeploy. The log shows `restoring ... from replica` on start. Without `LITESTREAM_BUCKET` the bot warns that links are not backed up.
+
+### 4. Keep the service warm with UptimeRobot
 
 1. Sign up at https://uptimerobot.com (free).
 2. **Add New Monitor**:
@@ -125,7 +142,7 @@ The webhook receiver uses `@octokit/webhooks` which validates the HMAC-SHA256 si
 | PR merged by contributor who has not run `/link`                                  | Bot logs and skips. Contributor can `/link` any time; roles sync immediately.                                                                                                                           |
 | Contributor tries to `/link` a GitHub name already linked to another Discord user | Command replies with an error; no state changes.                                                                                                                                                        |
 | GitHub API rate limit                                                             | Command replies with the error message. Retry manually or wait ~1 min.                                                                                                                                  |
-| Bot crashes / redeploys                                                           | Slash commands stay registered. On Render's free tier `DATABASE_PATH` points at `/tmp` and mappings reset on redeploy - contributors just run `/link` again. Move to a paid disk if that gets annoying. |
+| Bot crashes / redeploys                                                           | Slash commands stay registered. On Render's free tier `DATABASE_PATH` points at `/tmp` and mappings reset on redeploy unless the Litestream backup below is configured; then the database is restored automatically on start. |
 
 ## Security notes
 
