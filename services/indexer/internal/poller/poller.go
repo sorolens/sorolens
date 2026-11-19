@@ -203,31 +203,9 @@ func (p *Poller) processAll(ctx context.Context) error {
 	if err := partition.EnsureNextMonthPartition(ctx, p.store); err != nil {
 		p.log.Warn("failed to ensure next month partition", "err", err)
 	}
-	workerCount := p.cfg.Workers
-	if workerCount < 1 {
-		workerCount = runtime.GOMAXPROCS(0)
-	}
-	jobs := make(chan Contract, workerCount)
-	var workers sync.WaitGroup
-	workers.Add(workerCount)
-	for i := 0; i < workerCount; i++ {
-		go func() {
-			defer workers.Done()
-			for contract := range jobs {
-				// Preserve graceful shutdown semantics: contracts already being
-				// processed finish, but queued contracts do not start after cancel.
-				if ctx.Err() != nil {
-					continue
-				}
-				if err := p.indexContract(context.WithoutCancel(ctx), ctx, contract); err != nil {
-					// One failing contract must not block the rest of the pass.
-					p.log.Error("failed to index contract",
-						"contract_id", contract.ID,
-						"err", err,
-					)
-				}
-			}
-		}()
+	limit := p.cfg.Concurrency
+	if limit < 1 {
+		limit = p.cfg.Workers
 	}
 	if limit < 1 {
 		limit = runtime.GOMAXPROCS(0)
@@ -266,7 +244,7 @@ func (p *Poller) processAll(ctx context.Context) error {
 				if gctx.Err() != nil {
 					return nil
 				}
-				if err := p.processContract(context.WithoutCancel(gctx), contract); err != nil {
+				if err := p.indexContract(context.WithoutCancel(gctx), gctx, contract); err != nil {
 					// One failing contract must not block the rest of the pass.
 					p.log.Error("failed to index contract",
 						"contract_id", contract.ID,
