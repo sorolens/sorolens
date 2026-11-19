@@ -39,7 +39,10 @@ test.describe("Settings", () => {
     await expect(page.getByLabel("Email address")).toHaveValue("");
     await expect(page.getByLabel("Critical alerts")).toBeChecked();
     await expect(page.getByLabel("Weekly digest")).not.toBeChecked();
-    await expect(page.getByTestId("settings-api-key-value")).toHaveText("—");
+    await expect(page.getByTestId("settings-identity")).toBeVisible();
+    await expect(page.getByTestId("settings-api-key")).toContainText(
+      "No API key yet"
+    );
   });
 
   test("saves the theme and keeps it after a reload", async ({ page }) => {
@@ -124,49 +127,38 @@ test.describe("Settings", () => {
     await expect(page.getByLabel("Health changes")).not.toBeChecked();
   });
 
-  test("generates, saves, and revokes an API key", async ({ page }) => {
+  test("creates and revokes an API key through the API", async ({ page }) => {
     await page
       .getByTestId("settings-api-key")
       .getByRole("button", { name: "Generate key" })
       .click();
-    await expect(page.getByTestId("settings-api-key-value")).toContainText(
-      "sl_live_"
+    await expect(page.getByTestId("settings-api-key-value")).toHaveText(
+      "sl_e2e_plaintext_token"
     );
 
-    await page
-      .getByTestId("settings-api-key")
-      .getByRole("button", { name: "Save" })
-      .click();
-    await expect(page.getByTestId("settings-api-key-status")).toHaveText(
-      "Saved"
-    );
-
-    // Reloading masks the token again, but the key is still stored.
-    await page.reload();
-    await expect(page.getByTestId("settings-theme")).toBeVisible();
-    await expect(page.getByTestId("settings-api-key-value")).toContainText("•");
-    await expect(page.getByTestId("settings-api-key-value")).toContainText(
-      "sl_live_"
-    );
-
-    await page
-      .getByTestId("settings-api-key")
-      .getByRole("button", { name: "Revoke" })
-      .click();
-    await page
-      .getByTestId("settings-api-key")
-      .getByRole("button", { name: "Save" })
-      .click();
-    await expect(page.getByTestId("settings-api-key-value")).toHaveText("—");
-
-    await page.reload();
-    await expect(page.getByTestId("settings-theme")).toBeVisible();
-    await expect(page.getByTestId("settings-api-key-value")).toHaveText("—");
+    // The plaintext token is display-once and never written to storage.
     const stored = await page.evaluate(
       (key) => window.localStorage.getItem(key),
       SETTINGS_KEY
     );
-    expect(JSON.parse(stored as string).apiKey).toBeNull();
+    expect(stored ?? "").not.toContain("sl_e2e_plaintext_token");
+
+    // The server-issued prefix survives a reload; the plaintext does not.
+    await page.reload();
+    await expect(page.getByTestId("settings-theme")).toBeVisible();
+    await expect(page.getByTestId("settings-api-key-row")).toContainText(
+      "sl_e2eabc"
+    );
+    await expect(page.getByTestId("settings-api-key-value")).toHaveCount(0);
+
+    await page
+      .getByTestId("settings-api-key-row")
+      .getByRole("button", { name: "Revoke" })
+      .click();
+    await expect(page.getByTestId("settings-api-key-row")).toHaveCount(0);
+    await expect(page.getByTestId("settings-api-key")).toContainText(
+      "No API key yet"
+    );
   });
 
   test("is reachable from the header navigation", async ({ page }) => {

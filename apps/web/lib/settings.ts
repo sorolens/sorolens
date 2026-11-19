@@ -1,9 +1,11 @@
 /**
  * Persisted user preferences for the `/settings` page.
  *
- * The API has no user-profile endpoint yet, so preferences live in
- * `localStorage` under a single key. Every helper takes an optional `Storage`
- * argument so it can be unit-tested without a DOM.
+ * The API has no user-profile endpoint for theme/network/notification
+ * preferences, so those live in `localStorage` under a single key and the UI
+ * labels them as browser-only. API keys are NOT stored here: they are minted
+ * and revoked through `/api/v1/me/api-keys` (issue #613). Every helper takes
+ * an optional `Storage` argument so it can be unit-tested without a DOM.
  *
  * Theme is deliberately NOT stored here: `ThemeProvider` already owns the
  * `theme` key and applies it to `<html data-theme>`, so the theme card reads and
@@ -48,9 +50,6 @@ export interface UserSettings {
   /** Network pre-selected in the header selector on first load. */
   defaultNetwork: string;
   notifications: NotificationPreferences;
-  /** Plaintext token shown once after generation; null when revoked. */
-  apiKey: string | null;
-  apiKeyCreatedAt: string | null;
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -66,8 +65,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
       weekly_digest: false,
     },
   },
-  apiKey: null,
-  apiKeyCreatedAt: null,
 };
 
 /** Deliberately permissive: catches typos without rejecting valid addresses. */
@@ -76,23 +73,6 @@ export function isValidEmail(value: string): boolean {
   if (trimmed.length === 0 || trimmed.length > 254) return false;
   if (/\s/.test(trimmed)) return false;
   return /^[^@.]+(\.[^@.]+)*@[^@.]+(\.[^@.]+)+$/.test(trimmed);
-}
-
-/** Generates a display-once API token. Not a real credential yet. */
-export function generateApiKey(): string {
-  const bytes = new Uint8Array(24);
-  globalThis.crypto.getRandomValues(bytes);
-  const body = Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, "0")
-  ).join("");
-  return `sl_live_${body}`;
-}
-
-/** Renders a token for display without revealing the whole secret. */
-export function maskApiKey(key: string | null): string {
-  if (!key) return "";
-  if (key.length <= 12) return "•".repeat(key.length);
-  return `${key.slice(0, 8)}${"•".repeat(8)}${key.slice(-4)}`;
 }
 
 function coerceSettings(raw: unknown): UserSettings {
@@ -126,9 +106,9 @@ function coerceSettings(raw: unknown): UserSettings {
           DEFAULT_SETTINGS.notifications.channels.weekly_digest,
       },
     },
-    apiKey: typeof value.apiKey === "string" ? value.apiKey : null,
-    apiKeyCreatedAt:
-      typeof value.apiKeyCreatedAt === "string" ? value.apiKeyCreatedAt : null,
+    // API keys are server-issued and live in component state (issue #613).
+    // Any apiKey/apiKeyCreatedAt left in an older blob is dropped here so a
+    // fabricated plaintext token can never survive a reload.
   };
 }
 
