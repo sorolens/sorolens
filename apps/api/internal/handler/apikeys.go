@@ -27,6 +27,7 @@ type apiKeyResponse struct {
 	LastUsedAt *time.Time `json:"last_used_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
 	RotatedAt  *time.Time `json:"rotated_at"`
+	ExpiresAt  *time.Time `json:"expires_at"`
 }
 
 // createAPIKeyResponse includes the plaintext token exactly once, at creation.
@@ -42,6 +43,8 @@ type createAPIKeyRequest struct {
 	// A bound key carries that user's identity; an unbound key only
 	// authenticates scopes.
 	UserID *string `json:"user_id,omitempty"`
+	// ExpiresAt sets an optional expiration time for the key.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 func apiKeyFromStore(k store.APIKey) apiKeyResponse {
@@ -59,6 +62,7 @@ func apiKeyFromStore(k store.APIKey) apiKeyResponse {
 		LastUsedAt: k.LastUsedAt,
 		RevokedAt:  k.RevokedAt,
 		RotatedAt:  k.RotatedAt,
+		ExpiresAt:  k.ExpiresAt,
 	}
 }
 
@@ -119,6 +123,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		Scopes:    req.Scopes,
 		CreatedAt: time.Now().UTC(),
 		UserID:    boundUser,
+		ExpiresAt: req.ExpiresAt,
 	}
 	if err := h.Store.CreateAPIKey(r.Context(), key); err != nil {
 		if errors.Is(err, store.ErrInvalidScope) {

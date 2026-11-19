@@ -106,11 +106,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		Sessions:    h.SessionSigner,
 		ProxySecret: h.TrustedProxySecret,
 	}, h.Logger))
-	// Audit trail for every mutating /api/ request (issue #122). It sits
+	r.Use(middleware.RequireAuthMode(h.RequireAuth, h.Logger))
+	// Audit trail for every mutating /api/ and /admin request (issue #122). It sits
 	// outside rate limiting, content-type and auth checks so their
 	// rejections are audited too, and inside Recoverer so a panic is
 	// recorded as 500 before being recovered.
-	r.Use(middleware.Audit(h.Store, h.Logger, "/api/"))
+	r.Use(middleware.Audit(h.Store, h.Logger, "/api/", "/admin"))
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(middleware.Metrics)
 
@@ -188,6 +189,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		panic(fmt.Sprintf("graphql handler: %v", err))
 	}
 	r.With(middleware.RequireScopes(h.Logger)).Post("/graphql", gql.ServeHTTP)
+
+	// Root admin surface: GET /admin/audit (issue #523)
+	r.With(middleware.RequireRole(h.Logger, middleware.RoleAdmin)).Route("/admin", func(r chi.Router) {
+		r.Get("/audit", h.ListAuditEvents)
+	})
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {

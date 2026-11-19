@@ -112,6 +112,37 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/admin/audit": {
+      get: {
+        operationId: "listAuditEventsRoot",
+        summary: "List audit events (admin role only)",
+        tags: ["Audit"],
+        parameters: [
+          {
+            name: "since",
+            in: "query",
+            required: false,
+            description: "Only events at or after this RFC 3339 timestamp.",
+            type: "string",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
+            type: "integer",
+          },
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            description: "Opaque cursor from next_cursor of the previous page.",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/admin/audit": {
       get: {
         operationId: "listAuditEvents",
@@ -129,7 +160,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
@@ -160,21 +192,24 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "cursor",
             in: "query",
             required: false,
-            description: "Opaque pagination cursor from a previous response.",
+            description:
+              "Opaque pagination cursor from a previous response. A malformed or unusable cursor is rejected with 422 INVALID_CURSOR.",
             type: "string",
           },
           {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
           {
@@ -386,21 +421,24 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "cursor",
             in: "query",
             required: false,
-            description: "Opaque pagination cursor from a previous response.",
+            description:
+              "Opaque pagination cursor from a previous response. A malformed or unusable cursor is rejected with 422 INVALID_CURSOR.",
             type: "string",
           },
           {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
           {
@@ -444,7 +482,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
           {
@@ -490,21 +529,24 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "cursor",
             in: "query",
             required: false,
-            description: "Opaque pagination cursor from a previous response.",
+            description:
+              "Opaque pagination cursor from a previous response. A malformed or unusable cursor is rejected with 422 INVALID_CURSOR.",
             type: "string",
           },
           {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
           {
@@ -595,21 +637,24 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "cursor",
             in: "query",
             required: false,
-            description: "Opaque pagination cursor from a previous response.",
+            description:
+              "Opaque pagination cursor from a previous response. A malformed or unusable cursor is rejected with 422 INVALID_CURSOR.",
             type: "string",
           },
           {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
           {
@@ -793,14 +838,16 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "cursor",
             in: "query",
             required: false,
-            description: "Opaque pagination cursor from a previous response.",
+            description:
+              "Opaque pagination cursor from a previous response. A malformed or unusable cursor is rejected with 422 INVALID_CURSOR.",
             type: "string",
           },
           {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
         ],
@@ -871,14 +918,16 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "cursor",
             in: "query",
             required: false,
-            description: "Opaque pagination cursor from a previous response.",
+            description:
+              "Opaque pagination cursor from a previous response. A malformed or unusable cursor is rejected with 422 INVALID_CURSOR.",
             type: "string",
           },
           {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
         ],
@@ -1131,7 +1180,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
         ],
@@ -1154,7 +1204,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
           {
@@ -1185,21 +1236,24 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "cursor",
             in: "query",
             required: false,
-            description: "Opaque pagination cursor from a previous response.",
+            description:
+              "Opaque pagination cursor from a previous response. A malformed or unusable cursor is rejected with 422 INVALID_CURSOR.",
             type: "string",
           },
           {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
         ],
@@ -1267,7 +1321,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
           {
@@ -1365,7 +1420,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
         ],
@@ -1388,7 +1444,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
@@ -1469,7 +1526,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
@@ -1525,7 +1583,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
@@ -1588,7 +1647,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
@@ -1654,7 +1714,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
         ],
@@ -1843,7 +1904,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
         ],
@@ -1866,7 +1928,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
           {
@@ -1913,7 +1976,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
         ],
@@ -1936,7 +2000,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Page size (default 50, clamped to 200).",
+            description:
+              "Page size (default 50). Values above 200 are clamped to 200, so no endpoint returns more than the documented maximum; a non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
           },
         ],
@@ -2127,7 +2192,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "cursor",
             in: "query",
             required: false,
-            description: "Opaque pagination cursor from a previous response.",
+            description:
+              "Opaque pagination cursor from a previous response. A malformed or unusable cursor is rejected with 422 INVALID_CURSOR.",
             type: "string",
           },
           {
@@ -2248,7 +2314,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "cursor",
             in: "query",
             required: false,
-            description: "Opaque pagination cursor from a previous response.",
+            description:
+              "Opaque pagination cursor from a previous response. A malformed or unusable cursor is rejected with 422 INVALID_CURSOR.",
             type: "string",
           },
           {
@@ -2276,7 +2343,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
           {
@@ -2308,7 +2376,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "cursor",
             in: "query",
             required: false,
-            description: "Opaque pagination cursor from a previous response.",
+            description:
+              "Opaque pagination cursor from a previous response. A malformed or unusable cursor is rejected with 422 INVALID_CURSOR.",
             type: "string",
           },
           {
@@ -2343,7 +2412,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
           {
@@ -2396,7 +2466,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
-            description: "Maximum number of results",
+            description:
+              "Maximum number of results (default 10, clamped to 200). A non-numeric or non-positive value is rejected with 422 INVALID_LIMIT.",
             type: "integer",
             default: "10",
           },
@@ -2459,6 +2530,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
+            description:
+              "Page size (default 50). Values above 500 are clamped to 500, which the store has always enforced.",
             type: "integer",
             default: "50",
           },
@@ -2477,6 +2550,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             required: true,
             description: "Contract ID (starts with C).",
             type: "string",
+          },
+          {
+            name: "history_limit",
+            in: "query",
+            required: false,
+            description:
+              "Maximum number of recorded hourly snapshots to return, oldest first. Omit to skip history.",
+            type: "integer",
           },
         ],
       },
@@ -2680,7 +2761,8 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "network",
             in: "query",
             required: false,
-            description: "Network filter; empty means all networks.",
+            description:
+              "Network filter; empty means all networks. An unknown network is rejected with 422 INVALID_NETWORK.",
             type: "string",
           },
           {

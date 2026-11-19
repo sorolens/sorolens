@@ -647,17 +647,17 @@ func (s *postgresStore) GetGlobalStats(ctx context.Context) (GlobalStats, error)
 			-- estimate is the sum of the children; for a plain table the LEFT
 			-- JOIN yields one row with a NULL child and the parent estimate is
 			-- used instead.
-			(SELECT GREATEST(COALESCE(SUM(child.reltuples), 0), parent.reltuples, 0)::bigint
+			(SELECT GREATEST(COALESCE(SUM(child.reltuples), 0), MAX(parent.reltuples), 0)::bigint
 			   FROM pg_class parent
 			   LEFT JOIN pg_inherits inh ON inh.inhparent = parent.oid
 			   LEFT JOIN pg_class child ON child.oid = inh.inhrelid
 			  WHERE parent.oid = 'events'::regclass),
-			(SELECT GREATEST(COALESCE(SUM(child.reltuples), 0), parent.reltuples, 0)::bigint
+			(SELECT GREATEST(COALESCE(SUM(child.reltuples), 0), MAX(parent.reltuples), 0)::bigint
 			   FROM pg_class parent
 			   LEFT JOIN pg_inherits inh ON inh.inhparent = parent.oid
 			   LEFT JOIN pg_class child ON child.oid = inh.inhrelid
 			  WHERE parent.oid = 'invocations'::regclass),
-			(SELECT GREATEST(COALESCE(SUM(child.reltuples), 0), parent.reltuples, 0)::bigint
+			(SELECT GREATEST(COALESCE(SUM(child.reltuples), 0), MAX(parent.reltuples), 0)::bigint
 			   FROM pg_class parent
 			   LEFT JOIN pg_inherits inh ON inh.inhparent = parent.oid
 			   LEFT JOIN pg_class child ON child.oid = inh.inhrelid
@@ -708,6 +708,25 @@ func (s *postgresStore) CreateNextMonthPartition(ctx context.Context) error {
 func (s *postgresStore) CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error {
 	_, err := s.pool.Exec(ctx, `SELECT create_monthly_partition($1, $2)`, year, month)
 	return err
+}
+
+// MaintainPartitions ensures future partitions exist up to monthsAhead months ahead.
+func (s *postgresStore) MaintainPartitions(ctx context.Context, monthsAhead int) error {
+	if monthsAhead <= 0 {
+		monthsAhead = 6
+	}
+	_, err := s.pool.Exec(ctx, `SELECT maintain_events_partitions($1)`, monthsAhead)
+	return err
+}
+
+// ArchiveOldEvents archives events older than retentionDays into events_archive.
+func (s *postgresStore) ArchiveOldEvents(ctx context.Context, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, fmt.Errorf("retention days must be positive, got %d", retentionDays)
+	}
+	var moved int64
+	err := s.pool.QueryRow(ctx, `SELECT archive_old_events($1)`, retentionDays).Scan(&moved)
+	return moved, err
 }
 
 // GetPartitionStats returns information about all existing partitions of the events table.

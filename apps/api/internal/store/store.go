@@ -89,6 +89,12 @@ type Store interface {
 	// CreateMonthlyPartitionIfNotExists creates a partition for the given year/month if it does not exist.
 	CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error
 
+	// MaintainPartitions ensures future partitions exist up to monthsAhead months ahead.
+	MaintainPartitions(ctx context.Context, monthsAhead int) error
+
+	// ArchiveOldEvents archives events older than retentionDays into events_archive.
+	ArchiveOldEvents(ctx context.Context, retentionDays int) (int64, error)
+
 	// GetIndexerCursor returns the last successfully committed ledger sequence for a network,
 	// or 0 if no cursor has been recorded yet.
 	GetIndexerCursor(ctx context.Context, network string) (uint32, error)

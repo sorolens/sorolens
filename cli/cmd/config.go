@@ -29,6 +29,8 @@ func applyConfig(cmd *cobra.Command, _ []string) error {
 		globalConfig.APIURL = firstNonEmpty(os.Getenv("SOROLENS_API_URL"), config.APIURL, "http://localhost:8080")
 	}
 	if !cmd.Flags().Changed("network") {
+		// SOROLENS_NETWORK is the default network for commands when --network is not
+		// given and the config file sets none; defaults to testnet.
 		globalConfig.Network = firstNonEmpty(os.Getenv("SOROLENS_NETWORK"), config.Network, "testnet")
 	}
 
@@ -41,7 +43,9 @@ func applyConfig(cmd *cobra.Command, _ []string) error {
 		globalConfig.Output = strings.ToLower(strings.TrimSpace(globalConfig.Output))
 	} else {
 		globalConfig.Output = strings.ToLower(firstNonEmpty(
+			// SOROLENS_OUTPUT is the default output format when --output is not given.
 			os.Getenv("SOROLENS_OUTPUT"),
+			// SOROLENS_OUTPUT_FORMAT is a legacy alias of SOROLENS_OUTPUT.
 			os.Getenv("SOROLENS_OUTPUT_FORMAT"),
 			config.Output,
 			config.OutputFormat,
