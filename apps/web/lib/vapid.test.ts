@@ -35,7 +35,7 @@ it("sends a critical alert to the subscription with high urgency", async () => {
   expect(webPush.sendNotification).toHaveBeenCalledWith(
     subscription,
     JSON.stringify(payload),
-    expect.objectContaining({ urgency: "high", topic: "contract-123" }),
+    expect.objectContaining({ urgency: "high", topic: "contract-123" })
   );
 });
 

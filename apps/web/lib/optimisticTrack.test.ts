@@ -1,5 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { trackContractOptimistically, type ContractRow } from "./optimisticTrack";
+import {
+  trackContractOptimistically,
+  type ContractRow,
+} from "./optimisticTrack";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -9,13 +12,21 @@ it("restores the original list when the API rejects a new contract", async () =>
   const originalList: ContractRow[] = [];
   const setList = vi.fn();
   const input = { id: "contract-123", network: "testnet" };
-  const response = Response.json({ error: "Invalid contract ID" }, { status: 400 });
+  const response = Response.json(
+    { error: "Invalid contract ID" },
+    { status: 400 }
+  );
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
 
-  const result = await trackContractOptimistically(originalList, setList, input, {
-    userId: "test-user",
-    network: "testnet",
-  });
+  const result = await trackContractOptimistically(
+    originalList,
+    setList,
+    input,
+    {
+      userId: "test-user",
+      network: "testnet",
+    }
+  );
 
   expect(setList).toHaveBeenNthCalledWith(1, [
     expect.objectContaining({ id: "contract-123", status: "pending" }),
@@ -30,7 +41,10 @@ it("restores the original list when the API rejects a new contract", async () =>
 it("skips rollback when a newer list has already loaded", async () => {
   const setList = vi.fn();
   const input = { id: "contract-123", network: "testnet" };
-  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockRejectedValue(new TypeError("Failed to fetch"))
+  );
 
   const result = await trackContractOptimistically([], setList, input, {
     userId: "test-user",
@@ -61,7 +75,7 @@ it("sends the registration request and keeps the pending row on success", async 
 
   expect(fetchMock).toHaveBeenCalledWith(
     expect.stringMatching(/\/api\/v1\/contracts$/),
-    expect.objectContaining({ method: "POST", body: JSON.stringify(input) }),
+    expect.objectContaining({ method: "POST", body: JSON.stringify(input) })
   );
   expect(result).toEqual({ ok: true });
   expect(setList).toHaveBeenCalledTimes(1);

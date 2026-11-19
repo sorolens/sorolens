@@ -29,7 +29,6 @@ it("turns a 503 response into an ApiError with the server's message and code", a
   });
 });
 
-
 it("uses the HTTP status text when the error body is plain text", async () => {
   const response = new Response("Server temporarily offline", {
     status: 502,
@@ -50,7 +49,6 @@ it("passes the timeout error back to the caller when fetch times out", async () 
 
   await expect(getAPIHealth()).rejects.toBe(timeout);
 });
-
 
 it("rejects with a SyntaxError when a successful response contains invalid JSON", async () => {
   const response = new Response('{"status":', {
