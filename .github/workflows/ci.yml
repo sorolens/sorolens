@@ -354,20 +354,28 @@ jobs:
         run: |
           python=true
           rustsdk=true
+          jvm=true
+          ts=true
           contracts=true
           if [ "$EVENT" = "pull_request" ]; then
             files=$(git diff --name-only "$BASE_SHA"...HEAD)
             python=false
             rustsdk=false
+            jvm=false
+            ts=false
             contracts=false
             echo "$files" | grep -qE '^(packages/python-sdk/|docs/openapi\.yaml|\.github/workflows/ci\.yml)' && python=true
             echo "$files" | grep -qE '^(packages/rust-sdk/|\.github/workflows/ci\.yml)' && rustsdk=true
+            echo "$files" | grep -qE '^(packages/jvm-sdk/|docs/openapi\.yaml|\.github/workflows/ci\.yml)' && jvm=true
+            echo "$files" | grep -qE '^(packages/typescript-sdk/|\.github/workflows/ci\.yml)' && ts=true
             echo "$files" | grep -qE '^(contracts/|\.github/workflows/ci\.yml)' && contracts=true
           fi
           echo "python=$python" >> "$GITHUB_OUTPUT"
           echo "rustsdk=$rustsdk" >> "$GITHUB_OUTPUT"
+          echo "jvm=$jvm" >> "$GITHUB_OUTPUT"
+          echo "ts=$ts" >> "$GITHUB_OUTPUT"
           echo "contracts=$contracts" >> "$GITHUB_OUTPUT"
-          echo "python=$python rustsdk=$rustsdk contracts=$contracts"
+          echo "python=$python rustsdk=$rustsdk jvm=$jvm ts=$ts contracts=$contracts"
       # Python SDK. The full 3.11 to 3.13 matrix runs in python-sdk.yml after
       # merge; pull requests test the middle version.
       - name: Set up Python 3.12
@@ -447,6 +455,44 @@ jobs:
         if: steps.changes.outputs.rustsdk == 'true'
         working-directory: packages/rust-sdk
         run: cargo test --doc
+      # JVM SDK (Java 17, Gradle, OpenAPI generator pinned in the module).
+      - name: Set up Java 17
+        if: steps.changes.outputs.jvm == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: JVM SDK - gradle test
+        if: steps.changes.outputs.jvm == 'true'
+        working-directory: packages/jvm-sdk
+        run: ./gradlew test --no-daemon
+      - name: JVM SDK - regenerate models from docs/openapi.yaml
+        if: steps.changes.outputs.jvm == 'true'
+        run: bash packages/jvm-sdk/scripts/generate_jvm_client.sh
+      # Edge TypeScript SDK: Node, Deno and a Workers-like runtime (Miniflare).
+      - name: Set up pnpm
+        if: steps.changes.outputs.ts == 'true'
+        uses: pnpm/action-setup@v4
+      - name: Set up Node 22
+        if: steps.changes.outputs.ts == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install TypeScript SDK
+        if: steps.changes.outputs.ts == 'true'
+        run: pnpm install --filter @sorolens/sdk --frozen-lockfile
+      - name: TypeScript SDK - test (Node and workerd)
+        if: steps.changes.outputs.ts == 'true'
+        working-directory: packages/typescript-sdk
+        run: npm test
+      - name: TypeScript SDK - bundle size and tree-shaking
+        if: steps.changes.outputs.ts == 'true'
+        working-directory: packages/typescript-sdk
+        run: npm run size
+      - name: TypeScript SDK - Deno smoke test
+        if: steps.changes.outputs.ts == 'true'
+        working-directory: packages/typescript-sdk
+        run: npx -y deno test --allow-net test/deno_smoke.ts
       # Fixture contract.
       - name: Contract - cargo fmt --check
         if: steps.changes.outputs.contracts == 'true'

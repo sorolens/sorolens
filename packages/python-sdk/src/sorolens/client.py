@@ -10,6 +10,7 @@ raw status codes.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from . import exceptions
@@ -88,6 +89,7 @@ from ._generated.models import (
     Watchlist,
 )
 from ._generated.types import UNSET, Response
+from .retry import DEFAULT_RETRY_POLICY, RetryPolicy, RetryTransport
 
 DEFAULT_BASE_URL = "https://api.sorolens.xyz"
 
@@ -100,10 +102,30 @@ def _build_client(
     base_url: str,
     timeout: Any = None,
     headers: dict[str, str] | None = None,
+    retry: RetryPolicy | bool | None = True,
     **httpx_args: Any,
 ) -> _GeneratedClient:
-    """Return a generated client, authenticated when an API key is supplied."""
+    """Return a generated client, authenticated when an API key is supplied.
+
+    ``retry`` is on by default: safe requests (GET/HEAD) are retried on 429 and
+    common 5xx responses, honouring ``Retry-After``. Pass ``False`` to disable
+    it or a :class:`~sorolens.RetryPolicy` to tune it. A transport supplied in
+    ``httpx_args`` is wrapped rather than replaced.
+    """
     common: dict[str, Any] = {"base_url": base_url, **httpx_args}
+    if retry is not False and retry is not None:
+        policy = DEFAULT_RETRY_POLICY if retry is True else retry
+        if not isinstance(policy, RetryPolicy):
+            raise TypeError("retry must be a RetryPolicy, True, False or None")
+        # ``httpx_args`` is the generated client's alias for the kwargs dict it
+        # hands to httpx.Client/httpx.AsyncClient; keep any transport there.
+        nested = common.get("httpx_args")
+        if isinstance(nested, dict):
+            nested = dict(nested)
+            nested["transport"] = RetryTransport(nested.get("transport"), policy)
+            common["httpx_args"] = nested
+        else:
+            common["transport"] = RetryTransport(common.get("transport"), policy)
     if timeout is not None:
         common["timeout"] = timeout
     if headers:
@@ -165,6 +187,22 @@ class _Stats(_SyncResource):
 
 
 class _Contracts(_SyncResource):
+    def iter(
+        self,
+        *,
+        limit: int | None = None,
+        network: str | None = None,
+        status: str | None = None,
+    ) -> Iterator[Contract]:
+        """Yield every contract across all cursor pages."""
+        cursor: str | None = None
+        while True:
+            page = self.list(cursor=cursor, limit=limit, network=network, status=status)
+            yield from page.contracts
+            if not page.next_cursor:
+                return
+            cursor = page.next_cursor
+
     def list(
         self,
         *,
@@ -196,6 +234,33 @@ class _Contracts(_SyncResource):
 
 
 class _Events(_SyncResource):
+    def iter(
+        self,
+        contract_id: str,
+        *,
+        limit: int | None = None,
+        network: str | None = None,
+        type: str | None = None,
+        from_ledger: int | None = None,
+        to_ledger: int | None = None,
+    ) -> Iterator[Any]:
+        """Yield every event across all cursor pages."""
+        cursor: str | None = None
+        while True:
+            page = self.list(
+                contract_id,
+                cursor=cursor,
+                limit=limit,
+                network=network,
+                type=type,
+                from_ledger=from_ledger,
+                to_ledger=to_ledger,
+            )
+            yield from page.events
+            if not page.next_cursor:
+                return
+            cursor = page.next_cursor
+
     def list(
         self,
         contract_id: str,
@@ -226,6 +291,35 @@ class _Events(_SyncResource):
 
 
 class _Invocations(_SyncResource):
+    def iter(
+        self,
+        contract_id: str,
+        *,
+        limit: int | None = None,
+        network: str | None = None,
+        status: str | None = None,
+        fn: str | None = None,
+        from_ledger: int | None = None,
+        to_ledger: int | None = None,
+    ) -> Iterator[Any]:
+        """Yield every invocation across all cursor pages."""
+        cursor: str | None = None
+        while True:
+            page = self.list(
+                contract_id,
+                cursor=cursor,
+                limit=limit,
+                network=network,
+                status=status,
+                fn=fn,
+                from_ledger=from_ledger,
+                to_ledger=to_ledger,
+            )
+            yield from page.invocations
+            if not page.next_cursor:
+                return
+            cursor = page.next_cursor
+
     def list(
         self,
         contract_id: str,
@@ -443,10 +537,16 @@ class Client:
         base_url: str = DEFAULT_BASE_URL,
         timeout: Any = None,
         headers: dict[str, str] | None = None,
+        retry: RetryPolicy | bool | None = True,
         **httpx_args: Any,
     ) -> None:
         self._client = _build_client(
-            api_key=api_key, base_url=base_url, timeout=timeout, headers=headers, **httpx_args
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+            headers=headers,
+            retry=retry,
+            **httpx_args,
         )
         self.health = _Health(self)
         self.stats = _Stats(self)
@@ -495,6 +595,23 @@ class _AsyncStats(_AsyncResource):
 
 
 class _AsyncContracts(_AsyncResource):
+    async def iter(
+        self,
+        *,
+        limit: int | None = None,
+        network: str | None = None,
+        status: str | None = None,
+    ) -> AsyncIterator[Contract]:
+        """Yield every contract across all cursor pages."""
+        cursor: str | None = None
+        while True:
+            page = await self.list(cursor=cursor, limit=limit, network=network, status=status)
+            for contract in page.contracts:
+                yield contract
+            if not page.next_cursor:
+                return
+            cursor = page.next_cursor
+
     async def list(
         self,
         *,
@@ -528,6 +645,34 @@ class _AsyncContracts(_AsyncResource):
 
 
 class _AsyncEvents(_AsyncResource):
+    async def iter(
+        self,
+        contract_id: str,
+        *,
+        limit: int | None = None,
+        network: str | None = None,
+        type: str | None = None,
+        from_ledger: int | None = None,
+        to_ledger: int | None = None,
+    ) -> AsyncIterator[Any]:
+        """Yield every event across all cursor pages."""
+        cursor: str | None = None
+        while True:
+            page = await self.list(
+                contract_id,
+                cursor=cursor,
+                limit=limit,
+                network=network,
+                type=type,
+                from_ledger=from_ledger,
+                to_ledger=to_ledger,
+            )
+            for event in page.events:
+                yield event
+            if not page.next_cursor:
+                return
+            cursor = page.next_cursor
+
     async def list(
         self,
         contract_id: str,
@@ -559,6 +704,36 @@ class _AsyncEvents(_AsyncResource):
 
 
 class _AsyncInvocations(_AsyncResource):
+    async def iter(
+        self,
+        contract_id: str,
+        *,
+        limit: int | None = None,
+        network: str | None = None,
+        status: str | None = None,
+        fn: str | None = None,
+        from_ledger: int | None = None,
+        to_ledger: int | None = None,
+    ) -> AsyncIterator[Any]:
+        """Yield every invocation across all cursor pages."""
+        cursor: str | None = None
+        while True:
+            page = await self.list(
+                contract_id,
+                cursor=cursor,
+                limit=limit,
+                network=network,
+                status=status,
+                fn=fn,
+                from_ledger=from_ledger,
+                to_ledger=to_ledger,
+            )
+            for invocation in page.invocations:
+                yield invocation
+            if not page.next_cursor:
+                return
+            cursor = page.next_cursor
+
     async def list(
         self,
         contract_id: str,
@@ -786,10 +961,16 @@ class AsyncClient:
         base_url: str = DEFAULT_BASE_URL,
         timeout: Any = None,
         headers: dict[str, str] | None = None,
+        retry: RetryPolicy | bool | None = True,
         **httpx_args: Any,
     ) -> None:
         self._client = _build_client(
-            api_key=api_key, base_url=base_url, timeout=timeout, headers=headers, **httpx_args
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+            headers=headers,
+            retry=retry,
+            **httpx_args,
         )
         self.health = _AsyncHealth(self)
         self.stats = _AsyncStats(self)
