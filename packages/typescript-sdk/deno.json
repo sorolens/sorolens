@@ -1,0 +1,8 @@
+{
+  "tasks": {
+    "smoke": "npm run build && deno test --allow-net test/deno_smoke.ts"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window", "dom", "es2022"]
+  }
+}

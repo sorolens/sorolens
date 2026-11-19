@@ -72,6 +72,34 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+### Retries and cancellation
+
+Both clients retry safe requests (`GET`/`HEAD`) on `429`, `500`, `502`, `503` and
+`504` by default. `Retry-After` is honoured, otherwise the delay is exponential
+backoff with jitter. In the async client the delay is an `await asyncio.sleep`,
+so cancelling the task stops the retry loop immediately.
+
+```python
+from sorolens import Client, RetryPolicy
+
+client = Client(api_key="sk_...", retry=RetryPolicy(max_retries=5, max_backoff=20))
+client = Client(api_key="sk_...", retry=False)  # disable
+```
+
+### Pagination iterators
+
+`contracts`, `events` and `invocations` expose `iter(...)`, which follows
+`next_cursor` until the last page. The async version is an async iterator and
+accepts the same arguments as `list(...)`.
+
+```python
+for contract in client.contracts.iter(limit=100, network="testnet"):
+    ...
+
+async for event in async_client.events.iter(contract_id, limit=100):
+    ...
+```
+
 ### Authentication
 
 Pass a scoped API key as `api_key`; it is sent as `Authorization: Bearer <token>`.
@@ -115,9 +143,9 @@ with Client(api_key="sk_live_...") as client:
 | -------------------- | ------------------------------------------------------------------------------------ |
 | `client.health`      | `health()`, `readyz()`                                                               |
 | `client.stats`       | `global_stats()`, `contract(contract_id, window=...)`                                |
-| `client.contracts`   | `list(...)`, `get(contract_id)`, `register(contract_id, network, label=...)`         |
-| `client.events`      | `list(contract_id, ...)`, `stream(contract_id)`                                      |
-| `client.invocations` | `list(contract_id, ...)`                                                             |
+| `client.contracts`   | `list(...)`, `iter(...)`, `get(contract_id)`, `register(contract_id, network, ...)`   |
+| `client.events`      | `list(contract_id, ...)`, `iter(contract_id, ...)`, `stream(contract_id)`            |
+| `client.invocations` | `list(contract_id, ...)`, `iter(contract_id, ...)`                                   |
 | `client.storage`     | `list(contract_id, ...)`                                                             |
 | `client.forecast`    | `get(contract_id, horizon=...)`                                                      |
 | `client.snapshots`   | `get(contract_id, ledger=...)`                                                       |
@@ -129,7 +157,7 @@ with Client(api_key="sk_live_...") as client:
 
 ## Examples
 
-Four runnable examples live in [`examples/`](examples). Each one runs offline
+Five runnable examples live in [`examples/`](examples). Each one runs offline
 out of the box (canned responses through `httpx.MockTransport`) and against a
 live API when `SOROLENS_API_URL` is set:
 
@@ -139,6 +167,7 @@ live API when `SOROLENS_API_URL` is set:
 | [`errors.py`](examples/errors.py)         | `NotFoundError`, `ValidationError` and `RateLimitError` from real responses. |
 | [`sse.py`](examples/sse.py)               | Streaming `GET /api/v1/stream/events` incrementally with `httpx`.          |
 | [`webhooks.py`](examples/webhooks.py)     | Verifying `X-Sorolens-Signature` HMAC-SHA256 webhook deliveries.           |
+| [`async_retry.py`](examples/async_retry.py) | `AsyncClient` retry after `429`, then `async for` pagination.            |
 
 ```bash
 cd packages/python-sdk

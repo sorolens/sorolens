@@ -232,3 +232,89 @@ func TestStreamEventsSSE_PublishAlert(t *testing.T) {
 		t.Fatal("did not receive alert in stream")
 	}
 }
+
+func TestStreamEventsSSE_WritesEventIDs(t *testing.T) {
+	h := &Handler{Store: store.NewMockStore(), Logger: testLogger()}
+	ts := httptest.NewServer(http.HandlerFunc(h.StreamEventsSSE))
+	defer ts.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+	_, _ = reader.ReadString('\n')
+
+	h.Hub().PublishEvent(store.Event{ID: "evt-id-1", ContractID: "C1"})
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("reading stream: %v", err)
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if line == "id: evt-id-1" {
+			return // the id line precedes its data line
+		}
+		if strings.HasPrefix(line, "data: ") && strings.Contains(line, "evt-id-1") {
+			t.Fatal("event data arrived before its id line")
+		}
+	}
+}
+
+func TestStreamEventsSSE_ResumesFromLastEventID(t *testing.T) {
+	h := &Handler{Store: store.NewMockStore(), Logger: testLogger()}
+
+	// Published while the client was disconnected.
+	h.Hub().PublishEvent(store.Event{ID: "A1", ContractID: "CA"})
+	h.Hub().PublishEvent(store.Event{ID: "A2", ContractID: "CA"})
+	h.Hub().PublishEvent(store.Event{ID: "B1", ContractID: "CB"})
+
+	ts := httptest.NewServer(http.HandlerFunc(h.StreamEventsSSE))
+	defer ts.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"?contract_id=CA", nil)
+	req.Header.Set("Last-Event-ID", "A1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	reader := bufio.NewReader(resp.Body)
+	var ids []string
+	for len(ids) < 1 {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("reading stream: %v", err)
+		}
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "id: ") {
+			ids = append(ids, strings.TrimPrefix(line, "id: "))
+			continue
+		}
+		if strings.HasPrefix(line, "data: ") {
+			var msg StreamMessage
+			if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &msg) == nil && msg.Type == "event" {
+				if msg.Event.ID != "A2" {
+					t.Fatalf("replayed %q, want only A2 after Last-Event-ID A1", msg.Event.ID)
+				}
+			}
+		}
+	}
+	if ids[0] != "A2" {
+		t.Fatalf("first replayed id = %q, want A2", ids[0])
+	}
+}

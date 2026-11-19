@@ -1,6 +1,6 @@
-// Consume the Server-Sent Events endpoint GET /api/v1/stream/events.
-//
-// Every "data:" line is a JSON event, handled as it arrives off the wire.
+// Consume the Server-Sent Events endpoint GET /api/v1/stream/events through the
+// supported stream package, which reconnects with backoff, resumes with
+// Last-Event-ID and de-duplicates replayed events.
 //
 // Run against a live server:
 //
@@ -11,7 +11,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,19 +18,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"time"
+
+	"github.com/sorolens/go-client/stream"
 )
 
-const offlineTranscript = "event: contract.event\n" +
+const offlineTranscript = "id: 0\nevent: contract.event\n" +
 	`data: {"type":"contract.event","id":"0","contract_id":"CDEMO"}` + "\n\n" +
-	"event: contract.event\n" +
+	"id: 1\nevent: contract.event\n" +
 	`data: {"type":"contract.event","id":"1","contract_id":"CDEMO"}` + "\n\n" +
 	": keep-alive\n" +
-	"event: contract.event\n" +
+	"id: 2\nevent: contract.event\n" +
 	`data: {"type":"contract.event","id":"2","contract_id":"CDEMO"}` + "\n\n"
 
-type event struct {
+type payload struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	ContractID string `json:"contract_id"`
@@ -61,55 +61,42 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/api/v1/stream/events", nil)
-	if err != nil {
-		log.Fatalf("build request: %v", err)
-	}
-	if apiKey := os.Getenv("SOROLENS_API_KEY"); apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
+	s, err := stream.StreamEvents(ctx, stream.Options{
+		BaseURL:    baseURL,
+		APIKey:     os.Getenv("SOROLENS_API_KEY"),
+		ContractID: os.Getenv("SOROLENS_CONTRACT_ID"),
+	})
 	if err != nil {
 		log.Fatalf("open stream: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer s.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("stream returned status %d", resp.StatusCode)
-	}
-
-	var events []event
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if payload == "" {
-			continue
-		}
-		var e event
-		if err := json.Unmarshal([]byte(payload), &e); err != nil {
-			log.Fatalf("decode event %q: %v", payload, err)
-		}
-		events = append(events, e)
-		fmt.Printf("  %s %s\n", e.Type, e.ID)
-	}
-	if err := scanner.Err(); err != nil {
-		log.Fatalf("read stream: %v", err)
-	}
-
-	fmt.Printf("received %d events\n", len(events))
-	if live == "" {
-		if len(events) != 3 {
-			log.Fatalf("expected 3 events, got %d", len(events))
-		}
-		for _, e := range events {
-			if e.ContractID != "CDEMO" {
-				log.Fatalf("unexpected contract_id %q", e.ContractID)
+	count := 0
+	for count < 3 {
+		select {
+		case ev, ok := <-s.Events:
+			if !ok {
+				log.Fatalf("stream closed after %d events (last id %q)", count, s.LastEventID())
 			}
+			var p payload
+			if err := json.Unmarshal(ev.Data, &p); err != nil {
+				log.Fatalf("decode event %q: %v", ev.Data, err)
+			}
+			count++
+			fmt.Printf("  %s %s (id=%s)\n", p.Type, p.ID, ev.ID)
+		case err := <-s.Errors:
+			if err != nil {
+				log.Fatalf("stream: %v", err)
+			}
+		case <-ctx.Done():
+			log.Fatalf("timed out after %d events", count)
+		}
+	}
+
+	fmt.Printf("received %d events (last id %q)\n", count, s.LastEventID())
+	if live == "" {
+		if count != 3 {
+			log.Fatalf("expected 3 events, got %d", count)
 		}
 	}
 }

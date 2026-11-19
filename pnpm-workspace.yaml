@@ -5,6 +5,7 @@ packages:
 allowBuilds:
   esbuild: true
   sharp: true
+  workerd: true
 
 onlyBuiltDependencies:
   - esbuild

@@ -1,0 +1,43 @@
+{
+  "name": "@sorolens/sdk",
+  "version": "0.1.0",
+  "description": "Edge-runtime compatible TypeScript client for the Sorolens API",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "size": "node scripts/size.mjs"
+  },
+  "keywords": [
+    "stellar",
+    "soroban",
+    "sorolens",
+    "sdk",
+    "edge",
+    "cloudflare-workers"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "miniflare": "^4.20260730.0",
+    "typescript": "^5.5.0"
+  }
+}
