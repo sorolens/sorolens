@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class BatchContractsRequestAction(StrEnum):
     TAG = "tag"
     UNTRACK = "untrack"

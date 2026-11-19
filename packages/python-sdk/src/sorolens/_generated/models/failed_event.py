@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,34 +10,26 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-import datetime
-
 if TYPE_CHECKING:
-  from ..models.failed_event_event import FailedEventEvent
-
-
-
+    from ..models.failed_event_event import FailedEventEvent
 
 
 T = TypeVar("T", bound="FailedEvent")
 
 
-
 @_attrs_define
 class FailedEvent:
-    """ 
-        Attributes:
-            id (int):
-            event_id (str):
-            contract_id (str):
-            network (str):
-            error_message (str):
-            attempts (int):
-            created_at (datetime.datetime):
-            event (FailedEventEvent | Unset): The original event payload, when included.
-     """
+    """
+    Attributes:
+        id (int):
+        event_id (str):
+        contract_id (str):
+        network (str):
+        error_message (str):
+        attempts (int):
+        created_at (datetime.datetime):
+        event (FailedEventEvent | Unset): The original event payload, when included.
+    """
 
     id: int
     event_id: str
@@ -48,12 +41,7 @@ class FailedEvent:
     event: FailedEventEvent | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.failed_event_event import FailedEventEvent # noqa: PLC0415
         id = self.id
 
         event_id = self.event_id
@@ -72,28 +60,28 @@ class FailedEvent:
         if not isinstance(self.event, Unset):
             event = self.event.to_dict()
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "id": id,
-            "event_id": event_id,
-            "contract_id": contract_id,
-            "network": network,
-            "error_message": error_message,
-            "attempts": attempts,
-            "created_at": created_at,
-        })
+        field_dict.update(
+            {
+                "id": id,
+                "event_id": event_id,
+                "contract_id": contract_id,
+                "network": network,
+                "error_message": error_message,
+                "attempts": attempts,
+                "created_at": created_at,
+            }
+        )
         if event is not UNSET:
             field_dict["event"] = event
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.failed_event_event import FailedEventEvent # noqa: PLC0415
+        from ..models.failed_event_event import FailedEventEvent
+
         d = dict(src_dict)
         id = d.pop("id")
 
@@ -109,18 +97,12 @@ class FailedEvent:
 
         created_at = datetime.datetime.fromisoformat(d.pop("created_at"))
 
-
-
-
         _event = d.pop("event", UNSET)
         event: FailedEventEvent | Unset
-        if isinstance(_event,  Unset):
+        if isinstance(_event, Unset):
             event = UNSET
         else:
             event = FailedEventEvent.from_dict(_event)
-
-
-
 
         failed_event = cls(
             id=id,
@@ -132,7 +114,6 @@ class FailedEvent:
             created_at=created_at,
             event=event,
         )
-
 
         failed_event.additional_properties = d
         return failed_event

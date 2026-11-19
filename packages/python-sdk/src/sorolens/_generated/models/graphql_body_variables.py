@@ -1,51 +1,32 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
-
 T = TypeVar("T", bound="GraphqlBodyVariables")
-
 
 
 @_attrs_define
 class GraphqlBodyVariables:
-    """ Values for the query's GraphQL variables.
-
-     """
+    """Values for the query's GraphQL variables."""
 
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
-        graphql_body_variables = cls(
-        )
-
+        graphql_body_variables = cls()
 
         graphql_body_variables.additional_properties = d
         return graphql_body_variables

@@ -1,37 +1,27 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-from typing import cast
-import datetime
-
-
-
-
-
-
 T = TypeVar("T", bound="V2Upgrade")
-
 
 
 @_attrs_define
 class V2Upgrade:
-    """ 
-        Attributes:
-            contract_id (str):
-            from_hash (str):
-            to_hash (str):
-            ledger (int):
-            tx_hash (None | str):
-            at (datetime.datetime):
-     """
+    """
+    Attributes:
+        contract_id (str):
+        from_hash (str):
+        to_hash (str):
+        ledger (int):
+        tx_hash (None | str):
+        at (datetime.datetime):
+    """
 
     contract_id: str
     from_hash: str
@@ -40,10 +30,6 @@ class V2Upgrade:
     tx_hash: None | str
     at: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         contract_id = self.contract_id
@@ -59,21 +45,20 @@ class V2Upgrade:
 
         at = self.at.isoformat()
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "contract_id": contract_id,
-            "from_hash": from_hash,
-            "to_hash": to_hash,
-            "ledger": ledger,
-            "tx_hash": tx_hash,
-            "at": at,
-        })
+        field_dict.update(
+            {
+                "contract_id": contract_id,
+                "from_hash": from_hash,
+                "to_hash": to_hash,
+                "ledger": ledger,
+                "tx_hash": tx_hash,
+                "at": at,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -93,11 +78,7 @@ class V2Upgrade:
 
         tx_hash = _parse_tx_hash(d.pop("tx_hash"))
 
-
         at = datetime.datetime.fromisoformat(d.pop("at"))
-
-
-
 
         v2_upgrade = cls(
             contract_id=contract_id,
@@ -107,7 +88,6 @@ class V2Upgrade:
             tx_hash=tx_hash,
             at=at,
         )
-
 
         v2_upgrade.additional_properties = d
         return v2_upgrade

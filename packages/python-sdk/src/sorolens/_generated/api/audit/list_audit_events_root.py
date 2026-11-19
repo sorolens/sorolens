@@ -1,20 +1,15 @@
+import datetime
 from http import HTTPStatus
-from typing import Any, cast
-from urllib.parse import quote
+from typing import Any
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.list_audit_events_root_response_200 import ListAuditEventsRootResponse200
 from ...models.role_error import RoleError
-from ...types import UNSET, Unset
-from typing import cast
-import datetime
-
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
@@ -22,11 +17,7 @@ def _get_kwargs(
     since: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-
 ) -> dict[str, Any]:
-    
-
-    
 
     params: dict[str, Any] = {}
 
@@ -39,9 +30,7 @@ def _get_kwargs(
 
     params["cursor"] = cursor
 
-
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
-
 
     _kwargs: dict[str, Any] = {
         "method": "get",
@@ -49,44 +38,34 @@ def _get_kwargs(
         "params": params,
     }
 
-
     return _kwargs
 
 
-
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | ListAuditEventsRootResponse200 | RoleError | None:
+def _parse_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Error | ListAuditEventsRootResponse200 | RoleError | None:
     if response.status_code == 200:
         response_200 = ListAuditEventsRootResponse200.from_dict(response.json())
-
-
 
         return response_200
 
     if response.status_code == 401:
         response_401 = Error.from_dict(response.json())
 
-
-
         return response_401
 
     if response.status_code == 403:
         response_403 = RoleError.from_dict(response.json())
-
-
 
         return response_403
 
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())
 
-
-
         return response_422
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
-
-
 
         return response_500
 
@@ -96,7 +75,9 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | ListAuditEventsRootResponse200 | RoleError]:
+def _build_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Response[Error | ListAuditEventsRootResponse200 | RoleError]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -111,9 +92,8 @@ def sync_detailed(
     since: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-
 ) -> Response[Error | ListAuditEventsRootResponse200 | RoleError]:
-    """ List audit events (admin role only)
+    """List audit events (admin role only)
 
      Structured trail of every state-changing API request, newest first. Only a SHA-256 hash of each
     request body is stored, never the body.
@@ -129,14 +109,12 @@ def sync_detailed(
 
     Returns:
         Response[Error | ListAuditEventsRootResponse200 | RoleError]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         since=since,
-limit=limit,
-cursor=cursor,
-
+        limit=limit,
+        cursor=cursor,
     )
 
     response = client.get_httpx_client().request(
@@ -145,15 +123,15 @@ cursor=cursor,
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     *,
     client: AuthenticatedClient,
     since: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-
 ) -> Error | ListAuditEventsRootResponse200 | RoleError | None:
-    """ List audit events (admin role only)
+    """List audit events (admin role only)
 
      Structured trail of every state-changing API request, newest first. Only a SHA-256 hash of each
     request body is stored, never the body.
@@ -169,16 +147,15 @@ def sync(
 
     Returns:
         Error | ListAuditEventsRootResponse200 | RoleError
-     """
-
+    """
 
     return sync_detailed(
         client=client,
-since=since,
-limit=limit,
-cursor=cursor,
-
+        since=since,
+        limit=limit,
+        cursor=cursor,
     ).parsed
+
 
 async def asyncio_detailed(
     *,
@@ -186,9 +163,8 @@ async def asyncio_detailed(
     since: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-
 ) -> Response[Error | ListAuditEventsRootResponse200 | RoleError]:
-    """ List audit events (admin role only)
+    """List audit events (admin role only)
 
      Structured trail of every state-changing API request, newest first. Only a SHA-256 hash of each
     request body is stored, never the body.
@@ -204,21 +180,18 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | ListAuditEventsRootResponse200 | RoleError]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         since=since,
-limit=limit,
-cursor=cursor,
-
+        limit=limit,
+        cursor=cursor,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     *,
@@ -226,9 +199,8 @@ async def asyncio(
     since: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-
 ) -> Error | ListAuditEventsRootResponse200 | RoleError | None:
-    """ List audit events (admin role only)
+    """List audit events (admin role only)
 
      Structured trail of every state-changing API request, newest first. Only a SHA-256 hash of each
     request body is stored, never the body.
@@ -244,13 +216,13 @@ async def asyncio(
 
     Returns:
         Error | ListAuditEventsRootResponse200 | RoleError
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        client=client,
-since=since,
-limit=limit,
-cursor=cursor,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            client=client,
+            since=since,
+            limit=limit,
+            cursor=cursor,
+        )
+    ).parsed

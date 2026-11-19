@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,34 +10,24 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-import datetime
-
-
-
-
-
-
 T = TypeVar("T", bound="AuditEvent")
-
 
 
 @_attrs_define
 class AuditEvent:
-    """ 
-        Attributes:
-            id (int):
-            action (str): Method and route pattern, e.g. "POST /api/v1/contracts".
-            status (int): HTTP response status returned for the request.
-            at (datetime.datetime):
-            actor (str | Unset): Authenticated actor (API key label or role identity); empty for anonymous requests.
-            resource_type (str | Unset):
-            resource_id (str | Unset):
-            ip (str | Unset):
-            user_agent (str | Unset):
-            request_body_hash (str | Unset): SHA-256 hex of the request body; never the body itself.
-     """
+    """
+    Attributes:
+        id (int):
+        action (str): Method and route pattern, e.g. "POST /api/v1/contracts".
+        status (int): HTTP response status returned for the request.
+        at (datetime.datetime):
+        actor (str | Unset): Authenticated actor (API key label or role identity); empty for anonymous requests.
+        resource_type (str | Unset):
+        resource_id (str | Unset):
+        ip (str | Unset):
+        user_agent (str | Unset):
+        request_body_hash (str | Unset): SHA-256 hex of the request body; never the body itself.
+    """
 
     id: int
     action: str
@@ -49,10 +40,6 @@ class AuditEvent:
     user_agent: str | Unset = UNSET
     request_body_hash: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         id = self.id
@@ -75,15 +62,16 @@ class AuditEvent:
 
         request_body_hash = self.request_body_hash
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "id": id,
-            "action": action,
-            "status": status,
-            "at": at,
-        })
+        field_dict.update(
+            {
+                "id": id,
+                "action": action,
+                "status": status,
+                "at": at,
+            }
+        )
         if actor is not UNSET:
             field_dict["actor"] = actor
         if resource_type is not UNSET:
@@ -99,8 +87,6 @@ class AuditEvent:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
@@ -111,9 +97,6 @@ class AuditEvent:
         status = d.pop("status")
 
         at = datetime.datetime.fromisoformat(d.pop("at"))
-
-
-
 
         actor = d.pop("actor", UNSET)
 
@@ -139,7 +122,6 @@ class AuditEvent:
             user_agent=user_agent,
             request_body_hash=request_body_hash,
         )
-
 
         audit_event.additional_properties = d
         return audit_event

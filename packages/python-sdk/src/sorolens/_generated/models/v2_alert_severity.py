@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class V2AlertSeverity(StrEnum):
     CRITICAL = "Critical"
     INFO = "Info"

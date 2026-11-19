@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,40 +9,27 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-
 if TYPE_CHECKING:
-  from ..models.graphql_response_200_data import GraphqlResponse200Data
-  from ..models.graphql_response_200_errors_item import GraphqlResponse200ErrorsItem
-
-
-
+    from ..models.graphql_response_200_data import GraphqlResponse200Data
+    from ..models.graphql_response_200_errors_item import GraphqlResponse200ErrorsItem
 
 
 T = TypeVar("T", bound="GraphqlResponse200")
 
 
-
 @_attrs_define
 class GraphqlResponse200:
-    """ 
-        Attributes:
-            data (GraphqlResponse200Data | Unset):
-            errors (list[GraphqlResponse200ErrorsItem] | Unset):
-     """
+    """
+    Attributes:
+        data (GraphqlResponse200Data | Unset):
+        errors (list[GraphqlResponse200ErrorsItem] | Unset):
+    """
 
     data: GraphqlResponse200Data | Unset = UNSET
     errors: list[GraphqlResponse200ErrorsItem] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.graphql_response_200_data import GraphqlResponse200Data # noqa: PLC0415
-        from ..models.graphql_response_200_errors_item import GraphqlResponse200ErrorsItem # noqa: PLC0415
         data: dict[str, Any] | Unset = UNSET
         if not isinstance(self.data, Unset):
             data = self.data.to_dict()
@@ -54,13 +41,9 @@ class GraphqlResponse200:
                 errors_item = errors_item_data.to_dict()
                 errors.append(errors_item)
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-        })
+        field_dict.update({})
         if data is not UNSET:
             field_dict["data"] = data
         if errors is not UNSET:
@@ -68,22 +51,20 @@ class GraphqlResponse200:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.graphql_response_200_data import GraphqlResponse200Data # noqa: PLC0415
-        from ..models.graphql_response_200_errors_item import GraphqlResponse200ErrorsItem # noqa: PLC0415
+        from ..models.graphql_response_200_data import GraphqlResponse200Data
+        from ..models.graphql_response_200_errors_item import (
+            GraphqlResponse200ErrorsItem,
+        )
+
         d = dict(src_dict)
         _data = d.pop("data", UNSET)
         data: GraphqlResponse200Data | Unset
-        if isinstance(_data,  Unset):
+        if isinstance(_data, Unset):
             data = UNSET
         else:
             data = GraphqlResponse200Data.from_dict(_data)
-
-
-
 
         _errors = d.pop("errors", UNSET)
         errors: list[GraphqlResponse200ErrorsItem] | Unset = UNSET
@@ -92,16 +73,12 @@ class GraphqlResponse200:
             for errors_item_data in _errors:
                 errors_item = GraphqlResponse200ErrorsItem.from_dict(errors_item_data)
 
-
-
                 errors.append(errors_item)
-
 
         graphql_response_200 = cls(
             data=data,
             errors=errors,
         )
-
 
         graphql_response_200.additional_properties = d
         return graphql_response_200

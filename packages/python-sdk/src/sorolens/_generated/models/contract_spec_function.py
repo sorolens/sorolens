@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,30 +9,23 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-
 if TYPE_CHECKING:
-  from ..models.contract_spec_input import ContractSpecInput
-  from ..models.contract_spec_type import ContractSpecType
-
-
-
+    from ..models.contract_spec_input import ContractSpecInput
+    from ..models.contract_spec_type import ContractSpecType
 
 
 T = TypeVar("T", bound="ContractSpecFunction")
 
 
-
 @_attrs_define
 class ContractSpecFunction:
-    """ 
-        Attributes:
-            name (str):
-            inputs (list[ContractSpecInput]):
-            outputs (list[ContractSpecType]):
-            doc (str | Unset):
-     """
+    """
+    Attributes:
+        name (str):
+        inputs (list[ContractSpecInput]):
+        outputs (list[ContractSpecType]):
+        doc (str | Unset):
+    """
 
     name: str
     inputs: list[ContractSpecInput]
@@ -40,13 +33,7 @@ class ContractSpecFunction:
     doc: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.contract_spec_input import ContractSpecInput # noqa: PLC0415
-        from ..models.contract_spec_type import ContractSpecType # noqa: PLC0415
         name = self.name
 
         inputs = []
@@ -54,58 +41,48 @@ class ContractSpecFunction:
             inputs_item = inputs_item_data.to_dict()
             inputs.append(inputs_item)
 
-
-
         outputs = []
         for outputs_item_data in self.outputs:
             outputs_item = outputs_item_data.to_dict()
             outputs.append(outputs_item)
 
-
-
         doc = self.doc
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "name": name,
-            "inputs": inputs,
-            "outputs": outputs,
-        })
+        field_dict.update(
+            {
+                "name": name,
+                "inputs": inputs,
+                "outputs": outputs,
+            }
+        )
         if doc is not UNSET:
             field_dict["doc"] = doc
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.contract_spec_input import ContractSpecInput # noqa: PLC0415
-        from ..models.contract_spec_type import ContractSpecType # noqa: PLC0415
+        from ..models.contract_spec_input import ContractSpecInput
+        from ..models.contract_spec_type import ContractSpecType
+
         d = dict(src_dict)
         name = d.pop("name")
 
         inputs = []
         _inputs = d.pop("inputs")
-        for inputs_item_data in (_inputs):
+        for inputs_item_data in _inputs:
             inputs_item = ContractSpecInput.from_dict(inputs_item_data)
-
-
 
             inputs.append(inputs_item)
 
-
         outputs = []
         _outputs = d.pop("outputs")
-        for outputs_item_data in (_outputs):
+        for outputs_item_data in _outputs:
             outputs_item = ContractSpecType.from_dict(outputs_item_data)
 
-
-
             outputs.append(outputs_item)
-
 
         doc = d.pop("doc", UNSET)
 
@@ -115,7 +92,6 @@ class ContractSpecFunction:
             outputs=outputs,
             doc=doc,
         )
-
 
         contract_spec_function.additional_properties = d
         return contract_spec_function

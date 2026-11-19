@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,37 +10,31 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-import datetime
-
 if TYPE_CHECKING:
-  from ..models.preview_alert_rule_response_200_points_item import PreviewAlertRuleResponse200PointsItem
-  from ..models.rule_diagnostic import RuleDiagnostic
-
-
-
+    from ..models.preview_alert_rule_response_200_points_item import (
+        PreviewAlertRuleResponse200PointsItem,
+    )
+    from ..models.rule_diagnostic import RuleDiagnostic
 
 
 T = TypeVar("T", bound="PreviewAlertRuleResponse200")
 
 
-
 @_attrs_define
 class PreviewAlertRuleResponse200:
-    """ 
-        Attributes:
-            valid (bool | Unset):
-            fired (bool | Unset):
-            op (str | Unset):
-            value (float | None | Unset):
-            threshold (float | None | Unset):
-            reason (str | Unset):
-            window (str | Unset):
-            evaluated_at (datetime.datetime | Unset):
-            points (list[PreviewAlertRuleResponse200PointsItem] | Unset):
-            errors (list[RuleDiagnostic] | Unset):
-     """
+    """
+    Attributes:
+        valid (bool | Unset):
+        fired (bool | Unset):
+        op (str | Unset):
+        value (float | None | Unset):
+        threshold (float | None | Unset):
+        reason (str | Unset):
+        window (str | Unset):
+        evaluated_at (datetime.datetime | Unset):
+        points (list[PreviewAlertRuleResponse200PointsItem] | Unset):
+        errors (list[RuleDiagnostic] | Unset):
+    """
 
     valid: bool | Unset = UNSET
     fired: bool | Unset = UNSET
@@ -53,13 +48,7 @@ class PreviewAlertRuleResponse200:
     errors: list[RuleDiagnostic] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.preview_alert_rule_response_200_points_item import PreviewAlertRuleResponse200PointsItem # noqa: PLC0415
-        from ..models.rule_diagnostic import RuleDiagnostic # noqa: PLC0415
         valid = self.valid
 
         fired = self.fired
@@ -93,8 +82,6 @@ class PreviewAlertRuleResponse200:
                 points_item = points_item_data.to_dict()
                 points.append(points_item)
 
-
-
         errors: list[dict[str, Any]] | Unset = UNSET
         if not isinstance(self.errors, Unset):
             errors = []
@@ -102,13 +89,9 @@ class PreviewAlertRuleResponse200:
                 errors_item = errors_item_data.to_dict()
                 errors.append(errors_item)
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-        })
+        field_dict.update({})
         if valid is not UNSET:
             field_dict["valid"] = valid
         if fired is not UNSET:
@@ -132,12 +115,13 @@ class PreviewAlertRuleResponse200:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.preview_alert_rule_response_200_points_item import PreviewAlertRuleResponse200PointsItem # noqa: PLC0415
-        from ..models.rule_diagnostic import RuleDiagnostic # noqa: PLC0415
+        from ..models.preview_alert_rule_response_200_points_item import (
+            PreviewAlertRuleResponse200PointsItem,
+        )
+        from ..models.rule_diagnostic import RuleDiagnostic
+
         d = dict(src_dict)
         valid = d.pop("valid", UNSET)
 
@@ -154,7 +138,6 @@ class PreviewAlertRuleResponse200:
 
         value = _parse_value(d.pop("value", UNSET))
 
-
         def _parse_threshold(data: object) -> float | None | Unset:
             if data is None:
                 return data
@@ -164,32 +147,27 @@ class PreviewAlertRuleResponse200:
 
         threshold = _parse_threshold(d.pop("threshold", UNSET))
 
-
         reason = d.pop("reason", UNSET)
 
         window = d.pop("window", UNSET)
 
         _evaluated_at = d.pop("evaluated_at", UNSET)
         evaluated_at: datetime.datetime | Unset
-        if isinstance(_evaluated_at,  Unset):
+        if isinstance(_evaluated_at, Unset):
             evaluated_at = UNSET
         else:
             evaluated_at = datetime.datetime.fromisoformat(_evaluated_at)
-
-
-
 
         _points = d.pop("points", UNSET)
         points: list[PreviewAlertRuleResponse200PointsItem] | Unset = UNSET
         if _points is not UNSET:
             points = []
             for points_item_data in _points:
-                points_item = PreviewAlertRuleResponse200PointsItem.from_dict(points_item_data)
-
-
+                points_item = PreviewAlertRuleResponse200PointsItem.from_dict(
+                    points_item_data
+                )
 
                 points.append(points_item)
-
 
         _errors = d.pop("errors", UNSET)
         errors: list[RuleDiagnostic] | Unset = UNSET
@@ -198,10 +176,7 @@ class PreviewAlertRuleResponse200:
             for errors_item_data in _errors:
                 errors_item = RuleDiagnostic.from_dict(errors_item_data)
 
-
-
                 errors.append(errors_item)
-
 
         preview_alert_rule_response_200 = cls(
             valid=valid,
@@ -215,7 +190,6 @@ class PreviewAlertRuleResponse200:
             points=points,
             errors=errors,
         )
-
 
         preview_alert_rule_response_200.additional_properties = d
         return preview_alert_rule_response_200

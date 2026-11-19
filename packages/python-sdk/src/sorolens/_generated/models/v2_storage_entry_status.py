@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class V2StorageEntryStatus(StrEnum):
     ARCHIVED = "archived"
     DELETED = "deleted"

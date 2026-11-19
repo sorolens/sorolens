@@ -1,43 +1,30 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
-
 T = TypeVar("T", bound="V2GlobalStats")
-
 
 
 @_attrs_define
 class V2GlobalStats:
-    """ 
-        Attributes:
-            tracked_contracts (int):
-            total_events (int):
-            total_invocations (int):
-            total_storage_entries (int):
-     """
+    """
+    Attributes:
+        tracked_contracts (int):
+        total_events (int):
+        total_invocations (int):
+        total_storage_entries (int):
+    """
 
     tracked_contracts: int
     total_events: int
     total_invocations: int
     total_storage_entries: int
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         tracked_contracts = self.tracked_contracts
@@ -48,19 +35,18 @@ class V2GlobalStats:
 
         total_storage_entries = self.total_storage_entries
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "tracked_contracts": tracked_contracts,
-            "total_events": total_events,
-            "total_invocations": total_invocations,
-            "total_storage_entries": total_storage_entries,
-        })
+        field_dict.update(
+            {
+                "tracked_contracts": tracked_contracts,
+                "total_events": total_events,
+                "total_invocations": total_invocations,
+                "total_storage_entries": total_storage_entries,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -79,7 +65,6 @@ class V2GlobalStats:
             total_invocations=total_invocations,
             total_storage_entries=total_storage_entries,
         )
-
 
         v2_global_stats.additional_properties = d
         return v2_global_stats

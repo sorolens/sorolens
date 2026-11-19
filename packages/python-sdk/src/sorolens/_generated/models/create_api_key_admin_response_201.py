@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,35 +10,25 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-import datetime
-
-
-
-
-
-
 T = TypeVar("T", bound="CreateApiKeyAdminResponse201")
-
 
 
 @_attrs_define
 class CreateApiKeyAdminResponse201:
-    """ 
-        Attributes:
-            id (str):
-            name (str):
-            key_prefix (str):
-            scopes (list[str]):
-            created_at (datetime.datetime):
-            last_used_at (datetime.datetime | None):
-            revoked_at (datetime.datetime | None):
-            key (str):
-            user_id (None | str | Unset): User this key acts as. Null for scope-only keys.
-            rotated_at (datetime.datetime | None | Unset): When the key's secret was last rotated in place.
-            expires_at (datetime.datetime | None | Unset): When the key expires, or null if it does not expire.
-     """
+    """
+    Attributes:
+        id (str):
+        name (str):
+        key_prefix (str):
+        scopes (list[str]):
+        created_at (datetime.datetime):
+        last_used_at (datetime.datetime | None):
+        revoked_at (datetime.datetime | None):
+        key (str):
+        user_id (None | str | Unset): User this key acts as. Null for scope-only keys.
+        rotated_at (datetime.datetime | None | Unset): When the key's secret was last rotated in place.
+        expires_at (datetime.datetime | None | Unset): When the key expires, or null if it does not expire.
+    """
 
     id: str
     name: str
@@ -52,10 +43,6 @@ class CreateApiKeyAdminResponse201:
     expires_at: datetime.datetime | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
         id = self.id
 
@@ -64,8 +51,6 @@ class CreateApiKeyAdminResponse201:
         key_prefix = self.key_prefix
 
         scopes = self.scopes
-
-
 
         created_at = self.created_at.isoformat()
 
@@ -105,19 +90,20 @@ class CreateApiKeyAdminResponse201:
         else:
             expires_at = self.expires_at
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "id": id,
-            "name": name,
-            "key_prefix": key_prefix,
-            "scopes": scopes,
-            "created_at": created_at,
-            "last_used_at": last_used_at,
-            "revoked_at": revoked_at,
-            "key": key,
-        })
+        field_dict.update(
+            {
+                "id": id,
+                "name": name,
+                "key_prefix": key_prefix,
+                "scopes": scopes,
+                "created_at": created_at,
+                "last_used_at": last_used_at,
+                "revoked_at": revoked_at,
+                "key": key,
+            }
+        )
         if user_id is not UNSET:
             field_dict["user_id"] = user_id
         if rotated_at is not UNSET:
@@ -126,8 +112,6 @@ class CreateApiKeyAdminResponse201:
             field_dict["expires_at"] = expires_at
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -140,11 +124,7 @@ class CreateApiKeyAdminResponse201:
 
         scopes = cast(list[str], d.pop("scopes"))
 
-
         created_at = datetime.datetime.fromisoformat(d.pop("created_at"))
-
-
-
 
         def _parse_last_used_at(data: object) -> datetime.datetime | None:
             if data is None:
@@ -154,15 +134,12 @@ class CreateApiKeyAdminResponse201:
                     raise TypeError()
                 last_used_at_type_0 = datetime.datetime.fromisoformat(data)
 
-
-
                 return last_used_at_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None, data)
 
         last_used_at = _parse_last_used_at(d.pop("last_used_at"))
-
 
         def _parse_revoked_at(data: object) -> datetime.datetime | None:
             if data is None:
@@ -172,15 +149,12 @@ class CreateApiKeyAdminResponse201:
                     raise TypeError()
                 revoked_at_type_0 = datetime.datetime.fromisoformat(data)
 
-
-
                 return revoked_at_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None, data)
 
         revoked_at = _parse_revoked_at(d.pop("revoked_at"))
-
 
         key = d.pop("key")
 
@@ -193,7 +167,6 @@ class CreateApiKeyAdminResponse201:
 
         user_id = _parse_user_id(d.pop("user_id", UNSET))
 
-
         def _parse_rotated_at(data: object) -> datetime.datetime | None | Unset:
             if data is None:
                 return data
@@ -204,15 +177,12 @@ class CreateApiKeyAdminResponse201:
                     raise TypeError()
                 rotated_at_type_0 = datetime.datetime.fromisoformat(data)
 
-
-
                 return rotated_at_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None | Unset, data)
 
         rotated_at = _parse_rotated_at(d.pop("rotated_at", UNSET))
-
 
         def _parse_expires_at(data: object) -> datetime.datetime | None | Unset:
             if data is None:
@@ -224,15 +194,12 @@ class CreateApiKeyAdminResponse201:
                     raise TypeError()
                 expires_at_type_0 = datetime.datetime.fromisoformat(data)
 
-
-
                 return expires_at_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None | Unset, data)
 
         expires_at = _parse_expires_at(d.pop("expires_at", UNSET))
-
 
         create_api_key_admin_response_201 = cls(
             id=id,
@@ -247,7 +214,6 @@ class CreateApiKeyAdminResponse201:
             rotated_at=rotated_at,
             expires_at=expires_at,
         )
-
 
         create_api_key_admin_response_201.additional_properties = d
         return create_api_key_admin_response_201

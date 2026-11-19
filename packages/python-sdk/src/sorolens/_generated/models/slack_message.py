@@ -1,49 +1,37 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
 from ..models.slack_message_response_type import SlackMessageResponseType
 from ..types import UNSET, Unset
-from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.slack_message_blocks_item import SlackMessageBlocksItem
-
-
-
+    from ..models.slack_message_blocks_item import SlackMessageBlocksItem
 
 
 T = TypeVar("T", bound="SlackMessage")
 
 
-
 @_attrs_define
 class SlackMessage:
-    """ 
-        Attributes:
-            response_type (SlackMessageResponseType):
-            text (str):
-            blocks (list[SlackMessageBlocksItem] | Unset):
-     """
+    """
+    Attributes:
+        response_type (SlackMessageResponseType):
+        text (str):
+        blocks (list[SlackMessageBlocksItem] | Unset):
+    """
 
     response_type: SlackMessageResponseType
     text: str
     blocks: list[SlackMessageBlocksItem] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.slack_message_blocks_item import SlackMessageBlocksItem # noqa: PLC0415
         response_type = self.response_type.value
 
         text = self.text
@@ -55,30 +43,25 @@ class SlackMessage:
                 blocks_item = blocks_item_data.to_dict()
                 blocks.append(blocks_item)
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "response_type": response_type,
-            "text": text,
-        })
+        field_dict.update(
+            {
+                "response_type": response_type,
+                "text": text,
+            }
+        )
         if blocks is not UNSET:
             field_dict["blocks"] = blocks
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.slack_message_blocks_item import SlackMessageBlocksItem # noqa: PLC0415
+        from ..models.slack_message_blocks_item import SlackMessageBlocksItem
+
         d = dict(src_dict)
         response_type = SlackMessageResponseType(d.pop("response_type"))
-
-
-
 
         text = d.pop("text")
 
@@ -89,17 +72,13 @@ class SlackMessage:
             for blocks_item_data in _blocks:
                 blocks_item = SlackMessageBlocksItem.from_dict(blocks_item_data)
 
-
-
                 blocks.append(blocks_item)
-
 
         slack_message = cls(
             response_type=response_type,
             text=text,
             blocks=blocks,
         )
-
 
         slack_message.additional_properties = d
         return slack_message

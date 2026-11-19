@@ -1,43 +1,30 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
-
 T = TypeVar("T", bound="HealthScoreComponents")
-
 
 
 @_attrs_define
 class HealthScoreComponents:
-    """ 
-        Attributes:
-            uptime (int):
-            error_rate (int):
-            performance (int):
-            storage_ttl (int):
-     """
+    """
+    Attributes:
+        uptime (int):
+        error_rate (int):
+        performance (int):
+        storage_ttl (int):
+    """
 
     uptime: int
     error_rate: int
     performance: int
     storage_ttl: int
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         uptime = self.uptime
@@ -48,19 +35,18 @@ class HealthScoreComponents:
 
         storage_ttl = self.storage_ttl
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "uptime": uptime,
-            "error_rate": error_rate,
-            "performance": performance,
-            "storage_ttl": storage_ttl,
-        })
+        field_dict.update(
+            {
+                "uptime": uptime,
+                "error_rate": error_rate,
+                "performance": performance,
+                "storage_ttl": storage_ttl,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -79,7 +65,6 @@ class HealthScoreComponents:
             performance=performance,
             storage_ttl=storage_ttl,
         )
-
 
         health_score_components.additional_properties = d
         return health_score_components

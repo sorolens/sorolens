@@ -1,72 +1,56 @@
 from http import HTTPStatus
-from typing import Any, cast
+from typing import Any
 from urllib.parse import quote
+from uuid import UUID
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.group_detail import GroupDetail
-from typing import cast
-from uuid import UUID
-
+from ...types import Response
 
 
 def _get_kwargs(
     id: UUID,
     *,
     x_user_id: str,
-
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
     headers["X-User-ID"] = x_user_id
 
-
-
-    
-
-    
-
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/api/v1/groups/{id}".format(id=quote(str(id), safe=""),),
+        "url": "/api/v1/groups/{id}".format(
+            id=quote(str(id), safe=""),
+        ),
     }
-
 
     _kwargs["headers"] = headers
     return _kwargs
 
 
-
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | GroupDetail | None:
+def _parse_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Error | GroupDetail | None:
     if response.status_code == 200:
         response_200 = GroupDetail.from_dict(response.json())
-
-
 
         return response_200
 
     if response.status_code == 401:
         response_401 = Error.from_dict(response.json())
 
-
-
         return response_401
 
     if response.status_code == 404:
         response_404 = Error.from_dict(response.json())
 
-
-
         return response_404
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
-
-
 
         return response_500
 
@@ -76,7 +60,9 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | GroupDetail]:
+def _build_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Response[Error | GroupDetail]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -90,9 +76,8 @@ def sync_detailed(
     *,
     client: AuthenticatedClient,
     x_user_id: str,
-
 ) -> Response[Error | GroupDetail]:
-    """ Get a group with its member contracts
+    """Get a group with its member contracts
 
     Args:
         id (UUID):
@@ -104,13 +89,11 @@ def sync_detailed(
 
     Returns:
         Response[Error | GroupDetail]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         id=id,
-x_user_id=x_user_id,
-
+        x_user_id=x_user_id,
     )
 
     response = client.get_httpx_client().request(
@@ -119,14 +102,14 @@ x_user_id=x_user_id,
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     id: UUID,
     *,
     client: AuthenticatedClient,
     x_user_id: str,
-
 ) -> Error | GroupDetail | None:
-    """ Get a group with its member contracts
+    """Get a group with its member contracts
 
     Args:
         id (UUID):
@@ -138,24 +121,22 @@ def sync(
 
     Returns:
         Error | GroupDetail
-     """
-
+    """
 
     return sync_detailed(
         id=id,
-client=client,
-x_user_id=x_user_id,
-
+        client=client,
+        x_user_id=x_user_id,
     ).parsed
+
 
 async def asyncio_detailed(
     id: UUID,
     *,
     client: AuthenticatedClient,
     x_user_id: str,
-
 ) -> Response[Error | GroupDetail]:
-    """ Get a group with its member contracts
+    """Get a group with its member contracts
 
     Args:
         id (UUID):
@@ -167,29 +148,25 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | GroupDetail]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         id=id,
-x_user_id=x_user_id,
-
+        x_user_id=x_user_id,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     id: UUID,
     *,
     client: AuthenticatedClient,
     x_user_id: str,
-
 ) -> Error | GroupDetail | None:
-    """ Get a group with its member contracts
+    """Get a group with its member contracts
 
     Args:
         id (UUID):
@@ -201,12 +178,12 @@ async def asyncio(
 
     Returns:
         Error | GroupDetail
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        id=id,
-client=client,
-x_user_id=x_user_id,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            id=id,
+            client=client,
+            x_user_id=x_user_id,
+        )
+    ).parsed

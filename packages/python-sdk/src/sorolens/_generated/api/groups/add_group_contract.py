@@ -1,19 +1,16 @@
 from http import HTTPStatus
-from typing import Any, cast
+from typing import Any
 from urllib.parse import quote
+from uuid import UUID
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.add_group_contract_body import AddGroupContractBody
 from ...models.error import Error
 from ...models.group_membership import GroupMembership
-from typing import cast
-from uuid import UUID
-
+from ...types import Response
 
 
 def _get_kwargs(
@@ -21,20 +18,15 @@ def _get_kwargs(
     *,
     body: AddGroupContractBody,
     x_user_id: str,
-
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
     headers["X-User-ID"] = x_user_id
 
-
-
-    
-
-    
-
     _kwargs: dict[str, Any] = {
         "method": "post",
-        "url": "/api/v1/groups/{id}/contracts".format(id=quote(str(id), safe=""),),
+        "url": "/api/v1/groups/{id}/contracts".format(
+            id=quote(str(id), safe=""),
+        ),
     }
 
     _kwargs["json"] = body.to_dict()
@@ -45,47 +37,36 @@ def _get_kwargs(
     return _kwargs
 
 
-
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | GroupMembership | None:
+def _parse_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Error | GroupMembership | None:
     if response.status_code == 201:
         response_201 = GroupMembership.from_dict(response.json())
-
-
 
         return response_201
 
     if response.status_code == 401:
         response_401 = Error.from_dict(response.json())
 
-
-
         return response_401
 
     if response.status_code == 404:
         response_404 = Error.from_dict(response.json())
-
-
 
         return response_404
 
     if response.status_code == 415:
         response_415 = Error.from_dict(response.json())
 
-
-
         return response_415
 
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())
 
-
-
         return response_422
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
-
-
 
         return response_500
 
@@ -95,7 +76,9 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | GroupMembership]:
+def _build_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Response[Error | GroupMembership]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -110,9 +93,8 @@ def sync_detailed(
     client: AuthenticatedClient,
     body: AddGroupContractBody,
     x_user_id: str,
-
 ) -> Response[Error | GroupMembership]:
-    """ Add a contract to a group
+    """Add a contract to a group
 
      Membership is many-to-many and idempotent: a contract may belong to any
     number of groups, and re-adding an existing member succeeds.
@@ -128,14 +110,12 @@ def sync_detailed(
 
     Returns:
         Response[Error | GroupMembership]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         id=id,
-body=body,
-x_user_id=x_user_id,
-
+        body=body,
+        x_user_id=x_user_id,
     )
 
     response = client.get_httpx_client().request(
@@ -144,15 +124,15 @@ x_user_id=x_user_id,
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     id: UUID,
     *,
     client: AuthenticatedClient,
     body: AddGroupContractBody,
     x_user_id: str,
-
 ) -> Error | GroupMembership | None:
-    """ Add a contract to a group
+    """Add a contract to a group
 
      Membership is many-to-many and idempotent: a contract may belong to any
     number of groups, and re-adding an existing member succeeds.
@@ -168,16 +148,15 @@ def sync(
 
     Returns:
         Error | GroupMembership
-     """
-
+    """
 
     return sync_detailed(
         id=id,
-client=client,
-body=body,
-x_user_id=x_user_id,
-
+        client=client,
+        body=body,
+        x_user_id=x_user_id,
     ).parsed
+
 
 async def asyncio_detailed(
     id: UUID,
@@ -185,9 +164,8 @@ async def asyncio_detailed(
     client: AuthenticatedClient,
     body: AddGroupContractBody,
     x_user_id: str,
-
 ) -> Response[Error | GroupMembership]:
-    """ Add a contract to a group
+    """Add a contract to a group
 
      Membership is many-to-many and idempotent: a contract may belong to any
     number of groups, and re-adding an existing member succeeds.
@@ -203,21 +181,18 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | GroupMembership]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         id=id,
-body=body,
-x_user_id=x_user_id,
-
+        body=body,
+        x_user_id=x_user_id,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     id: UUID,
@@ -225,9 +200,8 @@ async def asyncio(
     client: AuthenticatedClient,
     body: AddGroupContractBody,
     x_user_id: str,
-
 ) -> Error | GroupMembership | None:
-    """ Add a contract to a group
+    """Add a contract to a group
 
      Membership is many-to-many and idempotent: a contract may belong to any
     number of groups, and re-adding an existing member succeeds.
@@ -243,13 +217,13 @@ async def asyncio(
 
     Returns:
         Error | GroupMembership
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        id=id,
-client=client,
-body=body,
-x_user_id=x_user_id,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            id=id,
+            client=client,
+            body=body,
+            x_user_id=x_user_id,
+        )
+    ).parsed

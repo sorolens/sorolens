@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,30 +10,20 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-import datetime
-
-
-
-
-
-
 T = TypeVar("T", bound="ContractUpgrade")
-
 
 
 @_attrs_define
 class ContractUpgrade:
-    """ 
-        Attributes:
-            contract_id (str):
-            from_hash (str): Previous Wasm hash (hex).
-            to_hash (str): New Wasm hash (hex).
-            ledger (int):
-            at (datetime.datetime):
-            tx_hash (str | Unset):
-     """
+    """
+    Attributes:
+        contract_id (str):
+        from_hash (str): Previous Wasm hash (hex).
+        to_hash (str): New Wasm hash (hex).
+        ledger (int):
+        at (datetime.datetime):
+        tx_hash (str | Unset):
+    """
 
     contract_id: str
     from_hash: str
@@ -41,10 +32,6 @@ class ContractUpgrade:
     at: datetime.datetime
     tx_hash: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         contract_id = self.contract_id
@@ -59,22 +46,21 @@ class ContractUpgrade:
 
         tx_hash = self.tx_hash
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "contract_id": contract_id,
-            "from_hash": from_hash,
-            "to_hash": to_hash,
-            "ledger": ledger,
-            "at": at,
-        })
+        field_dict.update(
+            {
+                "contract_id": contract_id,
+                "from_hash": from_hash,
+                "to_hash": to_hash,
+                "ledger": ledger,
+                "at": at,
+            }
+        )
         if tx_hash is not UNSET:
             field_dict["tx_hash"] = tx_hash
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -89,9 +75,6 @@ class ContractUpgrade:
 
         at = datetime.datetime.fromisoformat(d.pop("at"))
 
-
-
-
         tx_hash = d.pop("tx_hash", UNSET)
 
         contract_upgrade = cls(
@@ -102,7 +85,6 @@ class ContractUpgrade:
             at=at,
             tx_hash=tx_hash,
         )
-
 
         contract_upgrade.additional_properties = d
         return contract_upgrade

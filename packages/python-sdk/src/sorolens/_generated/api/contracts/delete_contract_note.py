@@ -1,42 +1,36 @@
 from http import HTTPStatus
 from typing import Any, cast
 from urllib.parse import quote
+from uuid import UUID
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.role_error import RoleError
-from typing import cast
-from uuid import UUID
-
+from ...types import Response
 
 
 def _get_kwargs(
     id: str,
     note_id: UUID,
-
 ) -> dict[str, Any]:
-    
-
-    
-
-    
 
     _kwargs: dict[str, Any] = {
         "method": "delete",
-        "url": "/api/v1/contracts/{id}/notes/{note_id}".format(id=quote(str(id), safe=""),note_id=quote(str(note_id), safe=""),),
+        "url": "/api/v1/contracts/{id}/notes/{note_id}".format(
+            id=quote(str(id), safe=""),
+            note_id=quote(str(note_id), safe=""),
+        ),
     }
-
 
     return _kwargs
 
 
-
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Any | Error | RoleError | None:
+def _parse_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Any | Error | RoleError | None:
     if response.status_code == 204:
         response_204 = cast(Any, None)
         return response_204
@@ -44,35 +38,25 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
     if response.status_code == 401:
         response_401 = Error.from_dict(response.json())
 
-
-
         return response_401
 
     if response.status_code == 403:
         response_403 = RoleError.from_dict(response.json())
-
-
 
         return response_403
 
     if response.status_code == 404:
         response_404 = Error.from_dict(response.json())
 
-
-
         return response_404
 
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())
 
-
-
         return response_422
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
-
-
 
         return response_500
 
@@ -82,7 +66,9 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Any | Error | RoleError]:
+def _build_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Response[Any | Error | RoleError]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -96,9 +82,8 @@ def sync_detailed(
     note_id: UUID,
     *,
     client: AuthenticatedClient,
-
 ) -> Response[Any | Error | RoleError]:
-    """ Delete a note
+    """Delete a note
 
      Removes a note. Only the note's author may delete it. Deleting a note
     that is already gone is a no-op, so a retried delete succeeds.
@@ -113,13 +98,11 @@ def sync_detailed(
 
     Returns:
         Response[Any | Error | RoleError]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         id=id,
-note_id=note_id,
-
+        note_id=note_id,
     )
 
     response = client.get_httpx_client().request(
@@ -128,14 +111,14 @@ note_id=note_id,
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     id: str,
     note_id: UUID,
     *,
     client: AuthenticatedClient,
-
 ) -> Any | Error | RoleError | None:
-    """ Delete a note
+    """Delete a note
 
      Removes a note. Only the note's author may delete it. Deleting a note
     that is already gone is a no-op, so a retried delete succeeds.
@@ -150,24 +133,22 @@ def sync(
 
     Returns:
         Any | Error | RoleError
-     """
-
+    """
 
     return sync_detailed(
         id=id,
-note_id=note_id,
-client=client,
-
+        note_id=note_id,
+        client=client,
     ).parsed
+
 
 async def asyncio_detailed(
     id: str,
     note_id: UUID,
     *,
     client: AuthenticatedClient,
-
 ) -> Response[Any | Error | RoleError]:
-    """ Delete a note
+    """Delete a note
 
      Removes a note. Only the note's author may delete it. Deleting a note
     that is already gone is a no-op, so a retried delete succeeds.
@@ -182,29 +163,25 @@ async def asyncio_detailed(
 
     Returns:
         Response[Any | Error | RoleError]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         id=id,
-note_id=note_id,
-
+        note_id=note_id,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     id: str,
     note_id: UUID,
     *,
     client: AuthenticatedClient,
-
 ) -> Any | Error | RoleError | None:
-    """ Delete a note
+    """Delete a note
 
      Removes a note. Only the note's author may delete it. Deleting a note
     that is already gone is a no-op, so a retried delete succeeds.
@@ -219,12 +196,12 @@ async def asyncio(
 
     Returns:
         Any | Error | RoleError
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        id=id,
-note_id=note_id,
-client=client,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            id=id,
+            note_id=note_id,
+            client=client,
+        )
+    ).parsed

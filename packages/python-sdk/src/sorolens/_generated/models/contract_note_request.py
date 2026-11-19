@@ -1,51 +1,37 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
-
 T = TypeVar("T", bound="ContractNoteRequest")
-
 
 
 @_attrs_define
 class ContractNoteRequest:
-    """ 
-        Attributes:
-            body (str): Note markdown. A whitespace-only body is rejected.
-     """
+    """
+    Attributes:
+        body (str): Note markdown. A whitespace-only body is rejected.
+    """
 
     body: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
         body = self.body
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "body": body,
-        })
+        field_dict.update(
+            {
+                "body": body,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -55,7 +41,6 @@ class ContractNoteRequest:
         contract_note_request = cls(
             body=body,
         )
-
 
         contract_note_request.additional_properties = d
         return contract_note_request

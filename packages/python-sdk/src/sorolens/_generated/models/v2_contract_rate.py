@@ -1,35 +1,25 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-from typing import cast
-
-
-
-
-
-
 T = TypeVar("T", bound="V2ContractRate")
-
 
 
 @_attrs_define
 class V2ContractRate:
-    """ 
-        Attributes:
-            contract_id (str):
-            label (None | str):
-            network (str):
-            total (int):
-            per_minute (list[int]):
-     """
+    """
+    Attributes:
+        contract_id (str):
+        label (None | str):
+        network (str):
+        total (int):
+        per_minute (list[int]):
+    """
 
     contract_id: str
     label: None | str
@@ -37,10 +27,6 @@ class V2ContractRate:
     total: int
     per_minute: list[int]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         contract_id = self.contract_id
@@ -54,22 +40,19 @@ class V2ContractRate:
 
         per_minute = self.per_minute
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "contract_id": contract_id,
-            "label": label,
-            "network": network,
-            "total": total,
-            "per_minute": per_minute,
-        })
+        field_dict.update(
+            {
+                "contract_id": contract_id,
+                "label": label,
+                "network": network,
+                "total": total,
+                "per_minute": per_minute,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -83,13 +66,11 @@ class V2ContractRate:
 
         label = _parse_label(d.pop("label"))
 
-
         network = d.pop("network")
 
         total = d.pop("total")
 
         per_minute = cast(list[int], d.pop("per_minute"))
-
 
         v2_contract_rate = cls(
             contract_id=contract_id,
@@ -98,7 +79,6 @@ class V2ContractRate:
             total=total,
             per_minute=per_minute,
         )
-
 
         v2_contract_rate.additional_properties = d
         return v2_contract_rate

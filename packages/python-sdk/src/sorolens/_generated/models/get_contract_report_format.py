@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class GetContractReportFormat(StrEnum):
     CSV = "csv"
     JSON = "json"

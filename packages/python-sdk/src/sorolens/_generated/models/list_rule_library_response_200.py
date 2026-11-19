@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,36 +9,26 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-
 if TYPE_CHECKING:
-  from ..models.list_rule_library_response_200_rules_item import ListRuleLibraryResponse200RulesItem
-
-
-
+    from ..models.list_rule_library_response_200_rules_item import (
+        ListRuleLibraryResponse200RulesItem,
+    )
 
 
 T = TypeVar("T", bound="ListRuleLibraryResponse200")
 
 
-
 @_attrs_define
 class ListRuleLibraryResponse200:
-    """ 
-        Attributes:
-            rules (list[ListRuleLibraryResponse200RulesItem] | Unset):
-     """
+    """
+    Attributes:
+        rules (list[ListRuleLibraryResponse200RulesItem] | Unset):
+    """
 
     rules: list[ListRuleLibraryResponse200RulesItem] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.list_rule_library_response_200_rules_item import ListRuleLibraryResponse200RulesItem # noqa: PLC0415
         rules: list[dict[str, Any]] | Unset = UNSET
         if not isinstance(self.rules, Unset):
             rules = []
@@ -46,40 +36,35 @@ class ListRuleLibraryResponse200:
                 rules_item = rules_item_data.to_dict()
                 rules.append(rules_item)
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-        })
+        field_dict.update({})
         if rules is not UNSET:
             field_dict["rules"] = rules
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.list_rule_library_response_200_rules_item import ListRuleLibraryResponse200RulesItem # noqa: PLC0415
+        from ..models.list_rule_library_response_200_rules_item import (
+            ListRuleLibraryResponse200RulesItem,
+        )
+
         d = dict(src_dict)
         _rules = d.pop("rules", UNSET)
         rules: list[ListRuleLibraryResponse200RulesItem] | Unset = UNSET
         if _rules is not UNSET:
             rules = []
             for rules_item_data in _rules:
-                rules_item = ListRuleLibraryResponse200RulesItem.from_dict(rules_item_data)
-
-
+                rules_item = ListRuleLibraryResponse200RulesItem.from_dict(
+                    rules_item_data
+                )
 
                 rules.append(rules_item)
-
 
         list_rule_library_response_200 = cls(
             rules=rules,
         )
-
 
         list_rule_library_response_200.additional_properties = d
         return list_rule_library_response_200

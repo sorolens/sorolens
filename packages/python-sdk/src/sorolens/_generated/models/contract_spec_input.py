@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,70 +9,55 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-
 if TYPE_CHECKING:
-  from ..models.contract_spec_type import ContractSpecType
-
-
-
+    from ..models.contract_spec_type import ContractSpecType
 
 
 T = TypeVar("T", bound="ContractSpecInput")
 
 
-
 @_attrs_define
 class ContractSpecInput:
-    """ 
-        Attributes:
-            name (str):
-            type_ (ContractSpecType):
-            doc (str | Unset):
-     """
+    """
+    Attributes:
+        name (str):
+        type_ (ContractSpecType):
+        doc (str | Unset):
+    """
 
     name: str
     type_: ContractSpecType
     doc: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.contract_spec_type import ContractSpecType # noqa: PLC0415
         name = self.name
 
         type_ = self.type_.to_dict()
 
         doc = self.doc
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "name": name,
-            "type": type_,
-        })
+        field_dict.update(
+            {
+                "name": name,
+                "type": type_,
+            }
+        )
         if doc is not UNSET:
             field_dict["doc"] = doc
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.contract_spec_type import ContractSpecType # noqa: PLC0415
+        from ..models.contract_spec_type import ContractSpecType
+
         d = dict(src_dict)
         name = d.pop("name")
 
         type_ = ContractSpecType.from_dict(d.pop("type"))
-
-
-
 
         doc = d.pop("doc", UNSET)
 
@@ -81,7 +66,6 @@ class ContractSpecInput:
             type_=type_,
             doc=doc,
         )
-
 
         contract_spec_input.additional_properties = d
         return contract_spec_input

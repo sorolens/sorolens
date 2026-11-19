@@ -1,47 +1,34 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
 from ..models.api_health_response_200_db import ApiHealthResponse200Db
 from ..models.api_health_response_200_redis import ApiHealthResponse200Redis
-from typing import cast
-import datetime
-
-
-
-
-
 
 T = TypeVar("T", bound="ApiHealthResponse200")
 
 
-
 @_attrs_define
 class ApiHealthResponse200:
-    """ 
-        Attributes:
-            status (str): "ok" when both dependencies are reachable, "degraded" otherwise Example: ok.
-            db (ApiHealthResponse200Db):
-            redis (ApiHealthResponse200Redis):
-            timestamp (datetime.datetime):
-     """
+    """
+    Attributes:
+        status (str): "ok" when both dependencies are reachable, "degraded" otherwise Example: ok.
+        db (ApiHealthResponse200Db):
+        redis (ApiHealthResponse200Redis):
+        timestamp (datetime.datetime):
+    """
 
     status: str
     db: ApiHealthResponse200Db
     redis: ApiHealthResponse200Redis
     timestamp: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         status = self.status
@@ -52,19 +39,18 @@ class ApiHealthResponse200:
 
         timestamp = self.timestamp.isoformat()
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "status": status,
-            "db": db,
-            "redis": redis,
-            "timestamp": timestamp,
-        })
+        field_dict.update(
+            {
+                "status": status,
+                "db": db,
+                "redis": redis,
+                "timestamp": timestamp,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -73,18 +59,9 @@ class ApiHealthResponse200:
 
         db = ApiHealthResponse200Db(d.pop("db"))
 
-
-
-
         redis = ApiHealthResponse200Redis(d.pop("redis"))
 
-
-
-
         timestamp = datetime.datetime.fromisoformat(d.pop("timestamp"))
-
-
-
 
         api_health_response_200 = cls(
             status=status,
@@ -92,7 +69,6 @@ class ApiHealthResponse200:
             redis=redis,
             timestamp=timestamp,
         )
-
 
         api_health_response_200.additional_properties = d
         return api_health_response_200

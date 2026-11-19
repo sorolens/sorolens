@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class V2ListInvocationsNetwork(StrEnum):
     FUTURENET = "futurenet"
     MAINNET = "mainnet"

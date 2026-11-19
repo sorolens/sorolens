@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class VerificationDiagnosticSeverity(StrEnum):
     ERROR = "error"
     INFO = "info"

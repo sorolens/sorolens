@@ -1,21 +1,16 @@
+import datetime
 from http import HTTPStatus
-from typing import Any, cast
-from urllib.parse import quote
+from typing import Any
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.list_all_events_network import ListAllEventsNetwork
 from ...models.list_all_events_response_200 import ListAllEventsResponse200
 from ...models.list_all_events_type import ListAllEventsType
-from ...types import UNSET, Unset
-from typing import cast
-import datetime
-
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
@@ -27,11 +22,7 @@ def _get_kwargs(
     network: ListAllEventsNetwork | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
-
 ) -> dict[str, Any]:
-    
-
-    
 
     params: dict[str, Any] = {}
 
@@ -63,9 +54,7 @@ def _get_kwargs(
         json_until = until.isoformat()
     params["until"] = json_until
 
-
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
-
 
     _kwargs: dict[str, Any] = {
         "method": "get",
@@ -73,30 +62,24 @@ def _get_kwargs(
         "params": params,
     }
 
-
     return _kwargs
 
 
-
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | ListAllEventsResponse200 | None:
+def _parse_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Error | ListAllEventsResponse200 | None:
     if response.status_code == 200:
         response_200 = ListAllEventsResponse200.from_dict(response.json())
-
-
 
         return response_200
 
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())
 
-
-
         return response_422
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
-
-
 
         return response_500
 
@@ -106,7 +89,9 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | ListAllEventsResponse200]:
+def _build_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Response[Error | ListAllEventsResponse200]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -125,9 +110,8 @@ def sync_detailed(
     network: ListAllEventsNetwork | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
-
 ) -> Response[Error | ListAllEventsResponse200]:
-    """ List events across all tracked contracts
+    """List events across all tracked contracts
 
      Cross-contract events explorer feed, newest first.
 
@@ -146,18 +130,16 @@ def sync_detailed(
 
     Returns:
         Response[Error | ListAllEventsResponse200]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         cursor=cursor,
-limit=limit,
-contract_id=contract_id,
-type_=type_,
-network=network,
-since=since,
-until=until,
-
+        limit=limit,
+        contract_id=contract_id,
+        type_=type_,
+        network=network,
+        since=since,
+        until=until,
     )
 
     response = client.get_httpx_client().request(
@@ -165,6 +147,7 @@ until=until,
     )
 
     return _build_response(client=client, response=response)
+
 
 def sync(
     *,
@@ -176,9 +159,8 @@ def sync(
     network: ListAllEventsNetwork | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
-
 ) -> Error | ListAllEventsResponse200 | None:
-    """ List events across all tracked contracts
+    """List events across all tracked contracts
 
      Cross-contract events explorer feed, newest first.
 
@@ -197,20 +179,19 @@ def sync(
 
     Returns:
         Error | ListAllEventsResponse200
-     """
-
+    """
 
     return sync_detailed(
         client=client,
-cursor=cursor,
-limit=limit,
-contract_id=contract_id,
-type_=type_,
-network=network,
-since=since,
-until=until,
-
+        cursor=cursor,
+        limit=limit,
+        contract_id=contract_id,
+        type_=type_,
+        network=network,
+        since=since,
+        until=until,
     ).parsed
+
 
 async def asyncio_detailed(
     *,
@@ -222,9 +203,8 @@ async def asyncio_detailed(
     network: ListAllEventsNetwork | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
-
 ) -> Response[Error | ListAllEventsResponse200]:
-    """ List events across all tracked contracts
+    """List events across all tracked contracts
 
      Cross-contract events explorer feed, newest first.
 
@@ -243,25 +223,22 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | ListAllEventsResponse200]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         cursor=cursor,
-limit=limit,
-contract_id=contract_id,
-type_=type_,
-network=network,
-since=since,
-until=until,
-
+        limit=limit,
+        contract_id=contract_id,
+        type_=type_,
+        network=network,
+        since=since,
+        until=until,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     *,
@@ -273,9 +250,8 @@ async def asyncio(
     network: ListAllEventsNetwork | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
-
 ) -> Error | ListAllEventsResponse200 | None:
-    """ List events across all tracked contracts
+    """List events across all tracked contracts
 
      Cross-contract events explorer feed, newest first.
 
@@ -294,17 +270,17 @@ async def asyncio(
 
     Returns:
         Error | ListAllEventsResponse200
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        client=client,
-cursor=cursor,
-limit=limit,
-contract_id=contract_id,
-type_=type_,
-network=network,
-since=since,
-until=until,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            client=client,
+            cursor=cursor,
+            limit=limit,
+            contract_id=contract_id,
+            type_=type_,
+            network=network,
+            since=since,
+            until=until,
+        )
+    ).parsed

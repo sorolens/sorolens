@@ -1,19 +1,14 @@
 from http import HTTPStatus
-from typing import Any, cast
-from urllib.parse import quote
+from typing import Any
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.v2_contract_list import V2ContractList
 from ...models.v2_list_contracts_network import V2ListContractsNetwork
-from ...types import UNSET, Unset
-from typing import cast
-
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
@@ -22,11 +17,7 @@ def _get_kwargs(
     limit: int | Unset = UNSET,
     network: V2ListContractsNetwork | Unset = UNSET,
     status: str | Unset = UNSET,
-
 ) -> dict[str, Any]:
-    
-
-    
 
     params: dict[str, Any] = {}
 
@@ -42,9 +33,7 @@ def _get_kwargs(
 
     params["status"] = status
 
-
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
-
 
     _kwargs: dict[str, Any] = {
         "method": "get",
@@ -52,30 +41,24 @@ def _get_kwargs(
         "params": params,
     }
 
-
     return _kwargs
 
 
-
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | V2ContractList | None:
+def _parse_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Error | V2ContractList | None:
     if response.status_code == 200:
         response_200 = V2ContractList.from_dict(response.json())
-
-
 
         return response_200
 
     if response.status_code == 429:
         response_429 = Error.from_dict(response.json())
 
-
-
         return response_429
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
-
-
 
         return response_500
 
@@ -85,7 +68,9 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | V2ContractList]:
+def _build_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Response[Error | V2ContractList]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -101,9 +86,8 @@ def sync_detailed(
     limit: int | Unset = UNSET,
     network: V2ListContractsNetwork | Unset = UNSET,
     status: str | Unset = UNSET,
-
 ) -> Response[Error | V2ContractList]:
-    """ List tracked contracts
+    """List tracked contracts
 
     Args:
         cursor (str | Unset):
@@ -117,15 +101,13 @@ def sync_detailed(
 
     Returns:
         Response[Error | V2ContractList]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         cursor=cursor,
-limit=limit,
-network=network,
-status=status,
-
+        limit=limit,
+        network=network,
+        status=status,
     )
 
     response = client.get_httpx_client().request(
@@ -134,6 +116,7 @@ status=status,
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     *,
     client: AuthenticatedClient,
@@ -141,9 +124,8 @@ def sync(
     limit: int | Unset = UNSET,
     network: V2ListContractsNetwork | Unset = UNSET,
     status: str | Unset = UNSET,
-
 ) -> Error | V2ContractList | None:
-    """ List tracked contracts
+    """List tracked contracts
 
     Args:
         cursor (str | Unset):
@@ -157,17 +139,16 @@ def sync(
 
     Returns:
         Error | V2ContractList
-     """
-
+    """
 
     return sync_detailed(
         client=client,
-cursor=cursor,
-limit=limit,
-network=network,
-status=status,
-
+        cursor=cursor,
+        limit=limit,
+        network=network,
+        status=status,
     ).parsed
+
 
 async def asyncio_detailed(
     *,
@@ -176,9 +157,8 @@ async def asyncio_detailed(
     limit: int | Unset = UNSET,
     network: V2ListContractsNetwork | Unset = UNSET,
     status: str | Unset = UNSET,
-
 ) -> Response[Error | V2ContractList]:
-    """ List tracked contracts
+    """List tracked contracts
 
     Args:
         cursor (str | Unset):
@@ -192,22 +172,19 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | V2ContractList]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         cursor=cursor,
-limit=limit,
-network=network,
-status=status,
-
+        limit=limit,
+        network=network,
+        status=status,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     *,
@@ -216,9 +193,8 @@ async def asyncio(
     limit: int | Unset = UNSET,
     network: V2ListContractsNetwork | Unset = UNSET,
     status: str | Unset = UNSET,
-
 ) -> Error | V2ContractList | None:
-    """ List tracked contracts
+    """List tracked contracts
 
     Args:
         cursor (str | Unset):
@@ -232,14 +208,14 @@ async def asyncio(
 
     Returns:
         Error | V2ContractList
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        client=client,
-cursor=cursor,
-limit=limit,
-network=network,
-status=status,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            client=client,
+            cursor=cursor,
+            limit=limit,
+            network=network,
+            status=status,
+        )
+    ).parsed

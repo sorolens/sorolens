@@ -1,51 +1,37 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
-
 T = TypeVar("T", bound="AddGroupContractBody")
-
 
 
 @_attrs_define
 class AddGroupContractBody:
-    """ 
-        Attributes:
-            contract_id (str):
-     """
+    """
+    Attributes:
+        contract_id (str):
+    """
 
     contract_id: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
         contract_id = self.contract_id
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "contract_id": contract_id,
-        })
+        field_dict.update(
+            {
+                "contract_id": contract_id,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -55,7 +41,6 @@ class AddGroupContractBody:
         add_group_contract_body = cls(
             contract_id=contract_id,
         )
-
 
         add_group_contract_body.additional_properties = d
         return add_group_contract_body

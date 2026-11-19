@@ -1,21 +1,16 @@
 from http import HTTPStatus
-from typing import Any, cast
-from urllib.parse import quote
+from typing import Any
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.list_contracts_dir import ListContractsDir
 from ...models.list_contracts_network import ListContractsNetwork
 from ...models.list_contracts_response_200 import ListContractsResponse200
 from ...models.list_contracts_sort import ListContractsSort
-from ...types import UNSET, Unset
-from typing import cast
-
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
@@ -27,11 +22,7 @@ def _get_kwargs(
     tag: str | Unset = UNSET,
     sort: ListContractsSort | Unset = UNSET,
     dir_: ListContractsDir | Unset = UNSET,
-
 ) -> dict[str, Any]:
-    
-
-    
 
     params: dict[str, Any] = {}
 
@@ -61,9 +52,7 @@ def _get_kwargs(
 
     params["dir"] = json_dir_
 
-
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
-
 
     _kwargs: dict[str, Any] = {
         "method": "get",
@@ -71,30 +60,24 @@ def _get_kwargs(
         "params": params,
     }
 
-
     return _kwargs
 
 
-
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | ListContractsResponse200 | None:
+def _parse_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Error | ListContractsResponse200 | None:
     if response.status_code == 200:
         response_200 = ListContractsResponse200.from_dict(response.json())
-
-
 
         return response_200
 
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())
 
-
-
         return response_422
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
-
-
 
         return response_500
 
@@ -104,7 +87,9 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | ListContractsResponse200]:
+def _build_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Response[Error | ListContractsResponse200]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -123,9 +108,8 @@ def sync_detailed(
     tag: str | Unset = UNSET,
     sort: ListContractsSort | Unset = UNSET,
     dir_: ListContractsDir | Unset = UNSET,
-
 ) -> Response[Error | ListContractsResponse200]:
-    """ List tracked contracts
+    """List tracked contracts
 
     Args:
         cursor (str | Unset):
@@ -142,18 +126,16 @@ def sync_detailed(
 
     Returns:
         Response[Error | ListContractsResponse200]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         cursor=cursor,
-limit=limit,
-network=network,
-status=status,
-tag=tag,
-sort=sort,
-dir_=dir_,
-
+        limit=limit,
+        network=network,
+        status=status,
+        tag=tag,
+        sort=sort,
+        dir_=dir_,
     )
 
     response = client.get_httpx_client().request(
@@ -161,6 +143,7 @@ dir_=dir_,
     )
 
     return _build_response(client=client, response=response)
+
 
 def sync(
     *,
@@ -172,9 +155,8 @@ def sync(
     tag: str | Unset = UNSET,
     sort: ListContractsSort | Unset = UNSET,
     dir_: ListContractsDir | Unset = UNSET,
-
 ) -> Error | ListContractsResponse200 | None:
-    """ List tracked contracts
+    """List tracked contracts
 
     Args:
         cursor (str | Unset):
@@ -191,20 +173,19 @@ def sync(
 
     Returns:
         Error | ListContractsResponse200
-     """
-
+    """
 
     return sync_detailed(
         client=client,
-cursor=cursor,
-limit=limit,
-network=network,
-status=status,
-tag=tag,
-sort=sort,
-dir_=dir_,
-
+        cursor=cursor,
+        limit=limit,
+        network=network,
+        status=status,
+        tag=tag,
+        sort=sort,
+        dir_=dir_,
     ).parsed
+
 
 async def asyncio_detailed(
     *,
@@ -216,9 +197,8 @@ async def asyncio_detailed(
     tag: str | Unset = UNSET,
     sort: ListContractsSort | Unset = UNSET,
     dir_: ListContractsDir | Unset = UNSET,
-
 ) -> Response[Error | ListContractsResponse200]:
-    """ List tracked contracts
+    """List tracked contracts
 
     Args:
         cursor (str | Unset):
@@ -235,25 +215,22 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | ListContractsResponse200]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         cursor=cursor,
-limit=limit,
-network=network,
-status=status,
-tag=tag,
-sort=sort,
-dir_=dir_,
-
+        limit=limit,
+        network=network,
+        status=status,
+        tag=tag,
+        sort=sort,
+        dir_=dir_,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     *,
@@ -265,9 +242,8 @@ async def asyncio(
     tag: str | Unset = UNSET,
     sort: ListContractsSort | Unset = UNSET,
     dir_: ListContractsDir | Unset = UNSET,
-
 ) -> Error | ListContractsResponse200 | None:
-    """ List tracked contracts
+    """List tracked contracts
 
     Args:
         cursor (str | Unset):
@@ -284,17 +260,17 @@ async def asyncio(
 
     Returns:
         Error | ListContractsResponse200
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        client=client,
-cursor=cursor,
-limit=limit,
-network=network,
-status=status,
-tag=tag,
-sort=sort,
-dir_=dir_,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            client=client,
+            cursor=cursor,
+            limit=limit,
+            network=network,
+            status=status,
+            tag=tag,
+            sort=sort,
+            dir_=dir_,
+        )
+    ).parsed

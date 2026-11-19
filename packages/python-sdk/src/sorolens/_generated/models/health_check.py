@@ -1,37 +1,27 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-from typing import cast
-import datetime
-
-
-
-
-
-
 T = TypeVar("T", bound="HealthCheck")
-
 
 
 @_attrs_define
 class HealthCheck:
-    """ 
-        Attributes:
-            contract_id (str):
-            status (str):
-            metadata (str):
-            ledger (int):
-            tx_hash (str):
-            timestamp (datetime.datetime):
-     """
+    """
+    Attributes:
+        contract_id (str):
+        status (str):
+        metadata (str):
+        ledger (int):
+        tx_hash (str):
+        timestamp (datetime.datetime):
+    """
 
     contract_id: str
     status: str
@@ -40,10 +30,6 @@ class HealthCheck:
     tx_hash: str
     timestamp: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         contract_id = self.contract_id
@@ -58,21 +44,20 @@ class HealthCheck:
 
         timestamp = self.timestamp.isoformat()
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "contract_id": contract_id,
-            "status": status,
-            "metadata": metadata,
-            "ledger": ledger,
-            "tx_hash": tx_hash,
-            "timestamp": timestamp,
-        })
+        field_dict.update(
+            {
+                "contract_id": contract_id,
+                "status": status,
+                "metadata": metadata,
+                "ledger": ledger,
+                "tx_hash": tx_hash,
+                "timestamp": timestamp,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -89,9 +74,6 @@ class HealthCheck:
 
         timestamp = datetime.datetime.fromisoformat(d.pop("timestamp"))
 
-
-
-
         health_check = cls(
             contract_id=contract_id,
             status=status,
@@ -100,7 +82,6 @@ class HealthCheck:
             tx_hash=tx_hash,
             timestamp=timestamp,
         )
-
 
         health_check.additional_properties = d
         return health_check

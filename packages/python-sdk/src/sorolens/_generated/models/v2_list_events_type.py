@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class V2ListEventsType(StrEnum):
     CONTRACT = "contract"
     SYSTEM = "system"

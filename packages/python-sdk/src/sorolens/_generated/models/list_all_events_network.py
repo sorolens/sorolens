@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class ListAllEventsNetwork(StrEnum):
     FUTURENET = "futurenet"
     MAINNET = "mainnet"

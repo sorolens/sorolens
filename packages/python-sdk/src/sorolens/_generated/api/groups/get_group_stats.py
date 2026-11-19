@@ -1,72 +1,56 @@
 from http import HTTPStatus
-from typing import Any, cast
+from typing import Any
 from urllib.parse import quote
+from uuid import UUID
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.group_stats import GroupStats
-from typing import cast
-from uuid import UUID
-
+from ...types import Response
 
 
 def _get_kwargs(
     id: UUID,
     *,
     x_user_id: str,
-
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
     headers["X-User-ID"] = x_user_id
 
-
-
-    
-
-    
-
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/api/v1/groups/{id}/stats".format(id=quote(str(id), safe=""),),
+        "url": "/api/v1/groups/{id}/stats".format(
+            id=quote(str(id), safe=""),
+        ),
     }
-
 
     _kwargs["headers"] = headers
     return _kwargs
 
 
-
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | GroupStats | None:
+def _parse_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Error | GroupStats | None:
     if response.status_code == 200:
         response_200 = GroupStats.from_dict(response.json())
-
-
 
         return response_200
 
     if response.status_code == 401:
         response_401 = Error.from_dict(response.json())
 
-
-
         return response_401
 
     if response.status_code == 404:
         response_404 = Error.from_dict(response.json())
 
-
-
         return response_404
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
-
-
 
         return response_500
 
@@ -76,7 +60,9 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | GroupStats]:
+def _build_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Response[Error | GroupStats]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -90,9 +76,8 @@ def sync_detailed(
     *,
     client: AuthenticatedClient,
     x_user_id: str,
-
 ) -> Response[Error | GroupStats]:
-    """ Aggregate statistics across a group's contracts
+    """Aggregate statistics across a group's contracts
 
      Aggregates the event count, invocation count, storage entry count, and
     average cached health score across every contract in the group. The
@@ -108,13 +93,11 @@ def sync_detailed(
 
     Returns:
         Response[Error | GroupStats]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         id=id,
-x_user_id=x_user_id,
-
+        x_user_id=x_user_id,
     )
 
     response = client.get_httpx_client().request(
@@ -123,14 +106,14 @@ x_user_id=x_user_id,
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     id: UUID,
     *,
     client: AuthenticatedClient,
     x_user_id: str,
-
 ) -> Error | GroupStats | None:
-    """ Aggregate statistics across a group's contracts
+    """Aggregate statistics across a group's contracts
 
      Aggregates the event count, invocation count, storage entry count, and
     average cached health score across every contract in the group. The
@@ -146,24 +129,22 @@ def sync(
 
     Returns:
         Error | GroupStats
-     """
-
+    """
 
     return sync_detailed(
         id=id,
-client=client,
-x_user_id=x_user_id,
-
+        client=client,
+        x_user_id=x_user_id,
     ).parsed
+
 
 async def asyncio_detailed(
     id: UUID,
     *,
     client: AuthenticatedClient,
     x_user_id: str,
-
 ) -> Response[Error | GroupStats]:
-    """ Aggregate statistics across a group's contracts
+    """Aggregate statistics across a group's contracts
 
      Aggregates the event count, invocation count, storage entry count, and
     average cached health score across every contract in the group. The
@@ -179,29 +160,25 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | GroupStats]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         id=id,
-x_user_id=x_user_id,
-
+        x_user_id=x_user_id,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     id: UUID,
     *,
     client: AuthenticatedClient,
     x_user_id: str,
-
 ) -> Error | GroupStats | None:
-    """ Aggregate statistics across a group's contracts
+    """Aggregate statistics across a group's contracts
 
      Aggregates the event count, invocation count, storage entry count, and
     average cached health score across every contract in the group. The
@@ -217,12 +194,12 @@ async def asyncio(
 
     Returns:
         Error | GroupStats
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        id=id,
-client=client,
-x_user_id=x_user_id,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            id=id,
+            client=client,
+            x_user_id=x_user_id,
+        )
+    ).parsed

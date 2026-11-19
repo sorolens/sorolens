@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class V2ListWatchdogAlertsNetwork(StrEnum):
     FUTURENET = "futurenet"
     MAINNET = "mainnet"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,73 +9,56 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-
 if TYPE_CHECKING:
-  from ..models.failed_event import FailedEvent
-
-
-
+    from ..models.failed_event import FailedEvent
 
 
 T = TypeVar("T", bound="ListFailedEventsResponse200")
 
 
-
 @_attrs_define
 class ListFailedEventsResponse200:
-    """ 
-        Attributes:
-            items (list[FailedEvent]):
-            next_cursor (str | Unset):
-     """
+    """
+    Attributes:
+        items (list[FailedEvent]):
+        next_cursor (str | Unset):
+    """
 
     items: list[FailedEvent]
     next_cursor: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.failed_event import FailedEvent # noqa: PLC0415
         items = []
         for items_item_data in self.items:
             items_item = items_item_data.to_dict()
             items.append(items_item)
 
-
-
         next_cursor = self.next_cursor
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "items": items,
-        })
+        field_dict.update(
+            {
+                "items": items,
+            }
+        )
         if next_cursor is not UNSET:
             field_dict["next_cursor"] = next_cursor
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.failed_event import FailedEvent # noqa: PLC0415
+        from ..models.failed_event import FailedEvent
+
         d = dict(src_dict)
         items = []
         _items = d.pop("items")
-        for items_item_data in (_items):
+        for items_item_data in _items:
             items_item = FailedEvent.from_dict(items_item_data)
 
-
-
             items.append(items_item)
-
 
         next_cursor = d.pop("next_cursor", UNSET)
 
@@ -83,7 +66,6 @@ class ListFailedEventsResponse200:
             items=items,
             next_cursor=next_cursor,
         )
-
 
         list_failed_events_response_200.additional_properties = d
         return list_failed_events_response_200

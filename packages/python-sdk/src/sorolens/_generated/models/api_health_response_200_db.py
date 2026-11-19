@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class ApiHealthResponse200Db(StrEnum):
     CONNECTED = "connected"
     UNREACHABLE = "unreachable"

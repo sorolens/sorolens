@@ -1,41 +1,28 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
-
 T = TypeVar("T", bound="ContractGraphEdgesType0Item")
-
 
 
 @_attrs_define
 class ContractGraphEdgesType0Item:
-    """ 
-        Attributes:
-            source (str):
-            target (str):
-            count (int):
-     """
+    """
+    Attributes:
+        source (str):
+        target (str):
+        count (int):
+    """
 
     source: str
     target: str
     count: int
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         source = self.source
@@ -44,18 +31,17 @@ class ContractGraphEdgesType0Item:
 
         count = self.count
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "source": source,
-            "target": target,
-            "count": count,
-        })
+        field_dict.update(
+            {
+                "source": source,
+                "target": target,
+                "count": count,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -71,7 +57,6 @@ class ContractGraphEdgesType0Item:
             target=target,
             count=count,
         )
-
 
         contract_graph_edges_type_0_item.additional_properties = d
         return contract_graph_edges_type_0_item

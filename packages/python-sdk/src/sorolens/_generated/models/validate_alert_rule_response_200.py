@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,30 +9,23 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-
 if TYPE_CHECKING:
-  from ..models.rule_diagnostic import RuleDiagnostic
-
-
-
+    from ..models.rule_diagnostic import RuleDiagnostic
 
 
 T = TypeVar("T", bound="ValidateAlertRuleResponse200")
 
 
-
 @_attrs_define
 class ValidateAlertRuleResponse200:
-    """ 
-        Attributes:
-            valid (bool | Unset):
-            normalized (str | Unset):
-            metrics (list[str] | Unset):
-            window (str | Unset):
-            errors (list[RuleDiagnostic] | Unset):
-     """
+    """
+    Attributes:
+        valid (bool | Unset):
+        normalized (str | Unset):
+        metrics (list[str] | Unset):
+        window (str | Unset):
+        errors (list[RuleDiagnostic] | Unset):
+    """
 
     valid: bool | Unset = UNSET
     normalized: str | Unset = UNSET
@@ -41,12 +34,7 @@ class ValidateAlertRuleResponse200:
     errors: list[RuleDiagnostic] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.rule_diagnostic import RuleDiagnostic # noqa: PLC0415
         valid = self.valid
 
         normalized = self.normalized
@@ -54,8 +42,6 @@ class ValidateAlertRuleResponse200:
         metrics: list[str] | Unset = UNSET
         if not isinstance(self.metrics, Unset):
             metrics = self.metrics
-
-
 
         window = self.window
 
@@ -66,13 +52,9 @@ class ValidateAlertRuleResponse200:
                 errors_item = errors_item_data.to_dict()
                 errors.append(errors_item)
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-        })
+        field_dict.update({})
         if valid is not UNSET:
             field_dict["valid"] = valid
         if normalized is not UNSET:
@@ -86,18 +68,16 @@ class ValidateAlertRuleResponse200:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.rule_diagnostic import RuleDiagnostic # noqa: PLC0415
+        from ..models.rule_diagnostic import RuleDiagnostic
+
         d = dict(src_dict)
         valid = d.pop("valid", UNSET)
 
         normalized = d.pop("normalized", UNSET)
 
         metrics = cast(list[str], d.pop("metrics", UNSET))
-
 
         window = d.pop("window", UNSET)
 
@@ -108,10 +88,7 @@ class ValidateAlertRuleResponse200:
             for errors_item_data in _errors:
                 errors_item = RuleDiagnostic.from_dict(errors_item_data)
 
-
-
                 errors.append(errors_item)
-
 
         validate_alert_rule_response_200 = cls(
             valid=valid,
@@ -120,7 +97,6 @@ class ValidateAlertRuleResponse200:
             window=window,
             errors=errors,
         )
-
 
         validate_alert_rule_response_200.additional_properties = d
         return validate_alert_rule_response_200

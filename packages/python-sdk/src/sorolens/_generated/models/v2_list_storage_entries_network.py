@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class V2ListStorageEntriesNetwork(StrEnum):
     FUTURENET = "futurenet"
     MAINNET = "mainnet"

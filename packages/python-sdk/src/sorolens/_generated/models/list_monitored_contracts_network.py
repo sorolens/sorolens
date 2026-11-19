@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class ListMonitoredContractsNetwork(StrEnum):
     FUTURENET = "futurenet"
     MAINNET = "mainnet"

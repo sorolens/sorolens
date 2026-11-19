@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,34 +9,22 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
 T = TypeVar("T", bound="PreviewAlertRuleBody")
-
 
 
 @_attrs_define
 class PreviewAlertRuleBody:
-    """ 
-        Attributes:
-            source (str):
-            contract_id (str | Unset):
-            window (str | Unset):  Example: 1h.
-     """
+    """
+    Attributes:
+        source (str):
+        contract_id (str | Unset):
+        window (str | Unset):  Example: 1h.
+    """
 
     source: str
     contract_id: str | Unset = UNSET
     window: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         source = self.source
@@ -45,20 +33,19 @@ class PreviewAlertRuleBody:
 
         window = self.window
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "source": source,
-        })
+        field_dict.update(
+            {
+                "source": source,
+            }
+        )
         if contract_id is not UNSET:
             field_dict["contract_id"] = contract_id
         if window is not UNSET:
             field_dict["window"] = window
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -74,7 +61,6 @@ class PreviewAlertRuleBody:
             contract_id=contract_id,
             window=window,
         )
-
 
         preview_alert_rule_body.additional_properties = d
         return preview_alert_rule_body

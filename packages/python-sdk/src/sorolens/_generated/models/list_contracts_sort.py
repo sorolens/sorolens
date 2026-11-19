@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class ListContractsSort(StrEnum):
     ADDED_AT = "added_at"
     ID = "id"

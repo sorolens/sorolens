@@ -1,42 +1,29 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-
-
-
-
-
-
 T = TypeVar("T", bound="BuildInfo")
-
 
 
 @_attrs_define
 class BuildInfo:
-    """ 
-        Attributes:
-            version (str): Semantic version injected at build time; "dev" when unset. Example: 1.4.2.
-            git_sha (str): Git commit SHA injected at build time; "dev" when unset. Example: abc1234.
-            built_at (str): RFC3339 build timestamp injected at build time; "dev" when unset or malformed. Example:
-                2026-01-02T15:04:05Z.
-     """
+    """
+    Attributes:
+        version (str): Semantic version injected at build time; "dev" when unset. Example: 1.4.2.
+        git_sha (str): Git commit SHA injected at build time; "dev" when unset. Example: abc1234.
+        built_at (str): RFC3339 build timestamp injected at build time; "dev" when unset or malformed. Example:
+            2026-01-02T15:04:05Z.
+    """
 
     version: str
     git_sha: str
     built_at: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         version = self.version
@@ -45,18 +32,17 @@ class BuildInfo:
 
         built_at = self.built_at
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "version": version,
-            "git_sha": git_sha,
-            "built_at": built_at,
-        })
+        field_dict.update(
+            {
+                "version": version,
+                "git_sha": git_sha,
+                "built_at": built_at,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -72,7 +58,6 @@ class BuildInfo:
             git_sha=git_sha,
             built_at=built_at,
         )
-
 
         build_info.additional_properties = d
         return build_info

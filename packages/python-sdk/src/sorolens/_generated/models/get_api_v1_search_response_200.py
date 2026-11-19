@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -9,36 +9,24 @@ from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-
 if TYPE_CHECKING:
-  from ..models.contract import Contract
-
-
-
+    from ..models.contract import Contract
 
 
 T = TypeVar("T", bound="GetApiV1SearchResponse200")
 
 
-
 @_attrs_define
 class GetApiV1SearchResponse200:
-    """ 
-        Attributes:
-            items (list[Contract] | Unset):
-     """
+    """
+    Attributes:
+        items (list[Contract] | Unset):
+    """
 
     items: list[Contract] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.contract import Contract # noqa: PLC0415
         items: list[dict[str, Any]] | Unset = UNSET
         if not isinstance(self.items, Unset):
             items = []
@@ -46,23 +34,18 @@ class GetApiV1SearchResponse200:
                 items_item = items_item_data.to_dict()
                 items.append(items_item)
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-        })
+        field_dict.update({})
         if items is not UNSET:
             field_dict["items"] = items
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.contract import Contract # noqa: PLC0415
+        from ..models.contract import Contract
+
         d = dict(src_dict)
         _items = d.pop("items", UNSET)
         items: list[Contract] | Unset = UNSET
@@ -71,15 +54,11 @@ class GetApiV1SearchResponse200:
             for items_item_data in _items:
                 items_item = Contract.from_dict(items_item_data)
 
-
-
                 items.append(items_item)
-
 
         get_api_v1_search_response_200 = cls(
             items=items,
         )
-
 
         get_api_v1_search_response_200.additional_properties = d
         return get_api_v1_search_response_200

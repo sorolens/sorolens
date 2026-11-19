@@ -1,30 +1,22 @@
 from http import HTTPStatus
-from typing import Any, cast
+from typing import Any
 from urllib.parse import quote
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.v2_contract_stats import V2ContractStats
 from ...models.v2_contract_stats_window import V2ContractStatsWindow
-from ...types import UNSET, Unset
-from typing import cast
-
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     id: str,
     *,
     window: V2ContractStatsWindow | Unset = V2ContractStatsWindow.VALUE_0,
-
 ) -> dict[str, Any]:
-    
-
-    
 
     params: dict[str, Any] = {}
 
@@ -34,40 +26,34 @@ def _get_kwargs(
 
     params["window"] = json_window
 
-
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
-
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/api/v2/contracts/{id}/stats".format(id=quote(str(id), safe=""),),
+        "url": "/api/v2/contracts/{id}/stats".format(
+            id=quote(str(id), safe=""),
+        ),
         "params": params,
     }
-
 
     return _kwargs
 
 
-
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | V2ContractStats | None:
+def _parse_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Error | V2ContractStats | None:
     if response.status_code == 200:
         response_200 = V2ContractStats.from_dict(response.json())
-
-
 
         return response_200
 
     if response.status_code == 429:
         response_429 = Error.from_dict(response.json())
 
-
-
         return response_429
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
-
-
 
         return response_500
 
@@ -77,7 +63,9 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | V2ContractStats]:
+def _build_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Response[Error | V2ContractStats]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -91,9 +79,8 @@ def sync_detailed(
     *,
     client: AuthenticatedClient,
     window: V2ContractStatsWindow | Unset = V2ContractStatsWindow.VALUE_0,
-
 ) -> Response[Error | V2ContractStats]:
-    """ Per-contract statistics
+    """Per-contract statistics
 
     Args:
         id (str):
@@ -105,13 +92,11 @@ def sync_detailed(
 
     Returns:
         Response[Error | V2ContractStats]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         id=id,
-window=window,
-
+        window=window,
     )
 
     response = client.get_httpx_client().request(
@@ -120,14 +105,14 @@ window=window,
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     id: str,
     *,
     client: AuthenticatedClient,
     window: V2ContractStatsWindow | Unset = V2ContractStatsWindow.VALUE_0,
-
 ) -> Error | V2ContractStats | None:
-    """ Per-contract statistics
+    """Per-contract statistics
 
     Args:
         id (str):
@@ -139,24 +124,22 @@ def sync(
 
     Returns:
         Error | V2ContractStats
-     """
-
+    """
 
     return sync_detailed(
         id=id,
-client=client,
-window=window,
-
+        client=client,
+        window=window,
     ).parsed
+
 
 async def asyncio_detailed(
     id: str,
     *,
     client: AuthenticatedClient,
     window: V2ContractStatsWindow | Unset = V2ContractStatsWindow.VALUE_0,
-
 ) -> Response[Error | V2ContractStats]:
-    """ Per-contract statistics
+    """Per-contract statistics
 
     Args:
         id (str):
@@ -168,29 +151,25 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | V2ContractStats]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         id=id,
-window=window,
-
+        window=window,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     id: str,
     *,
     client: AuthenticatedClient,
     window: V2ContractStatsWindow | Unset = V2ContractStatsWindow.VALUE_0,
-
 ) -> Error | V2ContractStats | None:
-    """ Per-contract statistics
+    """Per-contract statistics
 
     Args:
         id (str):
@@ -202,12 +181,12 @@ async def asyncio(
 
     Returns:
         Error | V2ContractStats
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        id=id,
-client=client,
-window=window,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            id=id,
+            client=client,
+            window=window,
+        )
+    ).parsed

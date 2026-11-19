@@ -1,20 +1,15 @@
 from http import HTTPStatus
-from typing import Any, cast
-from urllib.parse import quote
+from typing import Any
 
 import httpx
 
-from ...client import AuthenticatedClient, Client
-from ...types import Response, UNSET
 from ... import errors
-
+from ...client import AuthenticatedClient, Client
 from ...models.error import Error
 from ...models.list_watchdog_alerts_network import ListWatchdogAlertsNetwork
 from ...models.list_watchdog_alerts_response_200 import ListWatchdogAlertsResponse200
 from ...models.list_watchdog_alerts_severity import ListWatchdogAlertsSeverity
-from ...types import UNSET, Unset
-from typing import cast
-
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
@@ -23,11 +18,7 @@ def _get_kwargs(
     network: ListWatchdogAlertsNetwork | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-
 ) -> dict[str, Any]:
-    
-
-    
 
     params: dict[str, Any] = {}
 
@@ -47,9 +38,7 @@ def _get_kwargs(
 
     params["cursor"] = cursor
 
-
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
-
 
     _kwargs: dict[str, Any] = {
         "method": "get",
@@ -57,30 +46,24 @@ def _get_kwargs(
         "params": params,
     }
 
-
     return _kwargs
 
 
-
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Error | ListWatchdogAlertsResponse200 | None:
+def _parse_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Error | ListWatchdogAlertsResponse200 | None:
     if response.status_code == 200:
         response_200 = ListWatchdogAlertsResponse200.from_dict(response.json())
-
-
 
         return response_200
 
     if response.status_code == 422:
         response_422 = Error.from_dict(response.json())
 
-
-
         return response_422
 
     if response.status_code == 500:
         response_500 = Error.from_dict(response.json())
-
-
 
         return response_500
 
@@ -90,7 +73,9 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Error | ListWatchdogAlertsResponse200]:
+def _build_response(
+    *, client: AuthenticatedClient | Client, response: httpx.Response
+) -> Response[Error | ListWatchdogAlertsResponse200]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -106,9 +91,8 @@ def sync_detailed(
     network: ListWatchdogAlertsNetwork | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-
 ) -> Response[Error | ListWatchdogAlertsResponse200]:
-    """ List watchdog alerts
+    """List watchdog alerts
 
     Args:
         severity (ListWatchdogAlertsSeverity | Unset):
@@ -122,15 +106,13 @@ def sync_detailed(
 
     Returns:
         Response[Error | ListWatchdogAlertsResponse200]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         severity=severity,
-network=network,
-limit=limit,
-cursor=cursor,
-
+        network=network,
+        limit=limit,
+        cursor=cursor,
     )
 
     response = client.get_httpx_client().request(
@@ -139,6 +121,7 @@ cursor=cursor,
 
     return _build_response(client=client, response=response)
 
+
 def sync(
     *,
     client: AuthenticatedClient,
@@ -146,9 +129,8 @@ def sync(
     network: ListWatchdogAlertsNetwork | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-
 ) -> Error | ListWatchdogAlertsResponse200 | None:
-    """ List watchdog alerts
+    """List watchdog alerts
 
     Args:
         severity (ListWatchdogAlertsSeverity | Unset):
@@ -162,17 +144,16 @@ def sync(
 
     Returns:
         Error | ListWatchdogAlertsResponse200
-     """
-
+    """
 
     return sync_detailed(
         client=client,
-severity=severity,
-network=network,
-limit=limit,
-cursor=cursor,
-
+        severity=severity,
+        network=network,
+        limit=limit,
+        cursor=cursor,
     ).parsed
+
 
 async def asyncio_detailed(
     *,
@@ -181,9 +162,8 @@ async def asyncio_detailed(
     network: ListWatchdogAlertsNetwork | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-
 ) -> Response[Error | ListWatchdogAlertsResponse200]:
-    """ List watchdog alerts
+    """List watchdog alerts
 
     Args:
         severity (ListWatchdogAlertsSeverity | Unset):
@@ -197,22 +177,19 @@ async def asyncio_detailed(
 
     Returns:
         Response[Error | ListWatchdogAlertsResponse200]
-     """
-
+    """
 
     kwargs = _get_kwargs(
         severity=severity,
-network=network,
-limit=limit,
-cursor=cursor,
-
+        network=network,
+        limit=limit,
+        cursor=cursor,
     )
 
-    response = await client.get_async_httpx_client().request(
-        **kwargs
-    )
+    response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
 
 async def asyncio(
     *,
@@ -221,9 +198,8 @@ async def asyncio(
     network: ListWatchdogAlertsNetwork | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-
 ) -> Error | ListWatchdogAlertsResponse200 | None:
-    """ List watchdog alerts
+    """List watchdog alerts
 
     Args:
         severity (ListWatchdogAlertsSeverity | Unset):
@@ -237,14 +213,14 @@ async def asyncio(
 
     Returns:
         Error | ListWatchdogAlertsResponse200
-     """
+    """
 
-
-    return (await asyncio_detailed(
-        client=client,
-severity=severity,
-network=network,
-limit=limit,
-cursor=cursor,
-
-    )).parsed
+    return (
+        await asyncio_detailed(
+            client=client,
+            severity=severity,
+            network=network,
+            limit=limit,
+            cursor=cursor,
+        )
+    ).parsed

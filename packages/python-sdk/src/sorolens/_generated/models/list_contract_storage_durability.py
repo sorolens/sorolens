@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class ListContractStorageDurability(StrEnum):
     INSTANCE = "instance"
     PERSISTENT = "persistent"

@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class AlertSubscriptionChannelType(StrEnum):
     DISCORD = "discord"
     PAGERDUTY = "pagerduty"

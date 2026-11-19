@@ -1,41 +1,32 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
 from ..models.contract_status import ContractStatus
-from typing import cast
-import datetime
-
-
-
-
-
 
 T = TypeVar("T", bound="Contract")
 
 
-
 @_attrs_define
 class Contract:
-    """ 
-        Attributes:
-            id (str):
-            network (str):
-            label (str):
-            wasm_hash (str):
-            created_at_ledger (int):
-            backfill_complete_at (datetime.datetime | None):
-            status (ContractStatus):
-            added_at (datetime.datetime):
-            tags (list[str]): User-defined tags, sorted ascending. Always present; empty when the contract has no tags.
-     """
+    """
+    Attributes:
+        id (str):
+        network (str):
+        label (str):
+        wasm_hash (str):
+        created_at_ledger (int):
+        backfill_complete_at (datetime.datetime | None):
+        status (ContractStatus):
+        added_at (datetime.datetime):
+        tags (list[str]): User-defined tags, sorted ascending. Always present; empty when the contract has no tags.
+    """
 
     id: str
     network: str
@@ -47,10 +38,6 @@ class Contract:
     added_at: datetime.datetime
     tags: list[str]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         id = self.id
@@ -75,26 +62,23 @@ class Contract:
 
         tags = self.tags
 
-
-
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "id": id,
-            "network": network,
-            "label": label,
-            "wasm_hash": wasm_hash,
-            "created_at_ledger": created_at_ledger,
-            "backfill_complete_at": backfill_complete_at,
-            "status": status,
-            "added_at": added_at,
-            "tags": tags,
-        })
+        field_dict.update(
+            {
+                "id": id,
+                "network": network,
+                "label": label,
+                "wasm_hash": wasm_hash,
+                "created_at_ledger": created_at_ledger,
+                "backfill_complete_at": backfill_complete_at,
+                "status": status,
+                "added_at": added_at,
+                "tags": tags,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -117,28 +101,20 @@ class Contract:
                     raise TypeError()
                 backfill_complete_at_type_0 = datetime.datetime.fromisoformat(data)
 
-
-
                 return backfill_complete_at_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None, data)
 
-        backfill_complete_at = _parse_backfill_complete_at(d.pop("backfill_complete_at"))
-
+        backfill_complete_at = _parse_backfill_complete_at(
+            d.pop("backfill_complete_at")
+        )
 
         status = ContractStatus(d.pop("status"))
 
-
-
-
         added_at = datetime.datetime.fromisoformat(d.pop("added_at"))
 
-
-
-
         tags = cast(list[str], d.pop("tags"))
-
 
         contract = cls(
             id=id,
@@ -151,7 +127,6 @@ class Contract:
             added_at=added_at,
             tags=tags,
         )
-
 
         contract.additional_properties = d
         return contract

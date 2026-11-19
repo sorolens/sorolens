@@ -1,36 +1,27 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
+from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
-from uuid import UUID
-
-
-
-
-
-
 T = TypeVar("T", bound="GroupStats")
-
 
 
 @_attrs_define
 class GroupStats:
-    """ 
-        Attributes:
-            group_id (UUID):
-            contract_count (int):
-            event_count (int):
-            invocation_count (int):
-            storage_entry_count (int):
-            average_health_score (float): Mean cached health score across members that have one; 0 when none do.
-     """
+    """
+    Attributes:
+        group_id (UUID):
+        contract_count (int):
+        event_count (int):
+        invocation_count (int):
+        storage_entry_count (int):
+        average_health_score (float): Mean cached health score across members that have one; 0 when none do.
+    """
 
     group_id: UUID
     contract_count: int
@@ -39,10 +30,6 @@ class GroupStats:
     storage_entry_count: int
     average_health_score: float
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         group_id = str(self.group_id)
@@ -57,29 +44,25 @@ class GroupStats:
 
         average_health_score = self.average_health_score
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "group_id": group_id,
-            "contract_count": contract_count,
-            "event_count": event_count,
-            "invocation_count": invocation_count,
-            "storage_entry_count": storage_entry_count,
-            "average_health_score": average_health_score,
-        })
+        field_dict.update(
+            {
+                "group_id": group_id,
+                "contract_count": contract_count,
+                "event_count": event_count,
+                "invocation_count": invocation_count,
+                "storage_entry_count": storage_entry_count,
+                "average_health_score": average_health_score,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
         group_id = UUID(d.pop("group_id"))
-
-
-
 
         contract_count = d.pop("contract_count")
 
@@ -99,7 +82,6 @@ class GroupStats:
             storage_entry_count=storage_entry_count,
             average_health_score=average_health_score,
         )
-
 
         group_stats.additional_properties = d
         return group_stats

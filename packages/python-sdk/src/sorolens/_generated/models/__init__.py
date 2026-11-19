@@ -139,6 +139,7 @@ from .list_all_invocations_status import ListAllInvocationsStatus
 from .list_api_keys_admin_response_200 import ListApiKeysAdminResponse200
 from .list_api_keys_response_200 import ListApiKeysResponse200
 from .list_audit_events_response_200 import ListAuditEventsResponse200
+from .list_audit_events_root_response_200 import ListAuditEventsRootResponse200
 from .list_contract_alerts_network import ListContractAlertsNetwork
 from .list_contract_alerts_response_200 import ListContractAlertsResponse200
 from .list_contract_alerts_severity import ListContractAlertsSeverity
@@ -429,6 +430,7 @@ __all__ = (
     "ListApiKeysAdminResponse200",
     "ListApiKeysResponse200",
     "ListAuditEventsResponse200",
+    "ListAuditEventsRootResponse200",
     "ListContractAlertsNetwork",
     "ListContractAlertsResponse200",
     "ListContractAlertsSeverity",

@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class GetContractUptimeWindow(StrEnum):
     VALUE_0 = "24h"
     VALUE_1 = "7d"

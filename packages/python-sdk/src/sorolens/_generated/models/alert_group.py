@@ -1,43 +1,34 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import Any, Self, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
-from ..types import UNSET, Unset
-
 from ..models.alert_group_severity import AlertGroupSeverity
-from typing import cast
-import datetime
-
-
-
-
-
 
 T = TypeVar("T", bound="AlertGroup")
 
 
-
 @_attrs_define
 class AlertGroup:
-    """ 
-        Attributes:
-            id (int):
-            group_key (str):
-            contract_id (str):
-            severity (AlertGroupSeverity):
-            rule (str):
-            count (int):
-            dedupe_window_secs (int):
-            first_seen (datetime.datetime):
-            last_seen (datetime.datetime):
-            last_message (str):
-            backfill_eligible (bool):
-     """
+    """
+    Attributes:
+        id (int):
+        group_key (str):
+        contract_id (str):
+        severity (AlertGroupSeverity):
+        rule (str):
+        count (int):
+        dedupe_window_secs (int):
+        first_seen (datetime.datetime):
+        last_seen (datetime.datetime):
+        last_message (str):
+        backfill_eligible (bool):
+    """
 
     id: int
     group_key: str
@@ -51,10 +42,6 @@ class AlertGroup:
     last_message: str
     backfill_eligible: bool
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
-
-
-
-
 
     def to_dict(self) -> dict[str, Any]:
         id = self.id
@@ -79,26 +66,25 @@ class AlertGroup:
 
         backfill_eligible = self.backfill_eligible
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "id": id,
-            "group_key": group_key,
-            "contract_id": contract_id,
-            "severity": severity,
-            "rule": rule,
-            "count": count,
-            "dedupe_window_secs": dedupe_window_secs,
-            "first_seen": first_seen,
-            "last_seen": last_seen,
-            "last_message": last_message,
-            "backfill_eligible": backfill_eligible,
-        })
+        field_dict.update(
+            {
+                "id": id,
+                "group_key": group_key,
+                "contract_id": contract_id,
+                "severity": severity,
+                "rule": rule,
+                "count": count,
+                "dedupe_window_secs": dedupe_window_secs,
+                "first_seen": first_seen,
+                "last_seen": last_seen,
+                "last_message": last_message,
+                "backfill_eligible": backfill_eligible,
+            }
+        )
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
@@ -111,9 +97,6 @@ class AlertGroup:
 
         severity = AlertGroupSeverity(d.pop("severity"))
 
-
-
-
         rule = d.pop("rule")
 
         count = d.pop("count")
@@ -122,13 +105,7 @@ class AlertGroup:
 
         first_seen = datetime.datetime.fromisoformat(d.pop("first_seen"))
 
-
-
-
         last_seen = datetime.datetime.fromisoformat(d.pop("last_seen"))
-
-
-
 
         last_message = d.pop("last_message")
 
@@ -147,7 +124,6 @@ class AlertGroup:
             last_message=last_message,
             backfill_eligible=backfill_eligible,
         )
-
 
         alert_group.additional_properties = d
         return alert_group
