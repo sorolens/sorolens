@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   countWaveApplicants,
+  describeResponse,
+  formatHowToApply,
   formatAvailableSummary,
   formatIssueList,
   hasWaveApplication,
@@ -83,6 +85,11 @@ describe("processApplication", () => {
       getLink: db.getByDiscord,
       isInPool: db.isInPool,
       getGrant: db.getGrant,
+      listPool: db.listPool,
+      removeFromPool: db.removeFromPool,
+      setEnabled: (enabled) => {
+        db.updateAssignSettings({ enabled });
+      },
       listGrantsFor: db.listGrantsFor,
       claimIssue: db.claimIssue,
       releaseIssue: db.releaseIssue,
@@ -96,8 +103,8 @@ describe("processApplication", () => {
     };
   });
 
-  const msg = (content: string, discordId = "u1", roles = ["real", "core"], channelId = "chan") => ({
-    discordId, channelId, memberRoles: new Set(roles), content,
+  const msg = (content: string, discordId = "u1", roles = ["real", "core"], channelId = "chan", createdAt = Date.now()) => ({
+    discordId, channelId, memberRoles: new Set(roles), content, createdAt,
   });
 
   it("ignores other channels and messages without refs", async () => {
@@ -117,7 +124,7 @@ describe("processApplication", () => {
     expect(r).toEqual({ kind: "processed", outcomes: [
       { issue: 10, ok: true, url: "https://gh/10" },
       { issue: 11, ok: true, url: "https://gh/11" },
-    ] });
+    ], exhausted: false });
     expect(db.listGrantsFor("u1").map((g) => g.issueNumber)).toEqual([10, 11]);
   });
 
@@ -164,6 +171,28 @@ describe("processApplication", () => {
       { issue: 11, ok: true },
     ] });
     expect(issues.get(10)!.assignees).toEqual(["bob"]);
+  });
+
+  it("ignores messages sent before applications were switched on", async () => {
+    db.updateAssignSettings({ openedAt: 1_000 });
+    expect(await processApplication(msg("#10", "u1", ["real", "core"], "chan", 999), deps)).toEqual({ kind: "ignore" });
+    expect((await processApplication(msg("#10", "u1", ["real", "core"], "chan", 1_000), deps)).kind).toBe("processed");
+  });
+
+  it("drops closed or externally taken issues from the list", async () => {
+    issues.get(12)!.state = "closed";
+    issues.get(13)!.assignees = ["carol"];
+    await processApplication(msg("#12 #13"), deps);
+    expect(db.listPool()).toEqual([10, 11]);
+  });
+
+  it("switches itself off once every released issue is taken", async () => {
+    db.updateAssignSettings({ maxPerUser: 10 });
+    const first = await processApplication(msg("#10 #11"), deps);
+    expect(first).toMatchObject({ exhausted: false });
+    const last = await processApplication(msg("#12 #13", "u2"), deps);
+    expect(last).toMatchObject({ kind: "processed", exhausted: true });
+    expect(db.getAssignSettings().enabled).toBe(false);
   });
 
   it("does not hand the same issue to two people", async () => {
@@ -216,5 +245,49 @@ describe("available overview", () => {
   it("stays under Discord's message limit", () => {
     const open = Array.from({ length: 900 }, (_, i) => i * 2 + 1);
     expect(formatAvailableSummary({ open, pool: [] }).length).toBeLessThan(2000);
+  });
+});
+
+describe("describeResponse", () => {
+  it("only reacts when everything was assigned", () => {
+    expect(
+      describeResponse({ kind: "processed", exhausted: false, outcomes: [{ issue: 1, ok: true, url: "u" }] })
+    ).toEqual({ reaction: "✅", reply: null });
+  });
+
+  it("reacts ✅ and explains what was skipped on a partial result", () => {
+    const r = describeResponse({
+      kind: "processed",
+      exhausted: false,
+      outcomes: [
+        { issue: 1, ok: true, url: "u" },
+        { issue: 2, ok: false, reason: "is already taken" },
+      ],
+    });
+    expect(r.reaction).toBe("✅");
+    expect(r.reply).toContain("#2 is already taken");
+  });
+
+  it("reacts ❌ when nothing was assigned or the request was declined", () => {
+    expect(describeResponse({ kind: "declined", reason: "No." })).toMatchObject({ reaction: "❌", reply: expect.stringContaining("how to apply") });
+    expect(
+      describeResponse({ kind: "processed", exhausted: false, outcomes: [{ issue: 2, ok: false, reason: "is closed" }] }).reaction
+    ).toBe("❌");
+  });
+});
+
+describe("formatHowToApply", () => {
+  it("lists issues, steps and rules", () => {
+    const text = formatHowToApply(
+      { requiredRoles: ["r1"], anyOfRoles: ["c1", "c2"], maxPerUser: 2 },
+      [10, 11, 12, 20]
+    );
+    expect(text).toContain("4 issue(s) up for grabs: #10-#12, #20");
+    expect(text).toContain("/connect");
+    expect(text).toContain("Drips Wave");
+    expect(text).toContain("`#812 #840`");
+    expect(text).toContain("have <@&r1> and have one of <@&c1>, <@&c2>");
+    expect(text).toContain("Up to **2**");
+    expect(text.length).toBeLessThan(2000);
   });
 });

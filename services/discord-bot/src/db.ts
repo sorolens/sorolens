@@ -72,6 +72,14 @@ export function openDb(path: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS assign_grants_by_user ON assign_grants (discord_id);
   `);
+  // Added after the first release: when applications were last switched on
+  // (ms since epoch). Messages sent before it are ignored.
+  const cols = conn.prepare("PRAGMA table_info(assign_settings)").all() as {
+    name: string;
+  }[];
+  if (!cols.some((c) => c.name === "opened_at")) {
+    conn.exec("ALTER TABLE assign_settings ADD COLUMN opened_at INTEGER");
+  }
   db = conn;
   return conn;
 }
@@ -205,6 +213,8 @@ export interface AssignSettings {
   /** Member must hold at least one of these roles (ignored when empty). */
   anyOfRoles: string[];
   maxPerUser: number;
+  /** When applications were last switched on (ms since epoch). */
+  openedAt: number | null;
 }
 
 export interface AssignGrant {
@@ -218,7 +228,7 @@ export function getAssignSettings(): AssignSettings {
   const conn = requireDb();
   const row = conn
     .prepare(
-      "SELECT enabled, channel_id, required_roles, any_of_roles, max_per_user FROM assign_settings WHERE id = 1"
+      "SELECT enabled, channel_id, required_roles, any_of_roles, max_per_user, opened_at FROM assign_settings WHERE id = 1"
     )
     .get() as
     | {
@@ -227,6 +237,7 @@ export function getAssignSettings(): AssignSettings {
         required_roles: string;
         any_of_roles: string;
         max_per_user: number;
+        opened_at: number | null;
       }
     | undefined;
   if (!row) {
@@ -236,6 +247,7 @@ export function getAssignSettings(): AssignSettings {
       requiredRoles: [],
       anyOfRoles: [],
       maxPerUser: 1,
+      openedAt: null,
     };
   }
   return {
@@ -244,6 +256,7 @@ export function getAssignSettings(): AssignSettings {
     requiredRoles: JSON.parse(row.required_roles) as string[],
     anyOfRoles: JSON.parse(row.any_of_roles) as string[],
     maxPerUser: row.max_per_user,
+    openedAt: row.opened_at,
   };
 }
 
@@ -253,21 +266,23 @@ export function updateAssignSettings(
   const next = { ...getAssignSettings(), ...patch };
   requireDb()
     .prepare(
-      `INSERT INTO assign_settings (id, enabled, channel_id, required_roles, any_of_roles, max_per_user)
-       VALUES (1, ?, ?, ?, ?, ?)
+      `INSERT INTO assign_settings (id, enabled, channel_id, required_roles, any_of_roles, max_per_user, opened_at)
+       VALUES (1, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          enabled        = excluded.enabled,
          channel_id     = excluded.channel_id,
          required_roles = excluded.required_roles,
          any_of_roles   = excluded.any_of_roles,
-         max_per_user   = excluded.max_per_user`
+         max_per_user   = excluded.max_per_user,
+         opened_at      = excluded.opened_at`
     )
     .run(
       next.enabled ? 1 : 0,
       next.channelId,
       JSON.stringify(next.requiredRoles),
       JSON.stringify(next.anyOfRoles),
-      next.maxPerUser
+      next.maxPerUser,
+      next.openedAt
     );
   return next;
 }

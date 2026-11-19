@@ -33,7 +33,9 @@ import {
 import {
   countWaveApplicants,
   formatAvailableSummary,
-  formatApplicationReply,
+  describeResponse,
+  formatHowToApply,
+  remainingIssues,
   formatIssueList,
   parseIssueList,
   processApplication,
@@ -62,6 +64,11 @@ function deps(config: Config): AssignDeps {
     getLink: getByDiscord,
     isInPool,
     getGrant,
+    listPool,
+    removeFromPool,
+    setEnabled: (enabled: boolean) => {
+      updateAssignSettings({ enabled });
+    },
     listGrantsFor,
     claimIssue,
     releaseIssue,
@@ -100,15 +107,29 @@ export function registerAssignListener(client: Client, config: Config): void {
             channelId: message.channelId,
             memberRoles: new Set(member.roles.cache.keys()),
             content: message.content,
+            createdAt: message.createdTimestamp,
           },
           deps(config)
         )
       );
       if (result.kind === "ignore") return;
-      await message.reply({
-        content: formatApplicationReply(result),
-        allowedMentions: { repliedUser: true, parse: [] },
+      const response = describeResponse(result);
+      await message.react(response.reaction).catch((err) => {
+        console.warn("assign: could not react", err);
       });
+      if (response.reply) {
+        await message.reply({
+          content: response.reply,
+          allowedMentions: { repliedUser: true, parse: [] },
+        });
+      }
+      if (result.kind === "processed" && result.exhausted) {
+        await message.channel.send({
+          content:
+            "🎉 All released issues have been taken. Applications are now closed until the next release.",
+          allowedMentions: { parse: [] },
+        });
+      }
     } catch (err) {
       console.error("assign: failed to process message", err);
       try {
@@ -227,13 +248,36 @@ async function handleToggle(interaction: ChatInputCommandInteraction) {
     });
     return;
   }
-  updateAssignSettings({ enabled: on });
-  const warn =
-    on && listPool().length === 0
-      ? "\nNote: no issues are open yet. Add some with `/assign-issues add`."
-      : "";
+  const settings = updateAssignSettings(
+    on ? { enabled: true, openedAt: Date.now() } : { enabled: false }
+  );
+  const left = remainingIssues({ listPool, getGrant });
+  let note = "";
+  if (on && left.length === 0) {
+    note = "\nNote: no issues are left to give out. Add some with `/assign-issues add`.";
+  } else if (on) {
+    note = `\n${left.length} issue(s) can be picked. Only messages sent from now on count, and applications close by themselves when all are taken.`;
+  }
+
+  // Announce in the apply channel so members know how to apply.
+  try {
+    const channel = await interaction.client.channels.fetch(settings.channelId!);
+    if (channel?.isSendable()) {
+      const posted = await channel.send({
+        content: on
+          ? formatHowToApply(settings, left)
+          : "🔒 Issue applications are closed for now.",
+        allowedMentions: { parse: [] },
+      });
+      if (on) await posted.pin().catch(() => undefined);
+    }
+  } catch (err) {
+    console.warn("assign: could not announce in channel", err);
+    note += "\n(I couldn't post in the channel: check my permissions there.)";
+  }
+
   await interaction.reply({
-    content: `Issue applications are now **${on ? "ON" : "OFF"}**.${warn}`,
+    content: `Issue applications are now **${on ? "ON" : "OFF"}**.${note}`,
     flags: EPHEMERAL,
   });
 }

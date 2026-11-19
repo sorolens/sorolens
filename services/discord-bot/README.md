@@ -50,9 +50,18 @@ the whole request. Each issue must be in the list, open, unassigned, and
 carry a Drips Wave application comment (`<!-- wave:application-id:... -->`)
 posted by the member's linked GitHub account.
 
+The bot reacts ✅ to a message when it assigned at least one issue and ❌
+when it assigned none, replying only to explain anything skipped or declined.
+`/assign-toggle on` posts (and pins, if the bot may manage messages) a
+"how to apply" message in the channel; declines point members to it. Only
+messages sent after `/assign-toggle on` count. Closed issues and issues
+assigned outside the bot drop out of the list, and when every released issue
+has been given out the bot switches applications off and says so in the
+channel.
+
 Setup: enable **Message Content Intent** under Bot > Privileged Gateway
 Intents in the Discord developer portal (the bot fails to log in without
-it), give the bot Read/Send Messages in the channel, and give
+it), give the bot View Channel, Read Message History, Send Messages and Add Reactions in the channel, and give
 `GITHUB_TOKEN` `issues: read and write` on the repo.
 
 ## Role tiers
