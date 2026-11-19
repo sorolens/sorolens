@@ -59,6 +59,7 @@ import type {
   RuleCatalogResponse,
   RuleLibraryResponse,
   SearchResponse,
+  ContractUpgradeMarker,
 } from "./types";
 import type { ContractVersionEntry } from "@sorolens/ui";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
@@ -467,10 +468,22 @@ export function getContractSnapshot(
 }
 
 export function getContractHealthScore(
-  id: string
+  id: string,
+  historyLimit?: number
 ): Promise<HealthScoreResponse> {
+  const query =
+    historyLimit === undefined ? "" : `?history_limit=${historyLimit}`;
+
   return fetchJson<HealthScoreResponse>(
-    `${API_URL}/api/v1/contracts/${id}/health-score`
+    `${API_URL}/api/v1/contracts/${id}/health-score${query}`
+  );
+}
+
+export function getContractUpgrades(
+  id: string
+): Promise<{ upgrades: ContractUpgradeMarker[] }> {
+  return fetchJson<{ upgrades: ContractUpgradeMarker[] }>(
+    `${API_URL}/api/v1/contracts/${encodeURIComponent(id)}/upgrades?limit=100`
   );
 }
 

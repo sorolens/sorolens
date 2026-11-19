@@ -51,6 +51,8 @@ func main() {
 	ledgerWindow := flag.Uint("ledger-window", 120960, "Ledger window per getEvents call")
 	backfillWindow := flag.Uint("backfill-window", uint(envInt("INDEXER_BACKFILL_WINDOW", int(poller.DefaultBackfillWindow))), "Ledgers scanned per new-contract backfill step")
 	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics HTTP server (empty disables it)")
+	// INDEXER_CONCURRENCY (or the older INDEXER_WORKERS) is how many contracts
+	// one pass indexes concurrently; defaults to the number of usable CPUs.
 	concurrency := flag.Int("concurrency", envInt("INDEXER_CONCURRENCY", envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))), "Bounded worker pool concurrency for contract processing")
 	workers := *concurrency
 	// Sharded topology (issue #272). The default role preserves the original
@@ -141,6 +143,8 @@ func main() {
 	if ws, ok := storeAny.(watchdogStore); ok {
 		wdStore = ws
 	}
+	// WATCHDOG_ENABLED set to "true" makes the indexer record watchdog heartbeats
+	// for WATCHDOG_CONTRACT_ID while it polls.
 	watchdogEnabled := os.Getenv("WATCHDOG_ENABLED") == "true"
 	watchdogContractID := os.Getenv("WATCHDOG_CONTRACT_ID")
 

@@ -162,3 +162,59 @@ func TestHealthScoreStorePostgres(t *testing.T) {
 		t.Errorf("GetContractHealthScore(unknown): want ErrNotFound, got %v", err)
 	}
 }
+
+func TestHealthScoreHistoryPostgres(t *testing.T) {
+	pool := pgPool(t)
+	ctx := context.Background()
+	s := store.NewFullStore(pool)
+
+	const id = "CHS-HISTORY-TEST"
+	if _, err := pool.Exec(ctx,
+		`DELETE FROM contract_health_scores WHERE contract_id = $1`, id,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := pool.Exec(ctx,
+			`DELETE FROM contract_health_scores WHERE contract_id = $1`, id,
+		); err != nil {
+			t.Errorf("clean up test scores: %v", err)
+		}
+	})
+
+	base := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	for _, sample := range []struct {
+		after time.Duration
+		score int32
+	}{
+		{5 * time.Minute, 70},
+		{40 * time.Minute, 82},
+		{20 * time.Minute, 75},
+		{time.Hour, 90},
+	} {
+		err := s.UpsertContractHealthScore(ctx, store.ContractHealthScore{
+			ContractID: id,
+			Score:      sample.score,
+			ComputedAt: base.Add(sample.after),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	history, err := s.ListContractHealthScoreHistory(ctx, id, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 2 || history[0].Score != 82 || history[1].Score != 90 {
+		t.Fatalf("want hourly scores [82, 90] in time order, got %+v", history)
+	}
+
+	latest, err := s.ListContractHealthScoreHistory(ctx, id, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(latest) != 1 || latest[0].Score != 90 {
+		t.Fatalf("want only the latest score 90, got %+v", latest)
+	}
+}

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { getContractHealthScore } from "@/lib/api";
 import type { HealthScoreResponse } from "@/lib/types";
+import { HealthScoreHistory } from "./HealthScoreHistory";
+import { HEALTH_COMPONENTS } from "@/lib/healthScore";
 
 interface HealthScoreCardProps {
   contractId: string;
@@ -17,7 +19,7 @@ export function HealthScoreCard({ contractId }: HealthScoreCardProps) {
 
   useEffect(() => {
     let cancelled = false;
-    getContractHealthScore(contractId)
+    getContractHealthScore(contractId, 168)
       .then((data) => {
         if (!cancelled) setState({ data, error: null });
       })
@@ -113,6 +115,51 @@ export function HealthScoreCard({ contractId }: HealthScoreCardProps) {
           {open ? "Hide" : "Show"} component breakdown
         </div>
       </button>
+      {open && (
+        <div className="mt-4 border-t border-[var(--color-border)] pt-4">
+          <p className="text-xs text-[var(--color-text-secondary)]">
+            Overall score ranges: 80–100 healthy, 50–79 warning, 0–49 critical.
+          </p>
+          <ul className="mt-3 space-y-3">
+            {HEALTH_COMPONENTS.map(({ key, label, weight, explanation }) => {
+              const value = c[key];
+              const available =
+                typeof value === "number" && Number.isFinite(value);
+
+              return (
+                <li key={key} className="text-sm">
+                  <p className="font-medium">{label} contribution</p>
+                  <p className="text-[var(--color-text-secondary)]">
+                    {explanation}
+                  </p>
+                  {available ? (
+                    <>
+                      <meter
+                        aria-label={`${label} component score`}
+                        min={0}
+                        max={100}
+                        value={value}
+                        className="mt-1 h-2 w-full"
+                      />
+                      <p>
+                        {Number(((value * weight) / 100).toFixed(2))} of{" "}
+                        {weight} points
+                      </p>
+                    </>
+                  ) : (
+                    <p>Component data unavailable.</p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+      <HealthScoreHistory
+        key={contractId}
+        contractId={contractId}
+        history={data.history ?? []}
+      />
     </section>
   );
 }

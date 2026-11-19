@@ -258,7 +258,7 @@ deploy.
 
 ### Full Deployment Guide
 
-For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md).
+For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md). Every configuration option of each component is listed in the generated [configuration reference](docs/configuration.md).
 
 To run Sorolens on a Kubernetes cluster you already have, use the Helm chart: see [Self-hosting on Kubernetes](docs/self-hosting/kubernetes.md). Release images and CLI binaries are signed with cosign and carry SLSA provenance; [Verifying releases](docs/verifying-releases.md) has the commands to check them.
 

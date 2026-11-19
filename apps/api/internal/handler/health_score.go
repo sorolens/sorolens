@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -10,10 +11,11 @@ import (
 )
 
 type contractHealthScoreResponse struct {
-	ContractID string           `json:"contract_id"`
-	Score      int32            `json:"score"`
-	Components healthComponents `json:"components"`
-	ComputedAt string           `json:"computed_at"` // RFC3339 UTC
+	ContractID string                     `json:"contract_id"`
+	Score      int32                      `json:"score"`
+	Components healthComponents           `json:"components"`
+	ComputedAt string                     `json:"computed_at"` // RFC3339 UTC
+	History    *[]store.HealthScoreSample `json:"history,omitempty"`
 }
 
 type healthComponents struct {
@@ -65,5 +67,26 @@ func (h *Handler) GetContractHealthScore(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, contractHealthScoreFromStore(health))
+	response := contractHealthScoreFromStore(health)
+
+	query := r.URL.Query()
+	if query.Has("history_limit") {
+		limit, err := strconv.Atoi(query.Get("history_limit"))
+		if err != nil || limit < 1 || limit > 720 {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput,
+				"history_limit must be an integer between 1 and 720")
+			return
+		}
+
+		samples, err := h.Store.ListContractHealthScoreHistory(r.Context(), contractID, limit)
+		if err != nil {
+			h.Logger.Error("get contract health score history", "err", err, "contract_id", contractID)
+			writeError(w, r, http.StatusInternalServerError, CodeInternal,
+				"failed to load health score history")
+			return
+		}
+		response.History = &samples
+	}
+
+	writeJSON(w, http.StatusOK, response)
 }

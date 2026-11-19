@@ -108,6 +108,7 @@ postgres://user:pass@ep-cool-cloud-123456.us-east-1.aws.neon.tech/sorolens?sslmo
 ### Applying Migrations
 
 The repository maintains an ordered sequence of migrations under `apps/api/internal/db/migrations/*.up.sql`.
+New migrations must follow the [zero-downtime migration policy](migrations.md), which CI enforces.
 
 To apply all migrations to your Neon database from your local machine:
 
@@ -400,6 +401,8 @@ The Stellar mainnet operates with distinct network identifiers, RPC requirements
 ## 6. Environment Variable Reference
 
 This reference covers all environment variables parsed across `apps/api`, `services/indexer`, `apps/web`, and `cli/`.
+
+The complete, generated list of every option with its default and description is [`docs/configuration.md`](configuration.md); CI keeps it in sync with the code.
 
 ### API and Global Variables
 

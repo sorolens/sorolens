@@ -55,6 +55,8 @@ type config struct {
 
 func main() {
 	rpcURL := flag.String("rpc-url", os.Getenv("SOROBAN_RPC_URL"), "Soroban RPC endpoint (defaults to $SOROBAN_RPC_URL)")
+	// SOROBAN_NETWORK is the network the call-graph backfill stamps on the rows it
+	// writes (testnet, mainnet or futurenet); defaults to testnet.
 	network := flag.String("network", defaultString(os.Getenv("SOROBAN_NETWORK"), "testnet"), "network to stamp on the rows: testnet | mainnet | futurenet")
 	hashList := flag.String("tx-hashes", "", "comma-separated transaction hashes; when empty they are read one per line from stdin")
 	timeout := flag.Duration("timeout", 30*time.Second, "per-request RPC timeout")
