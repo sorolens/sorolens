@@ -1,4 +1,5 @@
 import * as matchers from "@testing-library/jest-dom/matchers";
+import type { ReactNode } from "react";
 import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DataTable } from "./DataTable";
@@ -181,6 +182,151 @@ describe("DataTable", () => {
     // Click row containing "Alpha"
     fireEvent.click(screen.getByText("Alpha"));
     expect(onRowClick).toHaveBeenCalledWith(DATA[0]);
+  });
+
+  describe("accessibility (issue #610)", () => {
+    it("marks every header cell as a column header with scope=col", () => {
+      const { container } = render(
+        <DataTable columns={COLUMNS} data={DATA} rowKey={(i) => i.id} />
+      );
+      const headers = container.querySelectorAll("th");
+      expect(headers.length).toBe(COLUMNS.length);
+      headers.forEach((th) => expect(th).toHaveAttribute("scope", "col"));
+    });
+
+    it("exposes aria-sort on sortable headers", () => {
+      const { container, rerender } = render(
+        <DataTable
+          columns={COLUMNS}
+          data={DATA}
+          rowKey={(i) => i.id}
+          sortColumn="id"
+          sortDirection="asc"
+        />
+      );
+      const th = (key: string) =>
+        container.querySelector(`th[data-key="${key}"]`)!;
+      expect(th("id")).toHaveAttribute("aria-sort", "ascending");
+      expect(th("name")).toHaveAttribute("aria-sort", "none");
+      expect(th("count")).not.toHaveAttribute("aria-sort");
+
+      rerender(
+        <DataTable
+          columns={COLUMNS}
+          data={DATA}
+          rowKey={(i) => i.id}
+          sortColumn="id"
+          sortDirection="desc"
+        />
+      );
+      expect(th("id")).toHaveAttribute("aria-sort", "descending");
+    });
+
+    it("renders sortable headers as keyboard-operable buttons", () => {
+      const onSort = vi.fn();
+      render(
+        <DataTable
+          columns={COLUMNS}
+          data={DATA}
+          rowKey={(i) => i.id}
+          onSort={onSort}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: /name/i }));
+      expect(onSort).toHaveBeenCalledWith("name");
+    });
+
+    it("renders one real link per row when rowHref is set", () => {
+      render(
+        <DataTable
+          columns={COLUMNS}
+          data={DATA}
+          rowKey={(i) => i.id}
+          rowHref={(i) => `/items/${i.id}`}
+        />
+      );
+      const links = screen.getAllByRole("link");
+      expect(links).toHaveLength(DATA.length);
+      expect(links[0]).toHaveAttribute("href", "/items/a");
+      expect(links[0]).toHaveTextContent("a");
+    });
+
+    it("puts the link in linkColumnKey when the first column is decorative", () => {
+      const { container } = render(
+        <DataTable
+          columns={COLUMNS}
+          data={DATA}
+          rowKey={(i) => i.id}
+          linkColumnKey="name"
+          rowHref={(i) => `/items/${i.id}`}
+        />
+      );
+      const cells = container.querySelector("tbody tr")!.querySelectorAll("td");
+      expect(cells[0]!.querySelector("a")).toBeNull();
+      expect(cells[1]!.querySelector("a")).toHaveAttribute("href", "/items/a");
+    });
+
+    it("uses the supplied link component for router navigation", () => {
+      const SpyLink = ({
+        href,
+        children,
+      }: {
+        href: string;
+        children: ReactNode;
+      }) => (
+        <a href={href} data-router="true">
+          {children}
+        </a>
+      );
+      render(
+        <DataTable
+          columns={COLUMNS}
+          data={DATA}
+          rowKey={(i) => i.id}
+          rowHref={(i) => `/items/${i.id}`}
+          linkComponent={SpyLink}
+        />
+      );
+      expect(document.querySelector('a[data-router="true"]')).not.toBeNull();
+    });
+
+    it("omits the link when rowHref returns null", () => {
+      render(
+        <DataTable
+          columns={COLUMNS}
+          data={DATA}
+          rowKey={(i) => i.id}
+          rowHref={(i) => (i.id === "b" ? null : `/items/${i.id}`)}
+        />
+      );
+      expect(screen.getAllByRole("link")).toHaveLength(DATA.length - 1);
+      expect(screen.getByText("b").closest("a")).toBeNull();
+    });
+
+    it("keeps header semantics for virtualized tables", () => {
+      const data = Array.from({ length: 200 }, (_, index) => ({
+        id: `row-${index}`,
+        name: `Item ${index}`,
+        count: index,
+      }));
+      const { container } = render(
+        <DataTable
+          columns={COLUMNS}
+          data={data}
+          rowKey={(item) => item.id}
+          virtualized
+          virtualizeAfter={10}
+          rowHref={(item) => `/items/${item.id}`}
+          sortColumn="id"
+          sortDirection="asc"
+        />
+      );
+      expect(container.querySelector('th[data-key="id"]')).toHaveAttribute(
+        "aria-sort",
+        "ascending"
+      );
+      expect(container.querySelector("th")!).toHaveAttribute("scope", "col");
+    });
   });
 
   // Negative: loading=true should suppress rows even if data is present

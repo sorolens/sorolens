@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -87,6 +88,12 @@ type Handler struct {
 	// SlackSigningSecret verifies Slack slash command requests (issue #127).
 	// Empty disables the Slack command endpoint.
 	SlackSigningSecret string
+	// Getenv looks up integration configuration (issue #612). Nil means
+	// os.Getenv; tests inject a fake environment.
+	Getenv func(string) string
+	// IntegrationHTTPClient delivers integration test messages (issue #612).
+	// Nil means http.DefaultClient.
+	IntegrationHTTPClient *http.Client
 	// SessionSigner mints and verifies HMAC workspace session tokens
 	// (issue #518). Nil or keyless disables POST /api/v1/auth/session and
 	// session authentication.

@@ -198,6 +198,21 @@
           "compareContracts",
           "listRuleLibrary"
         ]
+      },
+      {
+        "reason": "Self-service API keys and the integrations catalog (issues #612, #613) are web-app surfaces and are not part of this SDK's implemented surface yet.",
+        "operations": [
+          "createMyApiKey",
+          "listIntegrations",
+          "listMyApiKeys",
+          "revokeMyApiKey",
+          "testIntegration",
+          "v2CreateMyApiKey",
+          "v2ListIntegrations",
+          "v2ListMyApiKeys",
+          "v2RevokeMyApiKey",
+          "v2TestIntegration"
+        ]
       }
     ],
     "python": [
@@ -387,6 +402,21 @@
           "compareContracts",
           "listRuleLibrary"
         ]
+      },
+      {
+        "reason": "Self-service API keys and the integrations catalog (issues #612, #613) are web-app surfaces and are not part of this SDK's implemented surface yet.",
+        "operations": [
+          "createMyApiKey",
+          "listIntegrations",
+          "listMyApiKeys",
+          "revokeMyApiKey",
+          "testIntegration",
+          "v2CreateMyApiKey",
+          "v2ListIntegrations",
+          "v2ListMyApiKeys",
+          "v2RevokeMyApiKey",
+          "v2TestIntegration"
+        ]
       }
     ],
     "go": [
@@ -537,6 +567,21 @@
           "setAlertRuleEnabled",
           "deleteAlertRule"
         ]
+      },
+      {
+        "reason": "Self-service API keys and the integrations catalog (issues #612, #613) are not part of this SDK's implemented surface yet.",
+        "operations": [
+          "createMyApiKey",
+          "listIntegrations",
+          "listMyApiKeys",
+          "revokeMyApiKey",
+          "testIntegration",
+          "v2CreateMyApiKey",
+          "v2ListIntegrations",
+          "v2ListMyApiKeys",
+          "v2RevokeMyApiKey",
+          "v2TestIntegration"
+        ]
       }
     ],
     "typescript": [
@@ -678,6 +723,21 @@
           "listRuleLibrary",
           "setAlertRuleEnabled",
           "deleteAlertRule"
+        ]
+      },
+      {
+        "reason": "Self-service API keys and the integrations catalog (issues #612, #613) are not part of this SDK's implemented surface yet.",
+        "operations": [
+          "createMyApiKey",
+          "listIntegrations",
+          "listMyApiKeys",
+          "revokeMyApiKey",
+          "testIntegration",
+          "v2CreateMyApiKey",
+          "v2ListIntegrations",
+          "v2ListMyApiKeys",
+          "v2RevokeMyApiKey",
+          "v2TestIntegration"
         ]
       }
     ]

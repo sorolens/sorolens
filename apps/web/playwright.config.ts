@@ -32,5 +32,19 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    // Mobile viewports (issue #611) catch layout and tap-target regressions
+    // that a desktop-only run never sees.
+    // Mobile projects run the responsive smoke spec; the desktop-only specs
+    // assume a wide table and pointer interactions that mobile does not use.
+    {
+      name: "mobile-chrome",
+      testMatch: /a11y\.spec\.ts/,
+      use: { ...devices["Pixel 7"] },
+    },
+    {
+      name: "mobile-safari",
+      testMatch: /a11y\.spec\.ts/,
+      use: { ...devices["iPhone 14"] },
+    },
   ],
 });

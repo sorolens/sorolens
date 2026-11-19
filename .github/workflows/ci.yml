@@ -308,7 +308,8 @@ jobs:
       - name: Install Playwright browsers
         if: steps.changes.outputs.web == 'true'
         working-directory: apps/web
-        run: pnpm exec playwright install --with-deps chromium
+        # webkit backs the mobile-safari project added in #611.
+        run: pnpm exec playwright install --with-deps chromium webkit
       - name: Run Playwright tests
         if: steps.changes.outputs.web == 'true'
         working-directory: apps/web

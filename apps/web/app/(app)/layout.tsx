@@ -49,7 +49,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             Sorolens
           </Link>
           <div className="flex flex-wrap items-center gap-4">
-            <nav className="flex gap-4 text-sm">
+            <nav className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
               <Link
                 href="/dashboard"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
@@ -85,6 +85,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
                 Reports
+              </Link>
+              <Link
+                href="/integrations"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                Integrations
               </Link>
               <Link
                 href="/groups"

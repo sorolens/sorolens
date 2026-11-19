@@ -489,7 +489,7 @@ func TestApiClient_ExtendedOperations(t *testing.T) {
 
 	// CreateApiKey
 	createKeyResp, err := c.CreateApiKey(ctx, CreateApiKeyJSONRequestBody{
-		Name: "new-key", Scopes: []CreateApiKeyJSONBodyScopes{ReadContracts},
+		Name: "new-key", Scopes: []CreateApiKeyJSONBodyScopes{CreateApiKeyJSONBodyScopesReadContracts},
 	})
 	if err != nil || createKeyResp.StatusCode() != http.StatusCreated {
 		t.Fatalf("CreateApiKey failed: resp=%v, err=%v", createKeyResp, err)
@@ -552,4 +552,3 @@ func TestApiClient_WithRetryConfigOption(t *testing.T) {
 		t.Errorf("got %d, want 7", c.RetryConfig().MaxRetries)
 	}
 }
-

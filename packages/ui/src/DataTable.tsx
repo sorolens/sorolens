@@ -8,12 +8,47 @@ export interface Column<T> {
   sortable?: boolean;
 }
 
+/** Anything renderable as a row link. Defaults to a plain `<a>`. */
+export type LinkComponent = React.ComponentType<{
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}>;
+
+function DefaultLink({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  );
+}
+
 export interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
   loading?: boolean;
   emptyState?: React.ReactNode;
   rowKey: (item: T) => string;
+  /**
+   * When provided, every row renders a real link (in the link column) to the
+   * given href. Rows become keyboard and screen-reader accessible; pass
+   * `linkComponent` to use the router's client-side navigation (issue #610).
+   */
+  rowHref?: (item: T) => string | null;
+  /**
+   * Key of the column that receives the row link. Defaults to the first
+   * column; set it when the first column is decorative (e.g. a checkbox).
+   */
+  linkColumnKey?: string;
+  linkComponent?: LinkComponent;
   onRowClick?: (item: T) => void;
   sortColumn?: string;
   sortDirection?: "asc" | "desc";
@@ -23,12 +58,18 @@ export interface DataTableProps<T> {
   virtualizeAfter?: number;
 }
 
+const linkClass =
+  "text-[var(--color-accent)] underline-offset-2 hover:underline focus:outline-none focus-visible:underline";
+
 export function DataTable<T>({
   columns,
   data,
   loading = false,
   emptyState,
   rowKey,
+  rowHref,
+  linkColumnKey,
+  linkComponent: Link = DefaultLink,
   onRowClick,
   sortColumn,
   sortDirection,
@@ -67,6 +108,48 @@ export function DataTable<T>({
     return <div className={className}>{emptyState}</div>;
   }
 
+  const linkKey = linkColumnKey ?? columns[0]?.key;
+
+  const renderRow = (item: T, style?: React.CSSProperties) => {
+    const href = rowHref?.(item) ?? null;
+    return (
+      <tr
+        key={rowKey(item)}
+        onClick={() => {
+          // Rows with a real link navigate through that link, which is
+          // keyboard reachable; this is only a backstop for click-only rows.
+          if (!href) onRowClick?.(item);
+        }}
+        className={`border-b border-[var(--color-border)] transition-colors hover:bg-white/5 ${
+          onRowClick && !href ? "cursor-pointer" : ""
+        }`}
+        style={style}
+      >
+        {columns.map((col) => {
+          const content = col.accessor
+            ? col.accessor(item)
+            : String((item as Record<string, unknown>)[col.key] ?? "-");
+          // Exactly one announced, focusable link per row: the row link lives
+          // in linkColumnKey so a decorative first cell (checkbox) does not
+          // swallow it (issue #610).
+          const cellContent =
+            href !== null && col.key === linkKey ? (
+              <Link href={href} className={linkClass}>
+                {content}
+              </Link>
+            ) : (
+              content
+            );
+          return (
+            <td key={col.key} className="px-4 py-3 text-sm">
+              {cellContent}
+            </td>
+          );
+        })}
+      </tr>
+    );
+  };
+
   return (
     <div
       className={`rounded-lg bg-[var(--color-bg-card)] overflow-hidden ${className}`}
@@ -91,9 +174,20 @@ export function DataTable<T>({
                 return (
                   <th
                     key={col.key}
+                    data-key={col.key}
+                    scope="col"
+                    aria-sort={
+                      !col.sortable
+                        ? undefined
+                        : isSorted
+                          ? sortDirection === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                    }
                     className={`px-4 py-3 ${
                       col.sortable
-                        ? "cursor-pointer select-none hover:text-[var(--color-text-primary)]"
+                        ? "select-none hover:text-[var(--color-text-primary)]"
                         : ""
                     }`}
                     onClick={() => {
@@ -103,15 +197,28 @@ export function DataTable<T>({
                     }}
                   >
                     <div className="flex items-center gap-1.5">
-                      <span>{col.header}</span>
-                      {col.sortable && (
-                        <span className="text-xs opacity-60">
-                          {isSorted
-                            ? sortDirection === "asc"
-                              ? "▲"
-                              : "▼"
-                            : "↕"}
-                        </span>
+                      {col.sortable ? (
+                        // A real button makes sorting keyboard operable; the
+                        // th click handler stays for pointer users.
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onSort?.(col.key);
+                          }}
+                          className="flex items-center gap-1.5 font-medium"
+                        >
+                          <span>{col.header}</span>
+                          <span className="text-xs opacity-60" aria-hidden>
+                            {isSorted
+                              ? sortDirection === "asc"
+                                ? "▲"
+                                : "▼"
+                              : "↕"}
+                          </span>
+                        </button>
+                      ) : (
+                        <span>{col.header}</span>
                       )}
                     </div>
                   </th>
@@ -134,27 +241,7 @@ export function DataTable<T>({
                 )}
                 {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                   const item = data[virtualRow.index];
-                  return (
-                    <tr
-                      key={rowKey(item)}
-                      onClick={() => onRowClick?.(item)}
-                      className={`border-b border-[var(--color-border)] transition-colors hover:bg-white/5 ${
-                        onRowClick ? "cursor-pointer" : ""
-                      }`}
-                      style={{ height: virtualRow.size }}
-                    >
-                      {columns.map((col) => (
-                        <td key={col.key} className="px-4 py-3 text-sm">
-                          {col.accessor
-                            ? col.accessor(item)
-                            : String(
-                                (item as Record<string, unknown>)[col.key] ??
-                                  "-"
-                              )}
-                        </td>
-                      ))}
-                    </tr>
-                  );
+                  return renderRow(item, { height: virtualRow.size });
                 })}
                 {rowVirtualizer.getVirtualItems().length > 0 && (
                   <tr aria-hidden="true">
@@ -172,25 +259,7 @@ export function DataTable<T>({
                 )}
               </>
             ) : (
-              data.map((item) => (
-                <tr
-                  key={rowKey(item)}
-                  onClick={() => onRowClick?.(item)}
-                  className={`border-b border-[var(--color-border)] transition-colors hover:bg-white/5 ${
-                    onRowClick ? "cursor-pointer" : ""
-                  }`}
-                >
-                  {columns.map((col) => (
-                    <td key={col.key} className="px-4 py-3 text-sm">
-                      {col.accessor
-                        ? col.accessor(item)
-                        : String(
-                            (item as Record<string, unknown>)[col.key] ?? "-"
-                          )}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              data.map((item) => renderRow(item))
             )}
           </tbody>
         </table>

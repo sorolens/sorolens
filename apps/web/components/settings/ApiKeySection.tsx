@@ -1,101 +1,196 @@
 "use client";
 
-import { useState } from "react";
-import { SettingsCard, type SaveState } from "./SettingsCard";
-import { generateApiKey, maskApiKey } from "@/lib/settings";
+import { useCallback, useEffect, useState } from "react";
+import {
+  createMyApiKey,
+  listMyApiKeys,
+  revokeMyApiKey,
+  type APIKey,
+} from "@/lib/apiKeys";
 
 /**
- * API-key card. Generating or revoking only stages the change; Save commits it,
- * so a mis-click can be abandoned before it is persisted. The full token is
- * shown once on generation so it can be copied before it is masked away.
+ * API-key card backed by `/api/v1/me/api-keys` (issue #613).
+ *
+ * Keys are created on the server and bound to this workspace's session user.
+ * The plaintext token is returned once; it is kept in component memory so it
+ * can be copied, and never written to localStorage. After a reload the card
+ * shows only the server-issued prefix.
  */
-export function ApiKeySection({
-  apiKey,
-  apiKeyCreatedAt,
-  dirty,
-  status,
-  onChange,
-  onSave,
-}: {
-  apiKey: string | null;
-  apiKeyCreatedAt: string | null;
-  dirty: boolean;
-  status: SaveState;
-  onChange: (apiKey: string | null, apiKeyCreatedAt: string | null) => void;
-  onSave: () => boolean;
-}) {
-  const [revealed, setRevealed] = useState(false);
+export function ApiKeySection() {
+  const [keys, setKeys] = useState<APIKey[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [plaintext, setPlaintext] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      setKeys(await listMyApiKeys());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load API keys.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function handleCreate() {
+    setCreating(true);
+    setError(null);
+    setCopied(false);
+    try {
+      const created = await createMyApiKey();
+      setKeys((current) => [created, ...current]);
+      setPlaintext(created.key);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not create an API key."
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleRevoke(id: string) {
+    setRevoking(id);
+    setError(null);
+    try {
+      await revokeMyApiKey(id);
+      setKeys((current) => current.filter((key) => key.id !== id));
+      setPlaintext(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not revoke the API key."
+      );
+    } finally {
+      setRevoking(null);
+    }
+  }
+
+  async function copy(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      setError("Could not copy to the clipboard.");
+    }
+  }
 
   return (
-    <SettingsCard
-      testId="settings-api-key"
-      title="API key"
-      description="A personal key for calling the Sorolens API from your own scripts."
-      status={status}
-      onSave={onSave}
+    <section
+      data-testid="settings-api-key"
+      aria-labelledby="settings-api-key-heading"
+      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-[var(--color-text-primary)]">
-            {apiKey ? "Active key" : "No API key"}
+      <h2
+        id="settings-api-key-heading"
+        className="text-base font-semibold text-[var(--color-text-primary)]"
+      >
+        API keys
+      </h2>
+      <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+        Keys for calling the Sorolens API from your own scripts. They are bound
+        to this workspace and can be revoked at any time.
+      </p>
+
+      <div className="mt-4 space-y-3">
+        {loading ? (
+          <p
+            role="status"
+            className="text-sm text-[var(--color-text-secondary)]"
+          >
+            Loading keys…
           </p>
-          <p className="text-xs text-[var(--color-text-secondary)]">
-            {apiKey && apiKeyCreatedAt
-              ? `Created ${new Date(apiKeyCreatedAt).toLocaleDateString()}`
-              : "Generate a key to authenticate requests."}
+        ) : keys.length === 0 ? (
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            No API key yet. Create one to authenticate requests.
           </p>
-        </div>
+        ) : (
+          <ul className="space-y-2">
+            {keys.map((key) => (
+              <li
+                key={key.id}
+                data-testid="settings-api-key-row"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--color-border)] px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                    {key.name}
+                  </p>
+                  <p className="text-xs text-[var(--color-text-secondary)]">
+                    Created {new Date(key.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <code className="rounded bg-[var(--color-bg-page)] px-2 py-1 font-mono text-xs text-[var(--color-text-primary)]">
+                  {key.key_prefix}…
+                </code>
+                <button
+                  type="button"
+                  disabled={revoking === key.id}
+                  onClick={() => handleRevoke(key.id)}
+                  className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {revoking === key.id ? "Revoking…" : "Revoke"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
-        <code
-          data-testid="settings-api-key-value"
-          className="rounded bg-[var(--color-bg-page)] px-2 py-1 font-mono text-xs text-[var(--color-text-primary)]"
-        >
-          {apiKey ? (revealed ? apiKey : maskApiKey(apiKey)) : "—"}
-        </code>
-      </div>
+        {plaintext && (
+          <div
+            data-testid="settings-api-key-created"
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-page)] p-3"
+          >
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              Copy this key now — it will not be shown again.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <code
+                data-testid="settings-api-key-value"
+                className="overflow-x-auto rounded bg-black/30 px-2 py-1 font-mono text-xs text-[var(--color-text-primary)]"
+              >
+                {plaintext}
+              </code>
+              <button
+                type="button"
+                data-testid="settings-api-key-copy"
+                onClick={() => copy(plaintext)}
+                className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)]"
+              >
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
+        )}
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-3">
-        <button
-          type="button"
-          onClick={() => {
-            onChange(generateApiKey(), new Date().toISOString());
-            setRevealed(true);
-          }}
-          className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)]"
-        >
-          {apiKey ? "Regenerate key" : "Generate key"}
-        </button>
-
-        <button
-          type="button"
-          disabled={!apiKey}
-          onClick={() => setRevealed((current) => !current)}
-          className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {revealed ? "Hide" : "Reveal"}
-        </button>
-
-        <button
-          type="button"
-          disabled={!apiKey}
-          onClick={() => {
-            onChange(null, null);
-            setRevealed(false);
-          }}
-          className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Revoke
-        </button>
-
-        {dirty && (
-          <span
-            data-testid="settings-api-key-unsaved"
+        {error && (
+          <p
+            data-testid="settings-api-key-error"
+            role="alert"
             className="text-xs text-[var(--color-text-secondary)]"
           >
-            Unsaved change — press Save to apply.
-          </span>
+            {error}
+          </p>
         )}
       </div>
-    </SettingsCard>
+
+      <div className="mt-5 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleCreate}
+          disabled={creating || loading}
+          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {creating ? "Creating…" : "Generate key"}
+        </button>
+      </div>
+    </section>
   );
 }
