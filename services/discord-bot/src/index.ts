@@ -15,6 +15,7 @@ import { openDb } from "./db.js";
 import { initGithub } from "./github.js";
 import { registerHandlers } from "./commands.js";
 import { registerAssignListener } from "./assign-discord.js";
+import { startCommunityScheduler } from "./community-discord.js";
 import { mountWebhookRoutes } from "./webhook.js";
 import { mountOauthRoutes } from "./oauth.js";
 
@@ -49,6 +50,7 @@ async function main() {
   });
 
   await client.login(config.discordToken);
+  startCommunityScheduler(client, config);
 
   const app = express();
   mountWebhookRoutes(app, { client, config, tiers });

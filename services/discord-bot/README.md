@@ -20,6 +20,7 @@ Runs as a single Node.js process with a SQLite database. Deploys to Render's fre
 | `/unlink`                    | Remove the GitHub link on your Discord account.                         |
 | `/whoami`                    | Show your linked GitHub account, if any.                                |
 | `/mypr`                      | Show your merged PR count and current tier.                             |
+| `/leaderboard [period]`      | Public top 10 linked members by merged PRs (this week, last 30 days, all time). |
 | `/status <contract>`         | Show the current Sorolens status of a tracked contract.                 |
 | `/alerts <contract> [limit]` | Show the latest watchdog alerts for a contract.                         |
 | `/watch <contract>`          | Add a contract to your Sorolens watchlist.                              |
@@ -34,6 +35,8 @@ Admin commands are registered with no default permissions, so only server admini
 | `/contributions user:@x` or `github:name`       | Show someone's merged PR count and tier.                                                           |
 | `/members [filter]`                             | List linked members and their roles.                                                               |
 | `/admin-unlink user:@x` or `github:name`        | Remove another member's GitHub link. Roles and assigned issues are left as they are.              |
+| `/community-setup`                              | Set `congrats_channel`, `weekly_channel`, turn merge congrats / contributor of the week on or off, set the rotating `cotw_role`. |
+| `/milestones add\|remove\|list`                 | Roles granted at merged-PR counts, e.g. `count:5 role:@Rising Star`.                               |
 | `/assign-setup`                                 | Set the apply `channel`, `required_role`, `any_role_1..3` and `max` issues per person.             |
 | `/assign-available [from] [to] [label] [applicants]` | List open, unassigned issues with a count, range, and which are already released.             |
 | `/assign-issues add\|remove issues:836-850, 812` | Choose which issues members can pick. `clear` and `list` too.                                      |
@@ -73,6 +76,13 @@ none. It only replies to explain what was skipped or declined.
 - Each issue must be released, open and unassigned, and have a Drips Wave application comment (`<!-- wave:application-id:... -->`) posted by the member's linked GitHub account.
 - **First come, first served:** messages are processed one at a time. An issue someone already has is skipped (never reassigned) and the member still gets the other issues they picked.
 - Closed issues, and issues assigned outside the bot, drop out of the released list automatically.
+
+## Community and rewards
+
+- **Leaderboard:** `/leaderboard` posts publicly. Only linked members are ranked; ties go to whoever reached the count first. Data comes from GitHub search, cached for 5 minutes.
+- **Merge congrats:** when a linked member's PR merges, the bot tags them in `congrats_channel` (e.g. #live-updates) with the PR and their running total. This is a short message of its own, separate from the "Issue Resolved" card the `discord-live-updates` workflow posts.
+- **Contributor of the week:** the week runs Sunday to Saturday (UTC). From Sunday 08:00 UTC the bot posts the winner and runners-up in `weekly_channel` (e.g. #activity) and moves `cotw_role` to the new winner. If the bot was asleep at 08:00 it posts when it wakes.
+- **Milestones:** after the built-in Contributor (1 PR) and Core Contributor (3 PRs) tiers, suggested milestones are 5 Rising Star, 10 Veteran, 20 Elite, 40 Legend, 80 Mythic. Create the roles yourself (the bot never creates roles), keep them below the bot's role, and map them with `/milestones add`. Roles are granted on the member's next merge, and the congrats post mentions a newly unlocked milestone.
 
 ## Role tiers
 
