@@ -32,5 +32,15 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    // Mobile viewports (issue #611) catch layout and tap-target regressions
+    // that a desktop-only run never sees.
+    {
+      name: "mobile-chrome",
+      use: { ...devices["Pixel 7"] },
+    },
+    {
+      name: "mobile-safari",
+      use: { ...devices["iPhone 14"] },
+    },
   ],
 });
