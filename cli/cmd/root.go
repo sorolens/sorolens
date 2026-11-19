@@ -13,6 +13,7 @@ type Config struct {
 	APIURL  string
 	Network string
 	Output  string
+	Query   string
 	JSON    bool
 	NoColor bool
 	Timeout time.Duration
@@ -39,7 +40,8 @@ func init() {
 		"Sorolens API base URL",
 	)
 	rootCmd.PersistentFlags().StringVar(&globalConfig.Network, "network", "", "Stellar network (testnet, mainnet, futurenet, standalone)")
-	rootCmd.PersistentFlags().StringVar(&globalConfig.Output, "output", "", "Output format (table or json)")
+	rootCmd.PersistentFlags().StringVar(&globalConfig.Output, "output", "", "Output format (table, json, yaml or jsonl)")
+	rootCmd.PersistentFlags().StringVar(&globalConfig.Query, "query", "", "jq-style path filter applied to structured output (e.g. '.items[].name')")
 	rootCmd.PersistentFlags().BoolVar(&globalConfig.JSON, "json", false, "Output machine-readable JSON")
 	rootCmd.PersistentFlags().BoolVar(&globalConfig.NoColor, "no-color", false, "Disable color output")
 	rootCmd.PersistentFlags().DurationVar(&globalConfig.Timeout, "timeout", 10*time.Second, "Request timeout")

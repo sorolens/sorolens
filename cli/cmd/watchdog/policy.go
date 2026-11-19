@@ -112,7 +112,7 @@ func runPolicyGet(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "No policy set for %s\n", args[0])
 		return nil
 	}
-	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+	if jsonOut := format.Structured(); jsonOut {
 		fmt.Println(string(trimSpace(out)))
 		return nil
 	}

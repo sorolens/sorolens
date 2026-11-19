@@ -66,6 +66,25 @@ sorolens --api-url https://api.sorolens.xyz --network testnet inspect CDLZ...
 
 Add `--json` to any command for machine-readable output.
 
+### Output formats and `--query`
+
+`--output` (or `SOROLENS_OUTPUT`) accepts `table` (default), `json`, `yaml` and
+`jsonl`; `--json` is shorthand for `--output json`. `jsonl` writes one compact
+JSON document per line, element by element for list results.
+
+`--query` applies a jq-style path filter to structured output. Supported
+syntax: `.key`, `."quoted key"`, `[N]` (negative counts from the end), `[]`
+(iterate) and `|` to chain, for example:
+
+```bash
+sorolens contracts list --output jsonl --query '.[] | .id'
+sorolens watchdog status CAAA... --output yaml --query '.status'
+```
+
+A query implies `--output json` unless a structured format is chosen, and is
+rejected with `--output table`. Syntax and runtime errors report the position
+in the expression. The filter is implemented in Go; no external program runs.
+
 `compare` renders events, invocations, failure rate, CPU and fee averages,
 health scores and a unicode event-volume sparkline for each contract. Pick a
 window with `--window 24h|7d|30d`; missing data becomes an em dash instead of

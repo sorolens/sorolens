@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sorolens/sorolens/cli/internal/format"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -52,10 +53,27 @@ func applyConfig(cmd *cobra.Command, _ []string) error {
 			"table",
 		))
 	}
-	if globalConfig.Output != "table" && globalConfig.Output != "json" {
-		return fmt.Errorf("invalid output format %q: must be table or json", globalConfig.Output)
+	if !format.ValidFormat(globalConfig.Output) {
+		return fmt.Errorf("invalid output format %q: must be table, json, yaml or jsonl", globalConfig.Output)
 	}
-	globalConfig.JSON = globalConfig.Output == "json"
+	var query *format.Query
+	if strings.TrimSpace(globalConfig.Query) != "" {
+		q, err := format.ParseQuery(globalConfig.Query)
+		if err != nil {
+			return fmt.Errorf("invalid --query: %w", err)
+		}
+		query = q
+		if globalConfig.Output == "table" {
+			if cmd.Flags().Changed("output") {
+				return fmt.Errorf("--query needs a structured output format: use --output json, yaml or jsonl")
+			}
+			// A query only makes sense on structured data, so it implies JSON
+			// unless a structured format was chosen.
+			globalConfig.Output = "json"
+		}
+	}
+	globalConfig.JSON = globalConfig.Output != "table"
+	format.SetOptions(format.Options{Format: globalConfig.Output, Query: query})
 	return nil
 }
 
