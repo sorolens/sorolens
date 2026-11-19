@@ -233,6 +233,7 @@ To review a change, run the spec, open the expected, actual and diff images with
 [`middleware.ts`](middleware.ts) sends a strict policy, built by [`lib/csp.ts`](lib/csp.ts), with a new nonce on every document request:
 
 - **Scripts** run only with the request's nonce (`'strict-dynamic'` lets them load their own chunks). `'unsafe-inline'` and `'unsafe-eval'` are never allowed in production; `next dev` alone gets `'unsafe-eval'` for hot reloading.
+- **Styles** in production need the nonce on `<style>` elements. `next dev` injects its CSS as un-nonced `<style>` elements, so development allows inline styles instead.
 - **Styles**: `<style>` elements need the nonce. `style-src-attr 'unsafe-inline'` remains for `style` attributes, which React and Recharts server-render and which cannot execute code.
 - **Connections and images** are limited to the app, the API origin, and Sentry or Plausible when configured.
 

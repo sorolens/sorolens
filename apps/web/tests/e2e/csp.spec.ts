@@ -63,20 +63,25 @@ test("the violation check fails when a page breaks the policy", async ({
   await mockApi(page);
   await page.goto("/contracts");
 
-  // An injected script has no nonce, exactly like an XSS payload.
-  const executed = await page.evaluate(() => {
-    const script = document.createElement("script");
-    script.textContent = "window.__cspBypassed = true;";
-    document.head.appendChild(script);
-    return (window as unknown as { __cspBypassed?: boolean }).__cspBypassed;
+  // An injected inline event handler, the shape of a typical XSS payload.
+  // script-src blocks it whatever 'strict-dynamic' trusts.
+  await page.evaluate(() => {
+    const img = document.createElement("img");
+    img.setAttribute("onerror", "window.__cspBypassed = true;");
+    img.src = "data:image/png;base64,invalid";
+    document.body.appendChild(img);
   });
+  await page.waitForTimeout(500);
+  const executed = await page.evaluate(
+    () => (window as unknown as { __cspBypassed?: boolean }).__cspBypassed
+  );
 
   expect(executed).toBeUndefined();
   await expect
     .poll(() => readViolations(page))
     .toContainEqual(
       expect.objectContaining({
-        directive: "script-src-elem",
+        directive: "script-src-attr",
         blocked: "inline",
       })
     );

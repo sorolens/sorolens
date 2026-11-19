@@ -62,10 +62,17 @@ export function buildCsp({
   const scriptSrc = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"];
   if (isDev) scriptSrc.push("'unsafe-eval'");
 
+  // `next dev` injects its stylesheets as <style> elements without a nonce.
+  // A nonce makes browsers ignore 'unsafe-inline', so development drops the
+  // nonce for styles instead; production keeps <style> nonced.
+  const styleSrc = isDev
+    ? ["'self'", "'unsafe-inline'"]
+    : ["'self'", `'nonce-${nonce}'`];
+
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
     "script-src": scriptSrc,
-    "style-src": ["'self'", `'nonce-${nonce}'`],
+    "style-src": styleSrc,
     // Style attributes cannot run code, and React and Recharts server-render
     // them for layout, so only attributes are exempt. <style> stays nonced.
     "style-src-attr": ["'unsafe-inline'"],

@@ -43,6 +43,12 @@ describe("buildCsp", () => {
     const policy = buildCsp({ ...base, isDev: true });
     expect(directive(policy, "script-src")).toContain("'unsafe-eval'");
     expect(directive(policy, "connect-src")).toContain("ws://localhost:*");
+    // next dev injects un-nonced <style> elements, which a nonce would block.
+    expect(directive(policy, "style-src")).toEqual([
+      "'self'",
+      "'unsafe-inline'",
+    ]);
+    expect(directive(policy, "script-src")).not.toContain("'unsafe-inline'");
   });
 
   it("locks down plugins, framing, base and form targets", () => {
