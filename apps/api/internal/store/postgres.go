@@ -79,19 +79,36 @@ func (s *postgresStore) UpsertContract(ctx context.Context, c Contract) error {
 // GetContract retrieves a contract by its ID. Returns ErrNotFound if no contract exists.
 func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Contract, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, network, label, wasm_hash, created_at_ledger,
-		       backfill_complete_at, status, added_at, tracking_preset
-		FROM contracts WHERE id = $1`, contractID)
+		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+		       c.backfill_complete_at, c.status, c.added_at, c.tracking_preset,
+		       b.oldest_ledger, b.newest_ledger, b.next_ledger,
+		       b.started_at, b.updated_at, b.completed_at
+		FROM contracts c
+		LEFT JOIN contract_backfills b ON b.contract_id = c.id
+		WHERE c.id = $1`, contractID)
 	var c Contract
+	var oldest, newest, next *int64
+	var startedAt, updatedAt, completedAt *time.Time
 	err := row.Scan(
 		&c.ID, &c.Network, &c.Label, &c.WasmHash, &c.CreatedAtLedger,
 		&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.TrackingPreset,
+		&oldest, &newest, &next, &startedAt, &updatedAt, &completedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Contract{}, ErrNotFound
 	}
 	if err != nil {
 		return c, err
+	}
+	if oldest != nil {
+		c.Backfill = &BackfillProgress{
+			OldestLedger: *oldest,
+			NewestLedger: *newest,
+			NextLedger:   *next,
+			StartedAt:    *startedAt,
+			UpdatedAt:    *updatedAt,
+			CompletedAt:  completedAt,
+		}
 	}
 	tags, err := s.ListContractTags(ctx, contractID)
 	if err != nil {

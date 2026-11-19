@@ -174,7 +174,7 @@ go run ./services/indexer --role worker --worker-id worker-1 --shard-store memor
 
 ### Escalation and Rollback Notes
 
-- **RPC Retention Window**: Public Soroban RPC nodes retain events for ~24 hours and transaction history for ~7 days. If indexer lag exceeds the RPC retention horizon, missing historical events cannot be backfilled directly from public RPC. You must point `SOROBAN_RPC_URL` at an archival/history node or restore past data from cold storage / database backup.
+- **RPC Retention Window**: Soroban RPC nodes retain events and transaction history for 7 days by default (120,960 ledgers), and operators can configure less. If indexer lag exceeds the RPC retention horizon, missing historical events cannot be backfilled directly from public RPC. You must point `SOROBAN_RPC_URL` at an archival/history node or restore past data from cold storage / database backup.
 - **Stuck Cursor Reset**: If a contract is stuck on a corrupt ledger sequence, verify whether events have been parked in DLQ (see Section 2). Re-indexing a ledger range is safe: `pgstore` batch inserts use `ON CONFLICT DO NOTHING`.
 
 ---

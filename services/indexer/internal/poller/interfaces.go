@@ -27,6 +27,13 @@ type Store interface {
 	// returned to the caller. The network cursor never advances past a
 	// window whose data did not commit.
 	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) ([]FailedEvent, error)
+	// BeginBackfill records the backfill range for a contract and moves it to
+	// the backfilling status. An existing saved position wins over p and is
+	// returned, which is how a restarted indexer resumes.
+	BeginBackfill(ctx context.Context, p BackfillProgress) (BackfillProgress, error)
+	// CommitBackfillWindow atomically writes one scanned window together with
+	// its new position, and activates the contract on the final window.
+	CommitBackfillWindow(ctx context.Context, w BackfillWindow) ([]FailedEvent, error)
 	GetSyncState(ctx context.Context, contractID string) (SyncState, error)
 	UpsertSyncState(ctx context.Context, s SyncState) error
 	CreateNextMonthPartition(ctx context.Context) error

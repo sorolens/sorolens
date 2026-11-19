@@ -1,0 +1,54 @@
+# Everything switched on: existing Secret, mainnet with a commercial RPC,
+# sharded indexer, autoscaling, ingress with TLS and the migrations hook.
+config:
+  stellarNetwork: mainnet
+  sorobanRpcUrls:
+    mainnet: https://rpc.example.com
+    testnet: https://soroban-testnet.stellar.org:443
+  logLevel: warn
+  allowedOrigins:
+    - https://sorolens.example.com
+  watchdogContractId: CCLV77FYLRJMBGTILTKVIM76SI6JY56H7KTT47HE26UF4F265UYRDSR4
+database:
+  existingSecret: sorolens-connections
+imagePullSecrets:
+  - name: registry-credentials
+api:
+  image:
+    tag: "0.1.0"
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+  extraEnv:
+    - name: SENTRY_DSN
+      valueFrom:
+        secretKeyRef:
+          name: sorolens-sentry
+          key: dsn
+indexer:
+  mode: sharded
+  sharding:
+    shardCount: 128
+    workers:
+      replicas: 4
+web:
+  image:
+    repository: registry.example.com/sorolens-web
+    tag: "0.1.0"
+  autoscaling:
+    enabled: true
+migrations:
+  enabled: true
+  image:
+    repository: registry.example.com/sorolens-migrations
+    tag: "0.1.0"
+ingress:
+  enabled: true
+  className: nginx
+  host: sorolens.example.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  tls:
+    enabled: true
+    secretName: sorolens-tls

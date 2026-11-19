@@ -7,6 +7,10 @@ name: CLI Release
 # which builds every target and generates the checksums/SBOMs but publishes
 # nothing.
 #
+# Tag releases sign checksums.txt with cosign (keyless, GitHub OIDC), which
+# covers every archive it lists, and attach SLSA build provenance to each
+# archive. docs/verifying-releases.md has the commands to check both.
+#
 # Required secrets:
 #   GITHUB_TOKEN                  - provided by GitHub automatically.
 #   HOMEBREW_TAP_GITHUB_TOKEN     - PAT with write access to the
@@ -54,7 +58,8 @@ jobs:
           distribution: goreleaser
           version: "~> v2"
           workdir: cli
-          args: release --snapshot --clean
+          # A snapshot has no release identity to sign with.
+          args: release --snapshot --clean --skip=sign
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify checksums and SBOMs were produced
@@ -72,6 +77,11 @@ jobs:
     name: GoReleaser release
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # Keyless cosign signing and build provenance need an OIDC token.
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,6 +94,8 @@ jobs:
           cache: false
       - name: Install syft (SBOM generator)
         uses: anchore/sbom-action/download-syft@v0
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -94,3 +106,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+      - name: Attest build provenance for the archives
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            cli/dist/*.tar.gz
+            cli/dist/*.zip
+            cli/dist/checksums.txt

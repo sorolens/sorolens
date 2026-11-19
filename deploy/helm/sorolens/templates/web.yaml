@@ -1,0 +1,139 @@
+{{- if .Values.web.enabled }}
+{{- $component := "web" }}
+{{- $name := include "sorolens.componentName" (dict "root" . "component" $component) }}
+{{- $values := .Values.web }}
+{{- if not $values.image.repository }}
+{{- fail "web.image.repository is required: Sorolens publishes no dashboard image, so build one (see docs/self-hosting/kubernetes.md) or set web.enabled=false" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "sorolens.componentLabels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  {{- if not $values.autoscaling.enabled }}
+  replicas: {{ $values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "sorolens.selectorLabels" (dict "root" . "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "sorolens.componentLabels" (dict "root" . "component" $component) | nindent 8 }}
+      {{- with $values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "sorolens.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ $component }}
+          image: {{ include "sorolens.image" (dict "root" . "image" $values.image) | quote }}
+          imagePullPolicy: {{ $values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ $values.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ $values.port | quote }}
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            {{- with $values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            {{- toYaml $values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml $values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml $values.resources | nindent 12 }}
+          volumeMounts:
+            {{- range $i, $path := $values.writablePaths }}
+            - name: writable-{{ $i }}
+              mountPath: {{ $path }}
+            {{- end }}
+      volumes:
+        # The root filesystem is read-only; Next.js writes its image and
+        # fetch cache to these paths.
+        {{- range $i, $path := $values.writablePaths }}
+        - name: writable-{{ $i }}
+          emptyDir: {}
+        {{- end }}
+      {{- with $values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "sorolens.componentLabels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  type: {{ $values.service.type }}
+  selector:
+    {{- include "sorolens.selectorLabels" (dict "root" . "component" $component) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $values.service.port }}
+      targetPort: http
+      protocol: TCP
+{{- if $values.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "sorolens.componentLabels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ $values.autoscaling.minReplicas }}
+  maxReplicas: {{ $values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $values.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- if $values.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "sorolens.componentLabels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  minAvailable: {{ $values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "sorolens.selectorLabels" (dict "root" . "component" $component) | nindent 6 }}
+{{- end }}
+{{- end }}
