@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
+
+from ..types import UNSET, Unset
+
+if TYPE_CHECKING:
+    from ..models.contract_backfill import ContractBackfill
+
 
 T = TypeVar("T", bound="V2Contract")
 
@@ -23,6 +29,9 @@ class V2Contract:
         backfill_complete_at (datetime.datetime | None):
         status (str):
         added_at (datetime.datetime):
+        backfill (ContractBackfill | Unset): Progress of the new-contract backfill, returned by the contract detail
+            endpoint once the indexer has started it. Ledgers are scanned from newest_ledger down to oldest_ledger, and a
+            restarted indexer resumes at next_ledger.
     """
 
     id: str
@@ -33,6 +42,7 @@ class V2Contract:
     backfill_complete_at: datetime.datetime | None
     status: str
     added_at: datetime.datetime
+    backfill: ContractBackfill | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -58,6 +68,10 @@ class V2Contract:
 
         added_at = self.added_at.isoformat()
 
+        backfill: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.backfill, Unset):
+            backfill = self.backfill.to_dict()
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -72,11 +86,15 @@ class V2Contract:
                 "added_at": added_at,
             }
         )
+        if backfill is not UNSET:
+            field_dict["backfill"] = backfill
 
         return field_dict
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+        from ..models.contract_backfill import ContractBackfill
+
         d = dict(src_dict)
         id = d.pop("id")
 
@@ -119,6 +137,13 @@ class V2Contract:
 
         added_at = datetime.datetime.fromisoformat(d.pop("added_at"))
 
+        _backfill = d.pop("backfill", UNSET)
+        backfill: ContractBackfill | Unset
+        if isinstance(_backfill, Unset):
+            backfill = UNSET
+        else:
+            backfill = ContractBackfill.from_dict(_backfill)
+
         v2_contract = cls(
             id=id,
             network=network,
@@ -128,6 +153,7 @@ class V2Contract:
             backfill_complete_at=backfill_complete_at,
             status=status,
             added_at=added_at,
+            backfill=backfill,
         )
 
         v2_contract.additional_properties = d

@@ -1,0 +1,48 @@
+{{- if .Values.ingress.enabled }}
+{{- $api := include "sorolens.componentName" (dict "root" . "component" "api") }}
+{{- $web := include "sorolens.componentName" (dict "root" . "component" "web") }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "sorolens.fullname" . }}
+  labels:
+    {{- include "sorolens.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ required "ingress.tls.secretName is required when ingress.tls.enabled is true" .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # The API answers under /api plus its two health endpoints; the
+          # dashboard takes everything else, as the AWS load balancer does.
+          {{- range $path := list "/api" "/health" "/readyz" }}
+          - path: {{ $path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $api }}
+                port:
+                  name: http
+          {{- end }}
+          {{- if .Values.web.enabled }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $web }}
+                port:
+                  name: http
+          {{- end }}
+{{- end }}

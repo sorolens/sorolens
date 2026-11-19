@@ -1,0 +1,12 @@
+# API and indexer only, no dashboard; migrations with a chart-managed Secret.
+database:
+  url: postgres://sorolens:secret@postgres:5432/sorolens
+  directUrl: postgres://sorolens:secret@postgres-direct:5432/sorolens
+  redisUrl: redis://redis:6379/0
+web:
+  enabled: false
+migrations:
+  enabled: true
+  image:
+    repository: registry.example.com/sorolens-migrations
+    tag: "0.1.0"

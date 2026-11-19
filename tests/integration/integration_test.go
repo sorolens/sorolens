@@ -60,13 +60,9 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// setupFixture registers a contract through the public API, activates it, and
-// runs the indexer once.
-//
-// Registration currently leaves a contract in "pending" and nothing advances
-// it (issue #509 owns the pending -> backfilling -> active lifecycle). The
-// indexer only indexes active/backfilling contracts, so the fixture flips the
-// row directly. Once #509 lands this step should become unnecessary.
+// setupFixture registers a contract through the public API and runs the indexer
+// once. Registration leaves the contract "pending"; that pass takes it through
+// backfilling to active.
 func setupFixture() error {
 	status, body, err := apiRequest("POST", "/api/v1/auth/session", map[string]any{})
 	if err != nil {
@@ -95,27 +91,10 @@ func setupFixture() error {
 		return fmt.Errorf("register contract: status %d body %s", status, body)
 	}
 
-	if err := activateContract(); err != nil {
-		return err
-	}
 	if err := runIndexerOnce(); err != nil {
 		return err
 	}
 	return waitForEvent(30 * time.Second)
-}
-
-// activateContract marks the fixture contract as indexable in Postgres.
-func activateContract() error {
-	sql := fmt.Sprintf("UPDATE contracts SET status = 'active' WHERE id = '%s'", contractID)
-	out, err := composeOutput("exec", "-T", "postgres",
-		"psql", "-U", "postgres", "-d", "sorolens_test", "-tAc", sql)
-	if err != nil {
-		return fmt.Errorf("activate contract: %w\n%s", err, out)
-	}
-	if strings.TrimSpace(out) != "UPDATE 1" {
-		return fmt.Errorf("activate contract: expected UPDATE 1, got %q", strings.TrimSpace(out))
-	}
-	return nil
 }
 
 // runIndexerOnce runs a single indexing pass in the compose stack and fails on

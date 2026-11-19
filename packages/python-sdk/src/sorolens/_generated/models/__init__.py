@@ -31,6 +31,7 @@ from .compare_response_window import CompareResponseWindow
 from .contract import Contract
 from .contract_alert import ContractAlert
 from .contract_alert_severity import ContractAlertSeverity
+from .contract_backfill import ContractBackfill
 from .contract_event_rate import ContractEventRate
 from .contract_graph import ContractGraph
 from .contract_graph_edges_type_0_item import ContractGraphEdgesType0Item
@@ -328,6 +329,7 @@ __all__ = (
     "Contract",
     "ContractAlert",
     "ContractAlertSeverity",
+    "ContractBackfill",
     "ContractEventRate",
     "ContractGraph",
     "ContractGraphEdgesType0Item",

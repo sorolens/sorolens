@@ -5513,6 +5513,50 @@ components:
           items:
             type: string
           description: User-defined tags, sorted ascending. Always present; empty when the contract has no tags.
+        backfill:
+          $ref: "#/components/schemas/ContractBackfill"
+
+    ContractBackfill:
+      type: object
+      description: >-
+        Progress of the new-contract backfill, returned by the contract detail
+        endpoint once the indexer has started it. Ledgers are scanned from
+        newest_ledger down to oldest_ledger, and a restarted indexer resumes at
+        next_ledger.
+      required: [oldest_ledger, newest_ledger, next_ledger, ledgers_total, ledgers_done, percent, started_at, updated_at, completed_at]
+      properties:
+        oldest_ledger:
+          type: integer
+          format: int64
+          description: Oldest ledger the backfill will reach.
+        newest_ledger:
+          type: integer
+          format: int64
+          description: Chain head when the backfill started.
+        next_ledger:
+          type: integer
+          format: int64
+          description: Newest ledger not scanned yet. Below oldest_ledger once finished.
+        ledgers_total:
+          type: integer
+          format: int64
+        ledgers_done:
+          type: integer
+          format: int64
+        percent:
+          type: number
+          format: double
+          description: Scanned share of the range, from 0 to 100.
+        started_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
 
     ContractTagRequest:
       type: object
@@ -6178,6 +6222,8 @@ components:
         added_at:
           type: string
           format: date-time
+        backfill:
+          $ref: "#/components/schemas/ContractBackfill"
 
     V2Event:
       type: object

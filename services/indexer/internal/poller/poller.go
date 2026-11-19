@@ -31,9 +31,11 @@ const (
 	// lockKeyPrefix is the Redis key prefix for per-contract indexer locks.
 	lockKeyPrefix = "sorolens:lock:indexer:"
 
-	// newContractBackfillWindow is how many ledgers back to start a backfill
-	// for a contract with no prior sync state. At ~5s per ledger this is
-	// approximately 6 days, safely within the 7-day RPC retention window.
+	// newContractBackfillWindow is how far behind the chain head a new
+	// contract's backfill reaches. At ~5s per ledger this is approximately 6
+	// days, inside the 7-day (120,960 ledger) history retention that Soroban
+	// RPC defaults to. A node configured to keep less is detected at runtime
+	// and the backfill is shortened to what it retains (see runBackfill).
 	newContractBackfillWindow uint32 = 100_000
 )
 
@@ -48,6 +50,9 @@ type Config struct {
 	// LedgerWindow is the maximum number of ledgers to request per getEvents
 	// call. Matches INDEXER_LEDGER_WINDOW from the API config.
 	LedgerWindow uint32
+	// BackfillWindow is how many ledgers one backfill step scans. Zero means
+	// DefaultBackfillWindow. It never exceeds LedgerWindow.
+	BackfillWindow uint32
 	// PollInterval is the sleep duration between full passes in continuous mode.
 	PollInterval time.Duration
 	// MaxDuration is the wall-clock budget for a single once-mode pass.
@@ -198,9 +203,31 @@ func (p *Poller) processAll(ctx context.Context) error {
 	if err := partition.EnsureNextMonthPartition(ctx, p.store); err != nil {
 		p.log.Warn("failed to ensure next month partition", "err", err)
 	}
-	limit := p.cfg.Concurrency
-	if limit < 1 {
-		limit = p.cfg.Workers
+	workerCount := p.cfg.Workers
+	if workerCount < 1 {
+		workerCount = runtime.GOMAXPROCS(0)
+	}
+	jobs := make(chan Contract, workerCount)
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go func() {
+			defer workers.Done()
+			for contract := range jobs {
+				// Preserve graceful shutdown semantics: contracts already being
+				// processed finish, but queued contracts do not start after cancel.
+				if ctx.Err() != nil {
+					continue
+				}
+				if err := p.indexContract(context.WithoutCancel(ctx), ctx, contract); err != nil {
+					// One failing contract must not block the rest of the pass.
+					p.log.Error("failed to index contract",
+						"contract_id", contract.ID,
+						"err", err,
+					)
+				}
+			}
+		}()
 	}
 	if limit < 1 {
 		limit = runtime.GOMAXPROCS(0)
@@ -231,7 +258,7 @@ func (p *Poller) processAll(ctx context.Context) error {
 			if ctx.Err() != nil {
 				break contractBatch
 			}
-			if c.Status != "active" && c.Status != "backfilling" {
+			if c.Status != "active" && c.Status != "backfilling" && c.Status != "pending" {
 				continue
 			}
 			contract := c
@@ -496,6 +523,13 @@ func healthInputsToScoreInputs(in HealthInputs) healthscore.Inputs {
 // contract's on-chain Wasm hash for upgrades before scanning events so a code
 // upgrade with no indexable events still gets recorded.
 func (p *Poller) processContract(ctx context.Context, contract Contract) error {
+	return p.indexContract(ctx, ctx, contract)
+}
+
+// indexContract is processContract with a separate shutdown signal. ctx keeps
+// in-flight RPC and store calls alive so the current window always commits;
+// stop only ends a backfill between windows.
+func (p *Poller) indexContract(ctx, stop context.Context, contract Contract) error {
 	contractID := contract.ID
 	network := contract.Network
 	rpc, ok := p.selectRPCClient(network)
@@ -545,24 +579,32 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return fmt.Errorf("get sync state: %w", err)
 	}
 
-	var startLedger uint32
-	if syncState.LastLedger == 0 {
-		// New contract: best-effort backfill from within the retention window.
-		if latest.Sequence > newContractBackfillWindow {
-			startLedger = latest.Sequence - newContractBackfillWindow
-		} else {
-			startLedger = 1
-		}
-		p.log.Warn("new contract, starting partial backfill; events before this ledger are unavailable",
-			"contract_id", contractID,
-			"start_ledger", startLedger,
-			"retention_window_ledgers", newContractBackfillWindow,
-		)
-	} else {
-		startLedger = syncState.LastLedger + 1
+	if !needsBackfill(contract, syncState) {
+		return p.indexForward(ctx, rpc, contract, latest.Sequence, syncState)
 	}
 
-	if startLedger > latest.Sequence {
+	// New contract: tail the chain head from the start of the backfill while
+	// older ledgers are walked in bounded windows behind it.
+	progress, err := p.beginBackfill(ctx, contract, latest.Sequence, syncState)
+	if err != nil {
+		return err
+	}
+	if syncState.LastLedger == 0 {
+		syncState.LastLedger = progress.NewestLedger
+	}
+	if err := p.indexForward(ctx, rpc, contract, latest.Sequence, syncState); err != nil {
+		return err
+	}
+	return p.runBackfill(ctx, stop, rpc, contract, progress)
+}
+
+// indexForward indexes the next window of ledgers after the contract's cursor.
+func (p *Poller) indexForward(ctx context.Context, rpc RPCClient, contract Contract, latest uint32, syncState SyncState) error {
+	contractID := contract.ID
+	network := contract.Network
+
+	startLedger := syncState.LastLedger + 1
+	if startLedger > latest {
 		p.log.Info("contract is up to date",
 			"contract_id", contractID,
 			"last_ledger", syncState.LastLedger,
@@ -571,7 +613,7 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 	}
 
 	// Fetch events in windows to respect RPC page limits.
-	endLedger := min32(startLedger+p.cfg.LedgerWindow-1, latest.Sequence)
+	endLedger := min32(startLedger+p.cfg.LedgerWindow-1, latest)
 
 	log := p.log.With(
 		"contract_id", contractID,
@@ -609,7 +651,7 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 	// uses the batch's final ledger as the committed cursor, which is clamped
 	// at zero against the observed head.
 	p.metrics.AddEventsProcessed(network, len(events))
-	p.metrics.ObserveNetwork(network, latest.Sequence, endLedger)
+	p.metrics.ObserveNetwork(network, latest, endLedger)
 
 	log.Info("contract indexed",
 		"events", len(events),

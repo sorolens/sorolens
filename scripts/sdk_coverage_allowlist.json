@@ -47,15 +47,10 @@
       {
         "reason": "Scoped/admin API-key management is a control-plane concern not yet exposed by this SDK.",
         "operations": [
-          "createApiKey",
           "createApiKeyAdmin",
-          "getApiKey",
           "getApiKeyAdmin",
-          "listApiKeys",
           "listApiKeysAdmin",
-          "revokeApiKey",
           "revokeApiKeyAdmin",
-          "rotateApiKey",
           "rotateApiKeyAdmin"
         ]
       },
@@ -68,7 +63,6 @@
           "deleteAlertSubscription",
           "listAlertRules",
           "listAlertSubscriptions",
-          "listAlerts",
           "previewAlertRule",
           "setAlertRuleEnabled",
           "validateAlertRule"
@@ -77,18 +71,11 @@
       {
         "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
         "operations": [
-          "createReportSubscription",
-          "deleteReportSubscription",
           "getContractGraph",
           "getContractHealthScore",
-          "getContractReport",
-          "getContractReportHistory",
-          "getContractSLABadge",
           "getContractSpec",
           "getContractSummary",
-          "getContractUptime",
-          "listReportSubscriptions",
-          "unsubscribeReport"
+          "getContractUptime"
         ]
       },
       {

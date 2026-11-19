@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -196,6 +197,24 @@ type RPCError struct {
 
 func (e *RPCError) Error() string {
 	return fmt.Sprintf("soroban rpc %s: code %d: %s", e.Method, e.Code, e.Message)
+}
+
+// ledgerRangeMessage matches the node's rejection of a ledger it no longer
+// retains: "startLedger must be within the ledger range: 100 - 200".
+var ledgerRangeMessage = regexp.MustCompile(`ledger range: (\d+) - \d+`)
+
+// OldestRetainedLedger reports the oldest ledger the node still serves when the
+// error is an out-of-range rejection (poller.RetentionLimited).
+func (e *RPCError) OldestRetainedLedger() (uint32, bool) {
+	m := ledgerRangeMessage.FindStringSubmatch(e.Message)
+	if m == nil {
+		return 0, false
+	}
+	oldest, err := strconv.ParseUint(m[1], 10, 32)
+	if err != nil {
+		return 0, false
+	}
+	return uint32(oldest), true
 }
 
 // HTTPError is a non-200 HTTP response. 429 and 5xx are retriable.

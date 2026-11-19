@@ -25,7 +25,7 @@ make integration-test
 
 `make integration-test` builds the API, indexer and mock RPC images, starts
 Postgres, Redis, the mock RPC, migrations and the API, then runs the Go suite.
-The suite registers a contract through `POST /api/v1/contracts`, activates it,
+The suite registers a contract through `POST /api/v1/contracts`,
 runs the indexer once using `docker compose run --rm indexer -mode once`, and
 verifies the event, invocation, stats, filters and idempotency through the API.
 The stack is torn down (including volumes) afterwards, on success or failure.
@@ -46,10 +46,8 @@ The mock RPC (`mock_rpc/main.go`) serves one event for
 returns the event when the indexer requests the matching contract, event type
 and ledger window.
 
-Registration leaves a contract in `pending`, and the pending ->
-backfilling -> active lifecycle is tracked by issue #509. Until that lands, the
-suite activates its fixture row directly in Postgres so the indexer (which only
-processes active/backfilling contracts) picks it up.
+Registration leaves a contract in `pending`. The single indexer pass the suite
+runs takes it through `backfilling` to `active`.
 
 ## CI
 
