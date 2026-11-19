@@ -106,6 +106,7 @@
 
 pub mod error;
 pub mod types;
+pub mod webhooks;
 
 mod client;
 mod macros;
