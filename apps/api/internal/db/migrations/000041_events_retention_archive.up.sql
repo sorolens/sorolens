@@ -1,5 +1,5 @@
 -- ============================================================
--- 000040_events_retention_archive
+-- 000041_events_retention_archive
 --
 -- Retention archive for events older than a configurable threshold
 -- (ROADMAP v0.3). Archived events are preserved in events_archive rather
