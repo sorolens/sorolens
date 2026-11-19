@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiKeySection } from "@/components/settings/ApiKeySection";
+import { ExtensionSection } from "@/components/settings/ExtensionSection";
 import { IdentitySection } from "@/components/settings/IdentitySection";
 import { NetworkSection } from "@/components/settings/NetworkSection";
 import { NotificationsSection } from "@/components/settings/NotificationsSection";
@@ -118,6 +119,8 @@ export default function SettingsPage() {
             />
 
             <IdentitySection />
+
+            <ExtensionSection />
 
             <ApiKeySection />
           </>
