@@ -99,8 +99,7 @@ cp .env.example .env.local
 | :-------------------------------- | :-------------- | :-------- | :------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_API_URL`             | Client & Server | Optional  | `http://localhost:8080`         | Base URL pointing to the SoroLens REST API backend.                                                                               |
 | `API_URL`                         | Server-only     | Optional  | `http://localhost:8080`         | Server-side override / fallback for the REST API URL in server components.                                                        |
-| `NEXT_PUBLIC_APP_URL`             | Client & Server | Optional  | `http://localhost:3000`         | Canonical public app URL used in `robots.txt` (`https://sorolens.dev` in production).                                             |
-| `NEXT_PUBLIC_SITE_URL`            | Client & Server | Optional  | `http://localhost:3000`         | Canonical site origin used in `sitemap.xml` generation.                                                                           |
+| `NEXT_PUBLIC_APP_URL`             | Client & Server | Optional  | `https://sorolens.dev`          | Canonical public origin. The single source for `metadataBase`, `robots.txt` and `sitemap.xml` (see `lib/siteUrl.ts`).             |
 | `NEXT_PUBLIC_PWA_ENABLED`         | Client & Server | Optional  | `false`                         | Set to `"true"` to enable service worker registration in development mode. Always active in production.                           |
 | `VAPID_PUBLIC_KEY`                | Client & Server | Optional* | —                               | Base64url-encoded EC P-256 public key for Web Push. Exposed via `/api/push/key`. Required only if push notifications are enabled. |
 | `VAPID_PRIVATE_KEY`               | Server-only     | Secret*   | —                               | Base64url-encoded EC P-256 private key for Web Push. **Never commit or expose publicly.**                                         |
@@ -169,14 +168,14 @@ The application uses Next.js App Router. Routes inside the `(app)` route group s
 
 ### API Route Handlers & Metadata
 
-| Path                              | File                                                                                         | Methods                 | Description                                                              |
-| :-------------------------------- | :------------------------------------------------------------------------------------------- | :---------------------- | :----------------------------------------------------------------------- |
-| `/api/push/subscribe`             | [`app/api/push/subscribe/route.ts`](app/api/push/subscribe/route.ts)                         | `POST`, `DELETE`, `PUT` | Manages Web Push subscriptions and internal push alert dispatches.       |
-| `/api/push/vapid-public-key`      | [`app/api/push/vapid-public-key/route.ts`](app/api/push/vapid-public-key/route.ts)           | `GET`                   | Returns the server's public VAPID key for client push registration.      |
-| `/api/status/indexer`             | [`app/api/status/indexer/route.ts`](app/api/status/indexer/route.ts)                         | `GET`                   | Proxies and formats Prometheus metrics from the indexer service.         |
-| `/api/watchdog/test-notification` | [`app/api/watchdog/test-notification/route.ts`](app/api/watchdog/test-notification/route.ts) | `POST`                  | Dispatches a mock notification to verify alert channel configuration.    |
-| `/robots.txt`                     | [`app/robots.ts`](app/robots.ts)                                                             | `GET`                   | Generates crawler directives and sitemap URL from `NEXT_PUBLIC_APP_URL`. |
-| `/sitemap.xml`                    | [`app/sitemap.ts`](app/sitemap.ts)                                                           | `GET`                   | Generates search engine sitemap from `NEXT_PUBLIC_SITE_URL`.             |
+| Path                              | File                                                                                         | Methods                 | Description                                                                   |
+| :-------------------------------- | :------------------------------------------------------------------------------------------- | :---------------------- | :---------------------------------------------------------------------------- |
+| `/api/push/subscribe`             | [`app/api/push/subscribe/route.ts`](app/api/push/subscribe/route.ts)                         | `POST`, `DELETE`, `PUT` | Manages Web Push subscriptions and internal push alert dispatches.            |
+| `/api/push/vapid-public-key`      | [`app/api/push/vapid-public-key/route.ts`](app/api/push/vapid-public-key/route.ts)           | `GET`                   | Returns the server's public VAPID key for client push registration.           |
+| `/api/status/indexer`             | [`app/api/status/indexer/route.ts`](app/api/status/indexer/route.ts)                         | `GET`                   | Proxies and formats Prometheus metrics from the indexer service.              |
+| `/api/watchdog/test-notification` | [`app/api/watchdog/test-notification/route.ts`](app/api/watchdog/test-notification/route.ts) | `POST`                  | Dispatches a mock notification to verify alert channel configuration.         |
+| `/robots.txt`                     | [`app/robots.ts`](app/robots.ts)                                                             | `GET`                   | Generates crawler directives and sitemap URL from `NEXT_PUBLIC_APP_URL`.      |
+| `/sitemap.xml`                    | [`app/sitemap.ts`](app/sitemap.ts)                                                           | `GET`                   | Generates search engine sitemap from `NEXT_PUBLIC_APP_URL` via `lib/siteUrl`. |
 
 ---
 
