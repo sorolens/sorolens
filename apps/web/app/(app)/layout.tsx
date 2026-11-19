@@ -9,6 +9,7 @@
  *   Web Push at any time.
  */
 import Link from "next/link";
+import Image from "next/image";
 import { SWRConfig } from "swr";
 import { NetworkProvider } from "@/lib/network";
 import { swrConfig } from "@/lib/swr";
@@ -36,7 +37,15 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             href="/"
             className="flex items-center gap-2 text-2xl font-bold tracking-tight"
           >
-            <img src="/logo.svg" alt="" className="h-8 w-8" aria-hidden />
+            <Image
+              src="/logo.svg"
+              alt=""
+              width={32}
+              height={32}
+              priority
+              className="h-8 w-8"
+              aria-hidden
+            />
             Sorolens
           </Link>
           <div className="flex flex-wrap items-center gap-4">

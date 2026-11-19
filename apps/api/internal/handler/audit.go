@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"net/http"
 	"strconv"
 	"time"
@@ -51,22 +52,22 @@ func (h *Handler) ListAuditEvents(w http.ResponseWriter, r *http.Request) {
 		since = t
 	}
 
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
-	var cursor int64
+	var auditCursor int64
 	if rawCursor != "" {
 		n, err := strconv.ParseInt(rawCursor, 10, 64)
 		if err != nil || n <= 0 {
 			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 			return
 		}
-		cursor = n
+		auditCursor = n
 	}
 
-	events, next, err := h.Store.ListAuditEvents(r.Context(), since, cursor, intQuery(r, "limit", 100))
+	events, next, err := h.Store.ListAuditEvents(r.Context(), since, auditCursor, intQuery(r, "limit", 100))
 	if err != nil {
 		h.Logger.Error("list audit events", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list audit events")
@@ -79,7 +80,7 @@ func (h *Handler) ListAuditEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	var nextCursor string
 	if next != 0 {
-		nextCursor = encodeCursor(strconv.FormatInt(next, 10))
+		nextCursor = cursor.Encode(strconv.FormatInt(next, 10))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"events":      resp,
