@@ -58,11 +58,23 @@ sorolens --api-url https://api.sorolens.xyz --network testnet inspect CDLZ...
 | `sorolens status <contract-id>`      | Watchdog status for a contract                 |
 | `sorolens watchdog`                  | Watchdog overview and alerts                   |
 | `sorolens ttl <contract-id>`         | Entry TTL report                               |
+| `sorolens report <contract-id>`      | Monthly SLA and uptime report                  |
+| `sorolens compare <id> <id>...`      | Compare 2–5 contracts side by side             |
 | `sorolens label <name> <id>`         | Attach a public label to a contract or account |
 | `sorolens tui`                       | Interactive terminal UI                        |
 | `sorolens version`                   | Print the CLI version                          |
 
 Add `--json` to any command for machine-readable output.
+
+`compare` renders events, invocations, failure rate, CPU and fee averages,
+health scores and a unicode event-volume sparkline for each contract. Pick a
+window with `--window 24h|7d|30d`; missing data becomes an em dash instead of
+failing the command:
+
+```sh
+sorolens compare CAAA... CBBB... --window 7d
+sorolens compare CAAA... CBBB... CCCC... --json
+```
 
 ## Releasing
 

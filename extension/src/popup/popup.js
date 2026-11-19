@@ -283,4 +283,6 @@ el.optionsButton.addEventListener("click", () => {
   void openOptionsPage();
 });
 
+// Opening the popup counts as reading the alerts behind the badge.
+void sendRuntimeMessage({ type: MESSAGE.markAlertsRead });
 void refresh();

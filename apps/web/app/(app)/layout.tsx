@@ -42,6 +42,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           <div className="flex flex-wrap items-center gap-4">
             <nav className="flex gap-4 text-sm">
               <Link
+                href="/dashboard"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                Dashboard
+              </Link>
+              <Link
                 href="/live"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >

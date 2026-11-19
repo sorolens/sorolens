@@ -1,0 +1,9 @@
+Metric             alpha   CBBBBB…BBBB
+─────────────────  ──────  ───────────
+Events             1200    —
+Invocations        340     —
+Failure rate       2.50%   —
+Health score       92      —
+Avg CPU            1530    —
+Avg fee (stroops)  220     —
+Event volume       ▂▅▃█▅▁  —
