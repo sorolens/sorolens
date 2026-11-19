@@ -14,6 +14,7 @@ import { config } from "./config.js";
 import { openDb } from "./db.js";
 import { initGithub } from "./github.js";
 import { registerHandlers } from "./commands.js";
+import { registerAssignListener } from "./assign-discord.js";
 import { mountWebhookRoutes } from "./webhook.js";
 import { mountOauthRoutes } from "./oauth.js";
 
@@ -22,7 +23,15 @@ async function main() {
   initGithub(config.githubToken);
 
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      // Issue self-assign reads `#123` messages in the configured channel.
+      // Message Content is a privileged intent: enable it in the Discord
+      // developer portal (Bot > Privileged Gateway Intents) before deploying.
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
   });
 
   const tiers = {
@@ -33,6 +42,7 @@ async function main() {
   };
 
   registerHandlers(client, { config, tiers });
+  registerAssignListener(client, config);
 
   client.once("clientReady", () => {
     console.log(`Discord client ready as ${client.user?.tag}`);

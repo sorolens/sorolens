@@ -45,6 +45,32 @@ export function openDb(path: string): Database.Database {
       key_id     TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Issue self-assign: owner-controlled settings (single row, id = 1).
+    CREATE TABLE IF NOT EXISTS assign_settings (
+      id              INTEGER PRIMARY KEY CHECK (id = 1),
+      enabled         INTEGER NOT NULL DEFAULT 0,
+      channel_id      TEXT,
+      required_roles  TEXT NOT NULL DEFAULT '[]',
+      any_of_roles    TEXT NOT NULL DEFAULT '[]',
+      max_per_user    INTEGER NOT NULL DEFAULT 1
+    );
+
+    -- Issues the owner has opened up for self-assignment.
+    CREATE TABLE IF NOT EXISTS assign_pool (
+      issue_number INTEGER PRIMARY KEY,
+      added_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Issues the bot has handed out. The PRIMARY KEY doubles as the lock
+    -- that stops two members claiming the same issue at the same time.
+    CREATE TABLE IF NOT EXISTS assign_grants (
+      issue_number INTEGER PRIMARY KEY,
+      discord_id   TEXT NOT NULL,
+      github_login TEXT NOT NULL,
+      assigned_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS assign_grants_by_user ON assign_grants (discord_id);
   `);
   db = conn;
   return conn;
@@ -168,3 +194,175 @@ export const apiKeyStore = {
     setApiKey(discordId, key, keyId),
   clear: clearApiKey,
 };
+
+// ---- issue self-assign ------------------------------------------------------
+
+export interface AssignSettings {
+  enabled: boolean;
+  channelId: string | null;
+  /** Member must hold every one of these roles. */
+  requiredRoles: string[];
+  /** Member must hold at least one of these roles (ignored when empty). */
+  anyOfRoles: string[];
+  maxPerUser: number;
+}
+
+export interface AssignGrant {
+  issueNumber: number;
+  discordId: string;
+  githubLogin: string;
+  assignedAt: string;
+}
+
+export function getAssignSettings(): AssignSettings {
+  const conn = requireDb();
+  const row = conn
+    .prepare(
+      "SELECT enabled, channel_id, required_roles, any_of_roles, max_per_user FROM assign_settings WHERE id = 1"
+    )
+    .get() as
+    | {
+        enabled: number;
+        channel_id: string | null;
+        required_roles: string;
+        any_of_roles: string;
+        max_per_user: number;
+      }
+    | undefined;
+  if (!row) {
+    return {
+      enabled: false,
+      channelId: null,
+      requiredRoles: [],
+      anyOfRoles: [],
+      maxPerUser: 1,
+    };
+  }
+  return {
+    enabled: row.enabled === 1,
+    channelId: row.channel_id,
+    requiredRoles: JSON.parse(row.required_roles) as string[],
+    anyOfRoles: JSON.parse(row.any_of_roles) as string[],
+    maxPerUser: row.max_per_user,
+  };
+}
+
+export function updateAssignSettings(
+  patch: Partial<AssignSettings>
+): AssignSettings {
+  const next = { ...getAssignSettings(), ...patch };
+  requireDb()
+    .prepare(
+      `INSERT INTO assign_settings (id, enabled, channel_id, required_roles, any_of_roles, max_per_user)
+       VALUES (1, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         enabled        = excluded.enabled,
+         channel_id     = excluded.channel_id,
+         required_roles = excluded.required_roles,
+         any_of_roles   = excluded.any_of_roles,
+         max_per_user   = excluded.max_per_user`
+    )
+    .run(
+      next.enabled ? 1 : 0,
+      next.channelId,
+      JSON.stringify(next.requiredRoles),
+      JSON.stringify(next.anyOfRoles),
+      next.maxPerUser
+    );
+  return next;
+}
+
+/** Add issues to the pool. Returns how many were new. */
+export function addToPool(issues: number[]): number {
+  const conn = requireDb();
+  const stmt = conn.prepare(
+    "INSERT OR IGNORE INTO assign_pool (issue_number) VALUES (?)"
+  );
+  let added = 0;
+  conn.transaction(() => {
+    for (const n of issues) added += stmt.run(n).changes;
+  })();
+  return added;
+}
+
+/** Remove issues from the pool. Returns how many were removed. */
+export function removeFromPool(issues: number[]): number {
+  const conn = requireDb();
+  const stmt = conn.prepare("DELETE FROM assign_pool WHERE issue_number = ?");
+  let removed = 0;
+  conn.transaction(() => {
+    for (const n of issues) removed += stmt.run(n).changes;
+  })();
+  return removed;
+}
+
+export function clearPool(): number {
+  return requireDb().prepare("DELETE FROM assign_pool").run().changes;
+}
+
+export function listPool(): number[] {
+  return (
+    requireDb()
+      .prepare("SELECT issue_number AS n FROM assign_pool ORDER BY issue_number")
+      .all() as { n: number }[]
+  ).map((r) => r.n);
+}
+
+export function isInPool(issue: number): boolean {
+  return (
+    requireDb()
+      .prepare("SELECT 1 FROM assign_pool WHERE issue_number = ?")
+      .get(issue) !== undefined
+  );
+}
+
+/**
+ * Atomically reserve an issue for a member. Returns false when the issue
+ * is already reserved (by anyone), so concurrent requests cannot both win.
+ */
+export function claimIssue(
+  issue: number,
+  discordId: string,
+  githubLogin: string
+): boolean {
+  const r = requireDb()
+    .prepare(
+      "INSERT OR IGNORE INTO assign_grants (issue_number, discord_id, github_login) VALUES (?, ?, ?)"
+    )
+    .run(issue, discordId, githubLogin);
+  return r.changes > 0;
+}
+
+/** Drop a reservation (used when the GitHub assignment fails, or is released). */
+export function releaseIssue(issue: number): boolean {
+  return (
+    requireDb()
+      .prepare("DELETE FROM assign_grants WHERE issue_number = ?")
+      .run(issue).changes > 0
+  );
+}
+
+export function getGrant(issue: number): AssignGrant | null {
+  const row = requireDb()
+    .prepare(
+      "SELECT issue_number AS issueNumber, discord_id AS discordId, github_login AS githubLogin, assigned_at AS assignedAt FROM assign_grants WHERE issue_number = ?"
+    )
+    .get(issue) as AssignGrant | undefined;
+  return row ?? null;
+}
+
+export function listGrantsFor(discordId: string): AssignGrant[] {
+  return requireDb()
+    .prepare(
+      "SELECT issue_number AS issueNumber, discord_id AS discordId, github_login AS githubLogin, assigned_at AS assignedAt FROM assign_grants WHERE discord_id = ? ORDER BY issue_number"
+    )
+    .all(discordId) as AssignGrant[];
+}
+
+export function listAllGrants(): AssignGrant[] {
+  return requireDb()
+    .prepare(
+      "SELECT issue_number AS issueNumber, discord_id AS discordId, github_login AS githubLogin, assigned_at AS assignedAt FROM assign_grants ORDER BY issue_number"
+    )
+    .all() as AssignGrant[];
+}

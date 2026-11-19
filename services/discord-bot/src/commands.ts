@@ -42,6 +42,7 @@ import { alertsEmbed, shortId, statusEmbed, watchlistEmbed } from "./embeds.js";
 import { describeRetry, SlidingWindowRateLimiter } from "./ratelimit.js";
 import { ensureUserApiKey, revokeUserApiKey } from "./apikey.js";
 import type { Config } from "./config.js";
+import { ASSIGN_COMMANDS, handleAssignCommand } from "./assign-discord.js";
 
 // Re-exported from command-definitions.ts so callers that only import
 // commands.ts still get the definitions; the split lets the register
@@ -227,6 +228,9 @@ async function handle(
   api: SorolensApi,
   limiter: SlidingWindowRateLimiter
 ) {
+  if (ASSIGN_COMMANDS.has(interaction.commandName)) {
+    return handleAssignCommand(interaction, ctx.config);
+  }
   switch (interaction.commandName) {
     case "connect":
       return handleConnect(interaction, ctx);
