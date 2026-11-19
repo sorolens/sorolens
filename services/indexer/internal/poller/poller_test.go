@@ -186,6 +186,12 @@ func (f *fakeStore) InsertFailedEvent(_ context.Context, fe FailedEvent) error {
 	return nil
 }
 
+func (f *fakeStore) CountFailedEvents(_ context.Context, _ string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.failedEvents), nil
+}
+
 func (f *fakeStore) BatchInsertInvocations(_ context.Context, invs []Invocation) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -367,11 +373,18 @@ func (r *fakeRedis) SetNX(_ context.Context, key, _ string, _ time.Duration) (bo
 	return true, nil
 }
 
-func (r *fakeRedis) Del(_ context.Context, key string) error {
+func (r *fakeRedis) Del(_ context.Context, key, _ string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.held, key)
 	return nil
+}
+
+func (r *fakeRedis) Renew(_ context.Context, key, _ string, _ time.Duration) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.held[key]
+	return ok, nil
 }
 
 // ---- helpers --------------------------------------------------------------

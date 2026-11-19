@@ -99,3 +99,11 @@ The store tests run when `POSTGRES_TEST_URL` points at a migrated database:
 POSTGRES_TEST_URL=postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable \
   go test ./services/indexer/internal/pgstore/...
 ```
+
+## Redis run lock
+
+| Variable   | Default                   | Description                                                                                                                                                                 |
+| ---------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REDIS_URL` | `redis://localhost:6379` | Redis URL for the per-contract run lock. When set, the indexer acquires a Redis lock (`SET key value NX PX <ttl>`) before indexing each contract and renews it while the run is active. The lock is released with a compare-and-delete Lua script so one runner never deletes another's lock. When empty, locking is disabled and only one indexer should run per contract set. |
+
+Redis is checked at startup and an unreachable server prevents the indexer from starting, so two runners can never process the same ledgers.
