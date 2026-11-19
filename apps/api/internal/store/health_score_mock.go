@@ -20,6 +20,20 @@ func (m *MockStore) UpsertContractHealthScore(_ context.Context, h ContractHealt
 		m.healthScores = make(map[string]ContractHealthScore)
 	}
 	m.healthScores[h.ContractID] = h
+	if m.healthScoreHistory == nil {
+		m.healthScoreHistory = make(map[string]map[time.Time]HealthScoreSample)
+	}
+	buckets := m.healthScoreHistory[h.ContractID]
+	if buckets == nil {
+		buckets = make(map[time.Time]HealthScoreSample)
+		m.healthScoreHistory[h.ContractID] = buckets
+	}
+
+	computedAt := h.ComputedAt.UTC()
+	bucket := computedAt.Truncate(time.Hour)
+	if previous, ok := buckets[bucket]; !ok || !computedAt.Before(previous.ComputedAt) {
+		buckets[bucket] = HealthScoreSample{ComputedAt: computedAt, Score: h.Score}
+	}
 	return nil
 }
 
@@ -93,4 +107,21 @@ func condenseMockHealthInputs(m *MockStore, contractID string) HealthScoreInputs
 		in.Activity = activity
 	}
 	return in
+}
+
+func (m *MockStore) ListContractHealthScoreHistory(
+	_ context.Context, contractID string, limit int,
+) ([]HealthScoreSample, error) {
+	buckets := m.healthScoreHistory[contractID]
+	samples := make([]HealthScoreSample, 0, len(buckets))
+	for _, sample := range buckets {
+		samples = append(samples, sample)
+	}
+	sort.Slice(samples, func(i, j int) bool {
+		return samples[i].ComputedAt.Before(samples[j].ComputedAt)
+	})
+	if len(samples) > limit {
+		samples = samples[len(samples)-limit:]
+	}
+	return samples, nil
 }
