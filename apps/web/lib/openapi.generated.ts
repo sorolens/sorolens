@@ -112,6 +112,36 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/admin/audit": {
+      get: {
+        operationId: "listAuditEventsRoot",
+        summary: "List audit events (admin role only)",
+        tags: ["Audit"],
+        parameters: [
+          {
+            name: "since",
+            in: "query",
+            required: false,
+            description: "Only events at or after this RFC 3339 timestamp.",
+            type: "string",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            description: "Page size (default 50, clamped to 200).",
+            type: "integer",
+          },
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            description: "Opaque cursor from next_cursor of the previous page.",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/admin/audit": {
       get: {
         operationId: "listAuditEvents",

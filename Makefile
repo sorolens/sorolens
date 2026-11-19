@@ -21,7 +21,7 @@ BUILT_AT  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 API_BUILDINFO := github.com/sorolens/sorolens/apps/api/internal/buildinfo
 API_LDFLAGS   := -ldflags "-X $(API_BUILDINFO).Version=$(VERSION) -X $(API_BUILDINFO).GitSHA=$(GIT_SHA) -X $(API_BUILDINFO).BuiltAt=$(BUILT_AT)"
 
-.PHONY: up down logs psql migrate-up migrate-down migrate-version migrate-force migrate-new migrate-check test lint dev api build client-go openapi lint-openapi
+.PHONY: up down logs psql migrate-up migrate-down migrate-version migrate-force migrate-new migrate-check config-docs test lint dev api build client-go openapi lint-openapi
 
 ## up: start all Docker services in the background
 up:
@@ -112,6 +112,10 @@ migrate-new:
 ## apps/api/internal/db/migrations_test.go, without needing a database.
 migrate-check:
 	cd apps/api && go test -count=1 -run TestMigration ./internal/db
+
+## config-docs: regenerate docs/configuration.md from the code that reads each option
+config-docs:
+	cd apps/api && go run ./cmd/configdoc -o ../../docs/configuration.md
 
 ## test: run all Go and TypeScript tests
 test:

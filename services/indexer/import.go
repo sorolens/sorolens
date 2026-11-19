@@ -38,8 +38,11 @@ func registerImportFlags(fs *flag.FlagSet) *importFlags {
 	fs.UintVar(&f.to, "import-to", 0, "Import mode: last ledger to import (inclusive); clipped below the RPC backfill")
 	fs.UintVar(&f.batch, "import-batch", uint(history.DefaultBatchLedgers), "Import mode: ledgers per BigQuery query")
 	fs.StringVar(&f.billingProject, "hubble-billing-project", envString("HUBBLE_BILLING_PROJECT", ""), "Import mode: Google Cloud project BigQuery bills queries to")
+	// Import mode: Google Cloud project that holds the Hubble events dataset (default crypto-stellar).
 	fs.StringVar(&f.project, "hubble-project", envString("HUBBLE_PROJECT", ""), "Import mode: project of the events dataset (default "+history.DefaultHubbleProject+")")
+	// Import mode: Hubble events dataset to read (default crypto_stellar, mainnet only).
 	fs.StringVar(&f.dataset, "hubble-dataset", envString("HUBBLE_DATASET", ""), "Import mode: events dataset (default "+history.DefaultHubbleDataset+", mainnet only)")
+	// Import mode: largest scan one BigQuery query may bill; BigQuery refuses a query over it.
 	fs.Int64Var(&f.maxBytesBilled, "hubble-max-bytes-billed", int64(envInt("HUBBLE_MAX_BYTES_BILLED", int(history.DefaultMaxBytesBilled))), "Import mode: largest scan one query may bill; BigQuery refuses a query over it")
 	return f
 }

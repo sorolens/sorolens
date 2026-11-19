@@ -44,7 +44,10 @@ const (
 //   - Only a SHA-256 of the request body is stored, never the body.
 //   - The write happens in the background with its own timeout, so a slow or
 //     failing audit store never delays or fails the request.
-func Audit(writer AuditWriter, logger *slog.Logger, pathPrefix string) func(http.Handler) http.Handler {
+func Audit(writer AuditWriter, logger *slog.Logger, pathPrefixes ...string) func(http.Handler) http.Handler {
+	if len(pathPrefixes) == 0 {
+		pathPrefixes = []string{"/api/"}
+	}
 	inFlight := make(chan struct{}, auditMaxInFlight)
 
 	record := func(e store.AuditEvent) {
@@ -68,7 +71,14 @@ func Audit(writer AuditWriter, logger *slog.Logger, pathPrefix string) func(http
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !isMutating(r.Method) || !strings.HasPrefix(r.URL.Path, pathPrefix) {
+			matched := false
+			for _, p := range pathPrefixes {
+				if strings.HasPrefix(r.URL.Path, p) {
+					matched = true
+					break
+				}
+			}
+			if !isMutating(r.Method) || !matched {
 				next.ServeHTTP(w, r)
 				return
 			}

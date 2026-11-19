@@ -385,6 +385,26 @@ func (m *MockStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, 
 	return nil
 }
 
+func (m *MockStore) MaintainPartitions(_ context.Context, _ int) error { return nil }
+
+func (m *MockStore) ArchiveOldEvents(_ context.Context, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, errors.New("retention days must be positive")
+	}
+	cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+	var remaining []Event
+	var moved int64
+	for _, e := range m.events {
+		if e.LedgerClosedAt.Before(cutoff) {
+			moved++
+		} else {
+			remaining = append(remaining, e)
+		}
+	}
+	m.events = remaining
+	return moved, nil
+}
+
 func (m *MockStore) GetIndexerCursor(_ context.Context, network string) (uint32, error) {
 	if m.indexerCursors == nil {
 		return 0, nil
@@ -1031,7 +1051,7 @@ func (m *MockStore) GetAPIKeyByHash(_ context.Context, hash string) (APIKey, err
 		return APIKey{}, m.GetAPIKeyErr
 	}
 	for _, k := range m.apiKeys {
-		if k.KeyHash == hash && !k.Revoked() {
+		if k.KeyHash == hash && !k.Revoked() && !k.Expired(time.Now()) {
 			return k, nil
 		}
 	}

@@ -47,6 +47,7 @@ var integrationCatalog = []struct {
 		requiredEnv: []string{"SLACK_WEBHOOK_URL"},
 		optionalEnv: []string{"SLACK_SIGNING_SECRET"},
 		testEndpoint: func(env func(string) string) (string, []byte, string, error) {
+			// Slack incoming-webhook URL that test messages and watchdog alerts are posted to.
 			hook := env("SLACK_WEBHOOK_URL")
 			if hook == "" {
 				return "", nil, "", errNotConfigured("SLACK_WEBHOOK_URL")
@@ -71,6 +72,7 @@ var integrationCatalog = []struct {
 		requiredEnv: []string{"DISCORD_WEBHOOK_URL"},
 		optionalEnv: []string{"DISCORD_BOT_TOKEN"},
 		testEndpoint: func(env func(string) string) (string, []byte, string, error) {
+			// Discord channel webhook URL that test messages and watchdog alerts are posted to.
 			hook := env("DISCORD_WEBHOOK_URL")
 			if hook == "" {
 				return "", nil, "", errNotConfigured("DISCORD_WEBHOOK_URL")
@@ -95,7 +97,10 @@ var integrationCatalog = []struct {
 		},
 		requiredEnv: []string{"TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"},
 		testEndpoint: func(env func(string) string) (string, []byte, string, error) {
-			token, chat := env("TELEGRAM_BOT_TOKEN"), env("TELEGRAM_CHAT_ID")
+			// Telegram bot token from @BotFather, used to send test messages and watchdog alerts.
+			token := env("TELEGRAM_BOT_TOKEN")
+			// Telegram chat id the bot posts test messages and watchdog alerts to.
+			chat := env("TELEGRAM_CHAT_ID")
 			if token == "" || chat == "" {
 				return "", nil, "", errNotConfigured("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
 			}
