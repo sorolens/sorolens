@@ -38,6 +38,8 @@ func main() {
 	pollInterval := flag.Duration("poll-interval", 5*time.Minute, "Sleep between passes (continuous mode)")
 	ledgerWindow := flag.Uint("ledger-window", 120960, "Ledger window per getEvents call")
 	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics HTTP server (empty disables it)")
+	// INDEXER_WORKERS is how many contracts one pass indexes concurrently;
+	// defaults to the number of usable CPUs.
 	workers := envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))
 	// Sharded topology (issue #272). The default role preserves the original
 	// single-process behaviour: index every contract in this process.
@@ -108,6 +110,8 @@ func main() {
 	if ws, ok := storeAny.(watchdogStore); ok {
 		wdStore = ws
 	}
+	// WATCHDOG_ENABLED set to "true" makes the indexer record watchdog heartbeats
+	// for WATCHDOG_CONTRACT_ID while it polls.
 	watchdogEnabled := os.Getenv("WATCHDOG_ENABLED") == "true"
 	watchdogContractID := os.Getenv("WATCHDOG_CONTRACT_ID")
 

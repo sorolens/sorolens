@@ -402,6 +402,8 @@ The Stellar mainnet operates with distinct network identifiers, RPC requirements
 
 This reference covers all environment variables parsed across `apps/api`, `services/indexer`, `apps/web`, and `cli/`.
 
+The complete, generated list of every option with its default and description is [`docs/configuration.md`](configuration.md); CI keeps it in sync with the code.
+
 ### API and Global Variables
 
 | Variable | Component | Required? | Default | Description |

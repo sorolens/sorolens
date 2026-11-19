@@ -226,7 +226,7 @@ deploy.
 
 ### Full Deployment Guide
 
-For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md).
+For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md). Every configuration option of each component is listed in the generated [configuration reference](docs/configuration.md).
 
 ---
 

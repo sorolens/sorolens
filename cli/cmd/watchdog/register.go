@@ -111,10 +111,15 @@ func runRegister(cmd *cobra.Command, args []string) error {
 		secret = registerSourceAccount
 	}
 	if secret == "" {
+		// SOROLENS_WATCHDOG_SECRET is the secret key of the source account that
+		// signs `watchdog register` transactions when neither --secret-key nor
+		// --source-account is given.
 		secret = os.Getenv("SOROLENS_WATCHDOG_SECRET")
 	}
 	watchdogContract := registerWatchdogContract
 	if watchdogContract == "" {
+		// SOROLENS_WATCHDOG_CONTRACT_ID is the watchdog contract `watchdog register`
+		// targets when --watchdog-contract-id is not given.
 		watchdogContract = os.Getenv("SOROLENS_WATCHDOG_CONTRACT_ID")
 	}
 	if watchdogContract == "" {
