@@ -27,6 +27,7 @@ var watchdogStatusCmd = &cobra.Command{
 func init() {
 	watchdogCmd.AddCommand(watchdogStatusCmd)
 	watchdogCmd.AddCommand(watchdogregister.NewRegisterCommand())
+	watchdogCmd.AddCommand(watchdogregister.NewPolicyCommand())
 	rootCmd.AddCommand(watchdogCmd)
 }
 
