@@ -143,3 +143,27 @@ export async function addAssignee(
   });
   return (r.data.assignees ?? []).map((a) => a.login);
 }
+
+export interface OpenIssue {
+  number: number;
+  title: string;
+  comments: number;
+}
+
+/** Open issues with no assignee (pull requests excluded), optionally by label. */
+export async function listOpenUnassignedIssues(
+  repo: string,
+  label?: string
+): Promise<OpenIssue[]> {
+  const gh = requireClient();
+  const all = await gh.paginate(gh.issues.listForRepo, {
+    ...splitRepo(repo),
+    state: "open",
+    assignee: "none",
+    ...(label ? { labels: label } : {}),
+    per_page: 100,
+  });
+  return all
+    .filter((i) => !i.pull_request)
+    .map((i) => ({ number: i.number, title: i.title, comments: i.comments }));
+}

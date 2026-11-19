@@ -40,6 +40,7 @@ Owner commands (hidden from non-admins):
 | `/assign-toggle on\|off` | Open or close applications |
 | `/assign-status` | Show settings and who the bot gave which issue |
 | `/assign-release issue:` | Stop an issue counting toward someone's max |
+| `/assign-available` | List open, unassigned issues (optional `from`, `to`, `label`, `applicants`), with a count and which are already in your list |
 
 A message is accepted only when applications are on, it is in the set
 channel, the member has the roles, has linked GitHub (`/connect`), and the

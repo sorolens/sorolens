@@ -291,3 +291,62 @@ export function formatApplicationReply(
     )
     .join("\n");
 }
+
+/** Count distinct Drips Wave applicants in an issue's comments. */
+export function countWaveApplicants(comments: readonly IssueComment[]): number {
+  return new Set(
+    comments
+      .filter((c) => c.body.includes(WAVE_MARKER))
+      .map((c) => c.author.toLowerCase())
+  ).size;
+}
+
+export interface AvailableSummaryInput {
+  /** Open, unassigned issue numbers in the repo (already range-filtered). */
+  open: number[];
+  /** The owner's current release list. */
+  pool: number[];
+  /** Applicant counts per issue, when they were checked. */
+  applicants?: Map<number, number>;
+  /** Issues whose applicants were not checked because of the cap. */
+  unchecked?: number[];
+  label?: string;
+}
+
+/** Render the `/assign-available` overview. Kept under Discord's 2000 chars. */
+export function formatAvailableSummary(input: AvailableSummaryInput): string {
+  const open = [...input.open].sort((a, b) => a - b);
+  const poolSet = new Set(input.pool);
+  const inList = open.filter((n) => poolSet.has(n));
+  const notInList = open.filter((n) => !poolSet.has(n));
+  const scope = input.label ? ` with label \`${input.label}\`` : "";
+  const lines = [
+    `**Open and unassigned${scope}: ${open.length}**`,
+    open.length ? `Lowest #${open[0]}, highest #${open[open.length - 1]}` : "",
+    `${formatIssueList(open)}`,
+    "",
+    `**Already in your list (${inList.length}):** ${formatIssueList(inList)}`,
+    `**Not in your list yet (${notInList.length}):** ${formatIssueList(notInList)}`,
+  ];
+  if (input.applicants) {
+    const withApps = open.filter((n) => (input.applicants!.get(n) ?? 0) > 0);
+    const without = open.filter(
+      (n) => input.applicants!.has(n) && (input.applicants!.get(n) ?? 0) === 0
+    );
+    lines.push(
+      "",
+      `**With Drips Wave applicants (${withApps.length}):** ` +
+        (withApps.length
+          ? withApps.map((n) => `#${n} (${input.applicants!.get(n)})`).join(", ")
+          : "(none)"),
+      `**No applicants yet (${without.length}):** ${formatIssueList(without)}`
+    );
+    if (input.unchecked?.length) {
+      lines.push(
+        `_Not checked for applicants (narrow from/to to check them): ${formatIssueList(input.unchecked)}_`
+      );
+    }
+  }
+  const text = lines.filter((l, i) => l !== "" || lines[i - 1] !== "").join("\n");
+  return text.length > 1950 ? `${text.slice(0, 1940)}\n…(cut)` : text;
+}
