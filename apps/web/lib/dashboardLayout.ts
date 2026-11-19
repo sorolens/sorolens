@@ -110,7 +110,10 @@ export function saveLayout(layout: WidgetLayout[], storage?: Storage): void {
   const store = storage ?? safeStorage();
   if (!store) return;
   try {
-    store.setItem(DASHBOARD_STORAGE_KEY, JSON.stringify(sanitizeLayout(layout)));
+    store.setItem(
+      DASHBOARD_STORAGE_KEY,
+      JSON.stringify(sanitizeLayout(layout))
+    );
   } catch {
     // A full or disabled storage must not break an interaction.
   }
@@ -132,7 +135,10 @@ export function availableWidgets(layout: WidgetLayout[]): WidgetDefinition[] {
   return WIDGET_REGISTRY.filter((widget) => !present.has(widget.id));
 }
 
-export function addWidget(layout: WidgetLayout[], id: WidgetId): WidgetLayout[] {
+export function addWidget(
+  layout: WidgetLayout[],
+  id: WidgetId
+): WidgetLayout[] {
   if (layout.some((widget) => widget.id === id)) return layout;
   return [...layout, { id, span: widgetDefinition(id).defaultSpan }];
 }

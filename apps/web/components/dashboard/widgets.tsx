@@ -4,11 +4,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { EventVolumeChart } from "@/components/EventVolumeChart";
 import { StatCard } from "@/components/StatCard";
-import {
-  getGlobalStats,
-  getLiveActivity,
-  listAlerts,
-} from "@/lib/api";
+import { getGlobalStats, getLiveActivity, listAlerts } from "@/lib/api";
 import type {
   ContractAlert,
   LiveActivityResponse,
@@ -40,7 +36,8 @@ export function StatsWidget() {
     getGlobalStats,
     { refreshInterval: 60_000 }
   );
-  if (error) return <WidgetMessage>Could not load network stats.</WidgetMessage>;
+  if (error)
+    return <WidgetMessage>Could not load network stats.</WidgetMessage>;
   if (isLoading || !data) return <WidgetMessage>Loading stats…</WidgetMessage>;
 
   return (
@@ -65,8 +62,7 @@ export function StatsWidget() {
 /** Sums every contract's per-minute buckets into one series. */
 export function volumeSeries(activity: LiveActivityResponse): VolumePoint[] {
   const length = activity.contracts.reduce(
-    (longest, contract) =>
-      Math.max(longest, contract.per_minute?.length ?? 0),
+    (longest, contract) => Math.max(longest, contract.per_minute?.length ?? 0),
     0
   );
   const start = new Date(activity.window_start).getTime();
@@ -160,7 +156,8 @@ export function HotContractsWidget() {
   if (error) {
     return <WidgetMessage>Could not load hot contracts.</WidgetMessage>;
   }
-  if (isLoading || !data) return <WidgetMessage>Loading contracts…</WidgetMessage>;
+  if (isLoading || !data)
+    return <WidgetMessage>Loading contracts…</WidgetMessage>;
   const contracts = data.contracts.slice(0, HOT_CONTRACT_LIMIT);
   if (contracts.length === 0) {
     return <WidgetMessage>No activity in the last 30 minutes.</WidgetMessage>;
@@ -181,9 +178,7 @@ export function HotContractsWidget() {
             className="min-w-0 flex-1 truncate hover:text-[var(--color-accent)]"
           >
             {contract.label || (
-              <span className="font-mono">
-                {shortId(contract.contract_id)}
-              </span>
+              <span className="font-mono">{shortId(contract.contract_id)}</span>
             )}
           </Link>
           <span className="shrink-0 text-xs tabular-nums text-[var(--color-text-secondary)]">
