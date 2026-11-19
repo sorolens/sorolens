@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Suspense } from "react";
 import "./globals.css";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import { PlausibleAnalytics } from "@/components/PlausibleAnalytics";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { NONCE_HEADER } from "@/lib/csp";
 
 /** Single source of truth for absolute metadata URLs (issue #620). */
 const SITE_URL =
@@ -65,15 +67,20 @@ export const viewport: Viewport = {
   themeColor: "#7c3aed",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Reading the request also renders every page per request, which a nonce
+  // requires: a statically generated page could not carry a fresh one.
+  const nonce = (await headers()).get(NONCE_HEADER) ?? undefined;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `
               try {
@@ -85,7 +92,7 @@ export default function RootLayout({
             `,
           }}
         />
-        <PlausibleAnalytics />
+        <PlausibleAnalytics nonce={nonce} />
       </head>
       <body className="min-h-screen antialiased">
         <ThemeProvider>

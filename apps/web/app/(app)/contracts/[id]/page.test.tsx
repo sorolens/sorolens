@@ -161,6 +161,16 @@ vi.mock("@/components/ContractChangelogPanel", () => ({
 vi.mock("@/components/ContractForecastChart", () => ({
   ContractForecastChart: () => <div />,
 }));
+vi.mock("@/components/ContractTokensPanel", () => ({
+  ContractTokensPanel: () => <div data-testid="tokens-panel" />,
+}));
+const mockHasTokenActivity = vi.fn((id: string) => {
+  void id;
+  return Promise.resolve(false);
+});
+vi.mock("@/lib/tokens", () => ({
+  hasTokenActivity: (id: string) => mockHasTokenActivity(id),
+}));
 
 expect.extend(matchers);
 
@@ -239,6 +249,18 @@ describe("ContractDetailPage failure states", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Storage" }));
     expect(await screen.findByText("storage-1")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows the Tokens tab only for contracts with token activity", async () => {
+    await renderPage();
+    expect(await screen.findByText("My Contract")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Tokens" })).toBeNull();
+
+    cleanup();
+    mockHasTokenActivity.mockResolvedValueOnce(true);
+    await renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Tokens" }));
+    expect(await screen.findByTestId("tokens-panel")).toBeInTheDocument();
   });
 
   it("links to the comparison, pre-selected on this contract (#607)", async () => {

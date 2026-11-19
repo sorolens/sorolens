@@ -5699,6 +5699,37 @@ components:
           format: int64
         window_duration:
           type: string
+        resource_percentiles:
+          $ref: "#/components/schemas/ResourcePercentiles"
+
+    PercentileValues:
+      type: object
+      required: [p50, p95, p99]
+      properties:
+        p50:
+          type: number
+          format: double
+        p95:
+          type: number
+          format: double
+        p99:
+          type: number
+          format: double
+
+    ResourcePercentiles:
+      type: object
+      description: >-
+        Per-invocation resource usage percentiles over the requested window.
+        Returned by the contract stats endpoint; every value is 0 when the
+        window has no invocations.
+      required: [cpu_insn, mem_byte, fee]
+      properties:
+        cpu_insn:
+          $ref: "#/components/schemas/PercentileValues"
+        mem_byte:
+          $ref: "#/components/schemas/PercentileValues"
+        fee:
+          $ref: "#/components/schemas/PercentileValues"
 
     ContractInvocationStats:
       type: object
