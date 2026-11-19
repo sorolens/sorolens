@@ -6,7 +6,7 @@
  * `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, and `DISCORD_GUILD_ID` set.
  */
 
-import { SlashCommandBuilder } from "discord.js";
+import { ChannelType, SlashCommandBuilder } from "discord.js";
 
 export const commandDefinitions = [
   new SlashCommandBuilder()
@@ -125,5 +125,118 @@ export const commandDefinitions = [
         .setMinLength(1)
         .setMaxLength(64)
         .setAutocomplete(true)
+    ),
+  new SlashCommandBuilder()
+    .setName("assign-setup")
+    .setDescription(
+      "(Admin) Configure issue self-assign: channel, roles, max per person"
+    )
+    .setDefaultMemberPermissions("0")
+    .addChannelOption((o) =>
+      o
+        .setName("channel")
+        .setDescription("Channel where members drop #issue numbers")
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    )
+    .addIntegerOption((o) =>
+      o
+        .setName("max")
+        .setDescription("Max issues the bot gives one person at a time")
+        .setMinValue(1)
+        .setMaxValue(50)
+        .setRequired(false)
+    )
+    .addRoleOption((o) =>
+      o
+        .setName("required_role")
+        .setDescription("Role every applicant must have (e.g. @real)")
+        .setRequired(false)
+    )
+    .addRoleOption((o) =>
+      o
+        .setName("any_role_1")
+        .setDescription("Applicant also needs one of the any_role roles")
+        .setRequired(false)
+    )
+    .addRoleOption((o) =>
+      o
+        .setName("any_role_2")
+        .setDescription("Second accepted role (optional)")
+        .setRequired(false)
+    )
+    .addRoleOption((o) =>
+      o
+        .setName("any_role_3")
+        .setDescription("Third accepted role (optional)")
+        .setRequired(false)
+    )
+    .addBooleanOption((o) =>
+      o
+        .setName("clear_roles")
+        .setDescription("Remove all role rules before applying the ones given")
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
+    .setName("assign-issues")
+    .setDescription("(Admin) Choose which issues members can pick")
+    .setDefaultMemberPermissions("0")
+    .addSubcommand((s) =>
+      s
+        .setName("add")
+        .setDescription("Open issues for self-assign")
+        .addStringOption((o) =>
+          o
+            .setName("issues")
+            .setDescription("Numbers or ranges, e.g. 836-850, 812")
+            .setRequired(true)
+            .setMaxLength(500)
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("remove")
+        .setDescription("Close issues for self-assign")
+        .addStringOption((o) =>
+          o
+            .setName("issues")
+            .setDescription("Numbers or ranges, e.g. 836-850, 812")
+            .setRequired(true)
+            .setMaxLength(500)
+        )
+    )
+    .addSubcommand((s) =>
+      s.setName("clear").setDescription("Remove every issue from the list")
+    )
+    .addSubcommand((s) =>
+      s.setName("list").setDescription("Show the issues members can pick")
+    ),
+  new SlashCommandBuilder()
+    .setName("assign-toggle")
+    .setDescription("(Admin) Switch issue applications on or off")
+    .setDefaultMemberPermissions("0")
+    .addStringOption((o) =>
+      o
+        .setName("state")
+        .setDescription("on or off")
+        .setRequired(true)
+        .addChoices({ name: "on", value: "on" }, { name: "off", value: "off" })
+    ),
+  new SlashCommandBuilder()
+    .setName("assign-status")
+    .setDescription("(Admin) Show issue self-assign settings and who has what")
+    .setDefaultMemberPermissions("0"),
+  new SlashCommandBuilder()
+    .setName("assign-release")
+    .setDescription(
+      "(Admin) Stop counting an issue toward someone's max (does not unassign on GitHub)"
+    )
+    .setDefaultMemberPermissions("0")
+    .addIntegerOption((o) =>
+      o
+        .setName("issue")
+        .setDescription("Issue number")
+        .setMinValue(1)
+        .setRequired(true)
     ),
 ].map((c) => c.toJSON());

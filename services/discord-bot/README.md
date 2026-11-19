@@ -25,6 +25,35 @@ See [`docs/discord-bot.md`](../../docs/discord-bot.md) for the API-backed query 
 
 New members are also DM'd a personal `/connect` link automatically when they join, so most contributors never need to type anything.
 
+## Issue self-assign (Drips Wave)
+
+Members drop issue numbers like `#812 #840` in one channel and the bot
+assigns them on GitHub using `GITHUB_TOKEN` (so the token's account shows
+as the assigner, which Drips Wave treats as accepting the application).
+
+Owner commands (hidden from non-admins):
+
+| Command | What it does |
+| --- | --- |
+| `/assign-setup` | Set the channel, `required_role` (must have), `any_role_1..3` (must have one of), and `max` issues per person |
+| `/assign-issues add\|remove issues:836-850, 812` | Choose which issues can be picked (`clear`, `list` too) |
+| `/assign-toggle on\|off` | Open or close applications |
+| `/assign-status` | Show settings and who the bot gave which issue |
+| `/assign-release issue:` | Stop an issue counting toward someone's max |
+
+A message is accepted only when applications are on, it is in the set
+channel, the member has the roles, has linked GitHub (`/connect`), and the
+request keeps them within `max`. The max counts only issues the bot gave
+them that are still open and assigned to them; asking for too many declines
+the whole request. Each issue must be in the list, open, unassigned, and
+carry a Drips Wave application comment (`<!-- wave:application-id:... -->`)
+posted by the member's linked GitHub account.
+
+Setup: enable **Message Content Intent** under Bot > Privileged Gateway
+Intents in the Discord developer portal (the bot fails to log in without
+it), give the bot Read/Send Messages in the channel, and give
+`GITHUB_TOKEN` `issues: read and write` on the repo.
+
 ## Role tiers
 
 | Tier             | Requirement                                                  | Default threshold |
