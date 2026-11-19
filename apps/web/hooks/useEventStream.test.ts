@@ -96,7 +96,10 @@ function resetModules() {
 
 beforeEach(() => {
   resetModules();
-  vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+  vi.stubGlobal(
+    "EventSource",
+    FakeEventSource as unknown as typeof EventSource
+  );
 });
 
 afterEach(() => {
@@ -205,4 +208,3 @@ describe("useEventStream", () => {
     expect(result.current.lastEventAt).not.toBeNull();
   });
 });
-

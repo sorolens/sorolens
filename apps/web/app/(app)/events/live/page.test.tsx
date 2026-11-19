@@ -74,28 +74,23 @@ describe("Live events controls", () => {
     ["polling", "Live (Polling Fallback)"],
     ["connecting", "Connecting…"],
     ["disconnected", "Disconnected"],
-  ] as const)(
-    "shows the connection state for status %s",
-    (status, label) => {
-      streamMocks.useEventStream.mockReturnValue({
-        events: [],
-        clearEvents: vi.fn(),
-        droppedCount: 0,
-        status,
-        isConnected: status === "connected",
-        isPolling: status === "polling",
-        lastEventAt: null,
-      });
+  ] as const)("shows the connection state for status %s", (status, label) => {
+    streamMocks.useEventStream.mockReturnValue({
+      events: [],
+      clearEvents: vi.fn(),
+      droppedCount: 0,
+      status,
+      isConnected: status === "connected",
+      isPolling: status === "polling",
+      lastEventAt: null,
+    });
 
-      render(
-        <LocaleProvider>
-          <EventsPage />
-        </LocaleProvider>
-      );
+    render(
+      <LocaleProvider>
+        <EventsPage />
+      </LocaleProvider>
+    );
 
-      expect(screen.getByTestId("live-stream-status")).toHaveTextContent(
-        label
-      );
-    }
-  );
+    expect(screen.getByTestId("live-stream-status")).toHaveTextContent(label);
+  });
 });

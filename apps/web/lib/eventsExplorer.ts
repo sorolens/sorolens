@@ -88,7 +88,12 @@ export function previewEventData(value: unknown, max = 60): string {
 // shareable and survives reload.
 
 /** Event type values the explorer accepts; "" means "all types". */
-export const EVENT_TYPE_VALUES = ["", "contract", "system", "diagnostic"] as const;
+export const EVENT_TYPE_VALUES = [
+  "",
+  "contract",
+  "system",
+  "diagnostic",
+] as const;
 
 export type EventTypeFilter = (typeof EVENT_TYPE_VALUES)[number];
 
@@ -120,9 +125,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * malformed values fall back to defaults rather than failing: a mistyped
  * shared link must still show the page.
  */
-export function parseEventsUrlState(
-  params: URLSearchParams
-): EventsUrlState {
+export function parseEventsUrlState(params: URLSearchParams): EventsUrlState {
   const rawType = params.get("type") ?? "";
   const rawFrom = params.get("from") ?? "";
   const rawTo = params.get("to") ?? "";

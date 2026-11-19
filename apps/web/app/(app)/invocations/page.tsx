@@ -297,7 +297,11 @@ function InvocationsPage() {
 
   const handleNext = () => {
     if (!nextCursor) return;
-    setApplied((prev) => ({ ...prev, cursor: nextCursor, page: prev.page + 1 }));
+    setApplied((prev) => ({
+      ...prev,
+      cursor: nextCursor,
+      page: prev.page + 1,
+    }));
     setCursors((stack) => [...stack, nextCursor]);
   };
 

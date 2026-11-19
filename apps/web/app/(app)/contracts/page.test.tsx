@@ -63,7 +63,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 function resetQuery() {
-  for (const key of Array.from(nav.searchParams.keys())) nav.searchParams.delete(key);
+  for (const key of Array.from(nav.searchParams.keys()))
+    nav.searchParams.delete(key);
   nav.replace.mockClear();
   nav.push.mockClear();
 }
@@ -693,9 +694,12 @@ describe("ContractsPage", () => {
     // First click on the default column (added_at, desc) flips to asc.
     fireEvent.click(screen.getByTestId("col-added_at"));
     await waitFor(() =>
-      expect(nav.replace).toHaveBeenCalledWith("/contracts?sort=added_at&dir=asc", {
-        scroll: false,
-      })
+      expect(nav.replace).toHaveBeenCalledWith(
+        "/contracts?sort=added_at&dir=asc",
+        {
+          scroll: false,
+        }
+      )
     );
 
     // Second click flips back to desc — the default sort state, so the
@@ -843,9 +847,12 @@ describe("ContractsPage", () => {
         expect.objectContaining({ cursor: "cur-2" })
       );
     });
-    expect(nav.push).toHaveBeenLastCalledWith("/contracts?cursor=cur-2&page=2", {
-      scroll: false,
-    });
+    expect(nav.push).toHaveBeenLastCalledWith(
+      "/contracts?cursor=cur-2&page=2",
+      {
+        scroll: false,
+      }
+    );
   });
 
   it("writes the debounced search text into the URL with replace", async () => {

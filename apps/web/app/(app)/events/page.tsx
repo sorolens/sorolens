@@ -270,7 +270,11 @@ function EventsExplorerPage() {
 
   const goNextPage = () => {
     if (!nextCursor) return;
-    setApplied((prev) => ({ ...prev, cursor: nextCursor, page: prev.page + 1 }));
+    setApplied((prev) => ({
+      ...prev,
+      cursor: nextCursor,
+      page: prev.page + 1,
+    }));
     setHistory((h) => pushPage(h, nextCursor));
   };
 

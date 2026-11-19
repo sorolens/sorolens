@@ -303,9 +303,12 @@ describe("EventsExplorerPage", () => {
         expect.objectContaining({ contractId: "CAAQ", type: "system" })
       )
     );
-    expect(routerPush).toHaveBeenCalledWith("/events?contract=CAAQ&type=system", {
-      scroll: false,
-    });
+    expect(routerPush).toHaveBeenCalledWith(
+      "/events?contract=CAAQ&type=system",
+      {
+        scroll: false,
+      }
+    );
   });
 
   it("pushes the cursor and page number when paging forward", async () => {

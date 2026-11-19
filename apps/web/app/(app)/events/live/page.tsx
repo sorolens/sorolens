@@ -15,16 +15,11 @@ export default function EventsPage() {
   const [activeFilter, setActiveFilter] = useState("");
   const [paused, setPaused] = useState(false);
 
-  const {
-    events,
-    clearEvents,
-    droppedCount,
-    status,
-    lastEventAt,
-  } = useEventStream({
-    contractId: activeFilter || undefined,
-    enabled: !paused,
-  });
+  const { events, clearEvents, droppedCount, status, lastEventAt } =
+    useEventStream({
+      contractId: activeFilter || undefined,
+      enabled: !paused,
+    });
 
   const handleApplyFilter = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,9 +77,7 @@ export default function EventsPage() {
               data-testid="live-stream-status"
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeTone}`}
             >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${dotTone}`}
-              />
+              <span className={`h-1.5 w-1.5 rounded-full ${dotTone}`} />
               {badgeLabel}
             </span>
           </div>

@@ -493,7 +493,10 @@ describe("InvocationsPage", () => {
   // ── URL-synced state (issue #618) ─────────────────────────────────────────
 
   it("restores the filters and page from the URL on first render", async () => {
-    searchParams.set("contract", "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    searchParams.set(
+      "contract",
+      "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    );
     searchParams.set("fn", "transfer");
     searchParams.set("since", "2026-09-01");
     searchParams.set("until", "2026-09-02");
@@ -505,7 +508,8 @@ describe("InvocationsPage", () => {
     await waitFor(() => {
       expect(mockListInvocations).toHaveBeenCalledWith(
         expect.objectContaining({
-          contract_id: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          contract_id:
+            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           fn: "transfer",
           since: "2026-09-01",
           until: "2026-09-02",
@@ -516,9 +520,9 @@ describe("InvocationsPage", () => {
     });
     expect(screen.getByText("Page 2")).toBeInTheDocument();
     // The form fields show the restored filters too.
-    expect(
-      document.getElementById("invocations-contract-filter")
-    ).toHaveValue("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    expect(document.getElementById("invocations-contract-filter")).toHaveValue(
+      "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    );
     expect(document.getElementById("invocations-fn-filter")).toHaveValue(
       "transfer"
     );

@@ -21,8 +21,7 @@ vi.mock("./ContractsClient", async () => {
     default: () => {
       const { fallback } = useSWRConfig();
       const seeded = Object.values(fallback ?? {})[0] as
-        | ContractsListResponse
-        | undefined;
+        ContractsListResponse | undefined;
       return React.createElement(
         "p",
         null,

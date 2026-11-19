@@ -234,7 +234,10 @@ export function useEventStream(
           setStatus("connecting");
           const delay =
             RECONNECT_DELAYS_MS[
-              Math.min(failureCountRef.current - 1, RECONNECT_DELAYS_MS.length - 1)
+              Math.min(
+                failureCountRef.current - 1,
+                RECONNECT_DELAYS_MS.length - 1
+              )
             ];
           reconnectTimerRef.current = setTimeout(connect, delay);
         }

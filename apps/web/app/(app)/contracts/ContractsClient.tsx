@@ -414,7 +414,10 @@ export default function ContractsClient() {
   const [debouncedSearchInput] = useDebounce(searchInput, 400);
   useEffect(() => {
     setApplied(
-      (prev) => (prev.q === debouncedSearchInput ? prev : { ...prev, q: debouncedSearchInput }),
+      (prev) =>
+        prev.q === debouncedSearchInput
+          ? prev
+          : { ...prev, q: debouncedSearchInput },
       "replace"
     );
   }, [debouncedSearchInput, setApplied]);
@@ -431,7 +434,9 @@ export default function ContractsClient() {
   useEffect(() => {
     setApplied(
       (prev) =>
-        prev.tag === debouncedTagInput ? prev : { ...prev, tag: debouncedTagInput },
+        prev.tag === debouncedTagInput
+          ? prev
+          : { ...prev, tag: debouncedTagInput },
       "replace"
     );
   }, [debouncedTagInput, setApplied]);
@@ -563,7 +568,9 @@ export default function ContractsClient() {
   // longer points at the next page. The ref guard keeps this from firing
   // on mount; the change itself also alters the SWR key, which triggers
   // the fetch on its own.
-  const prevQueryKey = useRef(`${network}|${tagFilter}|${sortColumn}:${sortDirection}`);
+  const prevQueryKey = useRef(
+    `${network}|${tagFilter}|${sortColumn}:${sortDirection}`
+  );
   useEffect(() => {
     const key = `${network}|${tagFilter}|${sortColumn}:${sortDirection}`;
     if (prevQueryKey.current === key) return;
@@ -588,7 +595,11 @@ export default function ContractsClient() {
       data?.next_cursor ||
       (contracts.length > 0 ? contracts[contracts.length - 1].id : null);
     if (!nextCursor) return;
-    setApplied((prev) => ({ ...prev, cursor: nextCursor, page: prev.page + 1 }));
+    setApplied((prev) => ({
+      ...prev,
+      cursor: nextCursor,
+      page: prev.page + 1,
+    }));
     setCursors((stack) => [...stack, nextCursor]);
   };
 
@@ -610,10 +621,11 @@ export default function ContractsClient() {
     // Same column flips the direction; a new column starts ascending. The
     // new sort lands in the URL (shareable, #175) and the reset effect
     // above restarts pagination.
-    setApplied((prev) =>
-      col === prev.sort
-        ? { ...prev, dir: prev.dir === "asc" ? "desc" : "asc" }
-        : { ...prev, sort: col as ContractsUrlState["sort"], dir: "asc" },
+    setApplied(
+      (prev) =>
+        col === prev.sort
+          ? { ...prev, dir: prev.dir === "asc" ? "desc" : "asc" }
+          : { ...prev, sort: col as ContractsUrlState["sort"], dir: "asc" },
       "replace"
     );
   };
