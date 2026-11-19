@@ -153,7 +153,7 @@ export const commandDefinitions = [
       o
         .setName("channel")
         .setDescription("Channel where members drop #issue numbers")
-        .addChannelTypes(ChannelType.GuildText)
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(false)
     )
     .addIntegerOption((o) =>
@@ -303,14 +303,14 @@ export const commandDefinitions = [
       o
         .setName("congrats_channel")
         .setDescription("Where merge congratulations go (e.g. #live-updates)")
-        .addChannelTypes(ChannelType.GuildText)
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(false)
     )
     .addChannelOption((o) =>
       o
         .setName("weekly_channel")
         .setDescription("Where contributor of the week is posted (e.g. #activity)")
-        .addChannelTypes(ChannelType.GuildText)
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(false)
     )
     .addBooleanOption((o) =>

@@ -110,3 +110,17 @@ describe("/admin-unlink", () => {
     expect(resolveUnlinkTarget(null, "bob", lookup)).toHaveProperty("error");
   });
 });
+
+describe("channel options", () => {
+  it("accept announcement channels as well as text channels", () => {
+    const channelOptions = commandDefinitions.flatMap((c) =>
+      ((c.options ?? []) as { type: number; name: string; channel_types?: number[] }[])
+        .filter((o) => o.type === 7)
+        .map((o) => ({ cmd: c.name, ...o }))
+    );
+    expect(channelOptions.length).toBeGreaterThanOrEqual(3);
+    for (const o of channelOptions) {
+      expect(o.channel_types, `${o.cmd} ${o.name}`).toEqual(expect.arrayContaining([0, 5]));
+    }
+  });
+});
