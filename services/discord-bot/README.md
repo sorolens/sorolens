@@ -80,7 +80,7 @@ none. It only replies to explain what was skipped or declined.
 ## Community and rewards
 
 - **Leaderboard:** `/leaderboard` posts publicly. Only linked members are ranked; ties go to whoever reached the count first. Data comes from GitHub search, cached for 5 minutes.
-- **Merge congrats:** when a linked member's PR merges, the bot tags them in `congrats_channel` (e.g. #live-updates) with the PR and their running total. This is a short message of its own, separate from the "Issue Resolved" card the `discord-live-updates` workflow posts.
+- **Merge congrats:** for every merged PR (bot accounts excluded) the bot posts in `congrats_channel` (e.g. #live-updates): a line that tags linked members, plus an embed with the PR, the author's running total and their avatar (Discord avatar if linked, GitHub avatar otherwise). Unlinked authors are named by GitHub username with a nudge to run `/connect`. This is separate from the "Issue Resolved" card the `discord-live-updates` workflow posts.
 - **Contributor of the week:** the week runs Sunday to Saturday (UTC). From Sunday 08:00 UTC the bot posts the winner and runners-up in `weekly_channel` (e.g. #activity) and moves `cotw_role` to the new winner. If the bot was asleep at 08:00 it posts when it wakes.
 - **Milestones:** after the built-in Contributor (1 PR) and Core Contributor (3 PRs) tiers, suggested milestones are 5 Rising Star, 10 Veteran, 20 Elite, 40 Legend, 80 Mythic. Create the roles yourself (the bot never creates roles), keep them below the bot's role, and map them with `/milestones add`. Roles are granted on the member's next merge, and the congrats post mentions a newly unlocked milestone.
 
