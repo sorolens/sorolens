@@ -9,3 +9,4 @@
 000023_topic_decoded_gin_index.up.sql index-not-concurrent events is partitioned (000005); PostgreSQL rejects CONCURRENTLY on a partitioned parent, as the migration documents.
 000027_webhook_signing_secrets.up.sql set-not-null alert_subscriptions is a small configuration table; the scan under lock is negligible. Applied before the policy (#845).
 000036_api_key_user_id.up.sql index-not-concurrent Partial index on api_keys, a small table, over a column added NULL in the same migration. Applied before the policy (#845).
+000039_api_key_expires_at.up.sql index-not-concurrent Partial index on api_keys, a small table, over a column added NULL in the same migration. Merged before the policy (#845).
