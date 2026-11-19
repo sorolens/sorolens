@@ -18,12 +18,24 @@ import {
   writeStatusCache,
 } from "../shared/storage.js";
 import {
+  ALERTS,
   BADGE,
   CONTENT,
   DEFAULT_NETWORK,
+  DEFAULT_WEB_URL,
   PRODUCT_NAME,
 } from "../shared/constants.js";
 import { normalizeContractId } from "../shared/contract-id.js";
+import {
+  ALERT_POLL_ALARM,
+  alertKey,
+  nextBackoffMinutes,
+  notificationId,
+  notificationTarget,
+  pollOnce,
+  readAlertState,
+  writeAlertState,
+} from "./alerts.js";
 
 /**
  * Latest contract IDs reported by the content script, per tab. In-memory is
@@ -125,10 +137,117 @@ async function refreshBadge(tabId, count) {
   }
 }
 
+/** Shows the unread alert count on the toolbar badge (no tab, all windows). */
+async function setUnreadBadge(unread) {
+  try {
+    const api = getBrowserApi();
+    await api.action.setBadgeText({ text: unread > 0 ? String(unread) : "" });
+    if (unread > 0) {
+      await api.action.setBadgeBackgroundColor({ color: BADGE.color });
+    }
+  } catch {
+    // Badge updates are best-effort.
+  }
+}
+
+/** Raises one browser notification; the click handler opens the contract. */
+async function notifyAlert(alert) {
+  try {
+    const api = getBrowserApi();
+    if (!api.notifications) return;
+    await api.notifications.create(notificationId(alertKey(alert)), {
+      type: "basic",
+      title: `${alert.severity || "Alert"}: ${shortId(alert.contract_id)}`,
+      message: alert.message || "New Sorolens alert",
+      contextMessage: PRODUCT_NAME,
+      iconUrl: api.runtime.getURL("src/icons/icon-128.png"),
+      priority: alert.severity === "Critical" ? 2 : 1,
+    });
+  } catch {
+    // A denied notification must not stop the poll or the other alerts.
+  }
+}
+
+function shortId(id) {
+  if (!id || id.length <= 12) return id || "contract";
+  return `${id.slice(0, 6)}…${id.slice(-4)}`;
+}
+
+/**
+ * Schedules the next poll: a one-shot alarm after a backoff delay, or the
+ * regular periodic alarm when everything is healthy.
+ */
+async function scheduleAlertPoll(delayMinutes = 0) {
+  try {
+    const api = getBrowserApi();
+    if (!api.alarms) return;
+    await api.alarms.clear(ALERT_POLL_ALARM);
+    api.alarms.create(
+      ALERT_POLL_ALARM,
+      delayMinutes > 0
+        ? { delayInMinutes: delayMinutes }
+        : { periodInMinutes: ALERTS.pollMinutes }
+    );
+  } catch {
+    // Without alarms the extension still works on demand from the popup.
+  }
+}
+
+/** Starts, stops or resumes polling after install or a settings change. */
+async function ensureAlertPolling() {
+  const settings = await getSettings();
+  if (!settings.notificationsEnabled) {
+    try {
+      const api = getBrowserApi();
+      if (api.alarms) await api.alarms.clear(ALERT_POLL_ALARM);
+    } catch {
+      // Ignore: nothing is scheduled.
+    }
+    await setUnreadBadge(0);
+    return;
+  }
+  const state = await readAlertState();
+  await setUnreadBadge(state.unread);
+  await scheduleAlertPoll(0);
+}
+
+/** One alarm tick: poll, notify, then reset or back off. */
+async function onAlertAlarm() {
+  const settings = await getSettings();
+  if (!settings.notificationsEnabled) {
+    await setUnreadBadge(0);
+    return;
+  }
+
+  try {
+    const { client } = await createClient();
+    const state = await readAlertState();
+    await pollOnce({
+      client,
+      settings,
+      state,
+      notify: notifyAlert,
+      setUnread: setUnreadBadge,
+    });
+    await scheduleAlertPoll(0);
+  } catch (error) {
+    // Back off exponentially and honour Retry-After when the API sent one.
+    const state = await readAlertState();
+    const failures = state.failures + 1;
+    const backoffMinutes = nextBackoffMinutes(
+      failures,
+      (error && error.retryAfter) || 0
+    );
+    await writeAlertState({ ...state, failures, backoffMinutes });
+    await scheduleAlertPoll(backoffMinutes);
+  }
+}
+
 /** Seeds defaults, the context-menu entry and a stable identity on install. */
 async function onInstalled(details) {
   await ensureUserId();
   const api = getBrowserApi();
+  void ensureAlertPolling();
   if (api.contextMenus && details && details.reason === "install") {
     api.contextMenus.removeAll(() => {
       void api.runtime.lastError;
@@ -174,8 +293,18 @@ async function handleMessage(message, sender) {
     case MESSAGE.getSettings:
       return { ok: true, settings: await getSettings() };
 
-    case MESSAGE.saveSettings:
-      return { ok: true, settings: await saveSettings(message.patch || {}) };
+    case MESSAGE.saveSettings: {
+      const settings = await saveSettings(message.patch || {});
+      void ensureAlertPolling();
+      return { ok: true, settings };
+    }
+
+    case MESSAGE.markAlertsRead: {
+      const state = await readAlertState();
+      await writeAlertState({ ...state, unread: 0 });
+      await setUnreadBadge(0);
+      return { ok: true };
+    }
 
     case MESSAGE.testConnection: {
       const { client, settings } = await createClient();
@@ -303,6 +432,36 @@ export function bootstrap() {
     void onInstalled(details);
   });
 
+  if (api.runtime.onStartup) {
+    api.runtime.onStartup.addListener(() => {
+      void ensureAlertPolling();
+    });
+  }
+
+  if (api.alarms) {
+    api.alarms.onAlarm.addListener((alarm) => {
+      if (alarm && alarm.name === ALERT_POLL_ALARM) {
+        void onAlertAlarm();
+      }
+    });
+  }
+
+  if (api.notifications) {
+    api.notifications.onClicked.addListener((id) => {
+      const contractId = notificationTarget(id);
+      if (contractId && api.tabs) {
+        void api.tabs.create({
+          url: `${DEFAULT_WEB_URL}/contracts/${contractId}`,
+        });
+      }
+      try {
+        void api.notifications.clear(id);
+      } catch {
+        // Ignore a notification that already disappeared.
+      }
+    });
+  }
+
   api.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!isSorolensMessage(message)) return undefined;
     handleMessage(message, sender || {})
@@ -352,4 +511,7 @@ export const __test__ = {
   refreshBadge,
   tabScans,
   CONTEXT_MENU_ID,
+  onAlertAlarm,
+  ensureAlertPolling,
+  setUnreadBadge,
 };

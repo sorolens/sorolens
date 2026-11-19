@@ -29,8 +29,8 @@ concurrency:
 
 jobs:
   # ------------------------------------------------------------
-  # Go: API, indexer, CLI and Go client, generated-client drift,
-  # SDK coverage and the backup/restore scripts.
+  # Go: API, indexer, CLI and Go client, generated-client drift, OpenAPI
+  # compatibility, SDK coverage and the backup/restore scripts.
   # ------------------------------------------------------------
   go:
     name: Go
@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Go 1.26
         uses: actions/setup-go@v5
         with:
@@ -140,6 +142,35 @@ jobs:
         run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
       - name: Verify Go client has no diff
         run: git diff --exit-code -- packages/go-client/internal
+      # Issue #553: /api/v1 is frozen. Compare the PR spec with the base
+      # commit only when docs/openapi.yaml changed; keep this in the existing
+      # Go job so pull requests remain capped at five checks.
+      - name: Detect OpenAPI changes
+        id: openapi_changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --quiet "$BASE_SHA"...HEAD -- docs/openapi.yaml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "docs/openapi.yaml was not changed"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "docs/openapi.yaml changed"
+          fi
+      - name: Check OpenAPI for breaking changes
+        if: steps.openapi_changes.outputs.changed == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          go install github.com/oasdiff/oasdiff@v1.38.0
+          base_spec=$(mktemp)
+          trap 'rm -f "$base_spec"' EXIT
+          git show "$BASE_SHA:docs/openapi.yaml" > "$base_spec"
+          "$(go env GOPATH)/bin/oasdiff" breaking \
+            --format githubactions \
+            --fail-on WARN \
+            -- "$base_spec" docs/openapi.yaml
       # SDK coverage guard (issue #556): every operation declared in
       # docs/openapi.yaml must be exposed by each SDK, or be documented as an
       # intentional exclusion in scripts/sdk_coverage_allowlist.json.
@@ -303,8 +334,8 @@ jobs:
         run: make integration-test
 
   # ------------------------------------------------------------
-  # SDKs and contracts: Python SDK, Rust SDK and the fixture contract. Each
-  # part runs only when its paths changed.
+  # SDKs and contracts: Python SDK, Rust SDK and the contracts. Each part runs
+  # only when its paths changed.
   # ------------------------------------------------------------
   sdks:
     name: SDKs and contracts
@@ -370,7 +401,7 @@ jobs:
       - name: Verify Python client has no diff
         if: steps.changes.outputs.python == 'true'
         run: git diff --exit-code -- packages/python-sdk/src/sorolens/_generated
-      # Rust toolchain for the Rust SDK and the fixture contract.
+      # Rust toolchain for the Rust SDK and the contracts.
       - name: Install Rust stable
         if: steps.changes.outputs.rustsdk == 'true' || steps.changes.outputs.contracts == 'true'
         uses: dtolnay/rust-toolchain@stable
@@ -387,7 +418,8 @@ jobs:
             ~/.cargo/git/db/
             packages/rust-sdk/target/
             contracts/counter/target/
-          key: cargo-${{ hashFiles('packages/rust-sdk/Cargo.lock', 'contracts/counter/Cargo.lock') }}
+            contracts/watchdog/target/
+          key: cargo-${{ hashFiles('packages/rust-sdk/Cargo.lock', 'contracts/counter/Cargo.lock', 'contracts/watchdog/Cargo.lock') }}
           restore-keys: |
             cargo-
       # Rust SDK (async and blocking transports).
@@ -432,3 +464,35 @@ jobs:
         if: steps.changes.outputs.contracts == 'true'
         working-directory: contracts/counter
         run: cargo test
+      # Watchdog contract.
+      - name: Watchdog contract - cargo fmt --check
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo fmt --check
+      - name: Watchdog contract - cargo clippy
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Watchdog contract - cargo test
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo test
+      - name: Watchdog contract - cargo build (wasm32 release)
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo build --target wasm32v1-none --release
+      - name: Watchdog contract - report wasm size
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: |
+          wasm=$(find target/wasm32v1-none/release -maxdepth 1 -name '*.wasm' -print -quit)
+          test -n "$wasm"
+          bytes=$(wc -c < "$wasm")
+          kib=$(( (bytes + 1023) / 1024 ))
+          echo "Watchdog WASM size: ${bytes} bytes (${kib} KiB)"
+          {
+            echo "### Watchdog contract WASM"
+            echo
+            echo "- File: $wasm"
+            echo "- Size: ${bytes} bytes (${kib} KiB)"
+          } >> "$GITHUB_STEP_SUMMARY"

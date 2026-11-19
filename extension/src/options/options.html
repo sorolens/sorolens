@@ -92,6 +92,34 @@
           </label>
         </fieldset>
 
+        <fieldset>
+          <legend>Notifications</legend>
+          <label class="checkbox">
+            <input id="notifications-enabled" type="checkbox" />
+            <span>Show browser notifications for new alerts</span>
+          </label>
+          <p class="hint">
+            While this is on, the extension checks your watchlist every five
+            minutes in the background, updates the toolbar badge and raises one
+            notification per new alert. Polling backs off automatically when the
+            API is unavailable or rate-limits the extension.
+          </p>
+          <div class="severity-options">
+            <label class="checkbox">
+              <input id="notify-critical" type="checkbox" />
+              <span>Critical</span>
+            </label>
+            <label class="checkbox">
+              <input id="notify-warning" type="checkbox" />
+              <span>Warning</span>
+            </label>
+            <label class="checkbox">
+              <input id="notify-info" type="checkbox" />
+              <span>Info</span>
+            </label>
+          </div>
+        </fieldset>
+
         <div class="actions">
           <button class="button primary" type="submit" id="save-button">
             Save

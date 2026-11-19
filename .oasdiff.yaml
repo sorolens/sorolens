@@ -1,0 +1,3 @@
+fail-on: WARN
+err-ignore: .oasdiff-ignored.txt
+warn-ignore: .oasdiff-ignored.txt

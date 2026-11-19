@@ -1,0 +1,69 @@
+name: Extension Release
+
+# Builds the Chrome and Firefox extension bundles, lints the Firefox build and
+# attaches versioned, store-ready zips to a GitHub release.
+#
+# This workflow deliberately does NOT run on pull_request: the PR checks are
+# capped at five, and packaging is a release concern. Trigger it by pushing an
+# `extension-v*` tag, or run it manually to produce artifacts for inspection.
+#
+# No store credentials are stored here. Uploading to the Chrome Web Store or
+# AMO stays a manual, documented step (extension/README.md).
+
+on:
+  push:
+    tags:
+      - "extension-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: extension
+
+jobs:
+  package:
+    name: Package extension zips
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Unit tests and manifest checks
+        run: |
+          node scripts/check.mjs
+          node --test "tests/*.test.mjs"
+
+      - name: Build both browser targets
+        run: npm run build
+
+      # web-ext reports one intentional warning: loader.js dynamically imports
+      # the content module through runtime.getURL (the documented way to load a
+      # web-accessible module from a classic content script). Errors still fail
+      # the step.
+      - name: Lint the Firefox build with web-ext
+        run: npx --yes web-ext lint --source-dir dist/firefox
+
+      - name: Package store-ready zips
+        run: npm run package
+
+      - name: Upload zips as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sorolens-extension
+          path: extension/dist/*.zip
+          if-no-files-found: error
+
+      - name: Attach zips to the release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: extension/dist/*.zip
+          generate_release_notes: true

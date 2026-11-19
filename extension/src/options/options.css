@@ -120,6 +120,13 @@ legend {
   font-size: 13px;
 }
 
+.severity-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 8px;
+}
+
 .hint {
   margin: 8px 0 0;
   color: var(--text-secondary);
