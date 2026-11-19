@@ -648,6 +648,25 @@ func (s *postgresStore) CreateMonthlyPartitionIfNotExists(ctx context.Context, y
 	return err
 }
 
+// MaintainPartitions ensures future partitions exist up to monthsAhead months ahead.
+func (s *postgresStore) MaintainPartitions(ctx context.Context, monthsAhead int) error {
+	if monthsAhead <= 0 {
+		monthsAhead = 6
+	}
+	_, err := s.pool.Exec(ctx, `SELECT maintain_events_partitions($1)`, monthsAhead)
+	return err
+}
+
+// ArchiveOldEvents archives events older than retentionDays into events_archive.
+func (s *postgresStore) ArchiveOldEvents(ctx context.Context, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, fmt.Errorf("retention days must be positive, got %d", retentionDays)
+	}
+	var moved int64
+	err := s.pool.QueryRow(ctx, `SELECT archive_old_events($1)`, retentionDays).Scan(&moved)
+	return moved, err
+}
+
 // GetPartitionStats returns information about all existing partitions of the events table.
 func (s *postgresStore) GetPartitionStats(ctx context.Context) ([]PartitionStats, error) {
 	rows, err := s.pool.Query(ctx, `

@@ -219,6 +219,17 @@ CREATE INDEX idx_events_tx_hash ON events (tx_hash);
 -- Time-range queries from the dashboard.
 CREATE INDEX idx_events_ledger_closed_at ON events (ledger_closed_at DESC);
 
+-- Events table is partitioned by month on ledger_closed_at.
+-- An events_default DEFAULT partition catches backfills, future events,
+-- and any row falling outside active monthly partitions so inserts never fail.
+--
+-- Partition Maintenance & Retention:
+-- - Future monthly partitions are pre-provisioned up to 6 months in advance
+--   via `maintain_events_partitions()` (run automatically by the indexer and retention job).
+-- - Old events exceeding the retention threshold (EVENTS_RETENTION_DAYS, default 90 days)
+--   are moved into `events_archive` by the retention job (`cmd/retention`) and viewable via
+--   `events_with_archive`, keeping active table scans fast and bounding disk growth.
+
 -- ============================================================
 -- invocations
 -- One row per transaction that invoked (or attempted to invoke)

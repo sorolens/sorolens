@@ -152,6 +152,7 @@
         "operations": [
           "listAllEvents",
           "listAuditEvents",
+          "listAuditEventsRoot",
           "listFailedEvents",
           "recentEvents",
           "requeueFailedEvent",
@@ -356,6 +357,7 @@
         "operations": [
           "listAllEvents",
           "listAuditEvents",
+          "listAuditEventsRoot",
           "listFailedEvents",
           "recentEvents",
           "requeueFailedEvent",
@@ -428,6 +430,7 @@
           "addWatchedAccount",
           "deleteWatchedAccount",
           "listAuditEvents",
+          "listAuditEventsRoot",
           "registerContract",
           "batchContracts",
           "addContractTag",
@@ -585,6 +588,7 @@
           "addWatchedAccount",
           "deleteWatchedAccount",
           "listAuditEvents",
+          "listAuditEventsRoot",
           "registerContract",
           "batchContracts",
           "addContractTag",

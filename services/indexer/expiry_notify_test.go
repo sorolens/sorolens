@@ -99,7 +99,7 @@ func TestExpiryNotifierDeliversSummaryToConfiguredWebhook(t *testing.T) {
 	t.Cleanup(watchdog.SetHTTPClient(&http.Client{Timeout: 5 * time.Second}))
 
 	lister := &mockSubscriptionLister{subs: []pgstore.AlertSubscription{
-		{ID: "sub-1", ContractID: "CDXQ", WebhookURL: srvURL, SeverityFilter: "Critical", ChannelType: "webhook"},
+		{ID: "sub-1", ContractID: "CDXQ", WebhookURL: srvURL, SeverityFilter: "Critical", ChannelType: "webhook", SigningSecret: "whsec_expiry_1"},
 	}}
 	newExpiryNotifier(lister, quietLogger()).Notify(context.Background(), expiryAlert())
 
@@ -141,7 +141,7 @@ func TestExpiryNotifierRespectsSubscriptionSeverityFilter(t *testing.T) {
 	defer srv.Close()
 
 	lister := &mockSubscriptionLister{subs: []pgstore.AlertSubscription{
-		{ID: "sub-warn", ContractID: "CDXQ", WebhookURL: srv.URL, SeverityFilter: "Warning", ChannelType: "webhook"},
+		{ID: "sub-warn", ContractID: "CDXQ", WebhookURL: srv.URL, SeverityFilter: "Warning", ChannelType: "webhook", SigningSecret: "whsec_expiry_warn"},
 	}}
 	newExpiryNotifier(lister, quietLogger()).Notify(context.Background(), expiryAlert())
 
@@ -168,8 +168,8 @@ func TestExpiryNotifierWithoutSubscriptionsIsANoOp(t *testing.T) {
 // Slack/Discord/PagerDuty channels from firing.
 func TestContractSubscriptionsMapsEveryField(t *testing.T) {
 	lister := &mockSubscriptionLister{subs: []pgstore.AlertSubscription{
-		{ID: "1", ContractID: "CDXQ", WebhookURL: "https://hooks.example/x", SeverityFilter: "Critical", ChannelType: "pagerduty", RoutingKey: "rk"},
-		{ID: "2", ContractID: "CDXQ", WebhookURL: "https://discord.example/y", SeverityFilter: "Warning", ChannelType: "discord"},
+		{ID: "1", ContractID: "CDXQ", WebhookURL: "https://hooks.example/x", SeverityFilter: "Critical", ChannelType: "pagerduty", RoutingKey: "rk", SigningSecret: "whsec_map_1"},
+		{ID: "2", ContractID: "CDXQ", WebhookURL: "https://discord.example/y", SeverityFilter: "Warning", ChannelType: "discord", SigningSecret: "whsec_map_2"},
 	}}
 	subs, err := (&contractSubscriptions{lister: lister}).ListByContract(context.Background(), "CDXQ")
 	if err != nil {
@@ -179,10 +179,11 @@ func TestContractSubscriptionsMapsEveryField(t *testing.T) {
 		t.Fatalf("subs = %d, want 2", len(subs))
 	}
 	if subs[0].ID != "1" || subs[0].ContractID != "CDXQ" || subs[0].WebhookURL != "https://hooks.example/x" ||
-		subs[0].SeverityFilter != "Critical" || subs[0].ChannelType != "pagerduty" || subs[0].RoutingKey != "rk" {
+		subs[0].SeverityFilter != "Critical" || subs[0].ChannelType != "pagerduty" || subs[0].RoutingKey != "rk" ||
+		subs[0].SigningSecret != "whsec_map_1" {
 		t.Fatalf("first subscription lost fields in conversion: %+v", subs[0])
 	}
-	if subs[1].ChannelType != "discord" || subs[1].RoutingKey != "" {
+	if subs[1].ChannelType != "discord" || subs[1].RoutingKey != "" || subs[1].SigningSecret != "whsec_map_2" {
 		t.Fatalf("second subscription = %+v", subs[1])
 	}
 

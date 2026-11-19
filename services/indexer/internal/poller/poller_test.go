@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -1135,5 +1136,68 @@ func TestBatchInsertWithCursor_RetryThenSuccess(t *testing.T) {
 	}
 	if st.syncStates["C1"].LastLedger != 10 || st.indexerCursors["testnet"] != 10 {
 		t.Fatalf("cursors = %+v / %+v, want both at 10", st.syncStates["C1"], st.indexerCursors["testnet"])
+	}
+}
+
+func TestBoundedConcurrencyAndFailureIsolation(t *testing.T) {
+	t.Parallel()
+
+	const totalContracts = 8
+	const concurrencyLimit = 3
+
+	var contracts []Contract
+	for i := 0; i < totalContracts; i++ {
+		cID := fmt.Sprintf("contract_%d", i)
+		contracts = append(contracts, Contract{
+			ID:      cID,
+			Status:  "active",
+			Network: "testnet",
+		})
+	}
+
+	st := newFakeStore(contracts)
+	for _, c := range contracts {
+		st.syncStates[c.ID] = SyncState{ContractID: c.ID, LastLedger: 500}
+	}
+
+	var active int64
+	var maxActive int64
+
+	rpc := &fakeRPC{
+		latestLedger: &LatestLedger{Sequence: 1000},
+		events:       make(map[string]*GetEventsResult),
+		onGetEvents: func() {
+			cur := atomic.AddInt64(&active, 1)
+			defer atomic.AddInt64(&active, -1)
+			for {
+				max := atomic.LoadInt64(&maxActive)
+				if cur <= max || atomic.CompareAndSwapInt64(&maxActive, max, cur) {
+					break
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
+		},
+	}
+	// Contract 2 simulated error in fakeStore
+	st.eventInsertErrs = map[string]error{
+		"contract_2": errors.New("isolated contract error"),
+	}
+
+	cfg := Config{
+		Concurrency:  concurrencyLimit,
+		LedgerWindow: 100,
+	}
+
+	p := NewWithRPCClients(map[string]RPCClient{"testnet": rpc}, st, newFakeRedis(), cfg, slog.Default())
+	if err := p.processAll(context.Background()); err != nil {
+		t.Fatalf("processAll failed: %v", err)
+	}
+
+	observed := atomic.LoadInt64(&maxActive)
+	if observed > concurrencyLimit {
+		t.Errorf("max active concurrent contracts %d exceeded concurrency limit %d", observed, concurrencyLimit)
+	}
+	if observed < 2 {
+		t.Errorf("expected concurrent processing, max active was %d", observed)
 	}
 }
