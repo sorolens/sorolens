@@ -29,9 +29,12 @@ if [[ ! -f "$jar" ]]; then
 fi
 
 rm -rf "$here/build/generated/openapi"
+# docs/openapi.yaml uses `deprecated` on security schemes, a valid OpenAPI 3.1
+# field that OpenAPI Generator 7.10's strict validator rejects.
 java -jar "$jar" generate \
   --config "$config" \
   --input-spec "$spec" \
-  --output "$here/build/generated/openapi"
+  --output "$here/build/generated/openapi" \
+  --skip-validate-spec
 
 echo "Regenerated $here/build/generated/openapi (openapi-generator $generator_version)"
