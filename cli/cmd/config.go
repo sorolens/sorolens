@@ -18,6 +18,20 @@ type fileConfig struct {
 	Network      string `yaml:"network"`
 	Output       string `yaml:"output"`
 	OutputFormat string `yaml:"output_format"`
+
+	// DefaultProfile names the profile used when --profile and
+	// SOROLENS_PROFILE are not set. Profiles are optional: a config file with
+	// only the top-level fields above keeps working unchanged.
+	DefaultProfile string                   `yaml:"default_profile,omitempty"`
+	Profiles       map[string]profileConfig `yaml:"profiles,omitempty"`
+}
+
+// profileConfig holds one named profile. API keys are never stored here, only
+// where they live (KeyRef: "keyring" or "file").
+type profileConfig struct {
+	APIURL  string `yaml:"api_url,omitempty"`
+	Network string `yaml:"network,omitempty"`
+	KeyRef  string `yaml:"key_ref,omitempty"`
 }
 
 func applyConfig(cmd *cobra.Command, _ []string) error {
@@ -25,6 +39,17 @@ func applyConfig(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+
+	// Profile precedence: --profile, then SOROLENS_PROFILE, then the config
+	// file's default profile. A profile overrides the legacy top-level values.
+	profileName := firstNonEmpty(globalConfig.Profile, os.Getenv("SOROLENS_PROFILE"), config.DefaultProfile)
+	prof, found := config.Profiles[profileName]
+	if profileName != "" && !found {
+		return fmt.Errorf("unknown profile %q (see 'sorolens config profile list')", profileName)
+	}
+	globalConfig.Profile = profileName
+	config.APIURL = firstNonEmpty(prof.APIURL, config.APIURL)
+	config.Network = firstNonEmpty(prof.Network, config.Network)
 
 	if !cmd.Flags().Changed("api-url") {
 		globalConfig.APIURL = firstNonEmpty(os.Getenv("SOROLENS_API_URL"), config.APIURL, "http://localhost:8080")

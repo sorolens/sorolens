@@ -43,6 +43,33 @@ the defaults:
 
 `SOROLENS_OUTPUT_FORMAT` is accepted as an alias of `SOROLENS_OUTPUT`.
 
+### Profiles and API keys
+
+Named profiles hold an API URL, a network and an API key for different
+deployments. Selection order: `--profile`, then `SOROLENS_PROFILE`, then the
+default profile in `~/.sorolens.yml`. Within a profile, flags and
+`SOROLENS_API_URL` / `SOROLENS_NETWORK` still win over stored values.
+
+```sh
+printf '%s' "$KEY" | sorolens config profile add prod \
+  --api-url https://api.example.com --network mainnet --api-key-stdin --use
+sorolens config profile list
+sorolens config profile use prod
+sorolens --profile staging contracts list
+sorolens config profile remove staging
+sorolens config show        # keys are always masked
+```
+
+API keys are stored in the OS keyring (macOS Keychain, Windows Credential
+Manager, Secret Service) through `github.com/zalando/go-keyring`. When no
+keyring is available the key is written to `~/.sorolens-credentials.yml` with
+mode `0600` and a warning is printed. Keys are never written to
+`~/.sorolens.yml` and never printed. The active profile's key is sent as the
+`X-API-Key` / bearer header on API requests.
+
+Existing config files keep working. The first time a profile is written, the
+top-level `api_url` and `network` are migrated into a `default` profile.
+
 ```sh
 sorolens --api-url https://api.sorolens.xyz --network testnet inspect CDLZ...
 ```

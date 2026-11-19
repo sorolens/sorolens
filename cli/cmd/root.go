@@ -14,6 +14,7 @@ type Config struct {
 	Network string
 	Output  string
 	Query   string
+	Profile string
 	JSON    bool
 	NoColor bool
 	Timeout time.Duration
@@ -39,6 +40,7 @@ func init() {
 		"",
 		"Sorolens API base URL",
 	)
+	rootCmd.PersistentFlags().StringVar(&globalConfig.Profile, "profile", "", "Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)")
 	rootCmd.PersistentFlags().StringVar(&globalConfig.Network, "network", "", "Stellar network (testnet, mainnet, futurenet, standalone)")
 	rootCmd.PersistentFlags().StringVar(&globalConfig.Output, "output", "", "Output format (table, json, yaml or jsonl)")
 	rootCmd.PersistentFlags().StringVar(&globalConfig.Query, "query", "", "jq-style path filter applied to structured output (e.g. '.items[].name')")
