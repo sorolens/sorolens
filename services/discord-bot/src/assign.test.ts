@@ -154,6 +154,16 @@ describe("processApplication", () => {
     ]);
   });
 
+  it("skips issues someone else already has and assigns the rest (first come, first served)", async () => {
+    await processApplication(msg("#10", "u2"), deps);
+    const r = await processApplication(msg("#10 #11"), deps);
+    expect(r).toMatchObject({ kind: "processed", outcomes: [
+      { issue: 10, ok: false, reason: "is already taken" },
+      { issue: 11, ok: true },
+    ] });
+    expect(issues.get(10)!.assignees).toEqual(["bob"]);
+  });
+
   it("does not hand the same issue to two people", async () => {
     await processApplication(msg("#10"), deps);
     const r = await processApplication(msg("#10", "u2"), deps);
