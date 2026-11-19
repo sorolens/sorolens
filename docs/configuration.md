@@ -14,6 +14,7 @@ there, not here.
 |---|---|---|---|
 | `API_CACHE_TTL` | `30s` | no | CacheTTL is the lifetime of cached GET responses (API_CACHE_TTL, default 30s). Zero disables the response cache. |
 | `API_REQUEST_TIMEOUT` | `30s` | no | RequestTimeout caps handling of every /api/v1 request except the SSE stream; past it the client gets a 503 (API_REQUEST_TIMEOUT, default 30s). |
+| `API_REQUIRE_AUTH` | — | no | RequireAuth enforces authentication across all endpoints except health checks when set to true (API_REQUIRE_AUTH). |
 | `API_STREAM_TIMEOUT` | `5m` | no | StreamTimeout bounds one SSE connection on /api/v1/stream/events (API_STREAM_TIMEOUT, default 5m). |
 | `COLD_STORAGE_ACCESS_KEY_ID` | — | no | ColdStorageAccessKeyID and ColdStorageSecretAccessKey are optional explicit credentials. Empty falls back to the default AWS credential chain. |
 | `COLD_STORAGE_BUCKET` | — | no | Cold storage (issue #146). Optional: an empty bucket disables the tier. |
@@ -29,6 +30,7 @@ there, not here.
 | `DB_MIN_CONNS` | `DefaultDBMinConns` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
 | `DIRECT_DATABASE_URL` | — | no | DirectDatabaseURL is the non-pooled connection string used for migrations. |
 | `DISCORD_WEBHOOK_URL` | — | no | Discord channel webhook URL that test messages and watchdog alerts are posted to. |
+| `EVENTS_RETENTION_DAYS` | — | no | Retention window in days. Events older than this are moved from `events` to `events_archive` by the retention job (go run ./cmd/retention). |
 | `GRAPHQL_COMPLEXITY_LIMIT` | — | no | GraphQLComplexityLimit caps the estimated cost of one /graphql request (GRAPHQL_COMPLEXITY_LIMIT, default 5000). |
 | `GRAPHQL_PERSISTED_ONLY` | — | no | GraphQLPersistedOnly restricts /graphql to the embedded persisted queries (GRAPHQL_PERSISTED_ONLY). |
 | `IDENTITY_SESSION_TTL` | `720h` | no | IdentitySessionTTL is how long a session token stays valid (IDENTITY_SESSION_TTL, default 720h). |
@@ -75,6 +77,7 @@ there, not here.
 | `INDEXER_ANOMALY_MIN_HISTORY` | `12` | no | AnomalyMinHistory is the minimum samples before detection starts. |
 | `INDEXER_ANOMALY_SIGMA` | `3` | no | AnomalySigma is the standard-deviation threshold, default 3. |
 | `INDEXER_BACKFILL_WINDOW` | `int(poller.DefaultBackfillWindow)` | no | Ledgers scanned per step of a new contract's backfill. Progress is saved after every step, so a restarted indexer resumes where it stopped. |
+| `INDEXER_CONCURRENCY` | `envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))` | no | INDEXER_CONCURRENCY (or the older INDEXER_WORKERS) is how many contracts one pass indexes concurrently; defaults to the number of usable CPUs. |
 | `INDEXER_FN_CALL_FALLBACK` | `true` | no | On by default; set INDEXER_FN_CALL_FALLBACK=false to only trust diagnostic events for function names (issue #504). |
 | `INDEXER_HEARTBEAT_INTERVAL` | `coordinator.DefaultHeartbeatInterval` | no | HeartbeatInterval is how often a worker reports liveness. |
 | `INDEXER_METRICS_ADDR` | `:9100` | no | Address for the Prometheus /metrics HTTP server (empty disables it) |
@@ -82,7 +85,7 @@ there, not here.
 | `INDEXER_ROLE` | `all` | no | Sharded topology (issue #272). The default role preserves the original single-process behaviour: index every contract in this process. |
 | `INDEXER_SHARD_COUNT` | `coordinator.DefaultShardCount` | no | Number of shards contracts are spread across |
 | `INDEXER_SHARD_STORE` | — | no | Shard store backend: postgres (shared) or memory (single node only) |
-| `INDEXER_WORKERS` | `runtime.GOMAXPROCS(0)` | no | INDEXER_WORKERS is how many contracts one pass indexes concurrently; defaults to the number of usable CPUs. |
+| `INDEXER_WORKERS` | `runtime.GOMAXPROCS(0)` | no | INDEXER_CONCURRENCY (or the older INDEXER_WORKERS) is how many contracts one pass indexes concurrently; defaults to the number of usable CPUs. |
 | `INDEXER_WORKER_ID` | — | no | Unique id for this process (required for coordinator and worker roles) |
 | `INDEXER_WORKER_STALE_AFTER` | `coordinator.DefaultStaleAfter` | no | StaleAfter is how long a worker may go unheard before its shards move. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | no | OTEL_EXPORTER_OTLP_ENDPOINT is the OTLP/gRPC collector (host:port) that receives traces. Empty disables trace export. |
@@ -90,6 +93,7 @@ there, not here.
 | `SENTRY_ENVIRONMENT` | `production` | no | Tags reported Sentry events with the deployment environment. |
 | `SOROBAN_NETWORK` | — | no | SOROBAN_NETWORK is the network the call-graph backfill stamps on the rows it writes (testnet, mainnet or futurenet); defaults to testnet. |
 | `SOROBAN_RPC_MAX_RETRIES` | — | no | buildRPCClients builds one Soroban RPC client per configured network. - SOROBAN_RPC_URL_TESTNET / _MAINNET / _FUTURENET point a network at its own node. - SOROBAN_RPC_URL is the default client, keyed by "", that the poller falls back to for contracts on a network without a dedicated URL. - SOROBAN_RPC_TIMEOUT (Go duration, default 30s) bounds each request and SOROBAN_RPC_MAX_RETRIES (default 3) bounds retries of HTTP 429/5xx and transport failures. At least one URL must be set: indexing without a node can only fail, so the indexer refuses to start rather than run passes that do nothing. |
+| `SOROBAN_RPC_RATE_LIMIT` | — | no | Soroban RPC rate limit (requests per second). Optional, shared across workers. |
 | `SOROBAN_RPC_TIMEOUT` | — | no | buildRPCClients builds one Soroban RPC client per configured network. - SOROBAN_RPC_URL_TESTNET / _MAINNET / _FUTURENET point a network at its own node. - SOROBAN_RPC_URL is the default client, keyed by "", that the poller falls back to for contracts on a network without a dedicated URL. - SOROBAN_RPC_TIMEOUT (Go duration, default 30s) bounds each request and SOROBAN_RPC_MAX_RETRIES (default 3) bounds retries of HTTP 429/5xx and transport failures. At least one URL must be set: indexing without a node can only fail, so the indexer refuses to start rather than run passes that do nothing. |
 | `SOROBAN_RPC_URL` | — | no | Soroban RPC endpoint (defaults to $SOROBAN_RPC_URL) |
 | `WATCHDOG_CONTRACT_ID` | — | no | Deployed sorolens-watchdog Soroban contract id (56-char, starts with C). After running contracts/watchdog/scripts/deploy-testnet.sh, take the id it prints and set it here so the indexer knows which contract's events to treat as watchdog telemetry rather than generic contract events. |
@@ -116,6 +120,7 @@ there, not here.
 |---|---|---|---|
 | `API_CACHE_TTL` | `30s` | no | Lifetime of cached API responses for GET /contracts, /contracts/:id and /watchdog/stats (Go duration). Writes to contracts purge the cache immediately. Set to 0 to disable response caching. |
 | `API_REQUEST_TIMEOUT` | `30s` | no | Cap on handling one /api/v1 request (Go duration). Past it the request context is cancelled and the client gets a 503 TIMEOUT error. |
+| `API_REQUIRE_AUTH` | `false` | no | Require authentication mode: rejects all unauthenticated requests except health endpoints. Defaults to false (open read surface). |
 | `API_STREAM_TIMEOUT` | `5m` | no | Lifetime of one SSE connection on /api/v1/stream/events (Go duration). When it expires the stream closes and EventSource clients reconnect. |
 | `COLD_STORAGE_ACCESS_KEY_ID` | `sorolens` | no | Explicit credentials. Leave both empty to use the default AWS credential chain (environment, shared config, IAM role). |
 | `COLD_STORAGE_BUCKET` | `sorolens-archive` | no | S3-compatible bucket that holds archived events as Parquet files. Leaving this empty disables the cold-storage tier: the nightly archive job refuses to run and the API never falls back to object storage. Local development and integration tests use the MinIO service in docker-compose.yml: docker compose exec minio mc mb --ignore-existing local/sorolens-archive |
@@ -129,7 +134,9 @@ there, not here.
 | `DB_MAX_CONN_LIFETIME` | `1h` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
 | `DB_MIN_CONNS` | `2` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
 | `DIRECT_DATABASE_URL` | `postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable` | no | PostgreSQL direct (non-pooled) connection string. Used for migrations; bypasses PgBouncer transaction-mode pooling. |
+| `EVENTS_RETENTION_DAYS` | `90` | no | Retention window in days. Events older than this are moved from `events` to `events_archive` by the retention job (go run ./cmd/retention). |
 | `INDEXER_BACKFILL_WINDOW` | `10000` | no | Ledgers scanned per step of a new contract's backfill. Progress is saved after every step, so a restarted indexer resumes where it stopped. |
+| `INDEXER_CONCURRENCY` | `4` | no | Bounded worker pool concurrency for contract processing. Defaults to GOMAXPROCS. |
 | `INDEXER_LEDGER_WINDOW` | `120960` | no | Number of past ledgers to include in a backfill window. 120960 ledgers at ~5s/ledger is approximately 7 days. |
 | `INDEXER_MAX_DURATION` | `270s` | no | Maximum wall-clock time a single indexer run may take before forced exit. Set just under the cron interval (5m) so runs do not overlap. |
 | `INDEXER_METRICS_ADDR` | `:9100` | no | Address for the indexer's Prometheus /metrics endpoint, where the per-network indexer lag gauges are exposed. Set to empty to disable it. |
@@ -147,6 +154,9 @@ there, not here.
 | `SENTRY_DSN` | — | no | Sentry DSN for the API and indexer. Error reporting is disabled entirely (no-op, no network calls) when this is unset. |
 | `SENTRY_ENVIRONMENT` | `production` | no | Tags reported Sentry events with the deployment environment. |
 | `SLACK_SIGNING_SECRET` | — | no | Slack app signing secret for the /sorolens slash command (POST /integrations/slack/commands). Every request is verified with it; leave empty to disable the endpoint. |
+| `SOROBAN_RPC_RATE_LIMIT` | `10` | no | Soroban RPC rate limit (requests per second). Optional, shared across workers. |
+| `SOROBAN_RPC_RATE_LIMIT_MAINNET` | `10` | no | Soroban RPC rate limit (requests per second). Optional, shared across workers. |
+| `SOROBAN_RPC_RATE_LIMIT_TESTNET` | `10` | no | Soroban RPC rate limit (requests per second). Optional, shared across workers. |
 | `SOROBAN_RPC_URL` | `https://soroban-testnet.stellar.org:443` | no | Soroban RPC endpoint. Use the SDF testnet endpoint for development. For mainnet, use a commercial provider (Ankr, QuickNode, etc.). Set one or more of the network-specific variables below; the indexer will use the matching endpoint for each contract's configured network. |
 | `SOROBAN_RPC_URL_FUTURENET` | `https://soroban-futurenet.stellar.org:443` | no | Soroban RPC endpoint. Use the SDF testnet endpoint for development. For mainnet, use a commercial provider (Ankr, QuickNode, etc.). Set one or more of the network-specific variables below; the indexer will use the matching endpoint for each contract's configured network. |
 | `SOROBAN_RPC_URL_MAINNET` | `https://soroban-mainnet.stellar.org:443` | no | Soroban RPC endpoint. Use the SDF testnet endpoint for development. For mainnet, use a commercial provider (Ankr, QuickNode, etc.). Set one or more of the network-specific variables below; the indexer will use the matching endpoint for each contract's configured network. |
