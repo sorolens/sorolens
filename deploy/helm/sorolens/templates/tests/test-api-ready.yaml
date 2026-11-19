@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sorolens.componentName" (dict "root" . "component" "test-api-ready") }}
+  labels:
+    {{- include "sorolens.componentLabels" (dict "root" . "component" "test") | nindent 4 }}
+  annotations:
+    # `helm test` runs this pod: it passes once the API reports that its
+    # database and Redis are reachable.
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  containers:
+    - name: readyz
+      image: busybox:1.37
+      command:
+        - wget
+        - -q
+        - -O-
+        - http://{{ include "sorolens.componentName" (dict "root" . "component" "api") }}:{{ .Values.api.service.port }}/readyz
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 32Mi

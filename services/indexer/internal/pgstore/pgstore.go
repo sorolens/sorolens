@@ -253,12 +253,23 @@ func queueInvocation(batch *pgx.Batch, inv poller.Invocation, now time.Time) {
 	batch.Queue(`
 		INSERT INTO invocations
 			(tx_hash, contract_id, network, ledger, ledger_closed_at, status,
-			 result_xdr, application_order, inserted_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			 result_xdr, application_order, inserted_at,
+			 function_name, cpu_insn, mem_byte, ledger_read_byte, ledger_write_byte)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		ON CONFLICT (tx_hash) DO NOTHING`,
 		inv.TxHash, inv.ContractID, networkOrDefault(inv.Network), int64(inv.Ledger), inv.LedgerClosedAt, inv.Status,
 		inv.ResultXDR, inv.ApplicationOrder, now,
+		nullableString(inv.FunctionName), inv.CPUInsn, inv.MemByte, inv.LedgerReadByte, inv.LedgerWriteByte,
 	)
+}
+
+// nullableString maps "" to SQL NULL so an unknown function name is not
+// stored as an empty string.
+func nullableString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // batchSender is the shared statement surface of a pool and a transaction.
@@ -293,6 +304,29 @@ func (s *Store) BatchInsertWithCursor(ctx context.Context, network string, ledge
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	now := time.Now()
+	parked, err := insertWindowRows(ctx, tx, events, invocations, now)
+	if err != nil {
+		return nil, err
+	}
+
+	if syncState.ContractID != "" {
+		if err := upsertSyncState(ctx, tx, syncState, now); err != nil {
+			return nil, err
+		}
+	}
+	if err := setIndexerCursor(ctx, tx, network, ledger); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("batch insert with cursor: commit: %w", err)
+	}
+	return parked, nil
+}
+
+// insertWindowRows writes a window's events and invocations inside tx. Events
+// the database rejects are parked in the dead-letter queue and returned.
+func insertWindowRows(ctx context.Context, tx pgx.Tx, events []poller.Event, invocations []poller.Invocation, now time.Time) ([]poller.FailedEvent, error) {
 	var parked []poller.FailedEvent
 	for _, e := range events {
 		rejected, cause, err := insertEventAttempts(ctx, tx, e, now)
@@ -320,19 +354,6 @@ func (s *Store) BatchInsertWithCursor(ctx context.Context, network string, ledge
 		if err := execBatch(ctx, tx, batch, "batch insert invocations"); err != nil {
 			return nil, err
 		}
-	}
-
-	if syncState.ContractID != "" {
-		if err := upsertSyncState(ctx, tx, syncState, now); err != nil {
-			return nil, err
-		}
-	}
-	if err := setIndexerCursor(ctx, tx, network, ledger); err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("batch insert with cursor: commit: %w", err)
 	}
 	return parked, nil
 }

@@ -1,6 +1,7 @@
 name: IaC
 
-# Validates the self-hosting Terraform modules and Pulumi package in deploy/.
+# Validates the self-hosting Terraform modules, Pulumi package and Helm chart
+# in deploy/.
 # Everything runs against mocks, a throwaway local state backend and fake
 # credentials: no cloud account, no secrets (so fork PRs work), and nothing
 # is ever created (no apply / up).
@@ -23,6 +24,8 @@ env:
   TERRAFORM_VERSION: "1.16.4"
   TFLINT_VERSION: "v0.64.0"
   PULUMI_VERSION: "3.265.0"
+  HELM_VERSION: "v3.19.0"
+  KUBECONFORM_VERSION: "v0.7.0"
 
 jobs:
   terraform:
@@ -140,3 +143,29 @@ jobs:
 
       - name: pulumi preview, HTTP evaluation scenario
         run: ./scripts/offline-preview.sh http
+
+  helm:
+    name: Helm (lint, template, kubeconform)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up Go 1.26
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: false
+
+      - name: Install kubeconform
+        run: |
+          go install "github.com/yannh/kubeconform/cmd/kubeconform@${KUBECONFORM_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Lint, render and validate every scenario
+        run: deploy/helm/test.sh

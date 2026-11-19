@@ -134,6 +134,8 @@ type fakeStore struct {
 	// wasmBinaries is the content-addressed Wasm cache (issue #162):
 	// wasm hash -> raw bytes.
 	wasmBinaries map[string][]byte
+	// backfills is the saved backfill position per contract (issue #509).
+	backfills map[string]BackfillProgress
 }
 
 func newFakeStore(contracts []Contract) *fakeStore {
@@ -546,7 +548,7 @@ func TestPoller_RunOnce_indexesActiveContract(t *testing.T) {
 	}
 }
 
-func TestPoller_SkipsPendingContract(t *testing.T) {
+func TestPoller_PicksUpPendingContract(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeStore([]Contract{{ID: "CTEST", Status: "pending"}})
@@ -556,8 +558,23 @@ func TestPoller_SkipsPendingContract(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	if len(rpc.eventsCalls) == 0 {
+		t.Error("expected a pending contract to start backfilling")
+	}
+}
+
+func TestPoller_SkipsPausedAndErroredContracts(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeStore([]Contract{{ID: "CPAUSED", Status: "paused"}, {ID: "CERROR", Status: "error"}})
+	rpc := &fakeRPC{}
+	p := New(rpc, store, newFakeRedis(), testConfig(), testLogger())
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
 	if len(rpc.eventsCalls) != 0 {
-		t.Errorf("expected no RPC calls for pending contract, got %d", len(rpc.eventsCalls))
+		t.Errorf("expected no RPC calls for paused or errored contracts, got %d", len(rpc.eventsCalls))
 	}
 }
 
@@ -576,13 +593,17 @@ func TestPoller_NewContractStartsFromBackfillWindow(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Expected start: 200000 - 100000 = 100000.
+	// The backfill walks down from the head and stops at 200000 - 100000.
 	if len(rpc.eventsCalls) == 0 {
 		t.Fatal("expected at least one GetEvents call")
 	}
-	wantStart := uint32(200000 - newContractBackfillWindow)
-	if rpc.eventsCalls[0].StartLedger != wantStart {
-		t.Errorf("start ledger: want %d, got %d", wantStart, rpc.eventsCalls[0].StartLedger)
+	wantOldest := uint32(200000 - newContractBackfillWindow)
+	last := rpc.eventsCalls[len(rpc.eventsCalls)-1]
+	if last.StartLedger != wantOldest {
+		t.Errorf("oldest ledger: want %d, got %d", wantOldest, last.StartLedger)
+	}
+	if first := rpc.eventsCalls[0]; first.EndLedger != 200001 {
+		t.Errorf("first window should end at the head: got end %d", first.EndLedger)
 	}
 }
 

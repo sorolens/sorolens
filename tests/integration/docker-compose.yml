@@ -7,7 +7,7 @@
 # The API image is built from the monorepo root because apps/api/Dockerfile
 # copies the API module from there. The indexer runs on demand
 # (`docker compose run --rm indexer -mode once`) after the suite has registered
-# and activated its fixture contract.
+# its fixture contract.
 services:
   postgres:
     image: postgres:16-alpine

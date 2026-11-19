@@ -72,6 +72,19 @@ impl BlockingClient {
         let body = response.bytes().map_err(Error::transport)?;
         parse_json(status, &body)
     }
+
+    pub(crate) fn send_bytes(&self, spec: crate::request::RequestSpec) -> Result<Vec<u8>, Error> {
+        let request = build_request(&self.http, &self.config, &spec)?;
+        let response = request.send().map_err(Error::transport)?;
+        let status = response.status().as_u16();
+        let body = response.bytes().map_err(Error::transport)?;
+
+        if !(200..300).contains(&status) {
+            return Err(Error::Api(crate::error::parse_api_error(status, &body)));
+        }
+
+        Ok(body.to_vec())
+    }
 }
 
 fn build_request(

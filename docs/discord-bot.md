@@ -1,11 +1,14 @@
 # Discord bot
 
-The Sorolens Discord bot (`services/discord-bot/`) has two jobs: it links a
-Discord member to their GitHub account so contributor roles can be granted
-automatically, and it exposes Sorolens contract data as slash commands so
-people can query a contract without leaving Discord.
+The Sorolens Discord bot (`services/discord-bot/`) links a Discord member to
+their GitHub account so contributor roles can be granted automatically, lets
+members self-assign Drips Wave issues by posting issue numbers in a channel,
+and exposes Sorolens contract data as slash commands so people can query a
+contract without leaving Discord.
 
-This page documents the slash commands and how they authenticate.
+This page documents the slash commands and how they authenticate. Setup,
+deployment, the issue self-assign rules and the admin commands are in the
+bot's [README](../services/discord-bot/README.md).
 
 ## Commands
 
@@ -18,6 +21,18 @@ This page documents the slash commands and how they authenticate.
 | `/unlink`                 | Removes the GitHub link **and** revokes the member's Sorolens API key.                                   |
 | `/whoami`                 | Shows the GitHub account linked to your Discord id.                                                      |
 | `/mypr`                   | Shows the merged-PR count in `sorolens/sorolens` and the current role tier.                              |
+
+Admins can also remove another member's link with `/admin-unlink user:@x` (or `github:name`).
+
+### Issue self-assign
+
+Members apply on Drips Wave, then post `#123` (or several numbers) in the
+apply channel the owner set with `/assign-setup`. The bot assigns them on
+GitHub, first come, first served, up to the per-person max, and reacts ✅ or
+❌. The owner releases issues with `/assign-issues add`, checks what is open
+with `/assign-available`, and opens a round with `/assign-toggle on`. See the
+[README](../services/discord-bot/README.md#issue-self-assign-drips-wave) for
+the full rules.
 
 ### Contract queries
 
@@ -80,8 +95,10 @@ Add these to the bot's environment (see `.env.example`):
 | `SOROLENS_API_KEY`              | no                                   | Admin-scoped (`admin:*`) key used to mint per-user keys. Without it, commands run on the public read surface. |
 | `COMMAND_RATE_LIMIT_PER_MINUTE` | no (default `10`)                    | Per-user command budget per minute.                                                                           |
 
-After deploying, re-run the registration script so Discord learns the new
-commands:
+New or changed commands are registered by the `Discord register commands`
+GitHub Actions workflow when `src/command-definitions.ts` changes on `main`
+(it needs the `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID` and `DISCORD_GUILD_ID`
+repository secrets). Locally, run:
 
 ```bash
 cd services/discord-bot
