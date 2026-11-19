@@ -12,8 +12,9 @@ func MaintainPartitions(ctx context.Context, store Store, monthsAhead int) error
 		monthsAhead = 6
 	}
 	now := time.Now()
+	firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	for i := 0; i <= monthsAhead; i++ {
-		t := now.AddDate(0, i, 0)
+		t := firstOfMonth.AddDate(0, i, 0)
 		if err := store.CreateMonthlyPartitionIfNotExists(ctx, t.Year(), int(t.Month())); err != nil {
 			return err
 		}
