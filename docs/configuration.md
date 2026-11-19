@@ -23,7 +23,12 @@ there, not here.
 | `COLD_STORAGE_THRESHOLD_DAYS` | `90` | no | Events older than this many days are exported to Parquet and deleted from Postgres by the nightly archive job. |
 | `CORS_ALLOWED_ORIGINS` | — | no | corsMiddleware returns an http.Handler middleware that sets CORS headers. When CORS_ALLOWED_ORIGINS is unset or contains "*" all origins are allowed (Access-Control-Allow-Origin: *). When it is a comma-separated list of origins, only requests whose Origin header is in the list receive an echoed origin back; all others receive the first entry in the list (the browser will still block the mismatch). This lets a self-hosted API restrict cross-origin access to the Vercel dashboard domain without any code change. |
 | `DATABASE_URL` | — | yes | DatabaseURL is the pooled Postgres connection string used by the API. |
+| `DB_MAX_CONNS` | `DefaultDBMaxConns` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
+| `DB_MAX_CONN_IDLE_TIME` | `DefaultDBMaxConnIdleTime` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
+| `DB_MAX_CONN_LIFETIME` | `DefaultDBMaxConnLifetime` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
+| `DB_MIN_CONNS` | `DefaultDBMinConns` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
 | `DIRECT_DATABASE_URL` | — | no | DirectDatabaseURL is the non-pooled connection string used for migrations. |
+| `DISCORD_WEBHOOK_URL` | — | no | Discord channel webhook URL that test messages and watchdog alerts are posted to. |
 | `GRAPHQL_COMPLEXITY_LIMIT` | — | no | GraphQLComplexityLimit caps the estimated cost of one /graphql request (GRAPHQL_COMPLEXITY_LIMIT, default 5000). |
 | `GRAPHQL_PERSISTED_ONLY` | — | no | GraphQLPersistedOnly restricts /graphql to the embedded persisted queries (GRAPHQL_PERSISTED_ONLY). |
 | `IDENTITY_SESSION_TTL` | `720h` | no | IdentitySessionTTL is how long a session token stays valid (IDENTITY_SESSION_TTL, default 720h). |
@@ -42,12 +47,15 @@ there, not here.
 | `SENTRY_DSN` | — | no | SentryDSN is the Sentry project DSN. Error reporting is disabled entirely when this is empty. |
 | `SENTRY_ENVIRONMENT` | `production` | no | SentryEnvironment tags reported events (e.g. production, staging). |
 | `SLACK_SIGNING_SECRET` | — | no | SlackSigningSecret verifies Slack slash command requests (SLACK_SIGNING_SECRET). Empty disables the Slack command endpoint. |
+| `SLACK_WEBHOOK_URL` | — | no | Slack incoming-webhook URL that test messages and watchdog alerts are posted to. |
 | `SMTP_ADDR` | — | no | NewSMTPMailerFromEnv builds an SMTPMailer, or returns (nil, false) when SMTP_ADDR/SMTP_FROM are not set so the caller can skip sending in environments without mail configured. |
 | `SMTP_FROM` | — | no | NewSMTPMailerFromEnv builds an SMTPMailer, or returns (nil, false) when SMTP_ADDR/SMTP_FROM are not set so the caller can skip sending in environments without mail configured. |
 | `SMTP_PASS` | — | no | SMTP_PASS is the password for SMTP_USER. |
 | `SMTP_USER` | — | no | SMTP_USER and SMTP_PASS enable PLAIN auth against SMTP_ADDR. Empty SMTP_USER sends without authentication. |
 | `SOROBAN_RPC_URL` | `https://soroban-testnet.stellar.org` | no | SorobanRPCURL is the Soroban RPC endpoint to query on cache misses. |
 | `STELLAR_NETWORK` | `testnet` | no | StellarNetwork is the network identifier: testnet, mainnet, or futurenet. |
+| `TELEGRAM_BOT_TOKEN` | — | no | Telegram bot token from @BotFather, used to send test messages and watchdog alerts. |
+| `TELEGRAM_CHAT_ID` | — | no | Telegram chat id the bot posts test messages and watchdog alerts to. |
 | `TRUSTED_IDENTITY_PROXY_SECRET` | — | no | TrustedProxySecret enables identity headers signed by a reverse proxy. Empty disables that identity source. |
 | `VERIFY_BUILD_COMMAND` | `stellar contract build` | no | VerifyBuildCommand is the deterministic build invocation used for contract source verification (issue #263), parsed from a space-separated string. It is executed directly, never through a shell. |
 | `VERIFY_TIMEOUT` | `10m` | no | VERIFY_TIMEOUT bounds a single contract verification build (Go duration). |
@@ -58,10 +66,16 @@ there, not here.
 | Name | Default | Required | Description |
 |---|---|---|---|
 | `DATABASE_URL` | — | no | Postgres: the same schema the API reads (issue #500). A missing or unreachable database stops the indexer at startup. |
+| `HUBBLE_BILLING_PROJECT` | — | no | Import mode: Google Cloud project BigQuery bills queries to |
+| `HUBBLE_DATASET` | — | no | Import mode: Hubble events dataset to read (default crypto_stellar, mainnet only). |
+| `HUBBLE_MAX_BYTES_BILLED` | `int(history.DefaultMaxBytesBilled)` | no | Import mode: largest scan one BigQuery query may bill; BigQuery refuses a query over it. |
+| `HUBBLE_PROJECT` | — | no | Import mode: Google Cloud project that holds the Hubble events dataset (default crypto-stellar). |
 | `INDEXER_ANOMALY_ENABLED` | `false` | no | AnomalyEnabled turns the per-pass anomaly detection job on (default off; issue #136). Indexer main.go wires it via env. |
 | `INDEXER_ANOMALY_LOOKBACK_HOURS` | `168` | no | AnomalyLookbackHours is the rolling baseline window, default 168 (7 days). |
 | `INDEXER_ANOMALY_MIN_HISTORY` | `12` | no | AnomalyMinHistory is the minimum samples before detection starts. |
 | `INDEXER_ANOMALY_SIGMA` | `3` | no | AnomalySigma is the standard-deviation threshold, default 3. |
+| `INDEXER_BACKFILL_WINDOW` | `int(poller.DefaultBackfillWindow)` | no | Ledgers scanned per step of a new contract's backfill. Progress is saved after every step, so a restarted indexer resumes where it stopped. |
+| `INDEXER_FN_CALL_FALLBACK` | `true` | no | On by default; set INDEXER_FN_CALL_FALLBACK=false to only trust diagnostic events for function names (issue #504). |
 | `INDEXER_HEARTBEAT_INTERVAL` | `coordinator.DefaultHeartbeatInterval` | no | HeartbeatInterval is how often a worker reports liveness. |
 | `INDEXER_METRICS_ADDR` | `:9100` | no | Address for the Prometheus /metrics HTTP server (empty disables it) |
 | `INDEXER_REBALANCE_INTERVAL` | `coordinator.DefaultRebalanceInterval` | no | RebalanceInterval is how often the leader reconciles ownership. |
@@ -85,6 +99,7 @@ there, not here.
 
 | Name | Default | Required | Description |
 |---|---|---|---|
+| `COLUMNS` | — | no | resolveWidth uses --width when set, then $COLUMNS, then a 100-column default. |
 | `NO_COLOR` | — | no | IsColorEnabled returns true when color output should be rendered. Color is disabled when NO_COLOR is set (any value) or when stdout is not a terminal. |
 | `SOROLENS_API_KEY` | — | no | API key for authenticating with the Sorolens API |
 | `SOROLENS_API_URL` | — | no | APIURL is only used for display in the header. |
@@ -109,7 +124,12 @@ there, not here.
 | `COLD_STORAGE_SECRET_ACCESS_KEY` | `sorolens123` | no | Explicit credentials. Leave both empty to use the default AWS credential chain (environment, shared config, IAM role). |
 | `COLD_STORAGE_THRESHOLD_DAYS` | `90` | no | Events older than this many days are exported to Parquet and deleted from Postgres by the nightly archive job. |
 | `DATABASE_URL` | `postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable` | no | PostgreSQL connection string (pooled). Used by the API at runtime. Format: postgres://user:password@host:port/dbname?sslmode=require |
+| `DB_MAX_CONNS` | `20` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
+| `DB_MAX_CONN_IDLE_TIME` | `30m` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
+| `DB_MAX_CONN_LIFETIME` | `1h` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
+| `DB_MIN_CONNS` | `2` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
 | `DIRECT_DATABASE_URL` | `postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable` | no | PostgreSQL direct (non-pooled) connection string. Used for migrations; bypasses PgBouncer transaction-mode pooling. |
+| `INDEXER_BACKFILL_WINDOW` | `10000` | no | Ledgers scanned per step of a new contract's backfill. Progress is saved after every step, so a restarted indexer resumes where it stopped. |
 | `INDEXER_LEDGER_WINDOW` | `120960` | no | Number of past ledgers to include in a backfill window. 120960 ledgers at ~5s/ledger is approximately 7 days. |
 | `INDEXER_MAX_DURATION` | `270s` | no | Maximum wall-clock time a single indexer run may take before forced exit. Set just under the cron interval (5m) so runs do not overlap. |
 | `INDEXER_METRICS_ADDR` | `:9100` | no | Address for the indexer's Prometheus /metrics endpoint, where the per-network indexer lag gauges are exposed. Set to empty to disable it. |
@@ -165,7 +185,7 @@ there, not here.
 | `CONTRIBUTOR_THRESHOLD` | `1` | no | Contributors need at least this many merged PRs against GITHUB_REPO. |
 | `CORE_CONTRIBUTOR_THRESHOLD` | `3` | no | Contributors need at least this many merged PRs against GITHUB_REPO. |
 | `DATABASE_PATH` | `/tmp/mappings.db` | no | SQLite database file. On Render's free tier there is no persistent disk, so we point this at /tmp (writable, but wiped on redeploy). Set the LITESTREAM_* variables below to back the file up so links survive redeploys; without them contributors must /link again. On a platform with a persistent disk (Render paid, Fly, a VPS), mount a volume and point this at a stable path like /data/mappings.db. |
-| `DISCORD_BOT_TOKEN` | — | no | Bot token from https://discord.com/developers/applications/<app>/bot |
+| `DISCORD_BOT_TOKEN` | — | no | Bot token from https://discord.com/developers/applications/<app>/bot The bot also needs Server Members Intent and Message Content Intent turned on under Bot > Privileged Gateway Intents. |
 | `DISCORD_CLIENT_ID` | — | no | Application id (also known as Client ID) from Discord dev portal. |
 | `DISCORD_GUILD_ID` | — | no | Server (guild) id where the bot operates. In Discord: right-click server icon, Copy Server ID. Requires Developer Mode enabled in User Settings > Advanced. |
 | `DISCORD_ROLE_CONTRIBUTOR_ID` | — | no | Role ids for the two tiers the bot auto-grants. Right-click each role and Copy Role ID. |
@@ -174,7 +194,7 @@ there, not here.
 | `GITHUB_OAUTH_CLIENT_ID` | — | no | Create an OAuth App at https://github.com/settings/developers: Homepage URL           = value of PUBLIC_BASE_URL below Authorization callback = ${PUBLIC_BASE_URL}/oauth/callback |
 | `GITHUB_OAUTH_CLIENT_SECRET` | — | no | Create an OAuth App at https://github.com/settings/developers: Homepage URL           = value of PUBLIC_BASE_URL below Authorization callback = ${PUBLIC_BASE_URL}/oauth/callback |
 | `GITHUB_REPO` | `sorolens/sorolens` | no | Repository the bot counts merged PRs against. |
-| `GITHUB_TOKEN` | — | no | Fine-grained PAT with read access to sorolens/sorolens. Only needs `metadata: read` and `pull_requests: read`; no write scopes. |
+| `GITHUB_TOKEN` | — | no | Fine-grained PAT for sorolens/sorolens, created on the account that should appear as the assigner. Needs `metadata: read`, `pull_requests: read` and, for issue self-assign, `issues: read and write`. |
 | `GITHUB_WEBHOOK_SECRET` | — | no | Shared secret you set on the GitHub webhook. Random 32+ char string. |
 | `LITESTREAM_ACCESS_KEY_ID` | — | no | Optional backup of the database to S3-compatible storage (Cloudflare R2, Backblaze B2, AWS S3) via Litestream. Set LITESTREAM_BUCKET to enable. |
 | `LITESTREAM_BUCKET` | — | no | Optional backup of the database to S3-compatible storage (Cloudflare R2, Backblaze B2, AWS S3) via Litestream. Set LITESTREAM_BUCKET to enable. |
