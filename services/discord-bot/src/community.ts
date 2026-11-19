@@ -122,25 +122,60 @@ export function formatLeaderboard(title: string, rows: readonly LeaderboardRow[]
   return [`**${title}**`, ...lines, "", "_Link your GitHub with `/connect` to appear here._"].join("\n");
 }
 
-export function formatCongrats(opts: {
-  discordId: string;
+export interface CongratsInput {
+  /** Linked Discord member, or null when the author has not linked. */
+  discordId: string | null;
+  login: string;
+  /** Discord avatar for linked members, GitHub avatar otherwise. */
+  avatarUrl: string | null;
   prNumber: number;
   prTitle: string;
   prUrl: string;
   total: number;
   milestone?: { count: number; roleId: string } | null;
-}): string {
-  const title = opts.prTitle.length > 120 ? `${opts.prTitle.slice(0, 117)}…` : opts.prTitle;
-  const lines = [
-    `🎉 <@${opts.discordId}> just got [#${opts.prNumber}](<${opts.prUrl}>) merged: **${title}**`,
-    `That's their **${ordinal(opts.total)}** merged PR in Sorolens!`,
+}
+
+export interface CongratsMessage {
+  /** Plain message text; carries the @mention so the member is pinged. */
+  content: string;
+  embed: {
+    title: string;
+    url: string;
+    description: string;
+    thumbnail: string | null;
+    footer: string;
+    color: number;
+  };
+}
+
+/** Merge congratulation: a short pinging line plus an embed with the avatar. */
+export function formatCongrats(opts: CongratsInput): CongratsMessage {
+  const title = opts.prTitle.length > 200 ? `${opts.prTitle.slice(0, 197)}…` : opts.prTitle;
+  const who = opts.discordId ? `<@${opts.discordId}>` : `**${opts.login}**`;
+  const description = [
+    `That's ${opts.discordId ? "their" : `\`${opts.login}\`'s`} **${ordinal(opts.total)}** merged PR in Sorolens!`,
   ];
   if (opts.milestone) {
-    lines.push(
+    description.push(
       `🏅 Milestone unlocked: **${opts.milestone.count} merged PRs** and the <@&${opts.milestone.roleId}> role!`
     );
   }
-  return lines.join("\n");
+  if (!opts.discordId) {
+    description.push(
+      `Is this you, \`${opts.login}\`? Run \`/connect\` to link your GitHub and earn contributor roles.`
+    );
+  }
+  return {
+    content: `🎉 ${who} just got PR #${opts.prNumber} merged!`,
+    embed: {
+      title: `#${opts.prNumber} ${title}`.slice(0, 256),
+      url: opts.prUrl,
+      description: description.join("\n"),
+      thumbnail: opts.avatarUrl,
+      footer: `${opts.login} · sorolens/sorolens`,
+      color: 0x2ecc71,
+    },
+  };
 }
 
 export function formatCotw(opts: {

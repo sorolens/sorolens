@@ -80,19 +80,40 @@ describe("milestones", () => {
 });
 
 describe("messages", () => {
-  it("tags the member in the congrats and shows a milestone", () => {
-    const text = formatCongrats({
+  it("tags a linked member with their avatar and shows a milestone", () => {
+    const msg = formatCongrats({
       discordId: "42",
+      login: "alice",
+      avatarUrl: "https://cdn.discordapp.com/avatars/42/x.png",
       prNumber: 900,
       prTitle: "fix: thing",
       prUrl: "https://github.com/x/y/pull/900",
       total: 5,
       milestone: { count: 5, roleId: "r5" },
     });
-    expect(text).toContain("<@42>");
-    expect(text).toContain("#900");
-    expect(text).toContain("5th");
-    expect(text).toContain("<@&r5>");
+    expect(msg.content).toBe("🎉 <@42> just got PR #900 merged!");
+    expect(msg.embed.title).toBe("#900 fix: thing");
+    expect(msg.embed.thumbnail).toContain("cdn.discordapp.com");
+    expect(msg.embed.description).toContain("**5th**");
+    expect(msg.embed.description).toContain("<@&r5>");
+    expect(msg.embed.description).not.toContain("/connect");
+  });
+
+  it("congratulates an unlinked author by GitHub name and nudges them to /connect", () => {
+    const msg = formatCongrats({
+      discordId: null,
+      login: "bob",
+      avatarUrl: "https://avatars.githubusercontent.com/u/1",
+      prNumber: 7,
+      prTitle: "docs",
+      prUrl: "https://github.com/x/y/pull/7",
+      total: 1,
+    });
+    expect(msg.content).toBe("🎉 **bob** just got PR #7 merged!");
+    expect(msg.content).not.toContain("<@");
+    expect(msg.embed.thumbnail).toContain("githubusercontent");
+    expect(msg.embed.description).toContain("`bob`'s **1st**");
+    expect(msg.embed.description).toContain("/connect");
   });
 
   it("renders the leaderboard with medals", () => {

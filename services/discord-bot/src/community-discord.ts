@@ -4,7 +4,7 @@
  * weekly contributor-of-the-week post. Text comes from `community.ts`.
  */
 
-import type { ChatInputCommandInteraction, Client, Guild } from "discord.js";
+import { EmbedBuilder, type ChatInputCommandInteraction, type Client, type Guild } from "discord.js";
 import {
   allLinks,
   getCommunitySettings,
@@ -172,15 +172,18 @@ async function handleMilestones(interaction: ChatInputCommandInteraction) {
 }
 
 /**
- * Called from the webhook after a linked member's PR merges: grant milestone
- * roles they have reached and post a congratulation.
+ * Called from the webhook for every merged PR. Linked members get any
+ * milestone roles they reached and a congratulation that tags them with
+ * their Discord avatar; unlinked authors get one with their GitHub avatar
+ * and a nudge to `/connect`.
  */
-export async function onLinkedMerge(
+export async function onMerge(
   guild: Guild,
   config: Config,
   merge: {
-    discordId: string;
+    discordId: string | null;
     login: string;
+    githubAvatarUrl: string | null;
     prNumber: number;
     prTitle: string;
     prUrl: string;
@@ -191,11 +194,12 @@ export async function onLinkedMerge(
   const prs = await listMergedPRs(config.githubRepo, { author: merge.login });
   const total = prs.length + (prs.some((p) => p.number === merge.prNumber) ? 0 : 1);
 
-  const reached = milestonesReached(total, listMilestones());
-  const member = await guild.members.fetch(merge.discordId).catch(() => null);
+  const member = merge.discordId
+    ? await guild.members.fetch(merge.discordId).catch(() => null)
+    : null;
   let newMilestone: { count: number; roleId: string } | null = null;
   if (member) {
-    for (const m of reached) {
+    for (const m of milestonesReached(total, listMilestones())) {
       if (member.roles.cache.has(m.roleId)) continue;
       try {
         await member.roles.add(m.roleId, `sorolens-bot: ${total} merged PRs`);
@@ -210,9 +214,28 @@ export async function onLinkedMerge(
   if (!s.congratsEnabled || !s.congratsChannelId) return;
   const channel = await guild.channels.fetch(s.congratsChannelId).catch(() => null);
   if (!channel?.isSendable()) return;
+
+  const msg = formatCongrats({
+    discordId: merge.discordId,
+    login: merge.login,
+    avatarUrl: member ? member.displayAvatarURL({ size: 256 }) : merge.githubAvatarUrl,
+    prNumber: merge.prNumber,
+    prTitle: merge.prTitle,
+    prUrl: merge.prUrl,
+    total,
+    milestone: newMilestone,
+  });
+  const embed = new EmbedBuilder()
+    .setTitle(msg.embed.title)
+    .setURL(msg.embed.url)
+    .setDescription(msg.embed.description)
+    .setFooter({ text: msg.embed.footer })
+    .setColor(msg.embed.color);
+  if (msg.embed.thumbnail) embed.setThumbnail(msg.embed.thumbnail);
   await channel.send({
-    content: formatCongrats({ ...merge, total, milestone: newMilestone }),
-    allowedMentions: { users: [merge.discordId], roles: [] },
+    content: msg.content,
+    embeds: [embed],
+    allowedMentions: { users: merge.discordId ? [merge.discordId] : [], roles: [] },
   });
 }
 

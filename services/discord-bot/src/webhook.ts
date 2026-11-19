@@ -19,7 +19,7 @@ import { Webhooks } from "@octokit/webhooks";
 import type { Client } from "discord.js";
 import { getByGithub } from "./db.js";
 import { syncOnMerge } from "./commands.js";
-import { onLinkedMerge } from "./community-discord.js";
+import { onMerge } from "./community-discord.js";
 import { type Tiers } from "./roles.js";
 import type { Config } from "./config.js";
 
@@ -39,25 +39,28 @@ export function mountWebhookRoutes(app: Application, deps: Deps): void {
     const login = payload.pull_request.user?.login;
     if (!login) return;
 
+    // Bot accounts (dependabot, renovate, ...) get no congratulations.
+    if (payload.pull_request.user?.type === "Bot") return;
+
     const link = getByGithub(login);
-    if (!link) {
-      console.log(`webhook: merge by unlinked user ${login}; skipping`);
-      return;
+    const guild = await deps.client.guilds.fetch(deps.config.discordGuildId);
+    if (link) {
+      const result = await syncOnMerge(guild, link.discordId, login, {
+        config: deps.config,
+        tiers: deps.tiers,
+      });
+      console.log("webhook: sync result", result);
+    } else {
+      console.log(`webhook: merge by unlinked user ${login}; no role sync`);
     }
 
-    const guild = await deps.client.guilds.fetch(deps.config.discordGuildId);
-    const result = await syncOnMerge(guild, link.discordId, login, {
-      config: deps.config,
-      tiers: deps.tiers,
-    });
-    console.log("webhook: sync result", result);
-
-    // Community: milestone roles and a congratulation post. Failures here
-    // must not affect the role sync above.
+    // Community: milestone roles and a congratulation post for every merge.
+    // Failures here must not affect the role sync above.
     try {
-      await onLinkedMerge(guild, deps.config, {
-        discordId: link.discordId,
+      await onMerge(guild, deps.config, {
+        discordId: link?.discordId ?? null,
         login,
+        githubAvatarUrl: payload.pull_request.user?.avatar_url ?? null,
         prNumber: payload.pull_request.number,
         prTitle: payload.pull_request.title,
         prUrl: payload.pull_request.html_url,

@@ -43,14 +43,35 @@ func buildRPCClients(getenv func(string) string) (map[string]*sorobanrpc.Client,
 		opts = append(opts, sorobanrpc.WithMaxRetries(n))
 	}
 
+	globalLimit := 0
+	if v := getenv("SOROBAN_RPC_RATE_LIMIT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			globalLimit = n
+		}
+	}
+
 	clients := make(map[string]*sorobanrpc.Client)
 	for _, network := range indexedNetworks {
 		if url := strings.TrimSpace(getenv("SOROBAN_RPC_URL_" + strings.ToUpper(network))); url != "" {
-			clients[network] = sorobanrpc.New(url, opts...)
+			netOpts := append([]sorobanrpc.Option(nil), opts...)
+			limit := globalLimit
+			if v := getenv("SOROBAN_RPC_RATE_LIMIT_" + strings.ToUpper(network)); v != "" {
+				if n, err := strconv.Atoi(v); err == nil && n > 0 {
+					limit = n
+				}
+			}
+			if limit > 0 {
+				netOpts = append(netOpts, sorobanrpc.WithRateLimiter(sorobanrpc.NewLimiter(limit)))
+			}
+			clients[network] = sorobanrpc.New(url, netOpts...)
 		}
 	}
 	if url := strings.TrimSpace(getenv("SOROBAN_RPC_URL")); url != "" {
-		clients[""] = sorobanrpc.New(url, opts...)
+		defaultOpts := append([]sorobanrpc.Option(nil), opts...)
+		if globalLimit > 0 {
+			defaultOpts = append(defaultOpts, sorobanrpc.WithRateLimiter(sorobanrpc.NewLimiter(globalLimit)))
+		}
+		clients[""] = sorobanrpc.New(url, defaultOpts...)
 	}
 	if len(clients) == 0 {
 		return nil, errors.New("no Soroban RPC endpoint configured: set SOROBAN_RPC_URL or SOROBAN_RPC_URL_<NETWORK> (TESTNET, MAINNET, FUTURENET)")

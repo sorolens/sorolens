@@ -33,18 +33,21 @@ func main() {
 		defer tp.Shutdown(context.Background())
 	}
 
-	mode := flag.String("mode", "once", "Run mode: once or continuous")
+	mode := flag.String("mode", "once", "Run mode: once, continuous, or import (history from Hubble; needs -tags hubble)")
 	maxDuration := flag.Duration("max-duration", 270*time.Second, "Maximum duration for a single pass (once mode)")
 	pollInterval := flag.Duration("poll-interval", 5*time.Minute, "Sleep between passes (continuous mode)")
 	ledgerWindow := flag.Uint("ledger-window", 120960, "Ledger window per getEvents call")
+	backfillWindow := flag.Uint("backfill-window", uint(envInt("INDEXER_BACKFILL_WINDOW", int(poller.DefaultBackfillWindow))), "Ledgers scanned per new-contract backfill step")
 	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics HTTP server (empty disables it)")
-	workers := envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))
+	concurrency := flag.Int("concurrency", envInt("INDEXER_CONCURRENCY", envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))), "Bounded worker pool concurrency for contract processing")
+	workers := *concurrency
 	// Sharded topology (issue #272). The default role preserves the original
 	// single-process behaviour: index every contract in this process.
 	role := flag.String("role", envString("INDEXER_ROLE", "all"), "Role: all, coordinator, or worker")
 	shardCount := flag.Int("shard-count", envInt("INDEXER_SHARD_COUNT", coordinator.DefaultShardCount), "Number of shards contracts are spread across")
 	workerID := flag.String("worker-id", envString("INDEXER_WORKER_ID", ""), "Unique id for this process (required for coordinator and worker roles)")
 	shardStoreKind := flag.String("shard-store", envString("INDEXER_SHARD_STORE", ""), "Shard store backend: postgres (shared) or memory (single node only)")
+	importOpts := registerImportFlags(flag.CommandLine)
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -67,7 +70,9 @@ func main() {
 
 	cfg := poller.Config{
 		Workers:              workers,
+		Concurrency:          *concurrency,
 		LedgerWindow:         uint32(*ledgerWindow),
+		BackfillWindow:       uint32(*backfillWindow),
 		PollInterval:         *pollInterval,
 		MaxDuration:          *maxDuration,
 		AnomalyEnabled:       envBool("INDEXER_ANOMALY_ENABLED", false),
@@ -101,6 +106,17 @@ func main() {
 		os.Exit(1)
 	}
 	defer st.Close()
+
+	// Import mode (issue #511) copies one contract's history from Hubble and
+	// exits; it never starts the poller.
+	if *mode == "import" {
+		if err := runImport(context.Background(), importOpts, importStore{st}, rpcClients, newBigQueryReader, os.Stdout, log); err != nil {
+			log.Error("indexer: history import failed", "err", err)
+			st.Close()
+			os.Exit(1)
+		}
+		return
+	}
 	redis := &stubRedis{}
 
 	// Wire watchdog interceptor. pgstore does not implement the watchdog
