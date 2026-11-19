@@ -19,6 +19,7 @@ import { Webhooks } from "@octokit/webhooks";
 import type { Client } from "discord.js";
 import { getByGithub } from "./db.js";
 import { syncOnMerge } from "./commands.js";
+import { onLinkedMerge } from "./community-discord.js";
 import { type Tiers } from "./roles.js";
 import type { Config } from "./config.js";
 
@@ -50,6 +51,20 @@ export function mountWebhookRoutes(app: Application, deps: Deps): void {
       tiers: deps.tiers,
     });
     console.log("webhook: sync result", result);
+
+    // Community: milestone roles and a congratulation post. Failures here
+    // must not affect the role sync above.
+    try {
+      await onLinkedMerge(guild, deps.config, {
+        discordId: link.discordId,
+        login,
+        prNumber: payload.pull_request.number,
+        prTitle: payload.pull_request.title,
+        prUrl: payload.pull_request.html_url,
+      });
+    } catch (err) {
+      console.error("webhook: community post failed", err);
+    }
   });
 
   webhooks.onError((err) => {

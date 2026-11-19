@@ -124,6 +124,9 @@ type TransactionResult struct {
 	ApplicationOrder int
 	ResultXDR        string
 	ResourceFee      int64
+	// DiagnosticEventsXDR holds the base64 host diagnostic events (fn_call,
+	// fn_return, core_metrics). Empty when the node does not expose them.
+	DiagnosticEventsXDR []string
 }
 
 // LedgerEntry mirrors soroban.LedgerEntry.
@@ -200,6 +203,15 @@ type Invocation struct {
 	Status           string
 	ResultXDR        string
 	ApplicationOrder int
+
+	// Decoded from the transaction's diagnostic events (issue #504). An
+	// empty FunctionName and nil counters mean the node did not report them;
+	// the columns are then stored as NULL rather than zero.
+	FunctionName    string
+	CPUInsn         *int64
+	MemByte         *int64
+	LedgerReadByte  *int64
+	LedgerWriteByte *int64
 }
 
 // SyncState mirrors store.SyncState.

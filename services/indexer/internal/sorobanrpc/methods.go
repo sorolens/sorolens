@@ -82,6 +82,14 @@ type wireTransaction struct {
 	CreatedAt        flexInt64 `json:"createdAt"`
 	ApplicationOrder int       `json:"applicationOrder"`
 	ResultXDR        string    `json:"resultXdr"`
+	// DiagnosticEventsXDR is the pre-protocol-23 location of the host
+	// diagnostic events. Nodes only populate it when
+	// ENABLE_SOROBAN_DIAGNOSTIC_EVENTS is on.
+	DiagnosticEventsXDR []string `json:"diagnosticEventsXdr"`
+	// Events is where protocol 23+ RPC nodes return the same stream.
+	Events struct {
+		DiagnosticEventsXDR []string `json:"diagnosticEventsXdr"`
+	} `json:"events"`
 }
 
 type wireLedgerEntry struct {
@@ -189,6 +197,12 @@ func (c *Client) GetTransaction(ctx context.Context, hash string) (*poller.Trans
 		Ledger:           res.Ledger,
 		ApplicationOrder: res.ApplicationOrder,
 		ResultXDR:        res.ResultXDR,
+		// Prefer the top-level array; protocol 23+ nodes moved it under
+		// events. Either may be empty when the node disables diagnostics.
+		DiagnosticEventsXDR: res.DiagnosticEventsXDR,
+	}
+	if len(out.DiagnosticEventsXDR) == 0 {
+		out.DiagnosticEventsXDR = res.Events.DiagnosticEventsXDR
 	}
 	if res.CreatedAt > 0 {
 		out.LedgerClosedAt = time.Unix(int64(res.CreatedAt), 0).UTC()
