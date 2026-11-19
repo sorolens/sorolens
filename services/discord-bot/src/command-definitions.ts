@@ -239,4 +239,29 @@ export const commandDefinitions = [
         .setMinValue(1)
         .setRequired(true)
     ),
+  new SlashCommandBuilder()
+    .setName("assign-available")
+    .setDescription(
+      "(Admin) List open, unassigned issues and which are in your list"
+    )
+    .setDefaultMemberPermissions("0")
+    .addIntegerOption((o) =>
+      o.setName("from").setDescription("Lowest issue number").setMinValue(1).setRequired(false)
+    )
+    .addIntegerOption((o) =>
+      o.setName("to").setDescription("Highest issue number").setMinValue(1).setRequired(false)
+    )
+    .addStringOption((o) =>
+      o
+        .setName("label")
+        .setDescription("Only issues with this label, e.g. Stellar Wave")
+        .setMaxLength(100)
+        .setRequired(false)
+    )
+    .addBooleanOption((o) =>
+      o
+        .setName("applicants")
+        .setDescription("Also count Drips Wave applicants (slower, up to 60 issues)")
+        .setRequired(false)
+    ),
 ].map((c) => c.toJSON());

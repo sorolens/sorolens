@@ -3,6 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  countWaveApplicants,
+  formatAvailableSummary,
   formatIssueList,
   hasWaveApplication,
   meetsRoleRules,
@@ -175,5 +177,44 @@ describe("processApplication", () => {
     const r = await processApplication(msg("#10"), deps);
     expect(r).toMatchObject({ outcomes: [{ ok: false }] });
     expect(db.getGrant(10)).toBeNull();
+  });
+});
+
+describe("available overview", () => {
+  it("counts distinct Wave applicants", () => {
+    expect(
+      countWaveApplicants([
+        { author: "a", authorType: "User", body: WAVE("a") },
+        { author: "A", authorType: "User", body: WAVE("a") },
+        { author: "b", authorType: "User", body: WAVE("b") },
+        { author: "c", authorType: "User", body: "me please" },
+      ])
+    ).toBe(2);
+  });
+
+  it("splits open issues into in-list and not-in-list with a count and range", () => {
+    const text = formatAvailableSummary({ open: [12, 10, 11, 20], pool: [11, 12, 99] });
+    expect(text).toContain("Open and unassigned: 4");
+    expect(text).toContain("Lowest #10, highest #20");
+    expect(text).toContain("#10-#12, #20");
+    expect(text).toContain("Already in your list (2):** #11-#12");
+    expect(text).toContain("Not in your list yet (2):** #10, #20");
+  });
+
+  it("shows applicant counts and unchecked issues", () => {
+    const text = formatAvailableSummary({
+      open: [1, 2, 3],
+      pool: [],
+      applicants: new Map([[1, 3], [2, 0]]),
+      unchecked: [3],
+    });
+    expect(text).toContain("With Drips Wave applicants (1):** #1 (3)");
+    expect(text).toContain("No applicants yet (1):** #2");
+    expect(text).toContain("Not checked for applicants");
+  });
+
+  it("stays under Discord's message limit", () => {
+    const open = Array.from({ length: 900 }, (_, i) => i * 2 + 1);
+    expect(formatAvailableSummary({ open, pool: [] }).length).toBeLessThan(2000);
   });
 });

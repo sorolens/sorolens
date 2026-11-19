@@ -24,8 +24,15 @@ import {
   removeFromPool,
   updateAssignSettings,
 } from "./db.js";
-import { addAssignee, getIssue, listIssueComments } from "./github.js";
 import {
+  addAssignee,
+  getIssue,
+  listIssueComments,
+  listOpenUnassignedIssues,
+} from "./github.js";
+import {
+  countWaveApplicants,
+  formatAvailableSummary,
   formatApplicationReply,
   formatIssueList,
   parseIssueList,
@@ -42,7 +49,11 @@ export const ASSIGN_COMMANDS = new Set([
   "assign-toggle",
   "assign-status",
   "assign-release",
+  "assign-available",
 ]);
+
+/** Most issues whose comments `/assign-available applicants:true` reads. */
+const APPLICANT_CHECK_LIMIT = 60;
 
 function deps(config: Config): AssignDeps {
   return {
@@ -128,6 +139,8 @@ export async function handleAssignCommand(
       return handleStatus(interaction, config);
     case "assign-release":
       return handleRelease(interaction);
+    case "assign-available":
+      return handleAvailable(interaction, config);
   }
 }
 
@@ -253,5 +266,43 @@ async function handleRelease(interaction: ChatInputCommandInteraction) {
       ? `#${n} no longer counts toward anyone's max. It is still assigned on GitHub; unassign it there if needed.`
       : `#${n} wasn't given out by the bot.`,
     flags: EPHEMERAL,
+  });
+}
+
+async function handleAvailable(
+  interaction: ChatInputCommandInteraction,
+  config: Config
+) {
+  const from = interaction.options.getInteger("from") ?? 1;
+  const to = interaction.options.getInteger("to") ?? Number.MAX_SAFE_INTEGER;
+  const label = interaction.options.getString("label")?.trim() || undefined;
+  const checkApplicants = interaction.options.getBoolean("applicants") ?? false;
+  await interaction.deferReply({ flags: EPHEMERAL });
+
+  const open = (await listOpenUnassignedIssues(config.githubRepo, label))
+    .map((i) => i.number)
+    .filter((n) => n >= Math.min(from, to) && n <= Math.max(from, to))
+    .sort((a, b) => a - b);
+
+  let applicants: Map<number, number> | undefined;
+  let unchecked: number[] | undefined;
+  if (checkApplicants) {
+    applicants = new Map();
+    const toCheck = open.slice(0, APPLICANT_CHECK_LIMIT);
+    unchecked = open.slice(APPLICANT_CHECK_LIMIT);
+    for (const n of toCheck) {
+      const comments = await listIssueComments(config.githubRepo, n);
+      applicants.set(n, countWaveApplicants(comments));
+    }
+  }
+
+  await interaction.editReply({
+    content: formatAvailableSummary({
+      open,
+      pool: listPool(),
+      applicants,
+      unchecked,
+      label,
+    }),
   });
 }
