@@ -31,6 +31,23 @@ export const commandDefinitions = [
     .setName("unlink")
     .setDescription("Remove the GitHub link on your Discord account"),
   new SlashCommandBuilder()
+    .setName("admin-unlink")
+    .setDescription("(Admin) Remove another member's GitHub link")
+    .setDefaultMemberPermissions("0")
+    .addUserOption((o) =>
+      o
+        .setName("user")
+        .setDescription("The Discord member to unlink")
+        .setRequired(false)
+    )
+    .addStringOption((o) =>
+      o
+        .setName("github")
+        .setDescription("Or the GitHub username to unlink")
+        .setRequired(false)
+        .setMaxLength(39)
+    ),
+  new SlashCommandBuilder()
     .setName("whoami")
     .setDescription("Show your current linked GitHub account, if any"),
   new SlashCommandBuilder()

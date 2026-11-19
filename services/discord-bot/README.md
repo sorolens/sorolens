@@ -14,6 +14,7 @@ Runs as a single Node.js process. Deploys to Render's free tier (Docker) with an
 | `/connect`                   | **Recommended.** Auto-links your GitHub via one-click OAuth. No typing. |
 | `/link github <username>`    | Manual fallback if you cannot use OAuth.                                |
 | `/unlink`                    | Remove the GitHub link on your Discord account.                         |
+| `/admin-unlink`              | (Admin) Remove another member's GitHub link, by `user` or `github`.      |
 | `/whoami`                    | Show your current linked GitHub account, if any.                        |
 | `/mypr`                      | Show your merged PR count and current tier.                             |
 | `/status <contract>`         | Show the current Sorolens status of a tracked contract.                 |
