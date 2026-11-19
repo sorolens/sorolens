@@ -465,6 +465,7 @@ connection attacks.
 | `INDEXER_POLL_INTERVAL` | Indexer | Optional | `5m` | Sleep interval between passes in continuous mode. |
 | `INDEXER_LEDGER_WINDOW` | Indexer | Optional | `120960` | Backfill window size in ledgers (~7 days). |
 | `INDEXER_MAX_DURATION` | Indexer | Optional | `270s` | Maximum execution time per pass in `once` mode. |
+| `INDEXER_FN_CALL_FALLBACK` | Indexer | Optional | `true` | Derive an invocation's function name from `fn_call` topics in contract events when the RPC returns no diagnostic events. |
 | `INDEXER_METRICS_ADDR` | Indexer | Optional | `:9100` | Address for Prometheus `/metrics` HTTP server. |
 | `INDEXER_ROLE` | Indexer | Optional | `all` | Sharding role: `all`, `coordinator`, or `worker`. |
 | `INDEXER_SHARD_COUNT` | Indexer | Optional | `64` | Total number of virtual shards for contracts. |

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -427,6 +428,45 @@ func TestContractInstanceLedgerKey_RejectsBadIDs(t *testing.T) {
 	for _, id := range []string{"", "nothex", "CAAA"} {
 		if _, err := ContractInstanceLedgerKey(id); err == nil {
 			t.Errorf("ContractInstanceLedgerKey(%q): want error", id)
+		}
+	}
+}
+
+// TestGetTransaction_DiagnosticEventsBothShapes replays the go-stellar-sdk
+// encoded fixture through both getTransaction layouts: the top-level
+// diagnosticEventsXdr array and the protocol 23 events.diagnosticEventsXdr
+// location (issue #504).
+func TestGetTransaction_DiagnosticEventsBothShapes(t *testing.T) {
+	raw, err := os.ReadFile("../callgraph/testdata/diagnostic_events.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var fixture map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req := decodeReq(t, r)
+		var p struct{ Hash string }
+		json.Unmarshal(req.Params, &p) //nolint:errcheck
+		key := map[string]string{
+			"legacy": "getTransaction",
+			"p23":    "getTransactionProtocol23",
+		}[p.Hash]
+		var body map[string]any
+		json.Unmarshal(fixture[key], &body) //nolint:errcheck
+		writeResult(w, req.ID, body)
+	}))
+	defer srv.Close()
+	c := fastClient(srv.URL)
+
+	for _, hash := range []string{"legacy", "p23"} {
+		tx, err := c.GetTransaction(context.Background(), hash)
+		if err != nil {
+			t.Fatalf("%s: GetTransaction: %v", hash, err)
+		}
+		if len(tx.DiagnosticEventsXDR) != 19 {
+			t.Fatalf("%s: diagnostic events = %d, want 19", hash, len(tx.DiagnosticEventsXDR))
 		}
 	}
 }

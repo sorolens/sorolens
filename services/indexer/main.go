@@ -74,6 +74,9 @@ func main() {
 		AnomalyLookbackHours: envInt("INDEXER_ANOMALY_LOOKBACK_HOURS", 168),
 		AnomalySigma:         envFloat("INDEXER_ANOMALY_SIGMA", 3),
 		AnomalyMinHistory:    envInt("INDEXER_ANOMALY_MIN_HISTORY", 12),
+		// On by default; set INDEXER_FN_CALL_FALLBACK=false to only trust
+		// diagnostic events for function names (issue #504).
+		DisableFnCallFallback: !envBool("INDEXER_FN_CALL_FALLBACK", true),
 	}
 
 	// Soroban RPC: one client per configured network (issue #499).
