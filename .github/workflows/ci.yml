@@ -297,8 +297,8 @@ jobs:
         run: make integration-test
 
   # ------------------------------------------------------------
-  # SDKs and contracts: Python SDK, Rust SDK and the fixture contract. Each
-  # part runs only when its paths changed.
+  # SDKs and contracts: Python SDK, Rust SDK and the contracts. Each part runs
+  # only when its paths changed.
   # ------------------------------------------------------------
   sdks:
     name: SDKs and contracts
@@ -364,7 +364,7 @@ jobs:
       - name: Verify Python client has no diff
         if: steps.changes.outputs.python == 'true'
         run: git diff --exit-code -- packages/python-sdk/src/sorolens/_generated
-      # Rust toolchain for the Rust SDK and the fixture contract.
+      # Rust toolchain for the Rust SDK and the contracts.
       - name: Install Rust stable
         if: steps.changes.outputs.rustsdk == 'true' || steps.changes.outputs.contracts == 'true'
         uses: dtolnay/rust-toolchain@stable
@@ -381,7 +381,8 @@ jobs:
             ~/.cargo/git/db/
             packages/rust-sdk/target/
             contracts/counter/target/
-          key: cargo-${{ hashFiles('packages/rust-sdk/Cargo.lock', 'contracts/counter/Cargo.lock') }}
+            contracts/watchdog/target/
+          key: cargo-${{ hashFiles('packages/rust-sdk/Cargo.lock', 'contracts/counter/Cargo.lock', 'contracts/watchdog/Cargo.lock') }}
           restore-keys: |
             cargo-
       # Rust SDK (async and blocking transports).
@@ -426,3 +427,35 @@ jobs:
         if: steps.changes.outputs.contracts == 'true'
         working-directory: contracts/counter
         run: cargo test
+      # Watchdog contract.
+      - name: Watchdog contract - cargo fmt --check
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo fmt --check
+      - name: Watchdog contract - cargo clippy
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Watchdog contract - cargo test
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo test
+      - name: Watchdog contract - cargo build (wasm32 release)
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo build --target wasm32v1-none --release
+      - name: Watchdog contract - report wasm size
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: |
+          wasm=$(find target/wasm32v1-none/release -maxdepth 1 -name '*.wasm' -print -quit)
+          test -n "$wasm"
+          bytes=$(wc -c < "$wasm")
+          kib=$(( (bytes + 1023) / 1024 ))
+          echo "Watchdog WASM size: ${bytes} bytes (${kib} KiB)"
+          {
+            echo "### Watchdog contract WASM"
+            echo
+            echo "- File: $wasm"
+            echo "- Size: ${bytes} bytes (${kib} KiB)"
+          } >> "$GITHUB_STEP_SUMMARY"
