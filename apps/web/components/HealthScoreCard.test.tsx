@@ -62,7 +62,7 @@ describe("HealthScoreCard", () => {
     getContractHealthScore.mockReturnValue(new Promise(() => {}));
     render(<HealthScoreCard contractId="C1" />);
 
-    expect(getContractHealthScore).toHaveBeenCalledWith("C1");
+    expect(getContractHealthScore).toHaveBeenCalledWith("C1", 168);
   });
 
   it("renders the score and component breakdown, collapsed at first", async () => {
@@ -154,7 +154,7 @@ describe("HealthScoreCard", () => {
     const { rerender } = render(<HealthScoreCard contractId="C1" />);
     rerender(<HealthScoreCard contractId="C2" />);
 
-    expect(getContractHealthScore).toHaveBeenLastCalledWith("C2");
+    expect(getContractHealthScore).toHaveBeenLastCalledWith("C2", 168);
   });
 
   it("ignores a score that resolves after unmount", async () => {
@@ -173,4 +173,42 @@ describe("HealthScoreCard", () => {
     });
     expect(screen.queryByText("Health Score")).not.toBeInTheDocument();
   });
+});
+
+it("shows the weighted uptime contribution when the breakdown opens", async () => {
+  const score = healthScore();
+  getContractHealthScore.mockResolvedValue({
+    ...score,
+    components: { ...score.components, uptime: 95 },
+  });
+  render(<HealthScoreCard contractId="C1" />);
+
+  const toggle = await screen.findByRole("button", {
+    name: /show component breakdown/i,
+  });
+  expect(screen.queryByText("38 of 40 points")).toBeNull();
+
+  fireEvent.click(toggle);
+
+  expect(screen.getByText("38 of 40 points")).toBeVisible();
+  expect(screen.getByLabelText("Uptime component score")).toHaveAttribute(
+    "value",
+    "95"
+  );
+});
+
+it("explains when uptime data is missing", async () => {
+  const score = healthScore();
+  getContractHealthScore.mockResolvedValue({
+    ...score,
+    components: { ...score.components, uptime: undefined },
+  });
+  render(<HealthScoreCard contractId="C1" />);
+
+  fireEvent.click(
+    await screen.findByRole("button", { name: /show component breakdown/i })
+  );
+
+  expect(screen.getByText("Component data unavailable.")).toBeVisible();
+  expect(screen.queryByLabelText("Uptime component score")).toBeNull();
 });

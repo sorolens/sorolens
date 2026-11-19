@@ -4110,6 +4110,14 @@ paths:
         - ApiKeyAuth: [read:contracts]
       parameters:
         - $ref: "#/components/parameters/ContractID"
+        - name: history_limit
+          in: query
+          required: false
+          description: Maximum number of recorded hourly snapshots to return, oldest first. Omit to skip history.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 720
       responses:
         "200":
           description: The cached health score
@@ -4123,9 +4131,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
-
   /api/v1/contracts/{id}/summary:
     get:
       tags: [Stats]
@@ -7074,6 +7083,20 @@ components:
         computed_at:
           type: string
           format: date-time
+        history:
+          type: array
+          description: Recorded hourly snapshots, oldest first. Included when history_limit is requested.
+          items:
+            type: object
+            required: [computed_at, score]
+            properties:
+              computed_at:
+                type: string
+                format: date-time
+              score:
+                type: integer
+                minimum: 0
+                maximum: 100
 
     ContractSummary:
       type: object
@@ -7258,6 +7281,19 @@ components:
         health_score:
           type: integer
           nullable: true
+        health_components:
+          type: object
+          description: Latest component scores. Omitted when health has not yet been computed.
+          required: [uptime, error_rate, performance, storage_ttl]
+          properties:
+            uptime:
+              type: integer
+            error_rate:
+              type: integer
+            performance:
+              type: integer
+            storage_ttl:
+              type: integer
         last_synced_ledger:
           type: integer
           format: int64

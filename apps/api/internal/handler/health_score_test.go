@@ -100,3 +100,48 @@ func TestGetContractHealthScore_NotYetComputed(t *testing.T) {
 		t.Fatalf("want 404 when score not yet computed, got %d (%s)", w.Code, w.Body.String())
 	}
 }
+func TestGetContractHealthScore_History(t *testing.T) {
+	const contractID = "CONTRACT_A"
+	ms := seededHealthScoreStore(t, contractID)
+	latest := time.Date(2025, 2, 3, 5, 5, 6, 0, time.UTC)
+	if err := ms.UpsertContractHealthScore(nil, store.ContractHealthScore{
+		ContractID: contractID,
+		Score:      81,
+		ComputedAt: latest,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := newTestHandler(ms, true, true)
+	path := "/api/v1/contracts/" + contractID + "/health-score"
+
+	for _, tc := range []struct {
+		query  string
+		status int
+	}{
+		{"?history_limit=1", http.StatusOK},
+		{"?history_limit=721", http.StatusUnprocessableEntity},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path+tc.query, nil))
+			if w.Code != tc.status {
+				t.Fatalf("want status %d, got %d (%s)", tc.status, w.Code, w.Body.String())
+			}
+			if tc.status != http.StatusOK {
+				return
+			}
+
+			var resp struct {
+				History []store.HealthScoreSample `json:"history"`
+			}
+			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+				t.Fatal(err)
+			}
+			if len(resp.History) != 1 || resp.History[0].Score != 81 ||
+				!resp.History[0].ComputedAt.Equal(latest) {
+				t.Fatalf("want only the latest snapshot, got %+v", resp.History)
+			}
+		})
+	}
+}

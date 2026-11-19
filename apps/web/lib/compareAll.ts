@@ -88,6 +88,7 @@ async function getCompareAllEntry(id: string): Promise<CompareContractEntry> {
   try {
     const health = await getContractHealthScore(id);
     entry.health_score = health.score;
+    entry.health_components = health.components;
   } catch (err) {
     if (!(err instanceof ApiError) || err.status !== 404) {
       entry.error = "failed to load health score";

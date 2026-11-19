@@ -2508,6 +2508,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             description: "Contract ID (starts with C).",
             type: "string",
           },
+          {
+            name: "history_limit",
+            in: "query",
+            required: false,
+            description:
+              "Maximum number of recorded hourly snapshots to return, oldest first. Omit to skip history.",
+            type: "integer",
+          },
         ],
       },
     },
