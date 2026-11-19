@@ -478,3 +478,495 @@ async fn rate_limits_are_surfaced_as_api_errors() {
     assert_eq!(err.api_error().unwrap().code(), Some("RATE_LIMITED"));
     rate_limited_mock.assert_async().await;
 }
+
+#[tokio::test]
+async fn search_contracts_sends_query_and_decodes_matches() {
+    let server = MockServer::start_async().await;
+    let contract = include_str!("fixtures/contract.json");
+    let body = format!(r#"{{"items":[{contract}]}}"#);
+
+    let search_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v1/search")
+                .query_param("q", "treasury account")
+                .query_param("limit", "5");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(body.as_str());
+        })
+        .await;
+
+    let response = client(&server)
+        .search_contracts(&SearchContractsParams {
+            query: "treasury account".into(),
+            limit: Some(5),
+        })
+        .await
+        .expect("search succeeds");
+
+    search_mock.assert_async().await;
+    assert_eq!(response.items.len(), 1);
+}
+
+#[tokio::test]
+async fn labels_list_create_and_resolve() {
+    let server = MockServer::start_async().await;
+    let label = serde_json::json!({
+        "label": "treasury",
+        "value": CONTRACT_ID,
+        "scope": "workspace",
+    });
+
+    let list_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v1/labels")
+                .query_param("query", "treas");
+            then.status(200)
+                .json_body(serde_json::json!({ "labels": [label.clone()] }));
+        })
+        .await;
+
+    let create_mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/api/v1/labels")
+                .json_body(label.clone());
+            then.status(201).json_body(label.clone());
+        })
+        .await;
+
+    let resolve_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v1/resolve")
+                .query_param("query", CONTRACT_ID);
+            then.status(200).json_body(serde_json::json!({
+                "label": CONTRACT_ID,
+                "value": CONTRACT_ID,
+                "scope": "raw",
+            }));
+        })
+        .await;
+
+    let sdk = client(&server);
+
+    let list = sdk.list_labels(Some("treas")).await.unwrap();
+    assert_eq!(list.labels.len(), 1);
+    assert_eq!(list.labels[0].label, "treasury");
+
+    let saved = sdk
+        .create_label(&CreateLabelRequest {
+            label: "treasury".into(),
+            value: CONTRACT_ID.into(),
+            scope: CreateLabelScope::Workspace,
+        })
+        .await
+        .unwrap();
+    assert_eq!(saved.scope, "workspace");
+
+    let resolved = sdk.resolve_label(CONTRACT_ID).await.unwrap();
+    assert_eq!(resolved.value, CONTRACT_ID);
+    assert_eq!(resolved.scope, "raw");
+
+    list_mock.assert_async().await;
+    create_mock.assert_async().await;
+    resolve_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn global_alerts_decode_grouped_and_flat_responses() {
+    let server = MockServer::start_async().await;
+    let grouped = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v1/alerts")
+                .query_param("severity", "Critical");
+            then.status(200).json_body(serde_json::json!({
+                "groups": [{
+                    "id": 1,
+                    "group_key": "ttl-alert",
+                    "contract_id": CONTRACT_ID,
+                    "severity": "Critical",
+                    "rule": "ttl",
+                    "count": 2,
+                    "dedupe_window_secs": 60,
+                    "first_seen": "2026-01-15T11:04:00Z",
+                    "last_seen": "2026-01-15T11:05:00Z",
+                    "last_message": "Storage TTL is low",
+                    "backfill_eligible": false
+                }],
+                "next_cursor": "group-page-2"
+            }));
+        })
+        .await;
+
+    let mut flat_body: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/watchdog_alerts.json")).unwrap();
+    flat_body["next_cursor"] = serde_json::json!("");
+
+    let flat = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v1/alerts")
+                .query_param("flat", "true")
+                .query_param("limit", "2");
+            then.status(200).json_body(flat_body.clone());
+        })
+        .await;
+
+    let sdk = client(&server);
+    let grouped_page = sdk
+        .list_alerts(&ListAlertsParams {
+            severity: Some(Severity::Critical),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(grouped_page.groups[0].count, 2);
+    assert_eq!(grouped_page.next_cursor, "group-page-2");
+
+    let flat_page = sdk
+        .list_flat_alerts(&ListAlertsParams {
+            limit: Some(2),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(flat_page.alerts.len(), 2);
+    assert!(flat_page.next_cursor.is_empty());
+
+    grouped.assert_async().await;
+    flat.assert_async().await;
+}
+
+#[tokio::test]
+async fn api_key_lifecycle() {
+    let server = MockServer::start_async().await;
+    let metadata = serde_json::json!({
+        "id": "key-123",
+        "name": "Analytics",
+        "key_prefix": "sl_test",
+        "scopes": ["read:contracts"],
+        "created_at": "2026-01-15T11:00:00Z"
+    });
+
+    let mut created = metadata.clone();
+    created["key"] = serde_json::json!("fake-created-token");
+
+    let mut rotated = metadata.clone();
+    rotated["key"] = serde_json::json!("fake-rotated-token");
+
+    let list_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v1/api-keys")
+                .query_param("limit", "2");
+            then.status(200).json_body(serde_json::json!({
+                "api_keys": [metadata.clone()],
+                "next_cursor": "page-2"
+            }));
+        })
+        .await;
+
+    let create_mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/api/v1/api-keys")
+                .json_body(serde_json::json!({
+                    "name": "Analytics",
+                    "scopes": ["read:contracts"]
+                }));
+            then.status(201).json_body(created.clone());
+        })
+        .await;
+
+    let get_mock = server
+        .mock_async(|when, then| {
+            when.method(GET).path("/api/v1/api-keys/key-123");
+            then.status(200).json_body(metadata.clone());
+        })
+        .await;
+
+    let rotate_mock = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/api/v1/api-keys/key-123/rotate");
+            then.status(200).json_body(rotated.clone());
+        })
+        .await;
+
+    let revoke_mock = server
+        .mock_async(|when, then| {
+            when.method(Method::DELETE).path("/api/v1/api-keys/key-123");
+            then.status(204);
+        })
+        .await;
+
+    let sdk = client(&server);
+    let page = sdk.list_api_keys(None, Some(2)).await.unwrap();
+    assert_eq!(page.api_keys[0].id, "key-123");
+    assert_eq!(page.next_cursor, "page-2");
+
+    let new_key = sdk
+        .create_api_key(&CreateApiKeyRequest {
+            name: "Analytics".into(),
+            scopes: vec!["read:contracts".into()],
+            user_id: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(new_key.metadata.id, "key-123");
+    assert_eq!(new_key.key, "fake-created-token");
+
+    let key = sdk.get_api_key("key-123").await.unwrap();
+    assert_eq!(key.name, "Analytics");
+
+    let rotated_key = sdk.rotate_api_key("key-123").await.unwrap();
+    assert_eq!(rotated_key.key, "fake-rotated-token");
+
+    sdk.revoke_api_key("key-123").await.unwrap();
+
+    list_mock.assert_async().await;
+    create_mock.assert_async().await;
+    get_mock.assert_async().await;
+    rotate_mock.assert_async().await;
+    revoke_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn report_download_preserves_pdf_bytes_and_api_errors() {
+    let server = MockServer::start_async().await;
+    let path = format!("/api/v1/reports/{CONTRACT_ID}");
+    let pdf = b"%PDF-1.7\n\xff\x00\n%%EOF";
+
+    let pdf_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path(path.as_str())
+                .query_param("month", "2026-01")
+                .query_param("format", "pdf");
+            then.status(200)
+                .header("content-type", "application/pdf")
+                .body(pdf);
+        })
+        .await;
+
+    let error_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path(path.as_str())
+                .query_param("month", "invalid")
+                .query_param("format", "csv");
+            then.status(422)
+                .json_body(serde_json::json!({ "error": "invalid month" }));
+        })
+        .await;
+
+    let sdk = client(&server);
+    let downloaded = sdk
+        .download_contract_report(CONTRACT_ID, Some("2026-01"), ReportDownloadFormat::Pdf)
+        .await
+        .unwrap();
+    assert_eq!(downloaded.as_slice(), pdf);
+
+    let err = sdk
+        .download_contract_report(CONTRACT_ID, Some("invalid"), ReportDownloadFormat::Csv)
+        .await
+        .unwrap_err();
+    assert_eq!(err.status(), Some(422));
+    assert_eq!(err.api_error().unwrap().message, "invalid month");
+
+    pdf_mock.assert_async().await;
+    error_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn report_json_and_history_decode_monthly_metrics() {
+    let server = MockServer::start_async().await;
+    let path = format!("/api/v1/reports/{CONTRACT_ID}");
+    let history_path = format!("{path}/history");
+    let monthly = serde_json::json!({
+        "contract_id": CONTRACT_ID,
+        "month": "2026-01",
+        "uptime_pct": 95.0,
+        "total_checks": 20,
+        "healthy_checks": 19,
+        "incidents": 1,
+        "mttr_seconds": 60.0,
+        "total_downtime_seconds": 60.0,
+        "longest_outage_seconds": 60.0,
+        "ongoing_outage": false,
+        "critical_alerts": 1,
+        "warning_alerts": 0,
+        "info_alerts": 0,
+        "total_alerts": 1,
+        "first_check": null,
+        "last_check": null
+    });
+    let mut report = monthly.clone();
+    report["signed"] = serde_json::json!(false);
+
+    let report_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path(path.as_str())
+                .query_param("month", "2026-01")
+                .query_param("format", "json");
+            then.status(200).json_body(report.clone());
+        })
+        .await;
+    let history_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path(history_path.as_str())
+                .query_param("months", "1");
+            then.status(200).json_body(serde_json::json!({
+                "contract_id": CONTRACT_ID,
+                "months": [monthly.clone()]
+            }));
+        })
+        .await;
+
+    let sdk = client(&server);
+    let report = sdk
+        .get_contract_report(CONTRACT_ID, Some("2026-01"))
+        .await
+        .unwrap();
+    assert_eq!(report.sla.healthy_checks, 19);
+    assert!(!report.signed);
+    assert!(report.signature.is_none());
+
+    let history = sdk
+        .get_contract_report_history(CONTRACT_ID, Some(1))
+        .await
+        .unwrap();
+    assert_eq!(history.contract_id, CONTRACT_ID);
+    assert_eq!(history.months.len(), 1);
+    assert_eq!(history.months[0].month, "2026-01");
+
+    report_mock.assert_async().await;
+    history_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn report_subscriptions_create_list_and_delete() {
+    let server = MockServer::start_async().await;
+    let email = "reader+reports@example.com";
+    let path = "/api/v1/reports/subscriptions";
+    let subscription = serde_json::json!({
+        "id": "sub-1",
+        "email": email,
+        "frequency": "weekly",
+        "day_of_week": 1,
+        "created_at": "2026-01-15T11:00:00Z"
+    });
+
+    let create_mock = server
+        .mock_async(|when, then| {
+            when.method(POST).path(path).json_body(serde_json::json!({
+                "email": email,
+                "frequency": "weekly"
+            }));
+            then.status(201).json_body(subscription.clone());
+        })
+        .await;
+    let list_mock = server
+        .mock_async(|when, then| {
+            when.method(GET).path(path).query_param("email", email);
+            then.status(200).json_body(serde_json::json!({
+                "subscriptions": [subscription.clone()]
+            }));
+        })
+        .await;
+    let delete_mock = server
+        .mock_async(|when, then| {
+            when.method(Method::DELETE)
+                .path("/api/v1/reports/subscriptions/sub-1");
+            then.status(204);
+        })
+        .await;
+
+    let sdk = client(&server);
+    let created = sdk
+        .create_report_subscription(&CreateReportSubscriptionRequest {
+            email: email.into(),
+            frequency: ReportFrequency::Weekly,
+            day_of_week: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(created.frequency, ReportFrequency::Weekly);
+    assert_eq!(created.day_of_week, 1);
+
+    let subscriptions = sdk.list_report_subscriptions(email).await.unwrap();
+    assert_eq!(subscriptions.subscriptions.len(), 1);
+    assert_eq!(subscriptions.subscriptions[0].id, created.id);
+
+    sdk.delete_report_subscription(&created.id).await.unwrap();
+
+    create_mock.assert_async().await;
+    list_mock.assert_async().await;
+    delete_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn report_csv_badge_and_unsubscribe_return_raw_bodies() {
+    let server = MockServer::start_async().await;
+    let path = format!("/api/v1/reports/{CONTRACT_ID}");
+    let badge_path = format!("{path}/badge.svg");
+    let csv = "month,uptime_pct\n2026-01,95\n";
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"></svg>"#;
+    let confirmation = "You have been unsubscribed from Sorolens digest reports.";
+
+    let csv_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path(path.as_str())
+                .query_param("format", "csv");
+            then.status(200)
+                .header("content-type", "text/csv")
+                .body(csv);
+        })
+        .await;
+    let badge_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path(badge_path.as_str())
+                .query_param("month", "2026-01");
+            then.status(200)
+                .header("content-type", "image/svg+xml")
+                .body(svg);
+        })
+        .await;
+    let unsubscribe_mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v1/reports/unsubscribe")
+                .query_param("token", "sub-1.test-token");
+            then.status(200)
+                .header("content-type", "text/plain")
+                .body(confirmation);
+        })
+        .await;
+
+    let sdk = client(&server);
+    let downloaded = sdk
+        .download_contract_report(CONTRACT_ID, None, ReportDownloadFormat::Csv)
+        .await
+        .unwrap();
+    assert_eq!(downloaded.as_slice(), csv.as_bytes());
+
+    let badge = sdk
+        .get_contract_sla_badge(CONTRACT_ID, Some("2026-01"))
+        .await
+        .unwrap();
+    assert_eq!(badge.as_slice(), svg.as_bytes());
+
+    let message = sdk.unsubscribe_report("sub-1.test-token").await.unwrap();
+    assert_eq!(message.as_slice(), confirmation.as_bytes());
+
+    csv_mock.assert_async().await;
+    badge_mock.assert_async().await;
+    unsubscribe_mock.assert_async().await;
+}

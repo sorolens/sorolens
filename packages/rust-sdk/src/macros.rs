@@ -10,7 +10,7 @@
 /// builder whose signature is `(config, <method arguments>)` and which returns
 /// `Result<`[`RequestSpec`](crate::request::RequestSpec)`, `[`Error`](crate::Error)`)>`.
 macro_rules! endpoints {
-    ($(
+    (@send $sender:ident; $(
         $(#[$meta:meta])*
         fn $name:ident($($arg:ident : $ty:ty),* $(,)?) -> $ret:ty = $request:path;
     )+) => {
@@ -20,7 +20,7 @@ macro_rules! endpoints {
                 $(#[$meta])*
                 pub async fn $name(&self $(, $arg: $ty)*) -> Result<$ret, crate::Error> {
                     let spec = $request(self.config() $(, $arg)*)?;
-                    self.send(spec).await
+                    self.$sender(spec).await
                 }
             )+
         }
@@ -31,11 +31,16 @@ macro_rules! endpoints {
                 $(#[$meta])*
                 pub fn $name(&self $(, $arg: $ty)*) -> Result<$ret, crate::Error> {
                     let spec = $request(self.config() $(, $arg)*)?;
-                    self.send(spec)
+                    self.$sender(spec)
                 }
             )+
         }
     };
+    (bytes; $($endpoint:tt)+) => {
+        endpoints! { @send send_bytes; $($endpoint)+ }
+    };
+    ($($endpoint:tt)+) => {
+        endpoints! { @send send; $($endpoint)+ }
+    };
 }
-
 pub(crate) use endpoints;
