@@ -325,7 +325,10 @@ export function describeResponse(
   result: Exclude<ApplicationResult, { kind: "ignore" }>
 ): ApplicationResponse {
   if (result.kind === "declined") {
-    return { reaction: "❌", reply: `❌ ${result.reason}` };
+    return {
+      reaction: "❌",
+      reply: `❌ ${result.reason}\nSee the pinned "how to apply" message in this channel.`,
+    };
   }
   const ok = result.outcomes.filter((o) => o.ok);
   const failed = result.outcomes.filter(
@@ -397,4 +400,35 @@ export function formatAvailableSummary(input: AvailableSummaryInput): string {
   }
   const text = lines.filter((l, i) => l !== "" || lines[i - 1] !== "").join("\n");
   return text.length > 1950 ? `${text.slice(0, 1940)}\n…(cut)` : text;
+}
+
+/** The "how to apply" post the bot puts in the channel when applications open. */
+export function formatHowToApply(
+  settings: Pick<AssignSettings, "requiredRoles" | "anyOfRoles" | "maxPerUser">,
+  remaining: number[]
+): string {
+  const roles = (ids: string[]) => ids.map((id) => `<@&${id}>`).join(", ");
+  const roleRule = [
+    settings.requiredRoles.length ? `have ${roles(settings.requiredRoles)}` : "",
+    settings.anyOfRoles.length ? `have one of ${roles(settings.anyOfRoles)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  return [
+    `📢 **Issue applications are open!** ${remaining.length} issue(s) up for grabs: ${formatIssueList(remaining)}`,
+    "",
+    "**How to apply**",
+    "1. Link your GitHub with `/connect` (once).",
+    "2. Apply to the issue on **Drips Wave** first. The bot checks for your Wave application on GitHub.",
+    "3. Post the issue number(s) here, e.g. `#812` or `#812 #840`.",
+    "",
+    "**Rules**",
+    roleRule ? `• You must ${roleRule}.` : "",
+    `• Up to **${settings.maxPerUser}** issue(s) per person at a time. Asking for more than you have left declines the whole message.`,
+    "• First come, first served. Taken issues are skipped and you get the others you picked.",
+    "• ✅ on your message means you're assigned on GitHub. ❌ means nothing was assigned and the bot replies with why.",
+    "• Applications close automatically when every issue is taken.",
+  ]
+    .filter((l, i, a) => l !== "" || a[i - 1] !== "")
+    .join("\n");
 }

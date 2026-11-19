@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   countWaveApplicants,
   describeResponse,
+  formatHowToApply,
   formatAvailableSummary,
   formatIssueList,
   hasWaveApplication,
@@ -268,9 +269,25 @@ describe("describeResponse", () => {
   });
 
   it("reacts ❌ when nothing was assigned or the request was declined", () => {
-    expect(describeResponse({ kind: "declined", reason: "No." })).toEqual({ reaction: "❌", reply: "❌ No." });
+    expect(describeResponse({ kind: "declined", reason: "No." })).toMatchObject({ reaction: "❌", reply: expect.stringContaining("how to apply") });
     expect(
       describeResponse({ kind: "processed", exhausted: false, outcomes: [{ issue: 2, ok: false, reason: "is closed" }] }).reaction
     ).toBe("❌");
+  });
+});
+
+describe("formatHowToApply", () => {
+  it("lists issues, steps and rules", () => {
+    const text = formatHowToApply(
+      { requiredRoles: ["r1"], anyOfRoles: ["c1", "c2"], maxPerUser: 2 },
+      [10, 11, 12, 20]
+    );
+    expect(text).toContain("4 issue(s) up for grabs: #10-#12, #20");
+    expect(text).toContain("/connect");
+    expect(text).toContain("Drips Wave");
+    expect(text).toContain("`#812 #840`");
+    expect(text).toContain("have <@&r1> and have one of <@&c1>, <@&c2>");
+    expect(text).toContain("Up to **2**");
+    expect(text.length).toBeLessThan(2000);
   });
 });

@@ -34,6 +34,7 @@ import {
   countWaveApplicants,
   formatAvailableSummary,
   describeResponse,
+  formatHowToApply,
   remainingIssues,
   formatIssueList,
   parseIssueList,
@@ -247,16 +248,36 @@ async function handleToggle(interaction: ChatInputCommandInteraction) {
     });
     return;
   }
-  updateAssignSettings(on ? { enabled: true, openedAt: Date.now() } : { enabled: false });
-  const left = remainingIssues({ listPool, getGrant }).length;
-  const warn =
-    on && left === 0
-      ? "\nNote: no issues are left to give out. Add some with `/assign-issues add`."
-      : on
-        ? `\n${left} issue(s) can be picked. Only messages sent from now on count, and applications close by themselves when all are taken.`
-        : "";
+  const settings = updateAssignSettings(
+    on ? { enabled: true, openedAt: Date.now() } : { enabled: false }
+  );
+  const left = remainingIssues({ listPool, getGrant });
+  let note = "";
+  if (on && left.length === 0) {
+    note = "\nNote: no issues are left to give out. Add some with `/assign-issues add`.";
+  } else if (on) {
+    note = `\n${left.length} issue(s) can be picked. Only messages sent from now on count, and applications close by themselves when all are taken.`;
+  }
+
+  // Announce in the apply channel so members know how to apply.
+  try {
+    const channel = await interaction.client.channels.fetch(settings.channelId!);
+    if (channel?.isSendable()) {
+      const posted = await channel.send({
+        content: on
+          ? formatHowToApply(settings, left)
+          : "🔒 Issue applications are closed for now.",
+        allowedMentions: { parse: [] },
+      });
+      if (on) await posted.pin().catch(() => undefined);
+    }
+  } catch (err) {
+    console.warn("assign: could not announce in channel", err);
+    note += "\n(I couldn't post in the channel: check my permissions there.)";
+  }
+
   await interaction.reply({
-    content: `Issue applications are now **${on ? "ON" : "OFF"}**.${warn}`,
+    content: `Issue applications are now **${on ? "ON" : "OFF"}**.${note}`,
     flags: EPHEMERAL,
   });
 }
