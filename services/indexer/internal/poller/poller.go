@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
+	"github.com/sorolens/sorolens/services/indexer/internal/callgraph"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
@@ -59,6 +60,12 @@ type Config struct {
 	AnomalySigma float64
 	// AnomalyMinHistory is the minimum samples before detection starts.
 	AnomalyMinHistory int
+
+	// DisableFnCallFallback turns off deriving an invocation's function name
+	// from fn_call topics in the window's contract events when the node
+	// returns no diagnostic events (issue #504). The fallback is on by
+	// default; INDEXER_FN_CALL_FALLBACK=false disables it.
+	DisableFnCallFallback bool
 }
 
 // Poller fetches and persists events and invocations for all tracked contracts.
@@ -785,6 +792,10 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 
 	var events []Event
 	seenTx := make(map[string]struct{})
+	// fnCallTopics keeps, per transaction, the topics of any fn_call event
+	// the node surfaced with the contract events. It feeds the function-name
+	// fallback for nodes that do not return diagnostic events.
+	fnCallTopics := make(map[string][][]string)
 
 	for _, re := range result.Events {
 		closedAt, _ := time.Parse(time.RFC3339, re.LedgerClosedAt)
@@ -801,6 +812,9 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 			InSuccessfulCall: re.InSuccessfulContractCall,
 		})
 		seenTx[re.TxHash] = struct{}{}
+		if !p.cfg.DisableFnCallFallback && len(re.Topic) >= 2 {
+			fnCallTopics[re.TxHash] = append(fnCallTopics[re.TxHash], re.Topic)
+		}
 	}
 
 	// Fetch one transaction record per unique tx hash.
@@ -814,7 +828,7 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 			)
 			continue
 		}
-		invocations = append(invocations, Invocation{
+		inv := Invocation{
 			TxHash:           txHash,
 			ContractID:       contractID,
 			Network:          network,
@@ -823,10 +837,45 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 			Status:           tx.Status,
 			ResultXDR:        tx.ResultXDR,
 			ApplicationOrder: tx.ApplicationOrder,
-		})
+		}
+		p.applyDiagnostics(&inv, tx.DiagnosticEventsXDR, fnCallTopics[txHash])
+		invocations = append(invocations, inv)
 	}
 
 	return events, invocations, nil
+}
+
+// applyDiagnostics fills the invocation's function name and resource counters
+// from the transaction's diagnostic events (issue #504).
+//
+// When the node returns no diagnostic events, or they carry no function name,
+// the name falls back to the first fn_call topic set seen for the transaction
+// among the window's contract events, unless the fallback is disabled. Missing
+// data never fails the pass: fields the node did not report stay empty and are
+// stored as NULL.
+func (p *Poller) applyDiagnostics(inv *Invocation, diagnosticEventsXDR []string, fnCallTopics [][]string) {
+	sum := callgraph.Summarize(diagnosticEventsXDR)
+	inv.FunctionName = sum.FunctionName
+	inv.CPUInsn = sum.CPUInsn
+	inv.MemByte = sum.MemByte
+	inv.LedgerReadByte = sum.LedgerReadByte
+	inv.LedgerWriteByte = sum.LedgerWriteByte
+
+	if inv.FunctionName == "" && !p.cfg.DisableFnCallFallback {
+		for _, topics := range fnCallTopics {
+			if fn, ok := callgraph.FunctionNameFromTopics(topics, inv.ContractID); ok {
+				inv.FunctionName = fn
+				break
+			}
+		}
+	}
+
+	if len(diagnosticEventsXDR) > 0 && sum.Empty() {
+		p.log.Debug("diagnostic events present but undecodable; leaving function and metrics empty",
+			"tx_hash", inv.TxHash,
+			"events", len(diagnosticEventsXDR),
+		)
+	}
 }
 
 func (p *Poller) selectRPCClient(network string) (RPCClient, bool) {
