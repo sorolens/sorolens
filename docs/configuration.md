@@ -110,6 +110,7 @@ there, not here.
 | `SOROLENS_NETWORK` | — | no | SOROLENS_NETWORK is the default network for commands when --network is not given and the config file sets none; defaults to testnet. |
 | `SOROLENS_OUTPUT` | — | no | SOROLENS_OUTPUT is the default output format when --output is not given. |
 | `SOROLENS_OUTPUT_FORMAT` | — | no | SOROLENS_OUTPUT_FORMAT is a legacy alias of SOROLENS_OUTPUT. |
+| `SOROLENS_PROFILE` | — | no | SOROLENS_PROFILE is the profile used when --profile is not given; it overrides the config file's default profile. A profile overrides the legacy top-level api_url and network values. |
 | `SOROLENS_WATCHDOG_CONTRACT_ID` | — | no | SOROLENS_WATCHDOG_CONTRACT_ID is the watchdog contract `watchdog register` targets when --watchdog-contract-id is not given. |
 | `SOROLENS_WATCHDOG_SECRET` | — | no | SOROLENS_WATCHDOG_SECRET is the secret key of the source account that signs `watchdog register` transactions when neither --secret-key nor --source-account is given. |
 | `WATCHDOG_CONTRACT_ID` | — | no | Deployed sorolens-watchdog Soroban contract id (56-char, starts with C). After running contracts/watchdog/scripts/deploy-testnet.sh, take the id it prints and set it here so the indexer knows which contract's events to treat as watchdog telemetry rather than generic contract events. |

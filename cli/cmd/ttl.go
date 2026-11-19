@@ -6,9 +6,8 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/spf13/cobra"
-	"github.com/sorolens/sorolens/cli/internal/client"
 	"github.com/sorolens/sorolens/cli/internal/format"
+	"github.com/spf13/cobra"
 )
 
 var ttlCmd = &cobra.Command{
@@ -28,7 +27,7 @@ func runTTL(cmd *cobra.Command, args []string) error {
 		_ = os.Setenv("NO_COLOR", "1")
 	}
 
-	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
+	c := newClient(globalConfig.Timeout)
 	entries, err := c.GetStorage(cmd.Context(), contractID)
 	if err != nil {
 		return fmt.Errorf("get storage: %w", err)

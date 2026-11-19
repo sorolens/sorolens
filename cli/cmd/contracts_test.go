@@ -165,3 +165,37 @@ func TestContractsGetRequiresID(t *testing.T) {
 		t.Fatal("expected error for missing contract id")
 	}
 }
+
+func TestContractsListYAMLJSONLAndQuery(t *testing.T) {
+	srv := contractsTestServer(t, sampleContracts())
+	defer srv.Close()
+	base := []string{"contracts", "list", "--network", "mainnet", "--limit", "5", "--api-url", srv.URL}
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"yaml", []string{"--output", "yaml"}, "id: " + contractsTestID},
+		{"jsonl", []string{"--output", "jsonl"}, `"id":"` + contractsTestID + `"`},
+		{"query", []string{"--query", ".[0].id"}, `"` + contractsTestID + `"`},
+	} {
+		rootCmd.SetArgs(append(append([]string{}, base...), tc.args...))
+		out, err := captureOutput(t, rootCmd.Execute)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", tc.name, err)
+		}
+		if !strings.Contains(out, tc.want) {
+			t.Errorf("%s: output missing %q, got:\n%s", tc.name, tc.want, out)
+		}
+	}
+
+	rootCmd.SetArgs(append(append([]string{}, base...), "--query", ".[", "--output", "json"))
+	if _, err := captureOutput(t, rootCmd.Execute); err == nil || !strings.Contains(err.Error(), "position") {
+		t.Errorf("bad query should fail with a position, got %v", err)
+	}
+	rootCmd.SetArgs(append(append([]string{}, base...), "--query", ".[0]", "--output", "table"))
+	if _, err := captureOutput(t, rootCmd.Execute); err == nil {
+		t.Error("--query with --output table should fail")
+	}
+}
