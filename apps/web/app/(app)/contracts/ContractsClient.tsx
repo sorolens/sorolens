@@ -923,11 +923,12 @@ export default function ContractsClient({
             sortColumn={sortColumn}
             sortDirection={sortDirection}
             onSort={handleSort}
-            onRowClick={(c) => {
-              // The detail page doesn't exist until the API confirms it.
-              if (isPendingRow(c)) return;
-              window.location.href = `/contracts/${c.id}`;
-            }}
+            // A real link in the ID cell (issue #610) is keyboard reachable
+            // and announced by screen readers. Pending rows get no link: the
+            // detail page does not exist until the API confirms the contract.
+            linkColumnKey="id"
+            linkComponent={Link}
+            rowHref={(c) => (isPendingRow(c) ? null : `/contracts/${c.id}`)}
             emptyState={
               <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-12 text-center text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)]">
                 No contracts match your search.
@@ -966,17 +967,6 @@ export default function ContractsClient({
             </div>
           </div>
         )}
-
-        {/* Shortcut link to contract detail (accessible) */}
-        <div className="sr-only">
-          {sorted
-            .filter((c) => !isPendingRow(c))
-            .map((c) => (
-              <Link key={c.id} href={`/contracts/${c.id}`}>
-                {c.label ?? c.id}
-              </Link>
-            ))}
-        </div>
       </div>
     </>
   );
