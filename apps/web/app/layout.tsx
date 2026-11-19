@@ -6,13 +6,10 @@ import { NavigationProgress } from "@/components/NavigationProgress";
 import { PlausibleAnalytics } from "@/components/PlausibleAnalytics";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { NONCE_HEADER } from "@/lib/csp";
-
-/** Single source of truth for absolute metadata URLs (issue #620). */
-const SITE_URL =
-  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "https://sorolens.dev";
+import { siteOrigin } from "@/lib/siteUrl";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
+  metadataBase: new URL(siteOrigin()),
   manifest: "/manifest.json",
   title: {
     default: "Sorolens — Indexed Observability for Soroban",

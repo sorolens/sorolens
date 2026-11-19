@@ -419,6 +419,12 @@ export interface HealthScoreResponse {
     storage_ttl: number;
   };
   computed_at: string;
+  history?: { computed_at: string; score: number }[];
+}
+
+export interface ContractUpgradeMarker {
+  ledger: number;
+  at: string;
 }
 
 export interface ContractSnapshot {
@@ -514,6 +520,7 @@ export interface CompareContractEntry {
   avg_fee: number | null;
   /** Cached composite health score, or null when not computed yet. */
   health_score: number | null;
+  health_components?: HealthScoreResponse["components"];
   last_synced_ledger: number;
   event_volume: CompareVolumePoint[];
   /** Set when this contract's lookups failed while others succeeded. */

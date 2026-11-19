@@ -25,6 +25,9 @@ from .compare_contract_entry import CompareContractEntry
 from .compare_contract_entry_event_volume_item import (
     CompareContractEntryEventVolumeItem,
 )
+from .compare_contract_entry_health_components import (
+    CompareContractEntryHealthComponents,
+)
 from .compare_contracts_window import CompareContractsWindow
 from .compare_response import CompareResponse
 from .compare_response_window import CompareResponseWindow
@@ -119,6 +122,7 @@ from .health_check import HealthCheck
 from .health_response_200 import HealthResponse200
 from .health_score import HealthScore
 from .health_score_components import HealthScoreComponents
+from .health_score_history_item import HealthScoreHistoryItem
 from .in_watchlist import InWatchlist
 from .integration import Integration
 from .integration_id import IntegrationId
@@ -325,6 +329,7 @@ __all__ = (
     "BuildInfo",
     "CompareContractEntry",
     "CompareContractEntryEventVolumeItem",
+    "CompareContractEntryHealthComponents",
     "CompareContractsWindow",
     "CompareResponse",
     "CompareResponseWindow",
@@ -413,6 +418,7 @@ __all__ = (
     "HealthResponse200",
     "HealthScore",
     "HealthScoreComponents",
+    "HealthScoreHistoryItem",
     "InWatchlist",
     "Integration",
     "IntegrationId",

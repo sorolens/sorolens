@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automated GitHub Actions release workflow (`release.yml`) for publishing container images to GHCR and creating GitHub Releases with SHA256 checksums on semver tag push (#544).
 - Release process documentation in `CONTRIBUTING.md`.
 
+### Changed
+
+- One site URL source for the dashboard (#761): `apps/web/lib/siteUrl.ts` reads `NEXT_PUBLIC_APP_URL` (one variable, one fallback) and now drives `metadataBase`, `robots.txt` and `sitemap.xml`, which previously read three different things — `NEXT_PUBLIC_SITE_URL` with a localhost fallback in the sitemap, `NEXT_PUBLIC_APP_URL` with a production fallback in robots, and `NEXT_PUBLIC_APP_URL` again in the root layout. `NEXT_PUBLIC_SITE_URL` is no longer read; deployments that set only it must rename it to `NEXT_PUBLIC_APP_URL`, or the sitemap falls back to `https://sorolens.dev`. The sitemap now lists every public, non-personal route plus one entry per tracked contract (page-followed from `GET /api/v1/contracts`), and stamps entries with the API's `last_activity_at`/`added_at` instead of a fresh `new Date()` per request. `/events` no longer describes itself as the SSE stream — that is `/events/live`, which got its own metadata.
+
 ## [0.1.0] - 2026-09-25
 
 ### Added

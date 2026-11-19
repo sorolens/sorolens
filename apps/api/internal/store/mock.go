@@ -31,6 +31,7 @@ type MockStore struct {
 	alertSubscriptions    []AlertSubscription
 	users                 map[string]User
 	healthScores          map[string]ContractHealthScore
+	healthScoreHistory    map[string]map[time.Time]HealthScoreSample
 	failedEvents          map[int64]FailedEvent
 	failedEventSeq        int64
 	indexerCursors        map[string]uint32
@@ -299,6 +300,7 @@ func (m *MockStore) DeleteContracts(_ context.Context, ids []string) (int64, err
 	for id := range removed {
 		delete(m.syncStates, id)
 		delete(m.healthScores, id)
+		delete(m.healthScoreHistory, id)
 		for _, items := range m.watchlist {
 			delete(items, id)
 		}

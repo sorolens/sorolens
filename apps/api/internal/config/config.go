@@ -293,6 +293,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("VERIFY_BUILD_COMMAND: must contain at least one argument")
 	}
 
+	// VERIFY_TIMEOUT bounds a single contract verification build (Go duration).
 	verifyTimeoutStr := getEnvDefault("VERIFY_TIMEOUT", "10m")
 	verifyTimeout, err := time.ParseDuration(verifyTimeoutStr)
 	if err != nil {

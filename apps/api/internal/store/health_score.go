@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -12,6 +13,12 @@ import (
 // live_until_ledger must be to count as "healthy" TTL headroom. Set to
 // roughly one day of ledgers at ~5s each so expiring entries surface early.
 const storageHealthyHorizonLedgers int64 = 17_280
+
+// HealthScoreSample is a recorded composite score.
+type HealthScoreSample struct {
+	ComputedAt time.Time `json:"computed_at"`
+	Score      int32     `json:"score"`
+}
 
 // HealthScoreStore is the read/write surface for cached composite health
 // scores (issue #137). Kept as its own interface so the API and the indexer
@@ -29,6 +36,8 @@ type HealthScoreStore interface {
 	// GetContractHealthScore returns the most recently cached score for a
 	// contract, or ErrNotFound when the indexer has not computed one yet.
 	GetContractHealthScore(ctx context.Context, contractID string) (ContractHealthScore, error)
+	// ListContractHealthScoreHistory returns the latest samples, oldest first.
+	ListContractHealthScoreHistory(ctx context.Context, contractID string, limit int) ([]HealthScoreSample, error)
 }
 
 // ---- postgres implementation ----------------------------------------------
@@ -139,4 +148,37 @@ func (s *postgresStore) GetContractHealthScore(ctx context.Context, contractID s
 		return ContractHealthScore{}, fmt.Errorf("get contract health score: %w", err)
 	}
 	return h, nil
+}
+
+func (s *postgresStore) ListContractHealthScoreHistory(
+	ctx context.Context, contractID string, limit int,
+) ([]HealthScoreSample, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT computed_at, score
+		FROM (
+			SELECT bucket_at, computed_at, score
+			FROM contract_health_score_history
+			WHERE contract_id = $1
+			ORDER BY bucket_at DESC
+			LIMIT $2
+		) AS recent
+		ORDER BY bucket_at ASC`, contractID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query health score history: %w", err)
+	}
+	defer rows.Close()
+
+	samples := make([]HealthScoreSample, 0)
+	for rows.Next() {
+		var sample HealthScoreSample
+		if err := rows.Scan(&sample.ComputedAt, &sample.Score); err != nil {
+			return nil, fmt.Errorf("scan health score history: %w", err)
+		}
+		sample.ComputedAt = sample.ComputedAt.UTC()
+		samples = append(samples, sample)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read health score history: %w", err)
+	}
+	return samples, nil
 }

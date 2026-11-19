@@ -27,7 +27,7 @@ Sorolens watchdog system for monitored contracts.`,
 var alertsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List watchdog alerts",
-	Long: `List watchdog alerts across monitored contracts, optionally filtered by severity.`,
+	Long:  `List watchdog alerts across monitored contracts, optionally filtered by severity.`,
 	Example: `  # List recent alerts
   sorolens alerts list
 
@@ -63,7 +63,7 @@ func runAlertsList(cmd *cobra.Command, _ []string) error {
 	severity, _ := cmd.Flags().GetString("severity")
 	limit, _ := cmd.Flags().GetInt("limit")
 
-	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
+	c := newClient(globalConfig.Timeout)
 
 	stop := startSpinner("Fetching alerts...")
 	resp, err := c.ListAlerts(cmd.Context(), client.ListAlertsOpts{

@@ -108,6 +108,7 @@ postgres://user:pass@ep-cool-cloud-123456.us-east-1.aws.neon.tech/sorolens?sslmo
 ### Applying Migrations
 
 The repository maintains an ordered sequence of migrations under `apps/api/internal/db/migrations/*.up.sql`.
+New migrations must follow the [zero-downtime migration policy](migrations.md), which CI enforces.
 
 To apply all migrations to your Neon database from your local machine:
 
@@ -181,7 +182,7 @@ The dashboard is built on Next.js 15 and deploys to Vercel with zero extra infra
    - **Output Directory**: `.next`
 4. Configure Environment Variables in Vercel:
    - `NEXT_PUBLIC_API_URL`: The public URL of your deployed SoroLens API (e.g. `https://api.sorolens.example.com` or your Docker/Railway URL).
-   - `NEXT_PUBLIC_SITE_URL`: The public domain of the dashboard (e.g. `https://sorolens.example.com`).
+   - `NEXT_PUBLIC_APP_URL`: The public origin of the dashboard (e.g. `https://sorolens.example.com`). It is the single source for `metadataBase`, `robots.txt` and `sitemap.xml`; unset, those fall back to `https://sorolens.dev` (issue #761).
    - `NEXT_PUBLIC_PWA_ENABLED`: Set to `true` if Progressive Web App service workers are desired.
 5. Click **Deploy**.
 
@@ -401,6 +402,8 @@ The Stellar mainnet operates with distinct network identifiers, RPC requirements
 
 This reference covers all environment variables parsed across `apps/api`, `services/indexer`, `apps/web`, and `cli/`.
 
+The complete, generated list of every option with its default and description is [`docs/configuration.md`](configuration.md); CI keeps it in sync with the code.
+
 ### API and Global Variables
 
 | Variable | Component | Required? | Default | Description |
@@ -485,7 +488,7 @@ connection attacks.
 | Variable | Component | Required? | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `NEXT_PUBLIC_API_URL` | Web | Optional | `http://localhost:8080` | Browser URL pointing to the SoroLens REST API. |
-| `NEXT_PUBLIC_SITE_URL` | Web | Optional | `http://localhost:3000` | Public base domain of the web application. |
+| `NEXT_PUBLIC_APP_URL` | Web | Optional | `https://sorolens.dev` | Canonical public origin: metadataBase, `robots.txt` and `sitemap.xml`. |
 | `NEXT_PUBLIC_PWA_ENABLED` | Web | Optional | `false` | Enable service workers for mobile Progressive Web App. |
 | `NEXT_PUBLIC_SENTRY_DSN` | Web | Optional | — | Sentry DSN for frontend exception tracking. |
 | `NEXT_PUBLIC_PLAUSIBLE_DOMAIN`| Web | Optional | — | Domain name for privacy-preserving Plausible Analytics. |
