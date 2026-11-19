@@ -232,7 +232,14 @@ export default function NotificationsPage() {
         <p className="mt-2 max-w-2xl text-sm text-[var(--color-text-secondary)]">
           Send watchdog alerts for a contract to Slack, Discord, PagerDuty, or
           any webhook, formatted natively for each channel. Integration secrets
-          are stored server side and never shown again after you save them.
+          are stored server side and never shown again after you save them. See{" "}
+          <Link
+            href="/integrations"
+            className="text-[var(--color-accent)] underline underline-offset-2"
+          >
+            Integrations
+          </Link>{" "}
+          for deployment setup and test sends.
         </p>
       </div>
 

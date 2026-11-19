@@ -26,7 +26,36 @@ type Handler = (
 
 /** Overridable per-endpoint handlers, matched by pathname substring. */
 export function defaultHandlers(): Record<string, Handler> {
+  // Self-service API keys (#613) are stateful within one test: create adds a
+  // key, delete removes it, and list returns what is left.
+  const myKeys: Record<string, unknown>[] = [];
   return {
+    "me/api-keys": (route) => {
+      const method = route.request().method();
+      const path = new URL(route.request().url()).pathname;
+      if (method === "POST") {
+        const key = {
+          id: `key_${myKeys.length + 1}`,
+          name: "Dashboard key",
+          key_prefix: "sl_e2eabc",
+          scopes: ["read:contracts"],
+          user_id: "user_e2e",
+          created_at: new Date().toISOString(),
+          last_used_at: null,
+          revoked_at: null,
+          rotated_at: null,
+        };
+        myKeys.unshift(key);
+        return { status: 201, body: { ...key, key: "sl_e2e_plaintext_token" } };
+      }
+      if (method === "DELETE") {
+        const id = path.split("/").pop();
+        const index = myKeys.findIndex((key) => key.id === id);
+        if (index >= 0) myKeys.splice(index, 1);
+        return { status: 204, body: null };
+      }
+      return { status: 200, body: { api_keys: myKeys, next_cursor: "" } };
+    },
     // Workspace session mint (issue #518). The dashboard sends the returned
     // token as a bearer credential on identity-scoped calls.
     "api/v1/auth/session": () => ({
@@ -37,6 +66,46 @@ export function defaultHandlers(): Record<string, Handler> {
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       },
     }),
+    // Integrations catalog and test send (#612).
+    "api/v1/integrations": (route) => {
+      if (route.request().method() === "POST") {
+        return {
+          status: 200,
+          body: { ok: true, detail: "test message delivered" },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          integrations: [
+            {
+              id: "slack",
+              name: "Slack",
+              description: "Post watchdog alerts into Slack.",
+              install_url: "https://api.slack.com/apps",
+              setup_steps: ["Create the app", "Set SLACK_WEBHOOK_URL"],
+              configured: true,
+            },
+            {
+              id: "discord",
+              name: "Discord",
+              description: "Relay watchdog alerts to Discord.",
+              install_url: "https://discord.com/developers/applications",
+              setup_steps: ["Invite the bot"],
+              configured: false,
+            },
+            {
+              id: "telegram",
+              name: "Telegram",
+              description: "Deliver alerts to a Telegram chat.",
+              install_url: "https://t.me/BotFather",
+              setup_steps: ["Create a bot with @BotFather"],
+              configured: false,
+            },
+          ],
+        },
+      };
+    },
     "watchdog/contracts/": defaultContract,
     "watchdog/contracts": () => ({
       status: 200,
@@ -93,7 +162,7 @@ export function defaultHandlers(): Record<string, Handler> {
       }
       return {
         status: 200,
-        body: { contracts: [contractSummary()], cursor: null, has_more: false },
+        body: { contracts: [contractSummary()], next_cursor: "" },
       };
     },
     "stats/global": () => ({

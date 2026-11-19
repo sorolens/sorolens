@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"net/http"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ var validEventTypes = map[string]bool{
 // (RFC 3339, inclusive bounds on ledger_closed_at).
 func (h *Handler) ListAllEvents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	rawCursor, ok := decodeCursor(q.Get("cursor"))
+	rawCursor, ok := cursor.Decode(q.Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -74,6 +75,6 @@ func (h *Handler) ListAllEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"events":      resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }

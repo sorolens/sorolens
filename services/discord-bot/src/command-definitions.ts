@@ -80,6 +80,7 @@ export const commandDefinitions = [
         .setRequired(true)
         .setMinLength(1)
         .setMaxLength(64)
+        .setAutocomplete(true)
     ),
   new SlashCommandBuilder()
     .setName("alerts")
@@ -91,6 +92,7 @@ export const commandDefinitions = [
         .setRequired(true)
         .setMinLength(1)
         .setMaxLength(64)
+        .setAutocomplete(true)
     )
     .addIntegerOption((o) =>
       o
@@ -110,6 +112,7 @@ export const commandDefinitions = [
         .setRequired(true)
         .setMinLength(1)
         .setMaxLength(64)
+        .setAutocomplete(true)
     ),
   new SlashCommandBuilder()
     .setName("unwatch")
@@ -121,5 +124,6 @@ export const commandDefinitions = [
         .setRequired(true)
         .setMinLength(1)
         .setMaxLength(64)
+        .setAutocomplete(true)
     ),
 ].map((c) => c.toJSON());

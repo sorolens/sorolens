@@ -173,6 +173,49 @@ it := c.IterateContracts(ctx, &client.ListContractsParams{
 })
 ```
 
+## Streaming (Server-Sent Events)
+
+The `stream` subpackage is the supported client for
+`GET /api/v1/stream/events`. It reconnects with exponential backoff and jitter,
+resumes with the standard `Last-Event-ID` header, treats a silent connection as
+stale through a heartbeat read deadline, de-duplicates replayed events and gives
+up on permanent failures (401, 403, other 4xx) instead of retrying forever.
+
+```go
+import "github.com/sorolens/go-client/stream"
+
+s, err := stream.StreamEvents(ctx, stream.Options{
+    BaseURL:    "https://api.sorolens.xyz",
+    APIKey:     "sl_api_key",
+    ContractID: "CDLZ...", // optional filter
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer s.Close()
+
+for {
+    select {
+    case ev, ok := <-s.Events:
+        if !ok {
+            return
+        }
+        fmt.Println(ev.ID, ev.Type, string(ev.Data))
+    case err := <-s.Errors:
+        log.Fatal(err) // terminal error; the stream has stopped
+    case <-ctx.Done():
+        return
+    }
+}
+```
+
+**Delivery guarantees:** delivery is at-least-once. After a reconnect the server
+may resend the last event of the previous connection; the client remembers the
+last 256 event ids and drops duplicates, so callers see each event once while it
+is in that window. Ordering is the server's emission order, and events published
+while the client was disconnected are replayed before live ones. `Options.LastEventID`
+resumes from a previous process; `s.LastEventID()` returns the current resume point.
+
 ## Operation Coverage
 
 `ApiClient` provides high-level convenience methods matching the other Sorolens SDKs:
@@ -196,7 +239,7 @@ out of the box (`httptest` servers) and against a live API when
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | [`examples/pagination`](examples/pagination/main.go)             | Walking every page with `IterateContracts` and the cursor helpers.           |
 | [`examples/errors`](examples/errors/main.go)                     | 404 handling plus automatic retry/backoff recovery from a 429.               |
-| [`examples/sse`](examples/sse/main.go)                           | Streaming `GET /api/v1/stream/events` line by line.                          |
+| [`examples/sse`](examples/sse/main.go)                           | Streaming `GET /api/v1/stream/events` with reconnect and resume support.     |
 | [`examples/webhooks`](examples/webhooks/main.go)                 | Verifying `X-Sorolens-Signature` HMAC-SHA256 webhook deliveries.            |
 
 ```sh

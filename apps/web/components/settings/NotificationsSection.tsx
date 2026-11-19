@@ -28,7 +28,7 @@ export function NotificationsSection({
     <SettingsCard
       testId="settings-notifications"
       title="Notification preferences"
-      description="Which emails Sorolens sends you about the contracts you track."
+      description="Which emails Sorolens sends you about the contracts you track. These preferences are saved in this browser only — per-contract delivery channels live under Watchdog → Notification channels."
       status={status}
       onSave={onSave}
     >

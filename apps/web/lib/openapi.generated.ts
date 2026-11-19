@@ -781,6 +781,38 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/me/api-keys": {
+      get: {
+        operationId: "listMyApiKeys",
+        summary: "List the signed-in user's API keys",
+        tags: ["API Keys"],
+        parameters: [],
+      },
+      post: {
+        operationId: "createMyApiKey",
+        summary: "Create an API key for the signed-in user",
+        tags: ["API Keys"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/me/api-keys/{id}": {
+      delete: {
+        operationId: "revokeMyApiKey",
+        summary: "Revoke one of the signed-in user's API keys",
+        tags: ["API Keys"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/api-keys": {
       get: {
         operationId: "listApiKeys",
@@ -1940,6 +1972,61 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v2/integrations": {
+      get: {
+        operationId: "v2ListIntegrations",
+        summary: "List notification integrations (v2 passthrough)",
+        tags: ["Integrations"],
+        parameters: [],
+      },
+    },
+    "/api/v2/integrations/{id}/test": {
+      post: {
+        operationId: "v2TestIntegration",
+        summary: "Send a test message through an integration (v2 passthrough)",
+        tags: ["Integrations"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v2/me/api-keys": {
+      get: {
+        operationId: "v2ListMyApiKeys",
+        summary: "List the signed-in user's API keys (v2 passthrough)",
+        tags: ["API Keys"],
+        parameters: [],
+      },
+      post: {
+        operationId: "v2CreateMyApiKey",
+        summary: "Create an API key for the signed-in user (v2 passthrough)",
+        tags: ["API Keys"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v2/me/api-keys/{id}": {
+      delete: {
+        operationId: "v2RevokeMyApiKey",
+        summary: "Revoke one of the signed-in user's API keys (v2 passthrough)",
+        tags: ["API Keys"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v2/api-keys": {
       get: {
         operationId: "v2ListAPIKeys",
@@ -2558,6 +2645,29 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         operationId: "deleteAlertSubscription",
         summary: "Delete an alert subscription",
         tags: ["Notifications"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/integrations": {
+      get: {
+        operationId: "listIntegrations",
+        summary: "List notification integrations",
+        tags: ["Integrations"],
+        parameters: [],
+      },
+    },
+    "/api/v1/integrations/{id}/test": {
+      post: {
+        operationId: "testIntegration",
+        summary: "Send a test message through an integration",
+        tags: ["Integrations"],
         parameters: [
           {
             name: "id",

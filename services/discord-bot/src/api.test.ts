@@ -128,6 +128,33 @@ describe("SorolensApi.getContractStatus", () => {
   });
 });
 
+describe("SorolensApi.searchContracts", () => {
+  it("searches by query, caps the result limit, and keeps labels", async () => {
+    const { api, calls } = apiWith({
+      items: [
+        { id: CONTRACT, label: "Watchdog" },
+        { id: "C" + "B".repeat(55), label: null },
+        {},
+      ],
+    });
+
+    const results = await api.searchContracts("watch", 99);
+
+    expect(calls[0].url).toBe(
+      "https://api.sorolens.test/api/v1/search?q=watch&limit=25"
+    );
+    expect(results).toEqual([
+      { id: CONTRACT, label: "Watchdog" },
+      { id: "C" + "B".repeat(55), label: null },
+    ]);
+  });
+
+  it("returns no results when the response omits items", async () => {
+    const { api } = apiWith({});
+    expect(await api.searchContracts("missing")).toEqual([]);
+  });
+});
+
 describe("SorolensApi.listAlerts", () => {
   it("requests the watchdog alerts endpoint and normalises entries", async () => {
     const { api, calls } = apiWith({

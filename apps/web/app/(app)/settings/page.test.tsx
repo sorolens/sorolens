@@ -4,7 +4,8 @@
  * vitest + @testing-library/react + jsdom. The theme provider and the network
  * context are mocked so each section can be driven without mounting the whole
  * app shell; `localStorage` is the real jsdom implementation, which is what the
- * page actually persists to.
+ * page actually persists to. API-key and identity calls are mocked at the
+ * client boundary so the test never reaches the network.
  */
 
 import {
@@ -19,6 +20,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const setTheme = vi.fn();
 const setNetwork = vi.fn();
+const listMyApiKeys = vi.fn();
+const createMyApiKey = vi.fn();
+const revokeMyApiKey = vi.fn();
+const ensureSession = vi.fn();
 
 vi.mock("@/components/ThemeProvider", () => ({
   useTheme: () => ({ theme: "system", setTheme }),
@@ -32,7 +37,29 @@ vi.mock("@/lib/network", () => ({
   useNetwork: () => ({ network: "all", setNetwork }),
 }));
 
+vi.mock("@/lib/apiKeys", () => ({
+  listMyApiKeys: () => listMyApiKeys(),
+  createMyApiKey: () => createMyApiKey(),
+  revokeMyApiKey: (id: string) => revokeMyApiKey(id),
+}));
+
+vi.mock("@/lib/user", () => ({
+  ensureSession: () => ensureSession(),
+}));
+
 import { SETTINGS_STORAGE_KEY } from "@/lib/settings";
+
+const KEY = {
+  id: "key-1",
+  name: "Dashboard key",
+  key_prefix: "sl_abcdefgh",
+  scopes: ["read:contracts"],
+  user_id: "sess_test",
+  created_at: "2026-10-01T00:00:00.000Z",
+  last_used_at: null,
+  revoked_at: null,
+  rotated_at: null,
+};
 
 async function renderPage() {
   const { default: SettingsPage } = await import("@/app/(app)/settings/page");
@@ -62,19 +89,30 @@ describe("SettingsPage", () => {
     localStorage.clear();
     setTheme.mockClear();
     setNetwork.mockClear();
+    listMyApiKeys.mockReset();
+    listMyApiKeys.mockResolvedValue([]);
+    createMyApiKey.mockReset();
+    revokeMyApiKey.mockReset();
+    ensureSession.mockReset();
+    ensureSession.mockResolvedValue({
+      user_id: "sess_test",
+      token: "sls_token",
+      expires_at: "2099-01-01T00:00:00.000Z",
+    });
   });
 
   afterEach(() => {
     cleanup();
   });
 
-  it("renders all four sections", async () => {
+  it("renders every settings section", async () => {
     await renderPage();
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
     expect(screen.getByTestId("settings-theme")).toBeTruthy();
     expect(screen.getByTestId("settings-network")).toBeTruthy();
     expect(screen.getByTestId("settings-notifications")).toBeTruthy();
+    expect(screen.getByTestId("settings-identity")).toBeTruthy();
     expect(screen.getByTestId("settings-api-key")).toBeTruthy();
   });
 
@@ -91,8 +129,6 @@ describe("SettingsPage", () => {
             weekly_digest: true,
           },
         },
-        apiKey: "sl_live_stored",
-        apiKeyCreatedAt: "2026-09-25T00:00:00.000Z",
       })
     );
 
@@ -108,9 +144,6 @@ describe("SettingsPage", () => {
     expect(
       (screen.getByLabelText("Health changes") as HTMLInputElement).checked
     ).toBe(false);
-    expect(screen.getByTestId("settings-api-key-value").textContent).toContain(
-      "sl_live_"
-    );
   });
 
   it("saves the default network and switches the header selector", async () => {
@@ -165,42 +198,64 @@ describe("SettingsPage", () => {
     expect(stored.notifications.channels.weekly_digest).toBe(true);
   });
 
-  it("generates an API key, persists it, then revokes it", async () => {
+  it("shows the verified user ID with a copy button", async () => {
     await renderPage();
 
-    expect(screen.getByTestId("settings-api-key-value").textContent).toBe("—");
+    await waitFor(() =>
+      expect(screen.getByTestId("settings-user-id").textContent).toBe(
+        "sess_test"
+      )
+    );
+    expect(screen.getByTestId("settings-user-id-copy")).toBeTruthy();
+  });
+
+  it("creates a real key through the API and never stores the plaintext", async () => {
+    const created = { ...KEY, key: "sl_plaintext_secret" };
+    createMyApiKey.mockResolvedValueOnce(created);
+
+    await renderPage();
+    expect(
+      screen.getByText("No API key yet. Create one to authenticate requests.")
+    ).toBeTruthy();
 
     fireEvent.click(
       within(screen.getByTestId("settings-api-key")).getByRole("button", {
         name: "Generate key",
       })
     );
-    const generated = screen
-      .getByTestId("settings-api-key-value")
-      .textContent?.trim() as string;
-    expect(generated.startsWith("sl_live_")).toBe(true);
 
-    fireEvent.click(cardSave("settings-api-key"));
     await waitFor(() =>
-      expect(screen.getByTestId("settings-api-key-status")).toBeTruthy()
+      expect(screen.getByTestId("settings-api-key-value").textContent).toBe(
+        "sl_plaintext_secret"
+      )
     );
-    expect(
-      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).apiKey
-    ).toBe(generated);
+    expect(createMyApiKey).toHaveBeenCalledTimes(1);
+    // The plaintext is display-once component state, never persisted.
+    const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    expect(stored === null || !stored.includes("sl_plaintext_secret")).toBe(
+      true
+    );
+  });
 
+  it("shows the server-issued prefix and revokes through the API", async () => {
+    listMyApiKeys.mockResolvedValueOnce([KEY]);
+    revokeMyApiKey.mockResolvedValueOnce(undefined);
+
+    await renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("settings-api-key-row").textContent).toContain(
+        "sl_abcdefgh"
+      )
+    );
     fireEvent.click(
-      within(screen.getByTestId("settings-api-key")).getByRole("button", {
+      within(screen.getByTestId("settings-api-key-row")).getByRole("button", {
         name: "Revoke",
       })
     );
-    fireEvent.click(cardSave("settings-api-key"));
 
-    await waitFor(() =>
-      expect(screen.getByTestId("settings-api-key-value").textContent).toBe("—")
-    );
-    expect(
-      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) as string).apiKey
-    ).toBeNull();
+    await waitFor(() => expect(revokeMyApiKey).toHaveBeenCalledWith("key-1"));
+    expect(screen.queryByTestId("settings-api-key-row")).toBeNull();
   });
 
   it("applies a theme change through the provider", async () => {

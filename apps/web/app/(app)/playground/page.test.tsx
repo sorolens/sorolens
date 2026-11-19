@@ -77,7 +77,7 @@ describe("PlaygroundPage", () => {
     expect(keyInput.value).toBe("");
   });
 
-  it("pre-fills the API key saved in Settings", async () => {
+  it("does not pre-fill a legacy stored key", async () => {
     localStorage.setItem(
       SETTINGS_STORAGE_KEY,
       JSON.stringify({ apiKey: "sl_saved_key" })
@@ -88,7 +88,7 @@ describe("PlaygroundPage", () => {
       expect(
         (document.getElementById("playground-api-key") as HTMLInputElement)
           .value
-      ).toBe("sl_saved_key");
+      ).toBe("");
     });
   });
 

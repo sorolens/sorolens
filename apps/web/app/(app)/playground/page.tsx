@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { EndpointEntry, endpointsByTag } from "@/lib/openapi";
-import { loadSettings } from "@/lib/settings";
 import { useLocale } from "@/lib/i18n";
 import {
   buildCurl,
@@ -27,11 +26,6 @@ export default function PlaygroundPage() {
   const [response, setResponse] = useState<ResponseState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-
-  useEffect(() => {
-    const savedApiKey = loadSettings().apiKey;
-    if (savedApiKey) setApiKey(savedApiKey);
-  }, []);
 
   const curl = buildCurl(
     selected.method,

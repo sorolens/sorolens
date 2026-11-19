@@ -53,6 +53,7 @@ func main() {
 		logger.Error("parse config", "err", err)
 		os.Exit(1)
 	}
+	cfg.DatabasePool.Apply(poolCfg)
 	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
 	if err != nil {
@@ -119,6 +120,8 @@ func main() {
 		Addr:        fmt.Sprintf(":%s", cfg.Port),
 		Handler:     router.New(h, maxBodyBytes),
 		ReadTimeout: 15 * time.Second,
+		// Reject slow HTTP headers before they can occupy a connection.
+		ReadHeaderTimeout: 5 * time.Second,
 		// WriteTimeout starts before the handler's own timer, so it must
 		// outlast API_REQUEST_TIMEOUT or the 503 is cut off mid-write and the
 		// client sees a dropped connection. The SSE route extends its own
@@ -141,11 +144,12 @@ func main() {
 	var metricsSrv *http.Server
 	if cfg.MetricsPort != "" {
 		metricsSrv = &http.Server{
-			Addr:         fmt.Sprintf(":%s", cfg.MetricsPort),
-			Handler:      metrics.NewAdminMux(),
-			ReadTimeout:  15 * time.Second,
-			WriteTimeout: 30 * time.Second,
-			IdleTimeout:  60 * time.Second,
+			Addr:              fmt.Sprintf(":%s", cfg.MetricsPort),
+			Handler:           metrics.NewAdminMux(),
+			ReadTimeout:       15 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       60 * time.Second,
 		}
 	}
 

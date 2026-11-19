@@ -41,6 +41,18 @@ test("Chrome uses a module service worker, Firefox uses a module event page", ()
   assert.match(firefox.browser_specific_settings.gecko.id, /@/);
 });
 
+test("both manifests can poll alerts and raise notifications", () => {
+  for (const name of ["manifest.json", "manifest.firefox.json"]) {
+    const manifest = readManifest(name);
+    for (const permission of ["alarms", "notifications"]) {
+      assert.ok(
+        manifest.permissions.includes(permission),
+        `${name} is missing the ${permission} permission`
+      );
+    }
+  }
+});
+
 test("content scripts run on the three explorer origins", () => {
   for (const name of ["manifest.json", "manifest.firefox.json"]) {
     const manifest = readManifest(name);

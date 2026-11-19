@@ -9,6 +9,7 @@
  *   Web Push at any time.
  */
 import Link from "next/link";
+import Image from "next/image";
 import { SWRConfig } from "swr";
 import { NetworkProvider } from "@/lib/network";
 import { swrConfig } from "@/lib/swr";
@@ -36,11 +37,25 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             href="/"
             className="flex items-center gap-2 text-2xl font-bold tracking-tight"
           >
-            <img src="/logo.svg" alt="" className="h-8 w-8" aria-hidden />
+            <Image
+              src="/logo.svg"
+              alt=""
+              width={32}
+              height={32}
+              priority
+              className="h-8 w-8"
+              aria-hidden
+            />
             Sorolens
           </Link>
           <div className="flex flex-wrap items-center gap-4">
-            <nav className="flex gap-4 text-sm">
+            <nav className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              <Link
+                href="/dashboard"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                Dashboard
+              </Link>
               <Link
                 href="/live"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
@@ -70,6 +85,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
                 Reports
+              </Link>
+              <Link
+                href="/integrations"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                Integrations
               </Link>
               <Link
                 href="/groups"

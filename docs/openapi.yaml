@@ -1323,6 +1323,104 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/me/api-keys:
+    get:
+      tags: [API Keys]
+      summary: List the signed-in user's API keys
+      description: |
+        Self-service counterpart to `/api/v1/api-keys` (issue #613). Requires a
+        workspace session token; only keys bound to that user are returned and
+        key material is never included.
+      operationId: listMyApiKeys
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: The user's active API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [api_keys, next_cursor]
+                properties:
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/APIKey"
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [API Keys]
+      summary: Create an API key for the signed-in user
+      description: |
+        Creates a key bound to the workspace session's user. The plaintext key
+        is returned once. `admin:*` cannot be granted here.
+      operationId: createMyApiKey
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [read:contracts, write:contracts, read:watchdog]
+                  description: Defaults to read:contracts when omitted.
+      responses:
+        "201":
+          description: Key created; the plaintext key is returned once.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIKey"
+                  - type: object
+                    required: [key]
+                    properties:
+                      key:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/me/api-keys/{id}:
+    delete:
+      tags: [API Keys]
+      summary: Revoke one of the signed-in user's API keys
+      operationId: revokeMyApiKey
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Key revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/api-keys:
     get:
       tags: [API Keys]
@@ -3071,6 +3169,128 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v2/integrations:
+    get:
+      tags: [Integrations]
+      summary: List notification integrations (v2 passthrough)
+      operationId: v2ListIntegrations
+      security:
+        - ApiKeyAuth: [read:contracts]
+        - SessionAuth: []
+        - {}
+      responses:
+        "200":
+          description: Integration catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [integrations]
+                properties:
+                  integrations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Integration"
+
+  /api/v2/integrations/{id}/test:
+    post:
+      tags: [Integrations]
+      summary: Send a test message through an integration (v2 passthrough)
+      operationId: v2TestIntegration
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - SessionAuth: []
+        - {}
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [slack, discord, telegram]
+      responses:
+        "200":
+          description: Test message delivered
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Integration is not configured
+        "502":
+          description: Test message delivery failed
+
+  /api/v2/me/api-keys:
+    get:
+      tags: [API Keys]
+      summary: List the signed-in user's API keys (v2 passthrough)
+      operationId: v2ListMyApiKeys
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: The user's active API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [api_keys, next_cursor]
+                properties:
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/APIKey"
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [API Keys]
+      summary: Create an API key for the signed-in user (v2 passthrough)
+      operationId: v2CreateMyApiKey
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "201":
+          description: Key created; the plaintext key is returned once.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+
+  /api/v2/me/api-keys/{id}:
+    delete:
+      tags: [API Keys]
+      summary: Revoke one of the signed-in user's API keys (v2 passthrough)
+      operationId: v2RevokeMyApiKey
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Key revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v2/api-keys:
     get:
       tags: [API v2]
@@ -4194,6 +4414,95 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/integrations:
+    get:
+      tags: [Integrations]
+      summary: List notification integrations
+      description: |
+        Returns the catalog of notification integrations (Slack, Discord,
+        Telegram) with setup instructions and whether this deployment is
+        configured to deliver to each one (issue #612).
+      operationId: listIntegrations
+      security:
+        - ApiKeyAuth: [read:contracts]
+        - {}
+      responses:
+        "200":
+          description: Integration catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [integrations]
+                properties:
+                  integrations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Integration"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/integrations/{id}/test:
+    post:
+      tags: [Integrations]
+      summary: Send a test message through an integration
+      description: |
+        Sends a real test message through the integration's configured channel
+        so users can verify their setup end to end (issue #612). Returns 409
+        when the integration is not configured and 502 when the remote endpoint
+        rejects the message.
+      operationId: testIntegration
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - SessionAuth: []
+        - {}
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [slack, discord, telegram]
+      responses:
+        "200":
+          description: Test message delivered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                  detail:
+                    type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Integration is not configured
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, error]
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+        "502":
+          description: Test message delivery failed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, error]
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+
   /api/v1/alerts:
     get:
       tags: [Alerts]
@@ -5035,6 +5344,29 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    Integration:
+      type: object
+      description: A notification integration surfaced on the web Integrations page (issue #612).
+      required: [id, name, description, install_url, setup_steps, configured]
+      properties:
+        id:
+          type: string
+          enum: [slack, discord, telegram]
+        name:
+          type: string
+        description:
+          type: string
+        install_url:
+          type: string
+          format: uri
+        setup_steps:
+          type: array
+          items:
+            type: string
+        configured:
+          type: boolean
+          description: Whether this deployment has the environment variables needed to deliver through the integration.
+
     ContractNote:
       type: object
       required: [id, contract_id, author, body, created_at, updated_at]

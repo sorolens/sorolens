@@ -37,6 +37,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		var pool *pgxpool.Pool
 		config, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
 		if err == nil {
+			poolSettings, settingsErr := apiconfig.PoolSettingsFromEnv()
+			if settingsErr != nil {
+				logger.Error("pool config", "err", settingsErr)
+				return
+			}
+			poolSettings.Apply(config)
 			config.ConnConfig.Tracer = otelpgx.NewTracer()
 			var p *pgxpool.Pool
 			p, err = pgxpool.NewWithConfig(context.Background(), config)

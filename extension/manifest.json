@@ -27,7 +27,7 @@
     "page": "src/options/options.html",
     "open_in_tab": true
   },
-  "permissions": ["storage", "contextMenus"],
+  "permissions": ["storage", "contextMenus", "alarms", "notifications"],
   "host_permissions": [
     "https://api.sorolens.xyz/*",
     "https://stellar.expert/*",

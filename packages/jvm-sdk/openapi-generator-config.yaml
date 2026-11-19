@@ -1,0 +1,23 @@
+# Configuration for the OpenAPI Generator JVM models.
+#
+# The generator itself is pinned in scripts/generate_jvm_client.sh and runs in
+# the existing SDK CI job; generated sources are not committed. This file is the
+# reviewable input, the same way oapi-codegen.yaml is for the Go client.
+generatorName: java
+library: native
+inputSpec: ../../docs/openapi.yaml
+outputDir: build/generated/openapi
+additionalProperties:
+  invokerPackage: xyz.sorolens.sdk.generated
+  apiPackage: xyz.sorolens.sdk.generated.api
+  modelPackage: xyz.sorolens.sdk.generated.model
+  dateLibrary: java8
+  useJakartaEe: false
+  openApiNullable: false
+  hideGenerationTimestamp: true
+  disallowAdditionalPropertiesIfNotPresent: false
+globalProperties:
+  apiDocs: false
+  modelDocs: false
+  apiTests: false
+  modelTests: false

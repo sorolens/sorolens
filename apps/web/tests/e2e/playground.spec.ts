@@ -90,7 +90,7 @@ test("fills path parameters and API key into the curl preview", async ({
   );
 });
 
-test("pre-fills the API key saved in Settings", async ({ page }) => {
+test("does not pre-fill a legacy key from Settings", async ({ page }) => {
   await page.addInitScript((key) => {
     window.localStorage.setItem(
       key,
@@ -102,12 +102,8 @@ test("pre-fills the API key saved in Settings", async ({ page }) => {
   await page.goto("/playground");
   await expectHeading(page, "API Playground");
 
-  await expect(page.getByLabel("API key (optional)")).toHaveValue(
-    "sl_live_saved_key"
-  );
-  await expect(curlPreview(page)).toContainText(
-    "-H 'Authorization: Bearer sl_live_saved_key'"
-  );
+  await expect(page.getByLabel("API key (optional)")).toHaveValue("");
+  await expect(curlPreview(page)).not.toContainText("Authorization");
 });
 
 test("sends a request and renders status, headers and body", async ({

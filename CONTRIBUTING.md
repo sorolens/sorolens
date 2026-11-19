@@ -334,6 +334,21 @@ Before marking your PR ready for review, verify each item:
 - [ ] If you changed the REST API surface, `ARCHITECTURE.md` is updated.
 - [ ] If you changed environment variables, `.env.example` is updated.
 
+### OpenAPI compatibility
+
+Pull requests that change `docs/openapi.yaml` run `oasdiff` against the base
+commit. Breaking changes to the frozen `/api/v1` surface must fail CI; normal
+breaking API work belongs under `/api/v2` with a migration guide, as described
+in [ROADMAP.md](ROADMAP.md).
+
+If a maintainer approves an intentional exception (for example, correcting a
+specification that is known to be out of sync with the deployed API), record
+the decision in the issue or PR and add only the exact oasdiff finding to
+`.oasdiff-ignored.txt`. Include the issue or PR number on the ignore line.
+Do not add broad path or component ignores, and remove an exception once the
+migration or compatibility work is complete. Contributors should not modify
+the ignore file without explicit maintainer approval.
+
 ---
 
 ## Running tests

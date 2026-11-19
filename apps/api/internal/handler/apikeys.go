@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -142,7 +143,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 
 // ListAPIKeys handles GET /api/v1/api-keys. Key material is never returned.
 func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -159,7 +160,7 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"api_keys":    resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 

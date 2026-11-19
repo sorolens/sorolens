@@ -277,6 +277,28 @@ func (c *Client) GetMonitoredContract(ctx context.Context, contractID string) (M
 	return out, err
 }
 
+// CompareContracts fetches side-by-side metrics for 1 to 4 contracts over
+// window ("24h", "7d", "30d"). The response preserves the requested order.
+func (c *Client) CompareContracts(ctx context.Context, contractIDs []string, window string) (CompareResponse, error) {
+	if window == "" {
+		window = "24h"
+	}
+	q := url.Values{}
+	q.Set("ids", strings.Join(contractIDs, ","))
+	q.Set("window", window)
+	var out CompareResponse
+	err := c.do(ctx, http.MethodGet, "/api/v1/compare?"+q.Encode(), nil, &out)
+	return out, err
+}
+
+// GetContractInvocationStats fetches the fixed-window invocation aggregates
+// (counts, failure rate, fee and CPU percentiles) for a contract.
+func (c *Client) GetContractInvocationStats(ctx context.Context, contractID string) (ContractInvocationStats, error) {
+	var out ContractInvocationStats
+	err := c.do(ctx, http.MethodGet, "/api/v1/contracts/"+contractID+"/invocations/stats", nil, &out)
+	return out, err
+}
+
 // GetContractStats fetches per-contract statistics for the given window ("24h", "7d", "30d").
 func (c *Client) GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error) {
 	if window == "" {

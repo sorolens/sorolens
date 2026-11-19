@@ -29,8 +29,8 @@ concurrency:
 
 jobs:
   # ------------------------------------------------------------
-  # Go: API, indexer, CLI and Go client, generated-client drift,
-  # SDK coverage and the backup/restore scripts.
+  # Go: API, indexer, CLI and Go client, generated-client drift, OpenAPI
+  # compatibility, SDK coverage and the backup/restore scripts.
   # ------------------------------------------------------------
   go:
     name: Go
@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Go 1.26
         uses: actions/setup-go@v5
         with:
@@ -140,6 +142,35 @@ jobs:
         run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
       - name: Verify Go client has no diff
         run: git diff --exit-code -- packages/go-client/internal
+      # Issue #553: /api/v1 is frozen. Compare the PR spec with the base
+      # commit only when docs/openapi.yaml changed; keep this in the existing
+      # Go job so pull requests remain capped at five checks.
+      - name: Detect OpenAPI changes
+        id: openapi_changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --quiet "$BASE_SHA"...HEAD -- docs/openapi.yaml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "docs/openapi.yaml was not changed"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "docs/openapi.yaml changed"
+          fi
+      - name: Check OpenAPI for breaking changes
+        if: steps.openapi_changes.outputs.changed == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          go install github.com/oasdiff/oasdiff@v1.38.0
+          base_spec=$(mktemp)
+          trap 'rm -f "$base_spec"' EXIT
+          git show "$BASE_SHA:docs/openapi.yaml" > "$base_spec"
+          "$(go env GOPATH)/bin/oasdiff" breaking \
+            --format githubactions \
+            --fail-on WARN \
+            -- "$base_spec" docs/openapi.yaml
       # SDK coverage guard (issue #556): every operation declared in
       # docs/openapi.yaml must be exposed by each SDK, or be documented as an
       # intentional exclusion in scripts/sdk_coverage_allowlist.json.
@@ -223,6 +254,12 @@ jobs:
           # at build time. Real values are set in Vercel project settings.
           NEXT_PUBLIC_API_URL: http://localhost:8080
         run: pnpm build
+      # Performance budget (issue #614): the production build's per-route
+      # first-load JS and total client JS must stay under the budgets in
+      # apps/web/performance-budget.json. See docs/performance.md.
+      - name: Check bundle size budget
+        working-directory: apps/web
+        run: node scripts/check-bundle-budget.mjs
 
   # ------------------------------------------------------------
   # End-to-end: Playwright for the dashboard and the mock RPC -> indexer ->
@@ -271,7 +308,8 @@ jobs:
       - name: Install Playwright browsers
         if: steps.changes.outputs.web == 'true'
         working-directory: apps/web
-        run: pnpm exec playwright install --with-deps chromium
+        # webkit backs the mobile-safari project added in #611.
+        run: pnpm exec playwright install --with-deps chromium webkit
       - name: Run Playwright tests
         if: steps.changes.outputs.web == 'true'
         working-directory: apps/web
@@ -297,8 +335,8 @@ jobs:
         run: make integration-test
 
   # ------------------------------------------------------------
-  # SDKs and contracts: Python SDK, Rust SDK and the fixture contract. Each
-  # part runs only when its paths changed.
+  # SDKs and contracts: Python SDK, Rust SDK and the contracts. Each part runs
+  # only when its paths changed.
   # ------------------------------------------------------------
   sdks:
     name: SDKs and contracts
@@ -317,20 +355,28 @@ jobs:
         run: |
           python=true
           rustsdk=true
+          jvm=true
+          ts=true
           contracts=true
           if [ "$EVENT" = "pull_request" ]; then
             files=$(git diff --name-only "$BASE_SHA"...HEAD)
             python=false
             rustsdk=false
+            jvm=false
+            ts=false
             contracts=false
             echo "$files" | grep -qE '^(packages/python-sdk/|docs/openapi\.yaml|\.github/workflows/ci\.yml)' && python=true
             echo "$files" | grep -qE '^(packages/rust-sdk/|\.github/workflows/ci\.yml)' && rustsdk=true
+            echo "$files" | grep -qE '^(packages/jvm-sdk/|docs/openapi\.yaml|\.github/workflows/ci\.yml)' && jvm=true
+            echo "$files" | grep -qE '^(packages/typescript-sdk/|\.github/workflows/ci\.yml)' && ts=true
             echo "$files" | grep -qE '^(contracts/|\.github/workflows/ci\.yml)' && contracts=true
           fi
           echo "python=$python" >> "$GITHUB_OUTPUT"
           echo "rustsdk=$rustsdk" >> "$GITHUB_OUTPUT"
+          echo "jvm=$jvm" >> "$GITHUB_OUTPUT"
+          echo "ts=$ts" >> "$GITHUB_OUTPUT"
           echo "contracts=$contracts" >> "$GITHUB_OUTPUT"
-          echo "python=$python rustsdk=$rustsdk contracts=$contracts"
+          echo "python=$python rustsdk=$rustsdk jvm=$jvm ts=$ts contracts=$contracts"
       # Python SDK. The full 3.11 to 3.13 matrix runs in python-sdk.yml after
       # merge; pull requests test the middle version.
       - name: Set up Python 3.12
@@ -364,7 +410,7 @@ jobs:
       - name: Verify Python client has no diff
         if: steps.changes.outputs.python == 'true'
         run: git diff --exit-code -- packages/python-sdk/src/sorolens/_generated
-      # Rust toolchain for the Rust SDK and the fixture contract.
+      # Rust toolchain for the Rust SDK and the contracts.
       - name: Install Rust stable
         if: steps.changes.outputs.rustsdk == 'true' || steps.changes.outputs.contracts == 'true'
         uses: dtolnay/rust-toolchain@stable
@@ -381,7 +427,8 @@ jobs:
             ~/.cargo/git/db/
             packages/rust-sdk/target/
             contracts/counter/target/
-          key: cargo-${{ hashFiles('packages/rust-sdk/Cargo.lock', 'contracts/counter/Cargo.lock') }}
+            contracts/watchdog/target/
+          key: cargo-${{ hashFiles('packages/rust-sdk/Cargo.lock', 'contracts/counter/Cargo.lock', 'contracts/watchdog/Cargo.lock') }}
           restore-keys: |
             cargo-
       # Rust SDK (async and blocking transports).
@@ -409,6 +456,44 @@ jobs:
         if: steps.changes.outputs.rustsdk == 'true'
         working-directory: packages/rust-sdk
         run: cargo test --doc
+      # JVM SDK (Java 17, Gradle, OpenAPI generator pinned in the module).
+      - name: Set up Java 17
+        if: steps.changes.outputs.jvm == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: JVM SDK - gradle test
+        if: steps.changes.outputs.jvm == 'true'
+        working-directory: packages/jvm-sdk
+        run: ./gradlew test --no-daemon
+      - name: JVM SDK - regenerate models from docs/openapi.yaml
+        if: steps.changes.outputs.jvm == 'true'
+        run: bash packages/jvm-sdk/scripts/generate_jvm_client.sh
+      # Edge TypeScript SDK: Node, Deno and a Workers-like runtime (Miniflare).
+      - name: Set up pnpm
+        if: steps.changes.outputs.ts == 'true'
+        uses: pnpm/action-setup@v4
+      - name: Set up Node 22
+        if: steps.changes.outputs.ts == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install TypeScript SDK
+        if: steps.changes.outputs.ts == 'true'
+        run: pnpm install --filter @sorolens/sdk --frozen-lockfile
+      - name: TypeScript SDK - test (Node and workerd)
+        if: steps.changes.outputs.ts == 'true'
+        working-directory: packages/typescript-sdk
+        run: npm test
+      - name: TypeScript SDK - bundle size and tree-shaking
+        if: steps.changes.outputs.ts == 'true'
+        working-directory: packages/typescript-sdk
+        run: npm run size
+      - name: TypeScript SDK - Deno smoke test
+        if: steps.changes.outputs.ts == 'true'
+        working-directory: packages/typescript-sdk
+        run: npx -y deno test --allow-net test/deno_smoke.ts
       # Fixture contract.
       - name: Contract - cargo fmt --check
         if: steps.changes.outputs.contracts == 'true'
@@ -426,3 +511,35 @@ jobs:
         if: steps.changes.outputs.contracts == 'true'
         working-directory: contracts/counter
         run: cargo test
+      # Watchdog contract.
+      - name: Watchdog contract - cargo fmt --check
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo fmt --check
+      - name: Watchdog contract - cargo clippy
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Watchdog contract - cargo test
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo test
+      - name: Watchdog contract - cargo build (wasm32 release)
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: cargo build --target wasm32v1-none --release
+      - name: Watchdog contract - report wasm size
+        if: steps.changes.outputs.contracts == 'true'
+        working-directory: contracts/watchdog
+        run: |
+          wasm=$(find target/wasm32v1-none/release -maxdepth 1 -name '*.wasm' -print -quit)
+          test -n "$wasm"
+          bytes=$(wc -c < "$wasm")
+          kib=$(( (bytes + 1023) / 1024 ))
+          echo "Watchdog WASM size: ${bytes} bytes (${kib} KiB)"
+          {
+            echo "### Watchdog contract WASM"
+            echo
+            echo "- File: $wasm"
+            echo "- Size: ${bytes} bytes (${kib} KiB)"
+          } >> "$GITHUB_STEP_SUMMARY"
