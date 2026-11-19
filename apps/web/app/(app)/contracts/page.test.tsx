@@ -259,12 +259,7 @@ describe("ContractsPage", () => {
   // Helper: dynamic import so mocks are in place before module loads.
   // Each render mounts a fresh SWR cache so tests stay independent, and
   // deduping is disabled so a revalidation is observable immediately.
-  async function renderPage(
-    props: {
-      initialSortColumn?: string;
-      initialSortDirection?: "asc" | "desc";
-    } = {}
-  ) {
+  async function renderPage() {
     const { default: ContractsClient } =
       await import("@/app/(app)/contracts/ContractsClient");
     return render(
@@ -277,7 +272,7 @@ describe("ContractsPage", () => {
           shouldRetryOnError: false,
         }}
       >
-        <ContractsClient {...props} />
+        <ContractsClient />
       </SWRConfig>
     );
   }
