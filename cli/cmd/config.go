@@ -40,8 +40,9 @@ func applyConfig(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// Profile precedence: --profile, then SOROLENS_PROFILE, then the config
-	// file's default profile. A profile overrides the legacy top-level values.
+	// SOROLENS_PROFILE is the profile used when --profile is not given; it
+	// overrides the config file's default profile. A profile overrides the
+	// legacy top-level api_url and network values.
 	profileName := firstNonEmpty(globalConfig.Profile, os.Getenv("SOROLENS_PROFILE"), config.DefaultProfile)
 	prof, found := config.Profiles[profileName]
 	if profileName != "" && !found {
