@@ -55,11 +55,12 @@ This flow runs when a contract ID is first submitted to the system (either via t
    - Calls RPC getNetwork to confirm the node is reachable
    - Calls RPC getLedgerEntries for the contract instance entry
      - If not found: return 404 (contract does not exist on-chain)
-   - Inserts row into `contracts` table with status = "backfilling"
+   - Inserts row into `contracts` table with status = "pending"
    - Returns 201 Created
 
 2. On next cron run (at most 5 minutes later), the indexer sees
-   the contract in "backfilling" status.
+   the "pending" contract, records the range in `contract_backfills` and
+   sets status = "backfilling". A restart reuses the saved row.
 
 3. Indexer sets a Redis advisory lock:
    SET sorolens:lock:backfill:<contract_id> <job_id> NX PX 300000
@@ -67,9 +68,10 @@ This flow runs when a contract ID is first submitted to the system (either via t
 
 4. Indexer determines backfill range:
    - Calls RPC getLatestLedger -> current_ledger
-   - start_ledger = current_ledger - 120,960 (approximately 7 days at 5s/ledger)
-   - If network only retains 24h of events, start_ledger is adjusted to
-     current_ledger - 17,280 (approximately 1 day at 5s/ledger)
+   - oldest_ledger = current_ledger - 100,000 (approximately 5.8 days at 5s/ledger)
+   - If the node retains less history, oldest_ledger is raised to the oldest
+     ledger it reports. Ledgers are then scanned from newest to oldest in
+     bounded windows, each committed with the new position.
 
 5. Indexer calls RPC getEvents in paginated batches:
    params: {

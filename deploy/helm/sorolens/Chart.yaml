@@ -1,0 +1,16 @@
+apiVersion: v2
+name: sorolens
+description: Sorolens, observability for Soroban smart contracts. Deploys the API, the indexer and the web dashboard against an external PostgreSQL and Redis.
+type: application
+# The chart's own version. Bump it on every change to the chart.
+version: 0.1.0
+# The Sorolens release the default image tags point at.
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/sorolens/sorolens
+sources:
+  - https://github.com/sorolens/sorolens
+keywords:
+  - stellar
+  - soroban
+  - observability

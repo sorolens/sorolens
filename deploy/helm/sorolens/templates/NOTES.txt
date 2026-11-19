@@ -1,0 +1,21 @@
+Sorolens {{ .Chart.AppVersion }} is deployed as release {{ .Release.Name }} in {{ .Release.Namespace }}.
+
+Indexer mode: {{ .Values.indexer.mode }}{{ if eq .Values.indexer.mode "sharded" }} (1 coordinator, {{ .Values.indexer.sharding.workers.replicas }} workers, {{ .Values.indexer.sharding.shardCount }} shards){{ end }}
+
+Check the API is healthy:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "sorolens.componentName" (dict "root" . "component" "api") }} 8080:{{ .Values.api.service.port }}
+  curl -fsS http://localhost:8080/readyz
+
+Or run the chart's own test:
+
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+{{- if .Values.ingress.enabled }}
+
+Public URL: http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}
+{{- end }}
+{{- if not .Values.migrations.enabled }}
+
+Migrations are not run by this release (migrations.enabled=false). Apply them
+before the API can become ready; see docs/self-hosting/kubernetes.md.
+{{- end }}

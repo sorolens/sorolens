@@ -1,0 +1,269 @@
+# Default values for the Sorolens chart. Every key is validated by
+# values.schema.json; `helm install` refuses values that do not match it.
+# docs/self-hosting/kubernetes.md walks through installing and upgrading.
+
+# -- Overrides the chart name in resource names.
+nameOverride: ""
+# -- Overrides the full resource name prefix.
+fullnameOverride: ""
+
+# -- Applied to every pod.
+imagePullSecrets: []
+# -- Extra labels added to every resource.
+commonLabels: {}
+
+serviceAccount:
+  # -- Create a service account for the pods. None of them call the
+  # Kubernetes API, so its token is never mounted.
+  create: true
+  # -- Name of the service account to use. Defaults to the full name when
+  # create is true, and to "default" otherwise.
+  name: ""
+  annotations: {}
+
+# Settings shared by the API and the indexer.
+config:
+  # -- testnet, futurenet or mainnet.
+  stellarNetwork: testnet
+  # -- Soroban RPC endpoint per network. testnet and futurenet fall back to
+  # the public SDF endpoints; mainnet has no default and must be set here.
+  # The indexer indexes every network listed plus stellarNetwork.
+  sorobanRpcUrls: {}
+  #   mainnet: https://your-rpc-provider.example
+  # -- debug, info, warn or error.
+  logLevel: info
+  # -- Origins allowed to call the API from a browser.
+  allowedOrigins: []
+  # -- Watchdog contract address; the watchdog is off when empty.
+  watchdogContractId: ""
+
+# Connection strings for the external PostgreSQL and Redis. The chart never
+# runs either database.
+database:
+  # -- Name of an existing Secret holding the connection strings. When set,
+  # the values below are ignored and no Secret is created.
+  existingSecret: ""
+  # -- Keys read from that Secret.
+  secretKeys:
+    databaseUrl: DATABASE_URL
+    redisUrl: REDIS_URL
+    # Used by the migrations Job to bypass a connection pooler. Without a
+    # pooler, point it at the same key as databaseUrl.
+    directDatabaseUrl: DIRECT_DATABASE_URL
+  # -- postgres:// URL, used only when existingSecret is empty.
+  url: ""
+  # -- Non-pooled postgres:// URL for migrations; defaults to url.
+  directUrl: ""
+  # -- redis:// or rediss:// URL, used only when existingSecret is empty.
+  redisUrl: ""
+
+# Pod and container security, applied to every workload. The images run as
+# the distroless nonroot user.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+api:
+  image:
+    repository: ghcr.io/sorolens/sorolens-api
+    # -- Defaults to the chart's appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  port: 8080
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  # -- Extra environment variables, as name/value pairs or valueFrom.
+  extraEnv: []
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  # Liveness asks whether the process is up; readiness also checks the
+  # database and Redis, so a pod that lost them stops taking traffic.
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+indexer:
+  image:
+    repository: ghcr.io/sorolens/sorolens-indexer
+    tag: ""
+    pullPolicy: IfNotPresent
+  # -- "single" runs one process that owns every shard. "sharded" runs one
+  # coordinator and workers.replicas workers sharing a Postgres shard store.
+  mode: single
+  pollInterval: 5m
+  metricsPort: 9100
+  sharding:
+    # -- Total shards. Must stay the same across a running cluster.
+    shardCount: 64
+    workers:
+      replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  extraEnv: []
+  podDisruptionBudget:
+    # -- Only applies to sharded workers; the single indexer and the
+    # coordinator are one pod each and are replaced, not kept.
+    enabled: true
+    maxUnavailable: 1
+  # The indexer serves Prometheus metrics; answering on that port is its
+  # health signal.
+  livenessProbe:
+    httpGet:
+      path: /metrics
+      port: metrics
+    initialDelaySeconds: 10
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /metrics
+      port: metrics
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+web:
+  # -- Deploy the Next.js dashboard. Sorolens publishes no dashboard image:
+  # build one with NEXT_PUBLIC_API_URL set to this deployment's public URL.
+  enabled: true
+  image:
+    # -- Required when web.enabled is true.
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  port: 3000
+  # -- Writable emptyDir mounts on the read-only root filesystem. The
+  # default suits the Next.js standalone image layout (WORKDIR /app).
+  writablePaths:
+    - /tmp
+    - /app/.next/cache
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      memory: 512Mi
+  extraEnv: []
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  livenessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# A Job, run as a pre-install and pre-upgrade hook, that applies pending SQL
+# migrations before the new API starts. Off by default; see the Kubernetes
+# guide for the migrations image.
+migrations:
+  enabled: false
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  # -- Command run by the Job. The default mirrors the repository's compose
+  # migrate service: apply every *.up.sql on a fresh database with psql and
+  # skip when the schema already exists.
+  command:
+    - /bin/sh
+    - -c
+    - |
+      if psql "$DATABASE_URL" -tAc "SELECT to_regclass('public.contracts')" | grep -q contracts; then
+        echo "schema already present; skipping migrations"; exit 0
+      fi
+      for f in $(ls /migrations/*.up.sql | sort); do echo "applying $f"; psql -q "$DATABASE_URL" -f "$f"; done
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # -- Host serving both the dashboard and the API: /api, /health and
+  # /readyz go to the API, everything else to the dashboard.
+  host: sorolens.example.com
+  tls:
+    enabled: false
+    # -- Secret holding the certificate, e.g. one cert-manager creates.
+    secretName: ""

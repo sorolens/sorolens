@@ -113,6 +113,38 @@ type v2Contract struct {
 	BackfillCompleteAt *string `json:"backfill_complete_at"`
 	Status             string  `json:"status"`
 	AddedAt            string  `json:"added_at"`
+	// Backfill is absent until the indexer has started the backfill.
+	Backfill *v2ContractBackfill `json:"backfill,omitempty"`
+}
+
+// v2ContractBackfill is contractBackfillResponse with v2 timestamps.
+type v2ContractBackfill struct {
+	OldestLedger int64   `json:"oldest_ledger"`
+	NewestLedger int64   `json:"newest_ledger"`
+	NextLedger   int64   `json:"next_ledger"`
+	LedgersTotal int64   `json:"ledgers_total"`
+	LedgersDone  int64   `json:"ledgers_done"`
+	Percent      float64 `json:"percent"`
+	StartedAt    string  `json:"started_at"`
+	UpdatedAt    string  `json:"updated_at"`
+	CompletedAt  *string `json:"completed_at"`
+}
+
+func v2ContractBackfillFromStore(b *store.BackfillProgress) *v2ContractBackfill {
+	if b == nil {
+		return nil
+	}
+	return &v2ContractBackfill{
+		OldestLedger: b.OldestLedger,
+		NewestLedger: b.NewestLedger,
+		NextLedger:   b.NextLedger,
+		LedgersTotal: b.LedgersTotal(),
+		LedgersDone:  b.LedgersDone(),
+		Percent:      b.Percent(),
+		StartedAt:    v2Time(b.StartedAt),
+		UpdatedAt:    v2Time(b.UpdatedAt),
+		CompletedAt:  v2TimePtr(b.CompletedAt),
+	}
 }
 
 func v2ContractFromStore(c store.Contract) v2Contract {
@@ -125,6 +157,7 @@ func v2ContractFromStore(c store.Contract) v2Contract {
 		BackfillCompleteAt: v2TimePtr(c.BackfillCompleteAt),
 		Status:             c.Status,
 		AddedAt:            v2Time(c.AddedAt),
+		Backfill:           v2ContractBackfillFromStore(c.Backfill),
 	}
 }
 
