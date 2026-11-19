@@ -29,3 +29,23 @@ jobs:
       - name: Run integration suite
         working-directory: tests/integration
         run: make integration-test
+
+      - name: Set up Python for fuzzer
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Schemathesis
+        run: pip install schemathesis
+
+      - name: Run OpenAPI contract fuzzing
+        run: |
+          chmod +x ./tests/fuzz/run_fuzzer.sh
+          ./tests/fuzz/run_fuzzer.sh
+
+      - name: Publish OpenAPI contract fuzzing report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-fuzz-report
+          path: tests/fuzz/reports/

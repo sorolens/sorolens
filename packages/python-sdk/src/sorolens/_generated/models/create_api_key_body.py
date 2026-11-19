@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
 from typing import Any, Self, TypeVar
 
@@ -20,11 +21,13 @@ class CreateApiKeyBody:
         name (str): Human-friendly key name.
         scopes (list[CreateApiKeyBodyScopesItem]): Scopes granted to the key.
         user_id (str | Unset): Optional user the key acts as. The user must exist. Omit for a scope-only key.
+        expires_at (datetime.datetime | Unset): Optional expiry timestamp. Expired keys are rejected by authentication.
     """
 
     name: str
     scopes: list[CreateApiKeyBodyScopesItem]
     user_id: str | Unset = UNSET
+    expires_at: datetime.datetime | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -37,6 +40,10 @@ class CreateApiKeyBody:
 
         user_id = self.user_id
 
+        expires_at: str | Unset = UNSET
+        if not isinstance(self.expires_at, Unset):
+            expires_at = self.expires_at.isoformat()
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -47,6 +54,8 @@ class CreateApiKeyBody:
         )
         if user_id is not UNSET:
             field_dict["user_id"] = user_id
+        if expires_at is not UNSET:
+            field_dict["expires_at"] = expires_at
 
         return field_dict
 
@@ -64,10 +73,18 @@ class CreateApiKeyBody:
 
         user_id = d.pop("user_id", UNSET)
 
+        _expires_at = d.pop("expires_at", UNSET)
+        expires_at: datetime.datetime | Unset
+        if isinstance(_expires_at, Unset):
+            expires_at = UNSET
+        else:
+            expires_at = datetime.datetime.fromisoformat(_expires_at)
+
         create_api_key_body = cls(
             name=name,
             scopes=scopes,
             user_id=user_id,
+            expires_at=expires_at,
         )
 
         create_api_key_body.additional_properties = d

@@ -362,6 +362,54 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /admin/audit:
+    get:
+      tags: [Audit]
+      summary: List audit events (admin role only)
+      description: >-
+        Structured trail of every state-changing API request, newest first.
+        Only a SHA-256 hash of each request body is stored, never the body.
+      operationId: listAuditEventsRoot
+      security:
+        - RoleAuth: [admin]
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Only events at or after this RFC 3339 timestamp.
+        - $ref: "#/components/parameters/Limit"
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Opaque cursor from next_cursor of the previous page.
+      responses:
+        "200":
+          description: Page of audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next_cursor]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEvent"
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor for the next page; empty when no more pages.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/admin/audit:
     get:
       tags: [Audit]
@@ -1435,6 +1483,10 @@ paths:
                     enum: [read:contracts, write:contracts, read:watchdog, admin:*]
                   minItems: 1
                   description: Scopes granted to the key.
+                expires_at:
+                  type: string
+                  format: date-time
+                  description: Optional expiry timestamp. Expired keys are rejected by authentication.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -5894,6 +5946,11 @@ components:
           format: date-time
           nullable: true
           description: When the key's secret was last rotated in place.
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the key expires, or null if it does not expire.
 
     ReportSubscription:
       type: object
