@@ -122,6 +122,13 @@ sorolens compare CAAA... CBBB... --window 7d
 sorolens compare CAAA... CBBB... CCCC... --json
 ```
 
+## Plugins
+
+Executables named `sorolens-<name>` on `PATH` become subcommands
+(`sorolens <name>`); `sorolens plugin list` shows them. Built-in commands cannot
+be shadowed and API keys are not passed to plugins unless `--plugin-api-key` is
+set. See [docs/cli-plugins.md](../docs/cli-plugins.md).
+
 ## Releasing
 
 `.goreleaser.yml` defines the release: three GOOS targets, `tar.gz` archives

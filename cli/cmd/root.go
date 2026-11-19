@@ -51,6 +51,12 @@ func init() {
 
 // Execute runs the root command. Call this from main().
 func Execute() {
+	if handled, code, err := tryPlugin(os.Args[1:], os.Stdout, os.Stderr); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+		}
+		os.Exit(code)
+	}
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
