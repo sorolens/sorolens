@@ -1,11 +1,18 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 import withPWA from "@ducanh2912/next-pwa";
+import withBundleAnalyzer from "@next/bundle-analyzer";
 
 const baseConfig: NextConfig = {
   outputFileTracingRoot: path.resolve(process.cwd(), "../.."),
   transpilePackages: ["@sorolens/ui", "@sorolens/xdr"],
 };
+
+// Bundle analysis (issue #614): run `pnpm build` with ANALYZE=true to emit
+// client/server/edge bundle reports (HTML + stats.json) in apps/web/.next.
+// The client report is what the performance budget in
+// performance-budget.json is measured against; see docs/performance.md.
+const analyzeEnabled = process.env.ANALYZE === "true";
 
 export default withPWA({
   dest: "public",
@@ -57,4 +64,4 @@ export default withPWA({
       },
     ],
   },
-})(baseConfig);
+})(withBundleAnalyzer({ enabled: analyzeEnabled })(baseConfig));

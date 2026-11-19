@@ -223,6 +223,12 @@ jobs:
           # at build time. Real values are set in Vercel project settings.
           NEXT_PUBLIC_API_URL: http://localhost:8080
         run: pnpm build
+      # Performance budget (issue #614): the production build's per-route
+      # first-load JS and total client JS must stay under the budgets in
+      # apps/web/performance-budget.json. See docs/performance.md.
+      - name: Check bundle size budget
+        working-directory: apps/web
+        run: node scripts/check-bundle-budget.mjs
 
   # ------------------------------------------------------------
   # End-to-end: Playwright for the dashboard and the mock RPC -> indexer ->
