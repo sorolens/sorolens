@@ -19,6 +19,7 @@ from .exceptions import (
     SorolensError,
     ValidationError,
 )
+from .retry import RetryPolicy, RetryTransport
 
 __version__ = "0.1.0"
 
@@ -31,6 +32,8 @@ __all__ = [
     "ForbiddenError",
     "NotFoundError",
     "RateLimitError",
+    "RetryPolicy",
+    "RetryTransport",
     "SorolensError",
     "ValidationError",
     "__version__",
