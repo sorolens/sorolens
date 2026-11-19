@@ -31,6 +31,34 @@ vi.mock("@/lib/network", () => ({
   networkFilter: () => undefined,
 }));
 
+const { searchParams, routerPush, routerReplace } = vi.hoisted(() => {
+  const searchParams = new URLSearchParams();
+  // The mocked router applies navigations to the shared searchParams, the
+  // way the real one updates the URL, so a test can simulate Back by
+  // reverting the params and re-rendering.
+  const applyTo = (url: string) => {
+    const queryIndex = url.indexOf("?");
+    const qs = queryIndex >= 0 ? url.slice(queryIndex + 1) : "";
+    for (const key of Array.from(searchParams.keys())) searchParams.delete(key);
+    for (const [key, value] of new URLSearchParams(qs)) {
+      searchParams.set(key, value);
+    }
+  };
+  const routerPush = vi.fn((url: string) => applyTo(url));
+  const routerReplace = vi.fn((url: string) => applyTo(url));
+  return { searchParams, routerPush, routerReplace };
+});
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => searchParams,
+  useRouter: () => ({
+    push: routerPush,
+    replace: routerReplace,
+    back: vi.fn(),
+  }),
+  usePathname: () => "/events",
+}));
+
 const listAllEvents =
   vi.fn<(params: Record<string, unknown>) => Promise<GlobalEventsResponse>>();
 vi.mock("@/lib/api", () => ({
@@ -38,6 +66,12 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import EventsExplorerPage from "./page";
+
+function resetQuery() {
+  for (const key of Array.from(searchParams.keys())) searchParams.delete(key);
+  routerPush.mockClear();
+  routerReplace.mockClear();
+}
 
 function render(ui: ReactNode) {
   return renderWithoutLocale(<LocaleProvider>{ui}</LocaleProvider>);
@@ -63,10 +97,12 @@ function event(n: number, overrides: Partial<GlobalEvent> = {}): GlobalEvent {
 
 beforeEach(() => {
   listAllEvents.mockReset();
+  resetQuery();
 });
 
 afterEach(() => {
   cleanup();
+  resetQuery();
 });
 
 describe("EventsExplorerPage", () => {
@@ -216,5 +252,126 @@ describe("EventsExplorerPage", () => {
     expect(screen.getByRole("table").parentElement).toHaveClass(
       "overflow-x-auto"
     );
+  });
+
+  // ---- URL-synced state (issue #618) --------------------------------------
+
+  it("restores the filters and page from the URL on first render", async () => {
+    listAllEvents.mockResolvedValue({ events: [event(1)], next_cursor: "" });
+    searchParams.set("contract", "CAAQ");
+    searchParams.set("type", "system");
+    searchParams.set("from", "2026-09-01");
+    searchParams.set("to", "2026-09-02");
+    searchParams.set("cursor", "cur-3");
+    searchParams.set("page", "3");
+
+    render(<EventsExplorerPage />);
+
+    await waitFor(() =>
+      expect(listAllEvents).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contractId: "CAAQ",
+          type: "system",
+          since: "2026-09-01T00:00:00Z",
+          until: "2026-09-02T23:59:59Z",
+          cursor: "cur-3",
+          limit: 25,
+        })
+      )
+    );
+    expect(screen.getByText("Page 3")).toBeInTheDocument();
+    // The form fields show the restored filters too.
+    expect(screen.getByLabelText("Contract ID")).toHaveValue("CAAQ");
+    expect(screen.getByLabelText("Event type")).toHaveValue("system");
+  });
+
+  it("pushes applied filters into the URL", async () => {
+    listAllEvents.mockResolvedValue({ events: [event(1)], next_cursor: "c2" });
+    render(<EventsExplorerPage />);
+    await screen.findByText("1,001");
+
+    fireEvent.change(screen.getByLabelText("Contract ID"), {
+      target: { value: "CAAQ" },
+    });
+    fireEvent.change(screen.getByLabelText("Event type"), {
+      target: { value: "system" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() =>
+      expect(listAllEvents).toHaveBeenLastCalledWith(
+        expect.objectContaining({ contractId: "CAAQ", type: "system" })
+      )
+    );
+    expect(routerPush).toHaveBeenCalledWith("/events?contract=CAAQ&type=system", {
+      scroll: false,
+    });
+  });
+
+  it("pushes the cursor and page number when paging forward", async () => {
+    listAllEvents.mockResolvedValue({
+      events: [event(1), event(2)],
+      next_cursor: "c2",
+    });
+    render(<EventsExplorerPage />);
+    await screen.findByText("1,001");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next →" }));
+    await waitFor(() =>
+      expect(listAllEvents).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cursor: "c2" })
+      )
+    );
+    expect(routerPush).toHaveBeenLastCalledWith("/events?cursor=c2&page=2", {
+      scroll: false,
+    });
+  });
+
+  it("restores the previous view when the query string changes (back/forward)", async () => {
+    listAllEvents.mockResolvedValue({ events: [event(1)], next_cursor: "" });
+    const view = render(<EventsExplorerPage />);
+    await screen.findByText("1,001");
+
+    fireEvent.change(screen.getByLabelText("Contract ID"), {
+      target: { value: "CZZZ" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() =>
+      expect(listAllEvents).toHaveBeenLastCalledWith(
+        expect.objectContaining({ contractId: "CZZZ" })
+      )
+    );
+
+    // Simulate browser Back: the query string reverts and the component
+    // re-renders with the previous params.
+    searchParams.delete("contract");
+    view.rerender(
+      <LocaleProvider>
+        <EventsExplorerPage />
+      </LocaleProvider>
+    );
+
+    await waitFor(() =>
+      expect(listAllEvents).toHaveBeenLastCalledWith(
+        expect.objectContaining({ contractId: undefined })
+      )
+    );
+    expect(screen.getByLabelText("Contract ID")).toHaveValue("");
+  });
+
+  it("drops malformed URL values back to defaults", async () => {
+    listAllEvents.mockResolvedValue({ events: [event(1)], next_cursor: "" });
+    searchParams.set("type", "nonsense");
+    searchParams.set("page", "zero");
+    searchParams.set("from", "not-a-date");
+
+    render(<EventsExplorerPage />);
+
+    await screen.findByText("1,001");
+    expect(listAllEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ type: undefined, cursor: undefined })
+    );
+    expect(screen.getByText("Page 1")).toBeInTheDocument();
+    expect(screen.getByLabelText("From (UTC)")).toHaveValue("");
   });
 });

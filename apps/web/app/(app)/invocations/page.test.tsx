@@ -110,6 +110,41 @@ vi.mock("@/lib/api", () => ({
   listInvocations: (...args: unknown[]) => mockListInvocations(...args),
 }));
 
+// ── Mock next/navigation (the page syncs its state to the URL) ─────────────
+const { searchParams, routerPush, routerReplace } = vi.hoisted(() => {
+  const searchParams = new URLSearchParams();
+  // The mocked router applies navigations to the shared searchParams, the
+  // way the real one updates the URL, so a test can simulate Back by
+  // reverting the params and re-rendering.
+  const applyTo = (url: string) => {
+    const queryIndex = url.indexOf("?");
+    const qs = queryIndex >= 0 ? url.slice(queryIndex + 1) : "";
+    for (const key of Array.from(searchParams.keys())) searchParams.delete(key);
+    for (const [key, value] of new URLSearchParams(qs)) {
+      searchParams.set(key, value);
+    }
+  };
+  const routerPush = vi.fn((url: string) => applyTo(url));
+  const routerReplace = vi.fn((url: string) => applyTo(url));
+  return { searchParams, routerPush, routerReplace };
+});
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => searchParams,
+  useRouter: () => ({
+    push: routerPush,
+    replace: routerReplace,
+    back: vi.fn(),
+  }),
+  usePathname: () => "/invocations",
+}));
+
+function resetQuery() {
+  for (const key of Array.from(searchParams.keys())) searchParams.delete(key);
+  routerPush.mockClear();
+  routerReplace.mockClear();
+}
+
 expect.extend(matchers);
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -178,6 +213,7 @@ async function renderPage() {
 describe("InvocationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetQuery();
     mockListInvocations.mockResolvedValue({
       invocations: INVOCATIONS,
       next_cursor: null,
@@ -186,6 +222,7 @@ describe("InvocationsPage", () => {
 
   afterEach(() => {
     cleanup();
+    resetQuery();
   });
 
   it("renders the heading and a row per invocation", async () => {
@@ -451,5 +488,105 @@ describe("InvocationsPage", () => {
       await screen.findByText("No invocations indexed yet")
     ).toBeInTheDocument();
     expect(screen.queryByText("Couldn't load invocations.")).toBeNull();
+  });
+
+  // ── URL-synced state (issue #618) ─────────────────────────────────────────
+
+  it("restores the filters and page from the URL on first render", async () => {
+    searchParams.set("contract", "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    searchParams.set("fn", "transfer");
+    searchParams.set("since", "2026-09-01");
+    searchParams.set("until", "2026-09-02");
+    searchParams.set("cursor", "cur-2");
+    searchParams.set("page", "2");
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(mockListInvocations).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contract_id: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          fn: "transfer",
+          since: "2026-09-01",
+          until: "2026-09-02",
+          cursor: "cur-2",
+          limit: 20,
+        })
+      );
+    });
+    expect(screen.getByText("Page 2")).toBeInTheDocument();
+    // The form fields show the restored filters too.
+    expect(
+      document.getElementById("invocations-contract-filter")
+    ).toHaveValue("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    expect(document.getElementById("invocations-fn-filter")).toHaveValue(
+      "transfer"
+    );
+  });
+
+  it("pushes applied filters into the URL", async () => {
+    mockListInvocations.mockResolvedValue({
+      invocations: INVOCATIONS,
+      next_cursor: null,
+    });
+    await renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByTestId("data-table-row")).toHaveLength(3);
+    });
+
+    fireEvent.change(document.getElementById("invocations-contract-filter")!, {
+      target: { value: " CZZZ " },
+    });
+    fireEvent.change(document.getElementById("invocations-fn-filter")!, {
+      target: { value: " transfer " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => {
+      expect(mockListInvocations).toHaveBeenLastCalledWith(
+        expect.objectContaining({ contract_id: "CZZZ", fn: "transfer" })
+      );
+    });
+    expect(routerPush).toHaveBeenCalledWith(
+      "/invocations?contract=CZZZ&fn=transfer",
+      { scroll: false }
+    );
+  });
+
+  it("pushes the cursor and page number when paging forward", async () => {
+    mockListInvocations.mockResolvedValue({
+      invocations: INVOCATIONS,
+      next_cursor: "c2",
+    });
+    await renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByTestId("data-table-row")).toHaveLength(3);
+    });
+
+    fireEvent.click(document.getElementById("invocations-next-page")!);
+    await waitFor(() => {
+      expect(mockListInvocations).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cursor: "c2" })
+      );
+    });
+    expect(routerPush).toHaveBeenLastCalledWith(
+      "/invocations?cursor=c2&page=2",
+      { scroll: false }
+    );
+  });
+
+  it("drops malformed URL values back to defaults", async () => {
+    searchParams.set("since", "not-a-date");
+    searchParams.set("page", "zero");
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(mockListInvocations).toHaveBeenCalledWith(
+        expect.objectContaining({ since: undefined, cursor: undefined })
+      );
+    });
+    expect(screen.getByText("Page 1")).toBeInTheDocument();
+    expect(document.getElementById("invocations-since-filter")).toHaveValue("");
   });
 });

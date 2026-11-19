@@ -80,3 +80,78 @@ export function previewEventData(value: unknown, max = 60): string {
       : formatEventData(value).replace(/\s+/g, " ");
   return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
 }
+
+// ---- URL-synced state (issue #618) -----------------------------------------
+//
+// The applied filters and the current page live in the query string
+// (?contract=&type=&from=&to=&cursor=&page=) so a filtered view is
+// shareable and survives reload.
+
+/** Event type values the explorer accepts; "" means "all types". */
+export const EVENT_TYPE_VALUES = ["", "contract", "system", "diagnostic"] as const;
+
+export type EventTypeFilter = (typeof EVENT_TYPE_VALUES)[number];
+
+/** The shareable state of the /events explorer. */
+export interface EventsUrlState {
+  contractId: string;
+  type: EventTypeFilter;
+  from: string;
+  to: string;
+  /** Cursor that loads the current page; "" is the first page. */
+  cursor: string;
+  /** 1-based page number, for display and for Prev/Next. */
+  page: number;
+}
+
+export const DEFAULT_EVENTS_URL_STATE: EventsUrlState = {
+  contractId: "",
+  type: "",
+  from: "",
+  to: "",
+  cursor: "",
+  page: 1,
+};
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Parses the shareable explorer state from query params. Unknown or
+ * malformed values fall back to defaults rather than failing: a mistyped
+ * shared link must still show the page.
+ */
+export function parseEventsUrlState(
+  params: URLSearchParams
+): EventsUrlState {
+  const rawType = params.get("type") ?? "";
+  const rawFrom = params.get("from") ?? "";
+  const rawTo = params.get("to") ?? "";
+  const rawPage = Number.parseInt(params.get("page") ?? "1", 10);
+  return {
+    contractId: (params.get("contract") ?? "").trim(),
+    type: (EVENT_TYPE_VALUES as readonly string[]).includes(rawType)
+      ? (rawType as EventTypeFilter)
+      : "",
+    from: DATE_RE.test(rawFrom) ? rawFrom : "",
+    to: DATE_RE.test(rawTo) ? rawTo : "",
+    cursor: params.get("cursor") ?? "",
+    page: Number.isFinite(rawPage) && rawPage >= 1 ? rawPage : 1,
+  };
+}
+
+/**
+ * Serializes the explorer state back to query params. Default values are
+ * omitted so an unfiltered first page has a clean URL.
+ */
+export function serializeEventsUrlState(
+  state: EventsUrlState
+): Record<string, string | undefined> {
+  return {
+    contract: state.contractId || undefined,
+    type: state.type || undefined,
+    from: state.from || undefined,
+    to: state.to || undefined,
+    cursor: state.cursor || undefined,
+    page: state.page > 1 ? String(state.page) : undefined,
+  };
+}
