@@ -88,4 +88,22 @@ test.describe("mobile shell", () => {
     );
     expect(overflow).toBeLessThanOrEqual(1);
   });
+
+  test("settings is usable on a mobile viewport", async ({ page }) => {
+    await mockApi(page);
+    await page.goto("/settings");
+    await expectHeading(page, "Settings");
+    await expect(page.getByTestId("settings-api-key")).toBeVisible();
+    await expect(page.getByTestId("settings-identity")).toBeVisible();
+  });
+
+  test("the header navigation exposes the integrations page", async ({
+    page,
+  }) => {
+    await mockApi(page);
+    await page.goto("/");
+    await expect(
+      page.locator("header nav").getByRole("link", { name: "Integrations" })
+    ).toBeVisible();
+  });
 });
