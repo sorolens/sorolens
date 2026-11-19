@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"errors"
 	"net/http"
 	"time"
@@ -92,7 +93,7 @@ func alertFromStore(a store.ContractAlert) contractAlertResponse {
 
 // ListMonitoredContracts handles GET /api/v1/watchdog/contracts.
 func (h *Handler) ListMonitoredContracts(w http.ResponseWriter, r *http.Request) {
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -114,7 +115,7 @@ func (h *Handler) ListMonitoredContracts(w http.ResponseWriter, r *http.Request)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"contracts":   resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 

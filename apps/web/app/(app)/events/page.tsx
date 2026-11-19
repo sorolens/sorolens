@@ -1,6 +1,14 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import {
+  Fragment,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { MonoId } from "@sorolens/ui";
 import { listAllEvents } from "@/lib/api";
@@ -9,22 +17,24 @@ import { TableSkeleton } from "@/components/Skeleton";
 import { ErrorState } from "@/components/ErrorState";
 import {
   FIRST_PAGE,
-  currentCursor,
   dateRangeError,
   dateRangeToBounds,
   formatEventData,
-  pageNumber,
   popPage,
   previewEventData,
   pushPage,
-  type CursorHistory,
+  parseEventsUrlState,
+  serializeEventsUrlState,
+  type EventsUrlState,
+  type EventTypeFilter,
 } from "@/lib/eventsExplorer";
-import type { EventType, GlobalEvent } from "@/lib/types";
+import { useQueryState } from "@/hooks/useQueryState";
+import type { GlobalEvent } from "@/lib/types";
 import { useLocale } from "@/lib/i18n";
 
 const PAGE_SIZE = 25;
 
-const EVENT_TYPES: { value: "" | EventType; label: string }[] = [
+const EVENT_TYPES: { value: EventTypeFilter; label: string }[] = [
   { value: "", label: "All types" },
   { value: "contract", label: "Contract" },
   { value: "system", label: "System" },
@@ -33,7 +43,7 @@ const EVENT_TYPES: { value: "" | EventType; label: string }[] = [
 
 interface Filters {
   contractId: string;
-  type: "" | EventType;
+  type: EventTypeFilter;
   from: string;
   to: string;
 }
@@ -121,18 +131,68 @@ function EventRow({ event }: { event: GlobalEvent }) {
   );
 }
 
-export default function EventsExplorerPage() {
+function EventsExplorerPage() {
   const { network } = useNetwork();
-  const [draft, setDraft] = useState<Filters>(NO_FILTERS);
-  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const [history, setHistory] = useState<CursorHistory>(FIRST_PAGE);
+
+  // Applied filters and the current page live in the URL (issue #618), so
+  // a filtered view survives reload and can be shared. The draft inputs are
+  // local until the form is submitted.
+  const [applied, setApplied] = useQueryState<EventsUrlState>({
+    parse: parseEventsUrlState,
+    serialize: serializeEventsUrlState,
+  });
+
+  const [draft, setDraft] = useState<Filters>({
+    contractId: applied.contractId,
+    type: applied.type,
+    from: applied.from,
+    to: applied.to,
+  });
   const [events, setEvents] = useState<GlobalEvent[]>([]);
   const [nextCursor, setNextCursor] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const cursor = currentCursor(history);
+  // The API paginates with forward-only opaque cursors, so "previous page"
+  // is a client-side stack of the cursors each visited page was loaded
+  // with. The URL holds the current cursor; the stack is session memory
+  // and collapses to the current page whenever the cursor arrives from
+  // the URL instead of our own pagination (reload, back, shared link).
+  const [history, setHistory] = useState<string[]>([applied.cursor || ""]);
+  useEffect(() => {
+    setHistory((h) =>
+      h[h.length - 1] === applied.cursor ? h : [applied.cursor || ""]
+    );
+  }, [applied.cursor]);
+
+  // Keep the form fields in step with the applied filters when they change
+  // through the URL (back/forward, shared link), without clobbering a
+  // half-typed draft while the user pages through results.
+  const appliedFilterKey = `${applied.contractId}\u0000${applied.type}\u0000${applied.from}\u0000${applied.to}`;
+  const prevFilterKey = useRef(appliedFilterKey);
+  useEffect(() => {
+    if (prevFilterKey.current !== appliedFilterKey) {
+      prevFilterKey.current = appliedFilterKey;
+      setDraft({
+        contractId: applied.contractId,
+        type: applied.type,
+        from: applied.from,
+        to: applied.to,
+      });
+    }
+  }, [appliedFilterKey, applied]);
+
+  const filters = useMemo(
+    () => ({
+      contractId: applied.contractId,
+      type: applied.type,
+      from: applied.from,
+      to: applied.to,
+    }),
+    [applied.contractId, applied.type, applied.from, applied.to]
+  );
+  const cursor = applied.cursor;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -166,27 +226,67 @@ export default function EventsExplorerPage() {
   }, [cursor, filters, network, reloadKey]);
 
   // A network switch changes the result set, so start from the first page.
+  const prevNetwork = useRef(network);
   useEffect(() => {
-    setHistory(FIRST_PAGE);
-  }, [network]);
+    if (prevNetwork.current === network) return;
+    prevNetwork.current = network;
+    setApplied(
+      (prev) =>
+        prev.cursor === "" && prev.page === 1
+          ? prev
+          : { ...prev, cursor: "", page: 1 },
+      "replace"
+    );
+  }, [network, setApplied]);
 
   const rangeError = dateRangeError(draft.from, draft.to);
-  const hasFilters = JSON.stringify(filters) !== JSON.stringify(NO_FILTERS);
+  const hasFilters = Boolean(
+    filters.contractId || filters.type || filters.from || filters.to
+  );
 
   const applyFilters = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
       if (rangeError) return;
-      setFilters({ ...draft, contractId: draft.contractId.trim() });
+      const next: EventsUrlState = {
+        contractId: draft.contractId.trim(),
+        type: draft.type,
+        from: draft.from,
+        to: draft.to,
+        cursor: "",
+        page: 1,
+      };
+      setApplied(next);
       setHistory(FIRST_PAGE);
     },
-    [draft, rangeError]
+    [draft, rangeError, setApplied]
   );
 
   const clearFilters = () => {
     setDraft(NO_FILTERS);
-    setFilters(NO_FILTERS);
+    setApplied((prev) => ({ ...prev, ...NO_FILTERS, cursor: "", page: 1 }));
     setHistory(FIRST_PAGE);
+  };
+
+  const goNextPage = () => {
+    if (!nextCursor) return;
+    setApplied((prev) => ({
+      ...prev,
+      cursor: nextCursor,
+      page: prev.page + 1,
+    }));
+    setHistory((h) => pushPage(h, nextCursor));
+  };
+
+  const goPrevPage = () => {
+    if (history.length <= 1) return;
+    const prevCursor = history[history.length - 2];
+    setApplied((prev) => ({
+      ...prev,
+      cursor: prevCursor,
+      page: Math.max(1, prev.page - 1),
+    }));
+    setHistory((h) => popPage(h));
   };
 
   return (
@@ -354,25 +454,25 @@ export default function EventsExplorerPage() {
         </div>
       )}
 
-      {!error && (events.length > 0 || pageNumber(history) > 1) && (
+      {!error && (events.length > 0 || applied.page > 1) && (
         <nav
           className="flex items-center justify-between"
           aria-label="Pagination"
         >
           <button
             type="button"
-            onClick={() => setHistory(popPage)}
-            disabled={loading || pageNumber(history) === 1}
+            onClick={goPrevPage}
+            disabled={loading || history.length <= 1}
             className={buttonClass}
           >
             ← Previous
           </button>
           <span className="text-xs text-[var(--color-text-secondary)]">
-            Page {pageNumber(history)}
+            Page {applied.page}
           </span>
           <button
             type="button"
-            onClick={() => setHistory((h) => pushPage(h, nextCursor))}
+            onClick={goNextPage}
             disabled={loading || !nextCursor}
             className={buttonClass}
           >
@@ -381,5 +481,15 @@ export default function EventsExplorerPage() {
         </nav>
       )}
     </div>
+  );
+}
+
+export default function EventsPage() {
+  // useSearchParams (inside useQueryState) requires a Suspense boundary for
+  // static rendering.
+  return (
+    <Suspense fallback={<TableSkeleton rows={8} />}>
+      <EventsExplorerPage />
+    </Suspense>
   );
 }
