@@ -414,6 +414,11 @@ paths:
     get:
       tags: [Stats]
       summary: Global index statistics
+      description: >-
+        Index-wide counts, served from a short-lived cache and never per-request
+        table scans. Large event, invocation and storage tables are counted from
+        the planner's row estimates; when that happens `approximate` is true and
+        the totals are close, not exact.
       operationId: getGlobalStats
       security:
         - ApiKeyAuth: [read:contracts]
@@ -424,7 +429,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [tracked_contracts, total_events, total_invocations, total_storage_entries]
+                required: [tracked_contracts, total_events, total_invocations, total_storage_entries, approximate]
                 properties:
                   tracked_contracts:
                     type: integer
@@ -432,12 +437,21 @@ paths:
                   total_events:
                     type: integer
                     format: int64
+                    description: Exact for small tables, estimated when the table is large.
                   total_invocations:
                     type: integer
                     format: int64
+                    description: Exact for small tables, estimated when the table is large.
                   total_storage_entries:
                     type: integer
                     format: int64
+                    description: Exact for small tables, estimated when the table is large.
+                  approximate:
+                    type: boolean
+                    description: >-
+                      True when total_events, total_invocations or
+                      total_storage_entries came from planner estimates instead
+                      of exact counts.
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -3928,7 +3942,10 @@ paths:
             type: string
         - name: limit
           in: query
-          description: Maximum number of results
+          description: >-
+            Maximum number of results (default 10, clamped to 200). A
+            non-numeric or non-positive value is rejected with 422
+            INVALID_LIMIT.
           required: false
           schema:
             type: integer
@@ -4026,6 +4043,9 @@ paths:
         - $ref: "#/components/parameters/ContractID"
         - name: limit
           in: query
+          description: >-
+            Page size (default 50). Values above 500 are clamped to 500, which
+            the store has always enforced.
           required: false
           schema:
             type: integer
@@ -5106,7 +5126,9 @@ components:
       required: false
       schema:
         type: string
-      description: Opaque pagination cursor from a previous response.
+      description: >-
+        Opaque pagination cursor from a previous response. A malformed or
+        unusable cursor is rejected with 422 INVALID_CURSOR.
     Limit:
       name: limit
       in: query
@@ -5115,7 +5137,10 @@ components:
         type: integer
         minimum: 1
         maximum: 200
-      description: Page size (default 50, clamped to 200).
+      description: >-
+        Page size (default 50). Values above 200 are clamped to 200, so no
+        endpoint returns more than the documented maximum; a non-numeric or
+        non-positive value is rejected with 422 INVALID_LIMIT.
     NetworkParam:
       name: network
       in: query
@@ -5123,7 +5148,9 @@ components:
       schema:
         type: string
         enum: [testnet, mainnet, futurenet, standalone]
-      description: Network filter; empty means all networks.
+      description: >-
+        Network filter; empty means all networks. An unknown network is
+        rejected with 422 INVALID_NETWORK.
     TagParam:
       name: tag
       in: query
@@ -5190,7 +5217,10 @@ components:
         type: integer
         minimum: 1
         maximum: 200
-      description: Page size (default 50, clamped to 200).
+      description: >-
+        Page size (default 50). Values above 200 are clamped to 200, so no
+        endpoint returns more than the documented maximum; a non-numeric or
+        non-positive value is rejected with 422 INVALID_LIMIT.
     V2Network:
       name: network
       in: query
@@ -5261,7 +5291,13 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     InvalidInput:
-      description: Invalid query or body input
+      description: >-
+        Invalid query or body input. Query-parameter errors carry one code per
+        class of mistake: INVALID_CURSOR (malformed or unusable cursor),
+        INVALID_NETWORK (unknown network), INVALID_DATE (unparsable or inverted
+        date range), INVALID_ENUM (value outside a documented enum) and
+        INVALID_LIMIT (non-numeric or non-positive limit). Sizes above the
+        documented maximum are clamped, not rejected.
       content:
         application/json:
           schema:
@@ -5401,6 +5437,10 @@ components:
               properties:
                 code:
                   type: string
+                  description: >-
+                    Stable machine-readable code. Query-parameter failures use
+                    INVALID_CURSOR, INVALID_NETWORK, INVALID_DATE, INVALID_ENUM
+                    or INVALID_LIMIT; other bad input uses INVALID_INPUT.
                   enum: [NOT_FOUND, INVALID_INPUT, INTERNAL, RATE_LIMITED, UNSUPPORTED_MEDIA_TYPE]
                 message:
                   type: string
@@ -6305,7 +6345,10 @@ components:
 
     V2GlobalStats:
       type: object
-      required: [tracked_contracts, total_events, total_invocations, total_storage_entries]
+      description: >-
+        Index-wide counts. Large tables are counted from planner estimates, in
+        which case `approximate` is true.
+      required: [tracked_contracts, total_events, total_invocations, total_storage_entries, approximate]
       properties:
         tracked_contracts:
           type: integer
@@ -6319,6 +6362,11 @@ components:
         total_storage_entries:
           type: integer
           format: int64
+        approximate:
+          type: boolean
+          description: >-
+            True when the event, invocation or storage totals are planner
+            estimates rather than exact counts.
 
     V2ContractRate:
       type: object

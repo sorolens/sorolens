@@ -68,7 +68,7 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput,
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork,
 			"network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
@@ -82,7 +82,7 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 	groups, next, err := h.Store.ListAlertGroups(r.Context(), q.Get("cursor"), intQuery(r, "limit", 100), f)
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidCursor) {
-			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidCursor, "invalid cursor")
 			return
 		}
 		h.Logger.Error("list alert groups", "err", err)
@@ -106,7 +106,7 @@ func (h *Handler) listAlertsFlat(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput,
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork,
 			"network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
@@ -120,7 +120,7 @@ func (h *Handler) listAlertsFlat(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidCursor) {
-			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidCursor, "invalid cursor")
 			return
 		}
 		h.Logger.Error("list alerts flat", "err", err)

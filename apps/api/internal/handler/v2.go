@@ -25,9 +25,9 @@ package handler
 // The field-level v1 → v2 mapping is documented in docs/api-v2.md.
 
 import (
-	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"encoding/json"
 	"errors"
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"net/http"
 	"strings"
 	"time"
@@ -96,7 +96,7 @@ func v2Str(s string) *string {
 func v2Cursor(w http.ResponseWriter, r *http.Request) (string, bool) {
 	raw, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidCursor, "invalid cursor")
 		return "", false
 	}
 	return raw, true
@@ -278,6 +278,9 @@ type v2GlobalStats struct {
 	TotalEvents         int64 `json:"total_events"`
 	TotalInvocations    int64 `json:"total_invocations"`
 	TotalStorageEntries int64 `json:"total_storage_entries"`
+	// Approximate mirrors the v1 field: true when any total is the planner's
+	// row estimate rather than an exact count (issue #776).
+	Approximate bool `json:"approximate"`
 }
 
 type v2ContractRate struct {
@@ -377,6 +380,7 @@ func (h *Handler) V2GlobalStats(w http.ResponseWriter, r *http.Request) {
 		TotalEvents:         gs.TotalEvents,
 		TotalInvocations:    gs.TotalInvocations,
 		TotalStorageEntries: gs.TotalStorageEntries,
+		Approximate:         gs.Approximate,
 	})
 }
 
@@ -390,7 +394,7 @@ func (h *Handler) V2ListContracts(w http.ResponseWriter, r *http.Request) {
 	}
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	contracts, nextRaw, err := h.Store.ListContracts(r.Context(), rawCursor, intQuery(r, "limit", 50), store.ContractFilters{
@@ -422,7 +426,7 @@ func (h *Handler) V2RegisterContract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validNetworks[req.Network] {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 
@@ -468,7 +472,7 @@ func (h *Handler) V2ListEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	limit := intQuery(r, "limit", 50)
@@ -561,7 +565,7 @@ func (h *Handler) V2ListInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	// v2 renames the v1 `fn` query parameter to `function_name`, matching the
@@ -599,7 +603,7 @@ func (h *Handler) V2ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 	}
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	f := store.StorageFilters{
@@ -704,7 +708,7 @@ func (h *Handler) V2GetContractHealthScore(w http.ResponseWriter, r *http.Reques
 func (h *Handler) V2WatchdogStats(w http.ResponseWriter, r *http.Request) {
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	s, err := h.Store.GetWatchdogStats(r.Context(), network)
@@ -731,7 +735,7 @@ func (h *Handler) V2ListMonitoredContracts(w http.ResponseWriter, r *http.Reques
 	}
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	items, nextRaw, err := h.Store.ListMonitoredContracts(r.Context(), rawCursor, intQuery(r, "limit", 50), network)
@@ -809,7 +813,7 @@ func (h *Handler) V2ListHealthChecks(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) V2ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	alerts, next, err := h.Store.ListAlerts(

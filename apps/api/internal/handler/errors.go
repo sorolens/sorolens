@@ -15,6 +15,16 @@ const (
 	CodeRateLimited      = "RATE_LIMITED"
 	CodeUnsupportedMedia = "UNSUPPORTED_MEDIA_TYPE"
 	CodeUnauthorized     = "UNAUTHORIZED"
+
+	// Query-parameter codes (issue #776). Each class of bad parameter gets its
+	// own code so a caller can tell which parameter to fix without parsing the
+	// message, and so the same class always reports the same code across list
+	// endpoints.
+	CodeInvalidCursor  = "INVALID_CURSOR"
+	CodeInvalidNetwork = "INVALID_NETWORK"
+	CodeInvalidDate    = "INVALID_DATE"
+	CodeInvalidEnum    = "INVALID_ENUM"
+	CodeInvalidLimit   = "INVALID_LIMIT"
 )
 
 type errorBody struct {

@@ -140,7 +140,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidCursor, "invalid cursor")
 		return
 	}
 	keys, nextRaw, err := h.Store.ListAPIKeys(r.Context(), rawCursor, intQuery(r, "limit", 50))

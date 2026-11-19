@@ -19,29 +19,28 @@ var validEventTypes = map[string]bool{
 // ListAllEvents handles GET /api/v1/events: the cross-contract events
 // explorer feed (issue #97), newest first.
 //
-// Query params: cursor, limit (default 50, max 200), contract_id (prefix
-// match), type (contract | system | diagnostic), network, since and until
-// (RFC 3339, inclusive bounds on ledger_closed_at).
+// Query params: cursor, limit (default 50, clamped to MaxPageSize), contract_id
+// (prefix match), type (contract | system | diagnostic), network, since and
+// until (RFC 3339, inclusive bounds on ledger_closed_at). A malformed cursor,
+// network, type or date is rejected with its own 422 code (issue #776).
 func (h *Handler) ListAllEvents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	rawCursor, ok := cursor.Decode(q.Get("cursor"))
+	rawCursor, ok := decodeCursor(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
-	network, ok := networkParam(r)
+	network, ok := networkFilter(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	eventType, ok := enumParam(w, r, "type", validEventTypes, "type must be one of: contract, system, diagnostic")
+	if !ok {
 		return
 	}
 	f := store.GlobalEventFilters{
 		ContractID: strings.ToUpper(strings.TrimSpace(q.Get("contract_id"))),
-		Type:       strings.TrimSpace(q.Get("type")),
+		Type:       eventType,
 		Network:    network,
-	}
-	if f.Type != "" && !validEventTypes[f.Type] {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "type must be one of: contract, system, diagnostic")
-		return
 	}
 	for _, p := range []struct {
 		key string
@@ -53,17 +52,21 @@ func (h *Handler) ListAllEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
-			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, p.key+" must be an RFC 3339 timestamp")
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidDate, p.key+" must be an RFC 3339 timestamp")
 			return
 		}
 		*p.dst = t
 	}
 	if !f.Since.IsZero() && !f.Until.IsZero() && f.Until.Before(f.Since) {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "until must not be before since")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidDate, "until must not be before since")
+		return
+	}
+	limit, ok := pageLimit(w, r, 50)
+	if !ok {
 		return
 	}
 
-	events, nextRaw, err := h.Store.ListAllEvents(r.Context(), rawCursor, intQuery(r, "limit", 50), f)
+	events, nextRaw, err := h.Store.ListAllEvents(r.Context(), rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list all events", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list events")

@@ -17,7 +17,8 @@ T = TypeVar("T", bound="ErrorErrorType0")
 class ErrorErrorType0:
     """
     Attributes:
-        code (ErrorErrorType0Code):
+        code (ErrorErrorType0Code): Stable machine-readable code. Query-parameter failures use INVALID_CURSOR,
+            INVALID_NETWORK, INVALID_DATE, INVALID_ENUM or INVALID_LIMIT; other bad input uses INVALID_INPUT.
         message (str):
         request_id (str | Unset):
     """

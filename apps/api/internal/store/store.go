@@ -76,7 +76,11 @@ type Store interface {
 	UpsertSyncState(ctx context.Context, s SyncState) error
 
 	// GetGlobalStats returns aggregate counts across all tracked contracts.
-	// Computed with a single SQL query.
+	// The contract count is exact; the event, invocation and storage totals
+	// come from the planner's row estimate once a table is large enough for
+	// that to be cheaper than COUNT(*), and Approximate reports when any of
+	// those estimates was used. Cached by the API layer (short TTL), so it is
+	// not run per request.
 	GetGlobalStats(ctx context.Context) (GlobalStats, error)
 
 	// CreateNextMonthPartition creates the partition for next month if it does not exist.

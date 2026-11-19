@@ -46,7 +46,7 @@ func (h *Handler) ListAuditEvents(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("since"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
-			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "since must be an RFC 3339 timestamp")
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidDate, "since must be an RFC 3339 timestamp")
 			return
 		}
 		since = t
@@ -54,20 +54,20 @@ func (h *Handler) ListAuditEvents(w http.ResponseWriter, r *http.Request) {
 
 	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidCursor, "invalid cursor")
 		return
 	}
 	var auditCursor int64
 	if rawCursor != "" {
 		n, err := strconv.ParseInt(rawCursor, 10, 64)
 		if err != nil || n <= 0 {
-			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidCursor, "invalid cursor")
 			return
 		}
 		auditCursor = n
 	}
 
-	events, next, err := h.Store.ListAuditEvents(r.Context(), since, auditCursor, intQuery(r, "limit", 100))
+	events, next, err := h.Store.ListAuditEvents(r.Context(), since, auditCursor, clampLimit(intQuery(r, "limit", 100), MaxPageSize))
 	if err != nil {
 		h.Logger.Error("list audit events", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list audit events")

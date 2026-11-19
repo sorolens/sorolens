@@ -61,6 +61,10 @@ def sync_detailed(
 ) -> Response[Error | GetGlobalStatsResponse200]:
     """Global index statistics
 
+     Index-wide counts, served from a short-lived cache and never per-request table scans. Large event,
+    invocation and storage tables are counted from the planner's row estimates; when that happens
+    `approximate` is true and the totals are close, not exact.
+
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
@@ -84,6 +88,10 @@ def sync(
 ) -> Error | GetGlobalStatsResponse200 | None:
     """Global index statistics
 
+     Index-wide counts, served from a short-lived cache and never per-request table scans. Large event,
+    invocation and storage tables are counted from the planner's row estimates; when that happens
+    `approximate` is true and the totals are close, not exact.
+
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
@@ -102,6 +110,10 @@ async def asyncio_detailed(
     client: AuthenticatedClient,
 ) -> Response[Error | GetGlobalStatsResponse200]:
     """Global index statistics
+
+     Index-wide counts, served from a short-lived cache and never per-request table scans. Large event,
+    invocation and storage tables are counted from the planner's row estimates; when that happens
+    `approximate` is true and the totals are close, not exact.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -123,6 +135,10 @@ async def asyncio(
     client: AuthenticatedClient,
 ) -> Error | GetGlobalStatsResponse200 | None:
     """Global index statistics
+
+     Index-wide counts, served from a short-lived cache and never per-request table scans. Large event,
+    invocation and storage tables are counted from the planner's row estimates; when that happens
+    `approximate` is true and the totals are close, not exact.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

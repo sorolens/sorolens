@@ -175,11 +175,19 @@ type ContractVersion struct {
 }
 
 // GlobalStats is a network-wide summary across all tracked contracts.
+//
+// Approximate is set when any of the totals was taken from the planner's
+// row estimate (pg_class.reltuples) instead of an exact COUNT(*). The contract
+// count is always exact; the event, invocation and storage totals fall back to
+// an exact count while a table is small enough for one to be cheap, because a
+// freshly created or truncated table has no usable estimate yet (see
+// approximateMinRows).
 type GlobalStats struct {
 	TrackedContracts    int64
 	TotalEvents         int64
 	TotalInvocations    int64
 	TotalStorageEntries int64
+	Approximate         bool
 }
 
 // AlertSubscription represents a webhook subscription for watchdog alerts.

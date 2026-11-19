@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -89,6 +90,42 @@ func TestResponseCacheOnContractRoutes(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("/metrics missing %s", want)
 		}
+	}
+}
+
+// TestResponseCacheOnGlobalStats covers issue #776: /stats/global is served
+// from the cache, and a contract registration (the only API write that changes
+// a count in the response) purges it so the new count is visible at once.
+func TestResponseCacheOnGlobalStats(t *testing.T) {
+	ms := seedRBACUsers(t)
+	srv := newCachedServer(t, ms)
+
+	first := doRequest(srv, http.MethodGet, "/api/v1/stats/global", "", "")
+	if first.Code != http.StatusOK || first.Header().Get("X-Cache") != "MISS" {
+		t.Fatalf("first stats read: %d X-Cache=%q", first.Code, first.Header().Get("X-Cache"))
+	}
+
+	second := doRequest(srv, http.MethodGet, "/api/v1/stats/global", "", "")
+	if second.Header().Get("X-Cache") != "HIT" {
+		t.Fatalf("second stats read: X-Cache=%q, want HIT", second.Header().Get("X-Cache"))
+	}
+	if second.Body.String() != first.Body.String() {
+		t.Fatalf("cached body changed: first %s, second %s", first.Body.String(), second.Body.String())
+	}
+
+	if w := doRequestAsUser(srv, http.MethodPost, "/api/v1/contracts", "", contributorUser, validContractBody); w.Code != http.StatusCreated {
+		t.Fatalf("register: %d %s", w.Code, w.Body.String())
+	}
+	third := doRequest(srv, http.MethodGet, "/api/v1/stats/global", "", "")
+	if third.Header().Get("X-Cache") != "MISS" {
+		t.Fatalf("stats read after a contract write: X-Cache=%q, want MISS", third.Header().Get("X-Cache"))
+	}
+	var body map[string]any
+	if err := json.NewDecoder(third.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if got := body["tracked_contracts"].(float64); got != 1 {
+		t.Fatalf("tracked_contracts after register = %v, want 1", got)
 	}
 }
 

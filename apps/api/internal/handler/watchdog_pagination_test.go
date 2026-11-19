@@ -214,7 +214,7 @@ func TestListMonitoredContractsInvalidCursor(t *testing.T) {
 			if code != http.StatusUnprocessableEntity {
 				t.Fatalf("want 422, got %d", code)
 			}
-			if body.Error.Code != "INVALID_INPUT" || body.Error.Message != "invalid cursor" {
+			if body.Error.Code != "INVALID_CURSOR" || body.Error.Message != "invalid cursor" {
 				t.Fatalf("unexpected error body: %+v", body.Error)
 			}
 

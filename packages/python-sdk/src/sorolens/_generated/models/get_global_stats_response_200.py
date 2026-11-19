@@ -15,15 +15,18 @@ class GetGlobalStatsResponse200:
     """
     Attributes:
         tracked_contracts (int):
-        total_events (int):
-        total_invocations (int):
-        total_storage_entries (int):
+        total_events (int): Exact for small tables, estimated when the table is large.
+        total_invocations (int): Exact for small tables, estimated when the table is large.
+        total_storage_entries (int): Exact for small tables, estimated when the table is large.
+        approximate (bool): True when total_events, total_invocations or total_storage_entries came from planner
+            estimates instead of exact counts.
     """
 
     tracked_contracts: int
     total_events: int
     total_invocations: int
     total_storage_entries: int
+    approximate: bool
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -35,6 +38,8 @@ class GetGlobalStatsResponse200:
 
         total_storage_entries = self.total_storage_entries
 
+        approximate = self.approximate
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -43,6 +48,7 @@ class GetGlobalStatsResponse200:
                 "total_events": total_events,
                 "total_invocations": total_invocations,
                 "total_storage_entries": total_storage_entries,
+                "approximate": approximate,
             }
         )
 
@@ -59,11 +65,14 @@ class GetGlobalStatsResponse200:
 
         total_storage_entries = d.pop("total_storage_entries")
 
+        approximate = d.pop("approximate")
+
         get_global_stats_response_200 = cls(
             tracked_contracts=tracked_contracts,
             total_events=total_events,
             total_invocations=total_invocations,
             total_storage_entries=total_storage_entries,
+            approximate=approximate,
         )
 
         get_global_stats_response_200.additional_properties = d

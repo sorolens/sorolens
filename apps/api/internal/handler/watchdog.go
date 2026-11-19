@@ -95,12 +95,12 @@ func alertFromStore(a store.ContractAlert) contractAlertResponse {
 func (h *Handler) ListMonitoredContracts(w http.ResponseWriter, r *http.Request) {
 	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidCursor, "invalid cursor")
 		return
 	}
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	items, nextRaw, err := h.Store.ListMonitoredContracts(r.Context(), rawCursor, intQuery(r, "limit", 50), network)
@@ -163,13 +163,13 @@ func (h *Handler) ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 	severity := r.URL.Query().Get("severity")
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	alerts, next, err := h.Store.ListAlerts(r.Context(), id, severity, network, r.URL.Query().Get("cursor"), intQuery(r, "limit", 100))
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidCursor) {
-			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidCursor, "invalid cursor")
 			return
 		}
 		h.Logger.Error("list alerts", "err", err)
@@ -190,7 +190,7 @@ func (h *Handler) ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WatchdogStats(w http.ResponseWriter, r *http.Request) {
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	s, err := h.Store.GetWatchdogStats(r.Context(), network)

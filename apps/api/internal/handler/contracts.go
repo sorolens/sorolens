@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"math"
 	"net/http"
 	"regexp"
@@ -168,6 +168,9 @@ type contractInvocationStatsResponse struct {
 
 // ---- helpers ----------------------------------------------------------------
 
+// intQuery reads an optional positive integer query parameter, falling back to
+// def when it is absent or malformed. Paginated ends of the API use pageLimit
+// instead, which bounds the value and reports a malformed one (issue #776).
 func intQuery(r *http.Request, key string, def int) int {
 	v := r.URL.Query().Get(key)
 	if v == "" {
@@ -405,22 +408,23 @@ func (h *Handler) RegisterContract(w http.ResponseWriter, r *http.Request) {
 // Query params: cursor, limit, network (testnet|mainnet|futurenet), status,
 // sort (id|label|network|status|added_at), dir (asc|desc).
 func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
-	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
+	rawCursor, ok := decodeCursor(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
-	network, ok := networkParam(r)
+	network, ok := networkFilter(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	sort, dir, ok := contractSortParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "sort must be one of: id, label, network, status, added_at; dir must be asc or desc")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidEnum, "sort must be one of: id, label, network, status, added_at; dir must be asc or desc")
 		return
 	}
-	limit := intQuery(r, "limit", 50)
+	limit, ok := pageLimit(w, r, 50)
+	if !ok {
+		return
+	}
 	tag := normalizeTag(r.URL.Query().Get("tag"))
 	if tag != "" && !validTag(tag) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, invalidTagMessage)
@@ -539,25 +543,30 @@ func (h *Handler) RemoveContractTag(w http.ResponseWriter, r *http.Request) {
 // ListEvents handles GET /api/v1/contracts/{id}/events.
 func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
+	rawCursor, ok := decodeCursor(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
-	network, ok := networkParam(r)
+	network, ok := networkFilter(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	var inSuccess *bool
-	if param := r.URL.Query().Get("in_successful_call"); param != "" {
-		if param == "true" {
-			v := true
-			inSuccess = &v
-		} else if param == "false" {
-			v := false
-			inSuccess = &v
-		}
+	if _, ok := enumParam(w, r, "in_successful_call", map[string]bool{"true": true, "false": true},
+		"in_successful_call must be true or false"); !ok {
+		return
+	}
+	switch r.URL.Query().Get("in_successful_call") {
+	case "true":
+		v := true
+		inSuccess = &v
+	case "false":
+		v := false
+		inSuccess = &v
+	}
+	limit, ok := pageLimit(w, r, 50)
+	if !ok {
+		return
 	}
 	f := store.EventFilters{
 		Type:             r.URL.Query().Get("type"),
@@ -567,7 +576,7 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		To:               uint32Query(r, "to"),
 		InSuccessfulCall: inSuccess,
 	}
-	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list events", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list events")
@@ -581,7 +590,7 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	// Postgres path uses; archive-backed pages are not cursor-paginated, so
 	// next_cursor stays empty.
 	if len(events) == 0 && h.Cold != nil && f.From > 0 && rawCursor == "" {
-		archived, coldErr := h.Cold.Events(r.Context(), contractID, f.From, f.To, intQuery(r, "limit", 50))
+		archived, coldErr := h.Cold.Events(r.Context(), contractID, f.From, f.To, limit)
 		if coldErr != nil {
 			h.Logger.Error("list archived events", "err", coldErr, "contract_id", contractID)
 		} else if len(archived) > 0 {
@@ -602,14 +611,16 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 // ListInvocations handles GET /api/v1/contracts/{id}/invocations.
 func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
+	rawCursor, ok := decodeCursor(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
-	network, ok := networkParam(r)
+	network, ok := networkFilter(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	limit, ok := pageLimit(w, r, 50)
+	if !ok {
 		return
 	}
 	f := store.InvocationFilters{
@@ -619,7 +630,7 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 		From:         uint32Query(r, "from"),
 		To:           uint32Query(r, "to"),
 	}
-	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list invocations", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list invocations")
@@ -728,29 +739,29 @@ func timeParam(r *http.Request, key string, endOfDay bool) (*time.Time, bool) {
 // (ledger bounds), and since/until (inclusive date or RFC3339 bounds on
 // ledger_closed_at).
 func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
-	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
+	rawCursor, ok := decodeCursor(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
 	cursorLedger, cursorTxHash, ok := cursor.ParseInvocation(rawCursor)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidCursor, "invalid cursor")
 		return
 	}
-	network, ok := networkParam(r)
+	network, ok := networkFilter(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
-	since, ok := timeParam(r, "since", false)
+	since, ok := dateParam(w, r, "since", false)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "since must be an RFC3339 timestamp or YYYY-MM-DD date")
 		return
 	}
-	until, ok := timeParam(r, "until", true)
+	until, ok := dateParam(w, r, "until", true)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "until must be an RFC3339 timestamp or YYYY-MM-DD date")
+		return
+	}
+	limit, ok := pageLimit(w, r, 50)
+	if !ok {
 		return
 	}
 
@@ -765,7 +776,7 @@ func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
 		Until:        until,
 	}
 	invs, nextLedger, nextTxHash, err := h.Store.ListAllInvocations(
-		r.Context(), cursorLedger, cursorTxHash, intQuery(r, "limit", 50), f,
+		r.Context(), cursorLedger, cursorTxHash, limit, f,
 	)
 	if err != nil {
 		h.Logger.Error("list all invocations", "err", err)
@@ -790,14 +801,16 @@ func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
 // ListStorageEntries handles GET /api/v1/contracts/{id}/storage.
 func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
+	rawCursor, ok := decodeCursor(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
-	network, ok := networkParam(r)
+	network, ok := networkFilter(w, r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	limit, ok := pageLimit(w, r, 50)
+	if !ok {
 		return
 	}
 	f := store.StorageFilters{
@@ -805,7 +818,7 @@ func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 		Status:     r.URL.Query().Get("status"),
 		Network:    network,
 	}
-	entries, nextRaw, err := h.Store.ListStorageEntries(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	entries, nextRaw, err := h.Store.ListStorageEntries(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list storage entries", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list storage entries")
@@ -1052,7 +1065,10 @@ func (h *Handler) StreamEvents(w http.ResponseWriter, r *http.Request) {
 // or label (issue #159).
 func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
-	limit := intQuery(r, "limit", 10)
+	limit, ok := pageLimit(w, r, 10)
+	if !ok {
+		return
+	}
 
 	contracts, err := h.Store.SearchContracts(r.Context(), q, limit)
 	if err != nil {

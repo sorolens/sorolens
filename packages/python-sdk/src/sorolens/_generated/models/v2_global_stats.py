@@ -12,18 +12,22 @@ T = TypeVar("T", bound="V2GlobalStats")
 
 @_attrs_define
 class V2GlobalStats:
-    """
+    """Index-wide counts. Large tables are counted from planner estimates, in which case `approximate` is true.
+
     Attributes:
         tracked_contracts (int):
         total_events (int):
         total_invocations (int):
         total_storage_entries (int):
+        approximate (bool): True when the event, invocation or storage totals are planner estimates rather than exact
+            counts.
     """
 
     tracked_contracts: int
     total_events: int
     total_invocations: int
     total_storage_entries: int
+    approximate: bool
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -35,6 +39,8 @@ class V2GlobalStats:
 
         total_storage_entries = self.total_storage_entries
 
+        approximate = self.approximate
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -43,6 +49,7 @@ class V2GlobalStats:
                 "total_events": total_events,
                 "total_invocations": total_invocations,
                 "total_storage_entries": total_storage_entries,
+                "approximate": approximate,
             }
         )
 
@@ -59,11 +66,14 @@ class V2GlobalStats:
 
         total_storage_entries = d.pop("total_storage_entries")
 
+        approximate = d.pop("approximate")
+
         v2_global_stats = cls(
             tracked_contracts=tracked_contracts,
             total_events=total_events,
             total_invocations=total_invocations,
             total_storage_entries=total_storage_entries,
+            approximate=approximate,
         )
 
         v2_global_stats.additional_properties = d

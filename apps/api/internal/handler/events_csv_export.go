@@ -31,7 +31,7 @@ func (h *Handler) ExportEventsCSV(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	network, ok := networkParam(r)
 	if !ok {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidNetwork, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
 	from, to, ok := ledgerRangeQuery(r)

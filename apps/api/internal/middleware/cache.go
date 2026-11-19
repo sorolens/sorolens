@@ -28,6 +28,11 @@ const (
 	CacheNamespaceContracts = "contracts"
 	CacheNamespaceWatchdog  = "watchdog"
 	CacheNamespaceLabels    = "labels"
+	// CacheNamespaceStats holds /stats/global (issue #776). It is purged when a
+	// contract is registered or untracked, because that is the one write in
+	// the API's own surface that changes a count in the response; indexer
+	// writes are reflected when the short TTL expires.
+	CacheNamespaceStats = "stats"
 )
 
 // cacheKeyPrefix is the Redis key prefix for cached responses; keys are

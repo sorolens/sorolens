@@ -232,8 +232,13 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 
 		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
 
-		// Stats
-		get("/stats/global", h.GlobalStats)
+		// Stats. Cached for CacheTTL (issue #776): the response aggregates
+		// every indexed table, so polling dashboards must not re-run the
+		// aggregate on every request. Contract writes purge the namespace
+		// below, so a freshly registered contract shows up immediately.
+		cacheStats := middleware.Cache(h.Cache, middleware.CacheNamespaceStats, h.CacheTTL, h.Logger)
+		purgeStats := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceStats)
+		r.With(scope, cacheStats).Get("/stats/global", h.GlobalStats)
 
 		// Live dashboard feeds (#139): the newest events across all tracked
 		// contracts, and per-contract events-per-minute buckets for the
@@ -289,11 +294,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// check (issue #140). It is a POST purely to keep the path
 		// unambiguous against /contracts/{id}; it never writes.
 		r.With(scope).Post("/contracts/validate", h.ValidateContract)
-		r.With(scope, contributor, purgeContracts).Post("/contracts", h.RegisterContract)
+		r.With(scope, contributor, purgeContracts, purgeStats).Post("/contracts", h.RegisterContract)
 		// Bulk untrack/tag over a selection (#176). Like registration it mutates
 		// shared state, so it needs the same contributor role, and it purges both
 		// caches since it can untrack contracts and retag them.
-		r.With(scope, contributor, purgeContracts, purgeLabels).Post("/contracts/batch", h.BatchContracts)
+		r.With(scope, contributor, purgeContracts, purgeLabels, purgeStats).Post("/contracts/batch", h.BatchContracts)
 		r.With(scope, contributor, purgeLabels).Post("/labels", h.CreateLabel)
 		r.With(scope, cacheLabels).Get("/labels", h.ListLabels)
 		r.With(scope, cacheLabels).Get("/resolve", h.ResolveLabel)

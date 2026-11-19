@@ -621,17 +621,79 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 
 // ---- global stats ---------------------------------------------------------
 
-// GetGlobalStats retrieves aggregated statistics about the tracked contracts, events, invocations, and storage entries.
+// approximateMinRows is the row estimate above which GetGlobalStats trusts the
+// planner instead of counting rows. pg_class.reltuples is free to read, so a
+// table with at least this many estimated rows gets its total from the planner;
+// below it (including the -1 "never analysed" state of a fresh table) an exact
+// COUNT(*) only reads a handful of pages, so the response stays exact and CI
+// fixtures never depend on when autovacuum last ran. Raise it, never lower it,
+// without measuring the count query on a table of the new size first.
+const approximateMinRows = 10_000
+
+// GetGlobalStats retrieves aggregated statistics about the tracked contracts,
+// events, invocations, and storage entries without scanning a large table on
+// every call. Contracts are counted exactly (the table stays small and the
+// count is index-only); the three high-volume tables use the planner's row
+// estimate when it is large enough to trust, and report Approximate so callers
+// can label the numbers as such.
 func (s *postgresStore) GetGlobalStats(ctx context.Context) (GlobalStats, error) {
-	row := s.pool.QueryRow(ctx, `
-		SELECT
-			(SELECT COUNT(*) FROM contracts)       AS tracked_contracts,
-			(SELECT COUNT(*) FROM events)          AS total_events,
-			(SELECT COUNT(*) FROM invocations)     AS total_invocations,
-			(SELECT COUNT(*) FROM storage_entries) AS total_storage_entries`)
 	var g GlobalStats
-	err := row.Scan(&g.TrackedContracts, &g.TotalEvents, &g.TotalInvocations, &g.TotalStorageEntries)
-	return g, err
+	var eventsEst, invocationsEst, storageEst int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			(SELECT COUNT(*) FROM contracts),
+			-- reltuples is float4 and -1 when the table has never been analysed.
+			-- Partitioned tables carry their rows in the partitions, so the
+			-- estimate is the sum of the children; for a plain table the LEFT
+			-- JOIN yields one row with a NULL child and the parent estimate is
+			-- used instead.
+			(SELECT GREATEST(COALESCE(SUM(child.reltuples), 0), parent.reltuples, 0)::bigint
+			   FROM pg_class parent
+			   LEFT JOIN pg_inherits inh ON inh.inhparent = parent.oid
+			   LEFT JOIN pg_class child ON child.oid = inh.inhrelid
+			  WHERE parent.oid = 'events'::regclass),
+			(SELECT GREATEST(COALESCE(SUM(child.reltuples), 0), parent.reltuples, 0)::bigint
+			   FROM pg_class parent
+			   LEFT JOIN pg_inherits inh ON inh.inhparent = parent.oid
+			   LEFT JOIN pg_class child ON child.oid = inh.inhrelid
+			  WHERE parent.oid = 'invocations'::regclass),
+			(SELECT GREATEST(COALESCE(SUM(child.reltuples), 0), parent.reltuples, 0)::bigint
+			   FROM pg_class parent
+			   LEFT JOIN pg_inherits inh ON inh.inhparent = parent.oid
+			   LEFT JOIN pg_class child ON child.oid = inh.inhrelid
+			  WHERE parent.oid = 'storage_entries'::regclass)`).
+		Scan(&g.TrackedContracts, &eventsEst, &invocationsEst, &storageEst)
+	if err != nil {
+		return GlobalStats{}, err
+	}
+
+	// Count exactly only the tables whose estimate is still too small to trust,
+	// so one large table never drags a COUNT(*) of another into the request.
+	var cols []string
+	var dests []any
+	g.TotalEvents, g.TotalInvocations, g.TotalStorageEntries = eventsEst, invocationsEst, storageEst
+	g.Approximate = true
+	if eventsEst < approximateMinRows {
+		cols = append(cols, "(SELECT COUNT(*) FROM events)")
+		dests = append(dests, &g.TotalEvents)
+	}
+	if invocationsEst < approximateMinRows {
+		cols = append(cols, "(SELECT COUNT(*) FROM invocations)")
+		dests = append(dests, &g.TotalInvocations)
+	}
+	if storageEst < approximateMinRows {
+		cols = append(cols, "(SELECT COUNT(*) FROM storage_entries)")
+		dests = append(dests, &g.TotalStorageEntries)
+	}
+	if len(cols) == 0 {
+		return g, nil
+	}
+	if err := s.pool.QueryRow(ctx, "SELECT "+strings.Join(cols, ", ")).Scan(dests...); err != nil {
+		return GlobalStats{}, err
+	}
+	// Any table that still needed a count keeps the whole response exact.
+	g.Approximate = len(cols) < 3
+	return g, nil
 }
 
 // ---- partition management -------------------------------------------------
