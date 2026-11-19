@@ -44,6 +44,7 @@ import { describeRetry, SlidingWindowRateLimiter } from "./ratelimit.js";
 import { ensureUserApiKey, revokeUserApiKey } from "./apikey.js";
 import type { Config } from "./config.js";
 import { ASSIGN_COMMANDS, handleAssignCommand } from "./assign-discord.js";
+import { COMMUNITY_COMMANDS, handleCommunityCommand } from "./community-discord.js";
 
 // Re-exported from command-definitions.ts so callers that only import
 // commands.ts still get the definitions; the split lets the register
@@ -231,6 +232,9 @@ async function handle(
 ) {
   if (ASSIGN_COMMANDS.has(interaction.commandName)) {
     return handleAssignCommand(interaction, ctx.config);
+  }
+  if (COMMUNITY_COMMANDS.has(interaction.commandName)) {
+    return handleCommunityCommand(interaction, ctx.config);
   }
   switch (interaction.commandName) {
     case "connect":

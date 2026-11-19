@@ -167,3 +167,37 @@ export async function listOpenUnassignedIssues(
     .filter((i) => !i.pull_request)
     .map((i) => ({ number: i.number, title: i.title, comments: i.comments }));
 }
+
+export interface MergedPR {
+  number: number;
+  author: string;
+  mergedAt: string;
+}
+
+/**
+ * Merged PRs in `repo`, optionally merged on/after `since` and before
+ * `until` (ISO timestamps), optionally by one author. Uses the search API,
+ * which caps at 1000 results per query.
+ */
+export async function listMergedPRs(
+  repo: string,
+  opts: { since?: string; until?: string; author?: string } = {}
+): Promise<MergedPR[]> {
+  const gh = requireClient();
+  let q = `repo:${repo} is:pr is:merged`;
+  if (opts.author) q += ` author:${opts.author}`;
+  if (opts.since && opts.until) q += ` merged:${opts.since}..${opts.until}`;
+  else if (opts.since) q += ` merged:>=${opts.since}`;
+  else if (opts.until) q += ` merged:<${opts.until}`;
+  const items = await gh.paginate(gh.search.issuesAndPullRequests, {
+    q,
+    per_page: 100,
+  });
+  return items
+    .filter((i) => i.user?.login)
+    .map((i) => ({
+      number: i.number,
+      author: i.user!.login,
+      mergedAt: i.pull_request?.merged_at ?? i.closed_at ?? "",
+    }));
+}
