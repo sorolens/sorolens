@@ -33,7 +33,8 @@ import {
 import {
   countWaveApplicants,
   formatAvailableSummary,
-  formatApplicationReply,
+  describeResponse,
+  remainingIssues,
   formatIssueList,
   parseIssueList,
   processApplication,
@@ -62,6 +63,11 @@ function deps(config: Config): AssignDeps {
     getLink: getByDiscord,
     isInPool,
     getGrant,
+    listPool,
+    removeFromPool,
+    setEnabled: (enabled: boolean) => {
+      updateAssignSettings({ enabled });
+    },
     listGrantsFor,
     claimIssue,
     releaseIssue,
@@ -100,15 +106,29 @@ export function registerAssignListener(client: Client, config: Config): void {
             channelId: message.channelId,
             memberRoles: new Set(member.roles.cache.keys()),
             content: message.content,
+            createdAt: message.createdTimestamp,
           },
           deps(config)
         )
       );
       if (result.kind === "ignore") return;
-      await message.reply({
-        content: formatApplicationReply(result),
-        allowedMentions: { repliedUser: true, parse: [] },
+      const response = describeResponse(result);
+      await message.react(response.reaction).catch((err) => {
+        console.warn("assign: could not react", err);
       });
+      if (response.reply) {
+        await message.reply({
+          content: response.reply,
+          allowedMentions: { repliedUser: true, parse: [] },
+        });
+      }
+      if (result.kind === "processed" && result.exhausted) {
+        await message.channel.send({
+          content:
+            "🎉 All released issues have been taken. Applications are now closed until the next release.",
+          allowedMentions: { parse: [] },
+        });
+      }
     } catch (err) {
       console.error("assign: failed to process message", err);
       try {
@@ -227,11 +247,14 @@ async function handleToggle(interaction: ChatInputCommandInteraction) {
     });
     return;
   }
-  updateAssignSettings({ enabled: on });
+  updateAssignSettings(on ? { enabled: true, openedAt: Date.now() } : { enabled: false });
+  const left = remainingIssues({ listPool, getGrant }).length;
   const warn =
-    on && listPool().length === 0
-      ? "\nNote: no issues are open yet. Add some with `/assign-issues add`."
-      : "";
+    on && left === 0
+      ? "\nNote: no issues are left to give out. Add some with `/assign-issues add`."
+      : on
+        ? `\n${left} issue(s) can be picked. Only messages sent from now on count, and applications close by themselves when all are taken.`
+        : "";
   await interaction.reply({
     content: `Issue applications are now **${on ? "ON" : "OFF"}**.${warn}`,
     flags: EPHEMERAL,
