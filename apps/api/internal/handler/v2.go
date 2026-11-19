@@ -25,6 +25,7 @@ package handler
 // The field-level v1 → v2 mapping is documented in docs/api-v2.md.
 
 import (
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -60,7 +61,7 @@ func v2Data[T any](items []T) []T {
 func v2Page[T any](items []T, nextRaw string) v2List[T] {
 	pg := v2Pagination{HasMore: nextRaw != ""}
 	if nextRaw != "" {
-		encoded := encodeCursor(nextRaw)
+		encoded := cursor.Encode(nextRaw)
 		pg.NextCursor = &encoded
 	}
 	return v2List[T]{Data: v2Data(items), Pagination: pg}
@@ -93,7 +94,7 @@ func v2Str(s string) *string {
 // v2Cursor decodes the opaque cursor, writing a 422 and returning ok=false
 // when it is malformed.
 func v2Cursor(w http.ResponseWriter, r *http.Request) (string, bool) {
-	raw, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	raw, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return "", false
