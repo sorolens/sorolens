@@ -407,6 +407,10 @@ This reference covers all environment variables parsed across `apps/api`, `servi
 | :--- | :--- | :--- | :--- | :--- |
 | `DATABASE_URL` | API / Indexer | **Yes** | — | PostgreSQL connection string (pooled for API, unpooled for direct). |
 | `DIRECT_DATABASE_URL` | API / Migrate | Optional | — | Non-pooled connection string used for schema migrations. |
+| `DB_MAX_CONNS` | API | Optional | `20` | Maximum number of connections in the API pgx pool. |
+| `DB_MIN_CONNS` | API | Optional | `2` | Minimum number of connections retained by the API pgx pool. Must not exceed `DB_MAX_CONNS`. |
+| `DB_MAX_CONN_LIFETIME` | API | Optional | `1h` | Maximum age of an API pgx connection before it is recycled. Set `0` to disable the age limit. |
+| `DB_MAX_CONN_IDLE_TIME` | API | Optional | `30m` | Maximum idle time before an API pgx connection is recycled. Set `0` to disable the idle limit. |
 | `REDIS_URL` | API / Indexer | **Yes** | — | Redis connection string (`redis://...` or `rediss://...` for TLS). |
 | `PORT` | API | Optional | `8080` | HTTP listen port for the API server. |
 | `METRICS_PORT` | API | Optional | — | Dedicated private admin port for `GET /metrics`. |
@@ -441,6 +445,10 @@ This reference covers all environment variables parsed across `apps/api`, `servi
 | `SMTP_FROM` | API | Optional | — | From email address for report digests. |
 | `SMTP_USER` / `SMTP_PASS` | API | Optional | — | Credentials for SMTP authentication. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`| API / Indexer | Optional | — | OpenTelemetry collector endpoint. |
+
+The API and its optional dedicated metrics listener reject incomplete HTTP
+request headers after 5 seconds (`ReadHeaderTimeout`) to limit slow-header
+connection attacks.
 
 ---
 
