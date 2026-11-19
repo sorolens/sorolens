@@ -72,6 +72,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 Reports
               </Link>
               <Link
+                href="/integrations"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                Integrations
+              </Link>
+              <Link
                 href="/groups"
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >

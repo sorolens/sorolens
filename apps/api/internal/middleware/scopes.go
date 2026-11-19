@@ -85,6 +85,11 @@ var routeScopes = map[string]string{
 	"GET /api/v1/watched-accounts":         ScopeReadContracts,
 	"DELETE /api/v1/watched-accounts/{id}": ScopeWriteContracts,
 
+	// Integrations catalog and test-send (issue #612). Reads follow the
+	// contracts read scope; the test send is a write.
+	"GET /api/v1/integrations":            ScopeReadContracts,
+	"POST /api/v1/integrations/{id}/test": ScopeWriteContracts,
+
 	"GET /api/v1/watchdog/stats":                 ScopeReadWatchdog,
 	"GET /api/v1/watchdog/alerts":                ScopeReadWatchdog,
 	"GET /api/v1/watchdog/contracts":             ScopeReadWatchdog,
@@ -100,6 +105,13 @@ var routeScopes = map[string]string{
 	"DELETE /api/v1/watchdog/subscriptions/{id}":             ScopeWriteContracts,
 	"GET /api/v1/watchdog/subscriptions/{id}/signing-secret": ScopeAdmin,
 	"POST /api/v1/watchdog/subscriptions/{id}/rotate":        ScopeAdmin,
+
+	// Self-service keys (issue #613): a workspace session is not an API key,
+	// so RequireScopes lets it through; these entries only constrain callers
+	// that authenticate with a scoped key.
+	"GET /api/v1/me/api-keys":         ScopeReadContracts,
+	"POST /api/v1/me/api-keys":        ScopeWriteContracts,
+	"DELETE /api/v1/me/api-keys/{id}": ScopeWriteContracts,
 
 	"GET /api/v1/api-keys":              ScopeAdmin,
 	"POST /api/v1/api-keys":             ScopeAdmin,
@@ -131,6 +143,13 @@ var routeScopes = map[string]string{
 	"GET /api/v2/watchdog/contracts/{id}":        ScopeReadWatchdog,
 	"GET /api/v2/watchdog/contracts/{id}/health": ScopeReadWatchdog,
 	"GET /api/v2/watchdog/contracts/{id}/alerts": ScopeReadWatchdog,
+
+	// Integrations and self-service keys mirror v1 (issues #612, #613).
+	"GET /api/v2/integrations":            ScopeReadContracts,
+	"POST /api/v2/integrations/{id}/test": ScopeWriteContracts,
+	"GET /api/v2/me/api-keys":             ScopeReadContracts,
+	"POST /api/v2/me/api-keys":            ScopeWriteContracts,
+	"DELETE /api/v2/me/api-keys/{id}":     ScopeWriteContracts,
 
 	"GET /api/v2/api-keys":              ScopeAdmin,
 	"POST /api/v2/api-keys":             ScopeAdmin,
