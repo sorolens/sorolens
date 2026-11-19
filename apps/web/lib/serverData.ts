@@ -7,12 +7,12 @@ import type {
 } from "@/lib/types";
 import { API_URL as DEFAULT_API_URL } from "@/lib/config";
 
-// Server-side base: NEXT_PUBLIC_API_URL still wins over the server-only
-// API_URL override, then the shared default; a trailing slash is stripped so
+// Use the private address for server-side requests, then the browser URL.
+// A trailing slash is stripped so
 // `${API_URL}${path}` never produces a double slash.
 const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL ??
   process.env.API_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
   DEFAULT_API_URL
 ).replace(/\/$/, "");
 

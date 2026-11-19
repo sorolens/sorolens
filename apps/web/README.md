@@ -118,6 +118,19 @@ See [.env.example](.env.example) for detailed comments and safe development plac
 
 ---
 
+Set `PUSH_INTERNAL_SECRET` to a long random server-only value to enable
+`PUT /api/push/subscribe`. The alert producer must send the same value in
+`X-Push-Secret`. Missing configuration or credentials return HTTP 401 before
+delivery. Web Push delivery also needs the VAPID key pair above.
+
+The subscription route accepts up to 8 KiB of JSON. It validates the browser
+keys and accepts HTTPS endpoints from the supported browser push providers
+(Google, Mozilla, Apple and Microsoft). Each web process holds up to 1,000
+subscriptions, allows 60 registration or deletion requests and 6 authenticated
+dispatch requests per minute, and processes one dispatch at a time. Limits
+return HTTP 429 with `Retry-After`. Subscriptions and counters reset on restart
+and are independent across replicas.
+
 ## Available Scripts
 
 Run these scripts from `apps/web/` (or from the root using `pnpm --filter @sorolens/web <script>`):

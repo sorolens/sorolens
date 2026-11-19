@@ -27,6 +27,11 @@ API_LDFLAGS   := -ldflags "-X $(API_BUILDINFO).Version=$(VERSION) -X $(API_BUILD
 up:
 	docker compose up -d
 
+## full: build and start the dashboard, API, indexer, and local infrastructure
+.PHONY: full
+full:
+	VERSION="$(VERSION)" GIT_SHA="$(GIT_SHA)" BUILT_AT="$(BUILT_AT)" docker compose --profile full up --build -d
+
 ## down: stop and remove all Docker services
 down:
 	docker compose down

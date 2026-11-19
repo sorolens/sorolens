@@ -1176,3 +1176,9 @@ the one-object-per-month layout bounds the work to the months touched.
 - `apps/web/hooks/usePushSubscription.ts` — React hook managing the push subscription lifecycle (idle → subscribing → subscribed → denied).
 - `apps/web/components/OfflineAlert.tsx` — `OfflineBanner` (shown when offline) + `OfflineAlertPanel` (the `/offline-alerts` page body).
 - `apps/web/app/offline-alerts/page.tsx` — dedicated page for the queued-alert view.
+
+
+The API applies CORS and browser security headers before route authentication,
+so successful responses, errors, and OPTIONS responses follow the same policy.
+Key management and admin routes opt out of HTTP caching and ETag validation.
+See the [OpenAPI description](docs/openapi.yaml) for the header contract.

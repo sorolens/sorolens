@@ -174,6 +174,38 @@ Admin: `GAZ3HN2QNDKWLOI2OQEG65KBJEAUP4PROR3FJNXNDY34UH547MN4CJUI`
 
 ---
 
+## Run the full stack with Docker Compose
+
+From the repository root, run:
+
+```sh
+docker compose --profile full up --build
+# Or run in the background and include Git build metadata:
+make full
+```
+
+The dashboard listens on http://localhost:3000 and the API on
+http://localhost:8080. Compose applies the database schema before starting
+the API and indexer. The stack runs against Stellar testnet by default. Copy
+`.env.example` to `.env` to change the network, ports, or push settings.
+When changing the API or web port, update `NEXT_PUBLIC_API_URL` or
+`CORS_ALLOWED_ORIGINS` respectively and rebuild the web image if its API URL
+changed. Enable the optional MinIO archive service with `--profile archive`.
+
+Build and report the local image sizes with:
+
+```sh
+docker compose --profile full build api indexer web
+docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' 'sorolens/*:local'
+docker compose --profile full down
+```
+
+The API and indexer run as non-root and have image health checks. The API
+checks `/readyz`, and the continuously running indexer checks `/metrics`.
+Their image definitions are shared by the integration suite and release
+workflow. For scheduled scans and release SBOMs, see
+[Supply chain scans](docs/supply-chain.md).
+
 ## Deploying the API as a standalone Docker service
 
 The Go API ships with a multi-stage `apps/api/Dockerfile` that produces a
