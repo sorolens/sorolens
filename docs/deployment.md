@@ -108,6 +108,7 @@ postgres://user:pass@ep-cool-cloud-123456.us-east-1.aws.neon.tech/sorolens?sslmo
 ### Applying Migrations
 
 The repository maintains an ordered sequence of migrations under `apps/api/internal/db/migrations/*.up.sql`.
+New migrations must follow the [zero-downtime migration policy](migrations.md), which CI enforces.
 
 To apply all migrations to your Neon database from your local machine:
 
