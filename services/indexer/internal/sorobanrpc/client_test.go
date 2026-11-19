@@ -430,3 +430,57 @@ func TestContractInstanceLedgerKey_RejectsBadIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestLimiter_NilSafe(t *testing.T) {
+	var l *Limiter
+	if err := l.Wait(context.Background()); err != nil {
+		t.Errorf("expected nil error on nil limiter, got %v", err)
+	}
+}
+
+func TestNewLimiter_InvalidOrZeroRPS(t *testing.T) {
+	if l := NewLimiter(0); l != nil {
+		t.Errorf("expected nil for rps=0, got %+v", l)
+	}
+	if l := NewLimiter(-5); l != nil {
+		t.Errorf("expected nil for rps=-5, got %+v", l)
+	}
+}
+
+func TestLimiter_RateSpacing(t *testing.T) {
+	// 50 requests per second = 20ms interval
+	l := NewLimiter(50)
+	ctx := context.Background()
+
+	// First call should not wait
+	start := time.Now()
+	if err := l.Wait(ctx); err != nil {
+		t.Fatalf("first Wait failed: %v", err)
+	}
+
+	// Second call should wait roughly 20ms
+	if err := l.Wait(ctx); err != nil {
+		t.Fatalf("second Wait failed: %v", err)
+	}
+	elapsed := time.Since(start)
+	if elapsed < 15*time.Millisecond {
+		t.Errorf("expected rate limiter to space requests by at least 15ms, took %v", elapsed)
+	}
+}
+
+func TestLimiter_ContextCancellation(t *testing.T) {
+	// 1 request per second = 1s interval
+	l := NewLimiter(1)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// First call succeeds immediately
+	if err := l.Wait(ctx); err != nil {
+		t.Fatalf("first Wait failed: %v", err)
+	}
+
+	// Cancel context and second call should abort
+	cancel()
+	if err := l.Wait(ctx); !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
+	}
+}
