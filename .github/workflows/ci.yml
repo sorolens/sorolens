@@ -29,8 +29,8 @@ concurrency:
 
 jobs:
   # ------------------------------------------------------------
-  # Go: API, indexer, CLI and Go client, generated-client drift,
-  # SDK coverage and the backup/restore scripts.
+  # Go: API, indexer, CLI and Go client, generated-client drift, OpenAPI
+  # compatibility, SDK coverage and the backup/restore scripts.
   # ------------------------------------------------------------
   go:
     name: Go
@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Go 1.26
         uses: actions/setup-go@v5
         with:
@@ -140,6 +142,35 @@ jobs:
         run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
       - name: Verify Go client has no diff
         run: git diff --exit-code -- packages/go-client/internal
+      # Issue #553: /api/v1 is frozen. Compare the PR spec with the base
+      # commit only when docs/openapi.yaml changed; keep this in the existing
+      # Go job so pull requests remain capped at five checks.
+      - name: Detect OpenAPI changes
+        id: openapi_changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --quiet "$BASE_SHA"...HEAD -- docs/openapi.yaml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "docs/openapi.yaml was not changed"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "docs/openapi.yaml changed"
+          fi
+      - name: Check OpenAPI for breaking changes
+        if: steps.openapi_changes.outputs.changed == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          go install github.com/oasdiff/oasdiff@v1.38.0
+          base_spec=$(mktemp)
+          trap 'rm -f "$base_spec"' EXIT
+          git show "$BASE_SHA:docs/openapi.yaml" > "$base_spec"
+          "$(go env GOPATH)/bin/oasdiff" breaking \
+            --format githubactions \
+            --fail-on WARN \
+            -- "$base_spec" docs/openapi.yaml
       # SDK coverage guard (issue #556): every operation declared in
       # docs/openapi.yaml must be exposed by each SDK, or be documented as an
       # intentional exclusion in scripts/sdk_coverage_allowlist.json.
