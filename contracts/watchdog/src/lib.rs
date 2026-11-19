@@ -8,8 +8,8 @@
 //! here and materialises them into the dashboard.
 
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error,
-    symbol_short, Address, Env, String, Symbol, Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address,
+    Env, String, Symbol, Vec,
 };
 
 // ---------------------------------------------------------------------------
@@ -547,10 +547,7 @@ impl WatchdogContract {
             for i in start..core::cmp::min(start + limit, total) {
                 if let Some(id) = registry.get(i) {
                     let key = DataKey::Health(id.clone());
-                    if let Some(record) = env
-                        .storage()
-                        .persistent()
-                        .get::<_, ContractHealth>(&key)
+                    if let Some(record) = env.storage().persistent().get::<_, ContractHealth>(&key)
                     {
                         Self::bump_persistent_ttl(&env, &key);
                         page.push_back(record);
