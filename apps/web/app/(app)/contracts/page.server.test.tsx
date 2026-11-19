@@ -12,34 +12,20 @@ vi.mock("@/lib/serverData", () => ({
 
 vi.mock("./ContractsClient", async () => {
   const React = await import("react");
-  const { default: useSWR } = await import("swr");
+  const { useSWRConfig } = await import("swr");
 
   return {
-    default: ({
-      initialSortColumn,
-      initialSortDirection,
-    }: {
-      initialSortColumn: string;
-      initialSortDirection: "asc" | "desc";
-    }) => {
-      const { data } = useSWR<ContractsListResponse>(
-        [
-          "contracts",
-          {
-            cursor: undefined,
-            limit: 20,
-            network: undefined,
-            tag: undefined,
-            sort: initialSortColumn,
-            dir: initialSortDirection,
-          },
-        ],
-        null
-      );
+    // The page no longer passes sort props (the client reads everything from
+    // the URL); what must reach the client is the SWR fallback the server
+    // seeded, so read it straight from the SWR context.
+    default: () => {
+      const { fallback } = useSWRConfig();
+      const seeded = Object.values(fallback ?? {})[0] as
+        ContractsListResponse | undefined;
       return React.createElement(
         "p",
         null,
-        data?.contracts?.[0]?.label ?? "No server data"
+        seeded?.contracts?.[0]?.label ?? "No server data"
       );
     },
   };

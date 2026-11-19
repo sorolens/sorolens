@@ -9,6 +9,7 @@
 
 import { storageGet, storageSet, storageRemove } from "./browser.js";
 import {
+  ALERT_SEVERITIES,
   DEFAULT_API_BASE_URL,
   DEFAULT_NETWORK,
   LOCAL_KEYS,
@@ -26,6 +27,8 @@ import {
  * @property {string} userId
  * @property {boolean} showInlineButtons
  * @property {boolean} trackWatchlist
+ * @property {boolean} notificationsEnabled
+ * @property {string[]} notifySeverities
  */
 
 /** @type {SorolensSettings} */
@@ -36,6 +39,8 @@ export const DEFAULT_SETTINGS = {
   userId: "",
   showInlineButtons: true,
   trackWatchlist: true,
+  notificationsEnabled: true,
+  notifySeverities: ["Critical", "Warning"],
 };
 
 /** Trims a user-entered base URL and drops a trailing slash. */
@@ -75,6 +80,8 @@ export async function getSettings() {
       [SYNC_KEYS.userId]: "",
       [SYNC_KEYS.showInlineButtons]: true,
       [SYNC_KEYS.trackWatchlist]: true,
+      [SYNC_KEYS.notificationsEnabled]: true,
+      [SYNC_KEYS.notifySeverities]: DEFAULT_SETTINGS.notifySeverities,
     }),
   ]);
   const network = String(prefs[SYNC_KEYS.network] || DEFAULT_NETWORK);
@@ -87,7 +94,16 @@ export async function getSettings() {
     userId: String(prefs[SYNC_KEYS.userId] || ""),
     showInlineButtons: prefs[SYNC_KEYS.showInlineButtons] !== false,
     trackWatchlist: prefs[SYNC_KEYS.trackWatchlist] !== false,
+    notificationsEnabled: prefs[SYNC_KEYS.notificationsEnabled] !== false,
+    notifySeverities: normalizeSeverities(prefs[SYNC_KEYS.notifySeverities]),
   };
+}
+
+/** Keeps only known severity names, de-duplicated and in API order. */
+export function normalizeSeverities(value) {
+  if (!Array.isArray(value)) return [...DEFAULT_SETTINGS.notifySeverities];
+  const wanted = new Set(value);
+  return ALERT_SEVERITIES.filter((severity) => wanted.has(severity));
 }
 
 /**
@@ -118,6 +134,16 @@ export async function saveSettings(patch) {
   }
   if (patch.trackWatchlist !== undefined) {
     sync[SYNC_KEYS.trackWatchlist] = Boolean(patch.trackWatchlist);
+  }
+  if (patch.notificationsEnabled !== undefined) {
+    sync[SYNC_KEYS.notificationsEnabled] = Boolean(
+      patch.notificationsEnabled
+    );
+  }
+  if (patch.notifySeverities !== undefined) {
+    sync[SYNC_KEYS.notifySeverities] = normalizeSeverities(
+      patch.notifySeverities
+    );
   }
   const writes = [];
   if (Object.keys(local).length > 0) writes.push(storageSet("local", local));

@@ -6,7 +6,7 @@ import {
   sendRuntimeMessage,
   sendTabMessage,
 } from "../shared/browser.js";
-import { NETWORKS } from "../shared/constants.js";
+import { ALERT_SEVERITIES, NETWORKS } from "../shared/constants.js";
 import { MESSAGE } from "../shared/messages.js";
 import { baseUrlToOriginPattern } from "../shared/storage.js";
 
@@ -19,6 +19,12 @@ const el = {
   network: document.getElementById("network"),
   trackWatchlist: document.getElementById("track-watchlist"),
   showInlineButtons: document.getElementById("show-inline-buttons"),
+  notificationsEnabled: document.getElementById("notifications-enabled"),
+  notifySeverities: {
+    Critical: document.getElementById("notify-critical"),
+    Warning: document.getElementById("notify-warning"),
+    Info: document.getElementById("notify-info"),
+  },
   saveButton: document.getElementById("save-button"),
   testButton: document.getElementById("test-button"),
   clearKeyButton: document.getElementById("clear-key-button"),
@@ -59,6 +65,18 @@ function fillForm(value) {
     : NETWORKS[0];
   el.trackWatchlist.checked = value.trackWatchlist;
   el.showInlineButtons.checked = value.showInlineButtons;
+  el.notificationsEnabled.checked = value.notificationsEnabled !== false;
+  const selected = new Set(value.notifySeverities || []);
+  for (const severity of ALERT_SEVERITIES) {
+    el.notifySeverities[severity].checked = selected.has(severity);
+  }
+}
+
+/** @returns {string[]} the checked severities, in API order. */
+function checkedSeverities() {
+  return ALERT_SEVERITIES.filter(
+    (severity) => el.notifySeverities[severity].checked
+  );
 }
 
 async function load() {
@@ -118,6 +136,8 @@ async function onSave(event) {
       network: el.network.value,
       trackWatchlist: el.trackWatchlist.checked,
       showInlineButtons: el.showInlineButtons.checked,
+      notificationsEnabled: el.notificationsEnabled.checked,
+      notifySeverities: checkedSeverities(),
     },
   });
   el.saveButton.disabled = false;

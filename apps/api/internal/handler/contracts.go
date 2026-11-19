@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"encoding/base64"
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -133,24 +133,6 @@ type contractInvocationStatsResponse struct {
 }
 
 // ---- helpers ----------------------------------------------------------------
-
-func encodeCursor(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	return base64.StdEncoding.EncodeToString([]byte(raw))
-}
-
-func decodeCursor(encoded string) (string, bool) {
-	if encoded == "" {
-		return "", true
-	}
-	b, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return "", false
-	}
-	return string(b), true
-}
 
 func intQuery(r *http.Request, key string, def int) int {
 	v := r.URL.Query().Get(key)
@@ -388,7 +370,7 @@ func (h *Handler) RegisterContract(w http.ResponseWriter, r *http.Request) {
 // Query params: cursor, limit, network (testnet|mainnet|futurenet), status,
 // sort (id|label|network|status|added_at), dir (asc|desc).
 func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -430,7 +412,7 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"contracts":   resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 
@@ -522,7 +504,7 @@ func (h *Handler) RemoveContractTag(w http.ResponseWriter, r *http.Request) {
 // ListEvents handles GET /api/v1/contracts/{id}/events.
 func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -578,14 +560,14 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"events":      resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 
 // ListInvocations handles GET /api/v1/contracts/{id}/invocations.
 func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -614,7 +596,7 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"invocations": resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 
@@ -682,24 +664,6 @@ func (h *Handler) GetContractInvocation(w http.ResponseWriter, r *http.Request) 
 
 // ---- global invocations -----------------------------------------------------
 
-// parseInvocationCursor decodes the raw (already base64-decoded) global
-// invocation cursor "<ledger>:<tx_hash>" into its keyset components. An empty
-// cursor means "start at the newest invocation".
-func parseInvocationCursor(raw string) (uint32, string, bool) {
-	if raw == "" {
-		return 0, "", true
-	}
-	ledgerStr, txHash, found := strings.Cut(raw, ":")
-	if !found || txHash == "" {
-		return 0, "", false
-	}
-	n, err := strconv.ParseUint(ledgerStr, 10, 32)
-	if err != nil || n == 0 {
-		return 0, "", false
-	}
-	return uint32(n), txHash, true
-}
-
 // timeParam parses an inclusive date or RFC3339 bound. A plain date is expanded
 // to the start (or, when endOfDay is set, the end) of that UTC day so that
 // ?since=2026-09-01&until=2026-09-30 covers the whole range.
@@ -729,12 +693,12 @@ func timeParam(r *http.Request, key string, endOfDay bool) (*time.Time, bool) {
 // (ledger bounds), and since/until (inclusive date or RFC3339 bounds on
 // ledger_closed_at).
 func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
-	cursorLedger, cursorTxHash, ok := parseInvocationCursor(rawCursor)
+	cursorLedger, cursorTxHash, ok := cursor.ParseInvocation(rawCursor)
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -784,14 +748,14 @@ func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"invocations": resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 
 // ListStorageEntries handles GET /api/v1/contracts/{id}/storage.
 func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -818,7 +782,7 @@ func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"storage":     resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 

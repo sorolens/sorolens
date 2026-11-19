@@ -1,0 +1,90 @@
+name: Mutation testing
+
+# Issue #849: scheduled mutation testing of the security-critical Go
+# packages. Deliberately NOT triggered on pull requests (CI is capped at
+# five PR checks); run it manually from the Actions tab with
+# workflow_dispatch, or wait for the weekly schedule.
+#
+# The baseline scores and the survivors worth killing live in
+# docs/mutation-testing.md; the run artifacts carry the raw report.
+
+on:
+  schedule:
+    # Every Monday 04:00 UTC, off the top of the hour to avoid contention.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-testing
+  cancel-in-progress: true
+
+jobs:
+  mutate:
+    name: Mutation score (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # auth and scopes, rate limiting (issue #849)
+          - name: middleware-auth-scopes-ratelimit
+            package: ./internal/middleware
+            match: RequiredScope|RequireScopes|extractAPIKey|lookupRequiredScope|IsAdminKey|Issue|Verify|mac|resolveIdentity|resolveSession|resolveAPIKey|resolveTrustedProxy|ProxyMAC|RateLimit|clientIP|requireRole
+          # cursor parsing
+          - name: cursor
+            package: ./internal/cursor
+            match: ""
+          # report/webhook HMAC signing
+          - name: reportdigest
+            package: ./internal/reportdigest
+            match: ""
+    env:
+      REPORT_DIR: mutation-report
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go 1.26
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: false
+      - name: Install go-mutesting
+        # The original zimmski/go-mutesting does not build on all platforms
+        # (syscall.Rlimit on Windows); the avito-tech fork does and is
+        # maintained.
+        run: go install github.com/avito-tech/go-mutesting/cmd/go-mutesting@latest
+      - name: Run mutation testing
+        env:
+          PACKAGE: ${{ matrix.package }}
+          MATCH: ${{ matrix.match }}
+        run: |
+          mkdir -p "$REPORT_DIR"
+          args=(/exec-timeout:20)
+          if [ -n "$MATCH" ]; then
+            args+=("/match:$MATCH")
+          fi
+          # These packages' tests need no database: they run against fakes
+          # and mocks only.
+          set -o pipefail
+          go-mutesting "${args[@]}" "$PACKAGE" 2>&1 | tee "$REPORT_DIR/${{ matrix.name }}.log"
+      - name: Summarize the score
+        run: |
+          echo "## Mutation score — ${{ matrix.name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 1 "$REPORT_DIR/${{ matrix.name }}.log" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "surviving mutants: $(grep -c '^FAIL' "$REPORT_DIR/${{ matrix.name }}.log" || true)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload mutation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-${{ matrix.name }}
+          path: apps/api/mutation-report/
+          retention-days: 30
+          if-no-files-found: error

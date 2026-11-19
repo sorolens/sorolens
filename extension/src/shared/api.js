@@ -20,14 +20,16 @@ import { REQUEST_TIMEOUT_MS } from "./constants.js";
 export class SorolensApiError extends Error {
   /**
    * @param {string} message
-   * @param {{ status?: number, code?: string, url?: string }} [details]
+   * @param {{ status?: number, code?: string, url?: string, retryAfter?: number }} [details]
    */
-  constructor(message, { status = 0, code = "", url = "" } = {}) {
+  constructor(message, { status = 0, code = "", url = "", retryAfter = 0 } = {}) {
     super(message);
     this.name = "SorolensApiError";
     this.status = status;
     this.code = code;
     this.url = url;
+    /** Seconds requested by Retry-After, or 0 when absent/invalid. */
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -131,6 +133,11 @@ export class SorolensClient {
             status: response.status,
             code: (payload && payload.code) || "",
             url,
+            retryAfter: parseRetryAfter(
+              response.headers && response.headers.get
+                ? response.headers.get("Retry-After")
+                : ""
+            ),
           }
         );
       }
@@ -231,6 +238,25 @@ export class SorolensClient {
   }
 
   /**
+   * `GET /api/v1/alerts?flat=true` — the raw alert feed, newest first.
+   * Optionally scoped to one contract.
+   *
+   * @param {{ contractId?: string, limit?: number }} [options]
+   * @returns {Promise<Array<Record<string, any>>>}
+   */
+  async listAlertsFlat({ contractId = "", limit = 100 } = {}) {
+    const payload = await this.request("GET", "/api/v1/alerts", {
+      params: {
+        flat: "true",
+        limit: String(limit),
+        ...(contractId ? { contract_id: contractId } : {}),
+      },
+    });
+    const alerts = (payload && payload.alerts) || [];
+    return Array.isArray(alerts) ? alerts : [];
+  }
+
+  /**
    * Reads both halves of "is this contract being watched?" in one round trip.
    * A failure on one side is reported in `error` instead of rejecting, so the
    * popup can render partial state.
@@ -317,6 +343,21 @@ export class SorolensClient {
     const inWatchlist = await this.removeFromWatchlist(contractId);
     return { contractId, inWatchlist };
   }
+}
+
+/**
+ * Parses a Retry-After header (seconds or an HTTP date) into seconds. Returns 0
+ * when the value is missing or unparseable, so callers can fall back to their
+ * own backoff.
+ * @param {string} value
+ */
+export function parseRetryAfter(value) {
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.ceil(seconds);
+  const at = Date.parse(value);
+  if (Number.isNaN(at)) return 0;
+  return Math.max(0, Math.ceil((at - Date.now()) / 1000));
 }
 
 /** Reads a JSON body without throwing on empty/invalid payloads. */
