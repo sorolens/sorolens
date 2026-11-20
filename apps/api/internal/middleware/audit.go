@@ -134,7 +134,7 @@ func auditEventFor(r *http.Request, status int, bodyHash string, at time.Time) s
 		ResourceType:    resourceType(pattern),
 		ResourceID:      resourceID(r),
 		IP:              clientIP(r),
-		UserAgent:       r.UserAgent(),
+		UserAgent:       RedactUserAgent(r.UserAgent()),
 		RequestBodyHash: bodyHash,
 		Status:          status,
 		At:              at,
