@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ExportJobStatus represents the state of an asynchronous export job.
@@ -71,6 +72,10 @@ func scanExportJob(row pgx.Row) (ExportJob, error) {
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			return ExportJob{}, ErrNotFound
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "22P02" {
 			return ExportJob{}, ErrNotFound
 		}
 		return ExportJob{}, err
@@ -164,6 +169,10 @@ func (s *postgresStore) DeleteExportJob(ctx context.Context, id string, userID s
 	query := `DELETE FROM export_jobs WHERE id = $1 AND user_id = $2`
 	cmd, err := s.pool.Exec(ctx, query, id, userID)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "22P02" {
+			return ErrNotFound
+		}
 		return fmt.Errorf("delete export job: %w", err)
 	}
 	if cmd.RowsAffected() == 0 {
