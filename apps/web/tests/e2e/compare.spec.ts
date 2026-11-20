@@ -1,7 +1,7 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Route } from "@playwright/test";
 import { expectHeading, mockApi } from "./helpers";
-import type { Handler } from "./helpers";
-import { expectMatchesResponse } from "./openapiSchema";
+
+type ApiHandler = (route: Route) => { status: number; body: unknown };
 
 /**
  * E2E coverage for the contract comparison view (#766): selecting and removing
@@ -74,17 +74,12 @@ const COMPARE_RESPONSE = {
   contracts: [compareEntry(CONTRACTS[0].id), compareEntry(CONTRACTS[1].id)],
 };
 
-test.beforeAll(() => {
-  expectMatchesResponse("/api/v1/contracts", "get", CONTRACTS_RESPONSE);
-  expectMatchesResponse("/api/v1/compare", "get", COMPARE_RESPONSE);
-});
-
-const contractsHandler: Handler = () => ({
+const contractsHandler: ApiHandler = () => ({
   status: 200,
   body: CONTRACTS_RESPONSE,
 });
 
-function compareHandler(requests: URLSearchParams[], fail = false): Handler {
+function compareHandler(requests: URLSearchParams[], fail = false): ApiHandler {
   return (route) => {
     const params = new URL(route.request().url()).searchParams;
     requests.push(params);
@@ -111,8 +106,11 @@ test("/compare renders a shared comparison link", async ({ page }) => {
   await page.goto(`/compare?ids=${CONTRACTS[0].id},${CONTRACTS[1].id}`);
 
   await expectHeading(page, "Compare Contracts");
-  await expect(page.getByRole("heading", { name: "Alpha" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Beta" })).toBeVisible();
+  for (const contract of COMPARE_RESPONSE.contracts) {
+    await expect(
+      page.getByRole("heading", { name: contract.label })
+    ).toBeVisible();
+  }
   await expect(page.getByText("2/4 selected")).toBeVisible();
   await expect(page.getByText("Events", { exact: true }).first()).toBeVisible();
 

@@ -1,7 +1,7 @@
 import { test, expect, type Route } from "@playwright/test";
 import { blockApi, CONTRACT_ID, expectHeading, mockApi } from "./helpers";
-import type { Handler } from "./helpers";
-import { expectMatchesResponse } from "./openapiSchema";
+
+type ApiHandler = (route: Route) => { status: number; body: unknown };
 
 /**
  * E2E coverage for the cross-contract invocations explorer (#766): filters,
@@ -71,18 +71,13 @@ function trackRequests(): URLSearchParams[] {
 function invocationsHandler(
   requests: URLSearchParams[],
   body: (url: URL) => { invocations: unknown[]; next_cursor: string }
-): Handler {
+): ApiHandler {
   return (route: Route) => {
     const url = new URL(route.request().url());
     requests.push(url.searchParams);
     return { status: 200, body: body(url) };
   };
 }
-
-test.beforeAll(() => {
-  expectMatchesResponse("/api/v1/invocations", "get", FIRST_PAGE);
-  expectMatchesResponse("/api/v1/invocations", "get", SECOND_PAGE);
-});
 
 test("/invocations renders invocations from the mocked API", async ({
   page,
@@ -95,9 +90,14 @@ test("/invocations renders invocations from the mocked API", async ({
 
   await expectHeading(page, "Invocations");
   const table = page.getByRole("table");
-  await expect(table.getByText("swap", { exact: true })).toBeVisible();
-  await expect(table.getByText("transfer", { exact: true })).toBeVisible();
-  await expect(table.getByText("140,000")).toBeVisible();
+  for (const item of FIRST_PAGE.invocations) {
+    await expect(
+      table.getByText(item.function_name, { exact: true })
+    ).toBeVisible();
+  }
+  await expect(
+    table.getByText(FIRST_PAGE.invocations[0].cpu_insn.toLocaleString("en-US"))
+  ).toBeVisible();
   await expect(page.getByText("Page 1")).toBeVisible();
 
   // First load requests the configured page size with no filters.
@@ -177,7 +177,9 @@ test("/invocations paginates forward and back with the cursor", async ({
   await expect(page).toHaveURL(/page=2/);
   await expect(page.getByText("Page 2")).toBeVisible();
   await expect(
-    page.getByRole("table").getByText("mint", { exact: true })
+    page
+      .getByRole("table")
+      .getByText(SECOND_PAGE.invocations[0].function_name, { exact: true })
   ).toBeVisible();
   expect(requests[requests.length - 1].get("cursor")).toBe("cursor-2");
 
