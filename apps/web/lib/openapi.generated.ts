@@ -336,6 +336,20 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
           },
         ],
       },
+      delete: {
+        operationId: "deleteContract",
+        summary: "Untrack one contract",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
     },
     "/api/v1/contracts/{id}/tags": {
       post: {
@@ -1583,6 +1597,20 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
       get: {
         operationId: "v2GetContract",
         summary: "Get one contract",
+        tags: ["API v2"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+      delete: {
+        operationId: "v2DeleteContract",
+        summary: "Untrack one contract",
         tags: ["API v2"],
         parameters: [
           {

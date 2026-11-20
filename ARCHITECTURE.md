@@ -522,9 +522,19 @@ Get a single contract's metadata and sync state.
 
 #### `DELETE /api/v1/contracts/:id`
 
-Stop tracking a contract. Data is retained but the indexer stops polling.
+Stop tracking a contract. Requires the `write:contracts` scope and at least
+the `contributor` role, like registration. Untracking is a soft delete: the
+contract status flips to `paused` while the row and all indexed history are
+retained, and the indexer stops polling it (it only polls contracts whose
+status is `pending`, `backfilling` or `active`). Re-registering the contract
+flips the status back to `pending` and resumes tracking. Deleting a contract
+that is already paused is a no-op; deleting one that was never registered
+returns `404`. This differs from the batch `untrack` action, which
+permanently deletes the contracts and their indexed data.
 
 **Response:** `204 No Content`.
+
+**Responses:** `204`, `401`, `403`, `404 Not Found`, `500`.
 
 ---
 
