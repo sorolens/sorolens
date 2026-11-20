@@ -840,12 +840,10 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 				"contract_id", contractID,
 				"err", err,
 			)
-			if parkErr := p.store.ParkTransaction(ctx, contractID, network, txHash, err.Error()); parkErr != nil {
-				p.log.Error("failed to park transaction", "tx_hash", txHash, "err", parkErr)
-			}
 			if p.metrics != nil {
 				p.metrics.AddParkedTransaction(network)
 			}
+			_ = p.store.InsertParkedTransaction(ctx, network, contractID, txHash, err.Error())
 			continue
 		}
 		if tx == nil {
