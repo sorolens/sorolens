@@ -16,7 +16,7 @@ This PR adds unit tests for issue #765 covering the following components:
 
 ### Canonical Domain Fix
 
-- Fixed domain from `sorolens.dev` → `sorolens.xyz` in `settings.test.ts` per domain validation requirements
+- Fixed domain from `sorolens.xyz` → `sorolens.xyz` in `settings.test.ts` per domain validation requirements
 
 ### Conventional Commits
 
