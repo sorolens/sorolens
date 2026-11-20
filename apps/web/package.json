@@ -13,6 +13,7 @@
     "test:coverage": "pnpm openapi:check && vitest run --coverage",
     "openapi:generate": "node scripts/generate-openapi.mjs",
     "openapi:check": "node scripts/generate-openapi.mjs --check",
+    "check:unused-exports": "node scripts/check-unused-exports.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -47,6 +48,7 @@
     "fake-indexeddb": "^6.2.5",
     "js-yaml": "^4.3.2",
     "jsdom": "^26.1.0",
+    "knip": "^6.46.1",
     "tailwindcss": "^4.1.6",
     "typescript": "^5.5.0",
     "vitest": "^2.1.9",

@@ -122,12 +122,6 @@ export interface VolumePoint {
   count: number;
 }
 
-/** One hour bucket of invocation frequency (issue #185). */
-export interface InvocationFrequencyPoint {
-  hour: string; // "HH:00" UTC hour start
-  count: number;
-}
-
 export type StatsResponse = ContractStats;
 
 /** One day of averaged per-invocation resource usage (issue #184). */

@@ -242,6 +242,12 @@ jobs:
         run: pnpm exec tsc --noEmit
       - name: Lint dashboard
         run: pnpm lint
+      # Unused-export guard (issue #760): ensures no dead components, hooks,
+      # or helpers remain or are introduced. Allowed exceptions are documented
+      # in apps/web/unused-exports.allowlist.json.
+      - name: Check unused exports
+        working-directory: apps/web
+        run: node scripts/check-unused-exports.mjs
       # These tests were never run in CI before this job existed, and 10 tests
       # in 5 files (NavigationProgress, CmdkSearch, LastUpdated, app layout, og)
       # already fail on main. The step is reported but does not fail the check
