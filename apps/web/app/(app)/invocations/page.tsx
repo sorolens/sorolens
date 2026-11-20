@@ -477,7 +477,10 @@ function InvocationsPage() {
 
       {/* Empty state */}
       {!loading && !error && sorted.length === 0 && (
-        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
+        <div
+          role="status"
+          className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center"
+        >
           <p className="text-lg font-medium text-[var(--color-text-primary)]">
             {filtersActive
               ? "No invocations match your filters"
@@ -488,6 +491,15 @@ function InvocationsPage() {
               ? "Try widening the date range or clearing the contract and function filters."
               : "Invocations appear here once the indexer has traced activity for tracked contracts."}
           </p>
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="mt-4 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       )}
 

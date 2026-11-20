@@ -7,6 +7,7 @@ import type { GroupSummary } from "@/lib/types";
 import { useSessionUserId } from "@/lib/useSession";
 import { StatCard } from "@/components/StatCard";
 import { CardSkeleton } from "@/components/Skeleton";
+import { EmptyState } from "@/components/EmptyState";
 
 function healthTone(score: number): "default" | "warning" | "danger" | "safe" {
   if (score >= 80) return "safe";
@@ -29,6 +30,7 @@ export default function GroupsPage() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -36,13 +38,13 @@ export default function GroupsPage() {
       return;
     }
     setLoading(true);
+    setLoadFailed(false);
     try {
       const data = await listGroups(userId);
       setGroups(data.groups ?? []);
     } catch {
-      // Backend not reachable yet: fall through to the empty state rather
-      // than showing an error the user cannot act on.
       setGroups([]);
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -132,21 +134,20 @@ export default function GroupsPage() {
       )}
 
       {!loading && groups.length === 0 && (
-        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
-          <p className="text-lg font-medium text-[var(--color-text-primary)]">
-            No groups yet
-          </p>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            Create a group above, then add contracts from the{" "}
-            <Link
-              href="/contracts"
-              className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
-            >
-              contracts page
-            </Link>
-            .
-          </p>
-        </div>
+        <EmptyState
+          variant={loadFailed ? "error" : "first-run"}
+          title={loadFailed ? "Could not load groups" : "No groups yet"}
+          description={
+            loadFailed
+              ? "Something went wrong while loading your groups. Try again in a moment."
+              : "Create a group above, then add contracts from the contracts page to see portfolio statistics."
+          }
+          action={
+            loadFailed
+              ? { label: "Retry", onClick: load }
+              : { label: "Browse contracts", href: "/contracts" }
+          }
+        />
       )}
 
       {!loading && groups.length > 0 && (

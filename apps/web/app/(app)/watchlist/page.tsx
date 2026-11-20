@@ -82,11 +82,21 @@ export default function WatchlistPage() {
       {!loading && !error && items.length === 0 && (
         <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-16 text-center border border-[var(--color-border)]">
           <p className="text-lg font-medium text-[var(--color-text-primary)]">
-            No bookmarks yet
+            {userId ? "Your watchlist is empty" : "Sign in to use your watchlist"}
           </p>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            Star a contract on the Contracts page to add it to your watchlist.
+            {userId
+              ? "Star a contract to add it here and track its activity."
+              : "Your bookmarked contracts are saved to your account."}
           </p>
+          {userId && (
+            <Link
+              href="/contracts"
+              className="mt-6 inline-flex items-center rounded-md bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              Browse contracts
+            </Link>
+          )}
         </div>
       )}
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EmptyState } from "@/components/EmptyState";
 import {
   createRule,
   deleteRule,
@@ -319,9 +320,17 @@ export default function RulesPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold">Saved rules</h2>
         {rules.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            No rules yet.
-          </p>
+          <EmptyState
+            variant="first-run"
+            title="No alert rules yet"
+            description="Write a rule in the editor above, or start from a sample rule, to get alerted when a contract behaves outside your SLOs."
+            primaryAction={{
+              label: "Start from a sample rule",
+              onClick: () => {
+                if (library.length > 0) useExample(library[0]);
+              },
+            }}
+          />
         ) : (
           <ul className="divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">
             {rules.map((rule) => (

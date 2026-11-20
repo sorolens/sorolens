@@ -34,6 +34,8 @@ export default async function ContractsPage({
       {/* The client derives its sort, filters and pagination from the URL;
           the seed below only warms the SWR fallback for the first page. */}
       <ContractsClient />
+      {/* Empty-state variants (first-run, no-results, error) are rendered inside
+          ContractsClient via the shared EmptyState component. */}
     </SWRConfig>
   );
 }

@@ -392,10 +392,18 @@ function EventsExplorerPage() {
       ) : loading && events.length === 0 ? (
         <TableSkeleton rows={8} />
       ) : events.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] p-10 text-center text-sm text-[var(--color-text-secondary)]">
+        <div
+          role="status"
+          className="rounded-lg border border-dashed border-[var(--color-border)] p-10 text-center text-sm text-[var(--color-text-secondary)]"
+        >
           {hasFilters ? (
             <>
-              <p>No events match these filters.</p>
+              <p className="font-medium text-[var(--color-text-primary)]">
+                No events match these filters.
+              </p>
+              <p className="mt-1 text-xs">
+                Try a different contract, event type or date range.
+              </p>
               <button
                 type="button"
                 onClick={clearFilters}
@@ -405,16 +413,21 @@ function EventsExplorerPage() {
               </button>
             </>
           ) : (
-            <p>
+            <div>
+              <p className="font-medium text-[var(--color-text-primary)]">
+                No events indexed yet.
+              </p>
+              <p className="mt-1 text-xs">
+                Track a contract to start seeing its events here.
+              </p>
               No events indexed yet.{" "}
               <Link
                 href="/contracts"
-                className="text-[var(--color-accent)] hover:underline"
+                className="mt-4 inline-block rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-[var(--color-bg-page)] hover:opacity-90"
               >
                 Track a contract
               </Link>{" "}
-              to start seeing events here.
-            </p>
+            </div>
           )}
         </div>
       ) : (
