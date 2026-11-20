@@ -34,7 +34,7 @@ func TestCORSHeadersAndPassthrough(t *testing.T) {
 			})
 
 			rec := httptest.NewRecorder()
-			CORS(next).ServeHTTP(rec, httptest.NewRequest(tt.method, "/api/v1/contracts", nil))
+			CORS("")(next).ServeHTTP(rec, httptest.NewRequest(tt.method, "/api/v1/contracts", nil))
 
 			if called != tt.wantNext {
 				t.Errorf("next called = %v, want %v", called, tt.wantNext)
@@ -46,31 +46,26 @@ func TestCORSHeadersAndPassthrough(t *testing.T) {
 	}
 }
 
-// TestCORSSetsAllowHeaders asserts every response, including a preflight,
-// advertises the cross-origin contract the browser needs.
-func TestCORSSetsAllowHeaders(t *testing.T) {
+// TestCORSPreflightHeaders asserts the preflight advertises the cross-origin
+// contract the browser needs.
+func TestCORSPreflightHeaders(t *testing.T) {
 	t.Parallel()
 
-	for _, method := range []string{http.MethodGet, http.MethodOptions} {
-		t.Run(method, func(t *testing.T) {
-			t.Parallel()
+	rec := httptest.NewRecorder()
+	CORS("")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(rec, httptest.NewRequest(http.MethodOptions, "/api/v1/events", nil))
 
-			rec := httptest.NewRecorder()
-			CORS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusOK)
-			})).ServeHTTP(rec, httptest.NewRequest(method, "/api/v1/events", nil))
-
-			want := map[string]string{
-				"Access-Control-Allow-Origin":  "*",
-				"Access-Control-Allow-Headers": "Content-Type, X-Request-ID, Authorization, X-API-Key",
-				"Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-			}
-			for header, value := range want {
-				if got := rec.Header().Get(header); got != value {
-					t.Errorf("%s = %q, want %q", header, got, value)
-				}
-			}
-		})
+	want := map[string]string{
+		"Access-Control-Allow-Origin":  "*",
+		"Access-Control-Allow-Headers": "Content-Type, X-Request-ID, Authorization, X-API-Key, If-None-Match, X-Identity-User-ID, X-Identity-Timestamp, X-Identity-Signature",
+		"Access-Control-Allow-Methods": "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
+		"Access-Control-Max-Age":       "600",
+	}
+	for header, value := range want {
+		if got := rec.Header().Get(header); got != value {
+			t.Errorf("%s = %q, want %q", header, got, value)
+		}
 	}
 }
 
@@ -80,7 +75,7 @@ func TestCORSKeepsHandlerStatusAndBody(t *testing.T) {
 	t.Parallel()
 
 	rec := httptest.NewRecorder()
-	CORS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	CORS("")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":"invalid API key"}`))
