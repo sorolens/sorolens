@@ -1,4 +1,8 @@
-//! Cursor pagination over `GET /api/v1/contracts`.
+//! Cursor pagination over the list endpoints.
+//!
+//! Contracts are walked by hand with `ListContractsParams::cursor` and
+//! `next_cursor`; events use `Client::contract_events_stream`, which follows
+//! the cursors lazily and stops on the last page.
 //!
 //! Run against a live server:
 //!
@@ -11,9 +15,12 @@
 
 #[cfg(feature = "async")]
 mod example {
+    use futures_util::{pin_mut, StreamExt};
     use httpmock::prelude::*;
     use httpmock::MockServer;
-    use sorolens_sdk::{Client, ListContractsParams};
+    use sorolens_sdk::{Client, ListContractEventsParams, ListContractsParams};
+
+    const CONTRACT_ID: &str = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
 
     const PAGE_2: &str = r#"{
       "contracts": [
@@ -64,6 +71,32 @@ mod example {
                         .body(include_str!("../tests/fixtures/contracts_page.json"));
                 })
                 .await;
+
+            // Events: the fixture page carries a cursor; the follow-up page ends the walk.
+            let events_path = format!("/api/v1/contracts/{CONTRACT_ID}/events");
+            let mut last_page: serde_json::Value =
+                serde_json::from_str(include_str!("../tests/fixtures/events_page.json"))?;
+            last_page["events"][0]["id"] = "evt_last".into();
+            last_page["next_cursor"] = "".into();
+            let last_page = last_page.to_string();
+            server
+                .mock_async(|when, then| {
+                    when.method(GET)
+                        .path(events_path.as_str())
+                        .query_param_exists("cursor");
+                    then.status(200)
+                        .header("content-type", "application/json")
+                        .body(last_page.as_str());
+                })
+                .await;
+            server
+                .mock_async(|when, then| {
+                    when.method(GET).path(events_path.as_str());
+                    then.status(200)
+                        .header("content-type", "application/json")
+                        .body(include_str!("../tests/fixtures/events_page.json"));
+                })
+                .await;
         }
 
         let client = Client::builder().base_url(base_url).build()?;
@@ -89,7 +122,27 @@ mod example {
         }
 
         println!("paginated through {} contracts", ids.len());
+
+        // The stream follows `next_cursor` for you, fetching one page at a time.
+        // Live runs stream the first contract listed; offline runs use the mocked one.
+        let events_contract = match (&live, ids.first()) {
+            (Some(_), Some(first)) => first.clone(),
+            _ => CONTRACT_ID.to_string(),
+        };
+        let events = client.contract_events_stream(
+            &events_contract,
+            ListContractEventsParams::default().limit(200),
+        );
+        pin_mut!(events);
+        let mut event_ids: Vec<String> = Vec::new();
+        while let Some(event) = events.next().await {
+            event_ids.push(event?.id);
+        }
+        println!("streamed {} events", event_ids.len());
+
         if live.is_none() {
+            assert_eq!(event_ids.len(), 2, "expected two pages of one event each");
+            assert_eq!(event_ids[1], "evt_last");
             assert_eq!(ids.len(), 3, "expected two pages totalling three contracts");
             let mut unique = ids.clone();
             unique.sort();

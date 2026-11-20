@@ -88,15 +88,26 @@ client = Client(api_key="sk_...", retry=False)  # disable
 
 ### Pagination iterators
 
-`contracts`, `events` and `invocations` expose `iter(...)`, which follows
-`next_cursor` until the last page. The async version is an async iterator and
-accepts the same arguments as `list(...)`.
+`client.iter_events(contract_id, ...)` and `client.iter_invocations(contract_id, ...)`
+walk every page for you, and `contracts`, `events` and `invocations` expose the same
+walk as `iter(...)`. On `AsyncClient` they are async iterators. They take the same
+filters as `list(...)` and:
+
+- fetch pages lazily: the next page is requested only once the current one is used up;
+- stop on the first empty `next_cursor`;
+- clamp `limit` (the page size) to the server maximum of 200, and reject a limit below 1;
+- raise a failed request's error after yielding the items already received;
+- raise `PaginationError` if the API hands back a cursor the walk already requested,
+  instead of looping.
 
 ```python
-for contract in client.contracts.iter(limit=100, network="testnet"):
+for event in client.iter_events(contract_id, limit=200):
     ...
 
-async for event in async_client.events.iter(contract_id, limit=100):
+async for invocation in async_client.iter_invocations(contract_id, status="FAILED"):
+    ...
+
+for contract in client.contracts.iter(limit=100, network="testnet"):
     ...
 ```
 
@@ -169,7 +180,7 @@ live API when `SOROLENS_API_URL` is set:
 
 | Example                          | Shows                                                                            |
 | -------------------------------- | -------------------------------------------------------------------------------- |
-| [`pagination.py`](examples/pagination.py) | Walking every page of `client.contracts.list` via `next_cursor`.          |
+| [`pagination.py`](examples/pagination.py) | Walking `client.contracts.list` by hand, then `iter_events`/`iter_invocations`. |
 | [`errors.py`](examples/errors.py)         | `NotFoundError`, `ValidationError` and `RateLimitError` from real responses. |
 | [`sse.py`](examples/sse.py)               | Streaming `GET /api/v1/stream/events` incrementally with `httpx`.          |
 | [`webhooks.py`](examples/webhooks.py)     | Verifying `X-Sorolens-Signature` HMAC-SHA256 webhook deliveries.           |

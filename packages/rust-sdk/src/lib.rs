@@ -131,6 +131,8 @@ mod invocations;
 #[cfg(any(feature = "async", feature = "blocking"))]
 mod labels;
 #[cfg(any(feature = "async", feature = "blocking"))]
+mod pagination;
+#[cfg(any(feature = "async", feature = "blocking"))]
 mod reports;
 #[cfg(any(feature = "async", feature = "blocking"))]
 mod search;
@@ -164,6 +166,10 @@ pub use invocations::ListContractInvocationsParams;
 #[cfg(any(feature = "async", feature = "blocking"))]
 #[cfg(any(feature = "async", feature = "blocking"))]
 pub use labels::{AccountLabel, CreateLabelRequest, CreateLabelScope, LabelsResponse};
+#[cfg(any(feature = "async", feature = "blocking"))]
+pub use pagination::MAX_PAGE_SIZE;
+#[cfg(feature = "blocking")]
+pub use pagination::{ContractEventsIter, ContractInvocationsIter};
 
 #[cfg(any(feature = "async", feature = "blocking"))]
 pub use reports::{

@@ -150,6 +150,7 @@ from ._generated.models import (
     Watchlist,
 )
 from ._generated.types import UNSET, Response
+from ._pagination import CursorTracker, page_limit
 from .retry import DEFAULT_RETRY_POLICY, RetryPolicy, RetryTransport
 
 DEFAULT_BASE_URL = "https://api.sorolens.xyz"
@@ -284,14 +285,24 @@ class _Contracts(_SyncResource):
         network: str | None = None,
         status: str | None = None,
     ) -> Iterator[Contract]:
-        """Yield every contract across all cursor pages."""
+        """Yield every contract across all cursor pages, fetching each page lazily.
+
+        A page is requested only once the previous one is used up, and the walk
+        stops on the first empty ``next_cursor``. ``limit`` is the page size,
+        clamped to the server maximum of 200. If a request fails part-way, the
+        contracts already yielded stay with the caller and the error is raised on
+        the next step; a repeated cursor raises
+        :class:`~sorolens.exceptions.PaginationError`.
+        """
         cursor: str | None = None
+        limit = page_limit(limit)
+        cursors = CursorTracker()
         while True:
             page = self.list(cursor=cursor, limit=limit, network=network, status=status)
             yield from page.contracts
-            if not page.next_cursor:
+            cursor = cursors.advance(page.next_cursor)
+            if cursor is None:
                 return
-            cursor = page.next_cursor
 
     def list(
         self,
@@ -362,8 +373,18 @@ class _Events(_SyncResource):
         from_ledger: int | None = None,
         to_ledger: int | None = None,
     ) -> Iterator[Any]:
-        """Yield every event across all cursor pages."""
+        """Yield every event across all cursor pages, fetching each page lazily.
+
+        A page is requested only once the previous one is used up, and the walk
+        stops on the first empty ``next_cursor``. ``limit`` is the page size,
+        clamped to the server maximum of 200. If a request fails part-way, the
+        events already yielded stay with the caller and the error is raised on
+        the next step; a repeated cursor raises
+        :class:`~sorolens.exceptions.PaginationError`.
+        """
         cursor: str | None = None
+        limit = page_limit(limit)
+        cursors = CursorTracker()
         while True:
             page = self.list(
                 contract_id,
@@ -375,9 +396,9 @@ class _Events(_SyncResource):
                 to_ledger=to_ledger,
             )
             yield from page.events
-            if not page.next_cursor:
+            cursor = cursors.advance(page.next_cursor)
+            if cursor is None:
                 return
-            cursor = page.next_cursor
 
     def list(
         self,
@@ -420,8 +441,18 @@ class _Invocations(_SyncResource):
         from_ledger: int | None = None,
         to_ledger: int | None = None,
     ) -> Iterator[Any]:
-        """Yield every invocation across all cursor pages."""
+        """Yield every invocation across all cursor pages, fetching each page lazily.
+
+        A page is requested only once the previous one is used up, and the walk
+        stops on the first empty ``next_cursor``. ``limit`` is the page size,
+        clamped to the server maximum of 200. If a request fails part-way, the
+        invocations already yielded stay with the caller and the error is raised on
+        the next step; a repeated cursor raises
+        :class:`~sorolens.exceptions.PaginationError`.
+        """
         cursor: str | None = None
+        limit = page_limit(limit)
+        cursors = CursorTracker()
         while True:
             page = self.list(
                 contract_id,
@@ -434,9 +465,9 @@ class _Invocations(_SyncResource):
                 to_ledger=to_ledger,
             )
             yield from page.invocations
-            if not page.next_cursor:
+            cursor = cursors.advance(page.next_cursor)
+            if cursor is None:
                 return
-            cursor = page.next_cursor
 
     def list(
         self,
@@ -458,7 +489,7 @@ class _Invocations(_SyncResource):
                 limit=_value(limit),
                 network=_enum(ListContractInvocationsNetwork, network),
                 status=_enum(ListContractInvocationsStatus, status),
-                fn=_value(fn),
+                function_name=_value(fn),
                 from_=_value(from_ledger),
                 to=_value(to_ledger),
             )
@@ -867,6 +898,60 @@ class Client:
     def __exit__(self, *exc_info: Any) -> None:
         self._client.get_httpx_client().__exit__(*exc_info)
 
+    def iter_events(
+        self,
+        contract_id: str,
+        *,
+        limit: int | None = None,
+        network: str | None = None,
+        type: str | None = None,
+        from_ledger: int | None = None,
+        to_ledger: int | None = None,
+    ) -> Iterator[Any]:
+        """Iterate over every event of ``contract_id``, following cursors lazily.
+
+        Shorthand for ``client.events.iter(...)``::
+
+            for event in client.iter_events(contract_id, limit=200):
+                ...
+        """
+        return self.events.iter(
+            contract_id,
+            limit=limit,
+            network=network,
+            type=type,
+            from_ledger=from_ledger,
+            to_ledger=to_ledger,
+        )
+
+    def iter_invocations(
+        self,
+        contract_id: str,
+        *,
+        limit: int | None = None,
+        network: str | None = None,
+        status: str | None = None,
+        fn: str | None = None,
+        from_ledger: int | None = None,
+        to_ledger: int | None = None,
+    ) -> Iterator[Any]:
+        """Iterate over every invocation of ``contract_id``, following cursors lazily.
+
+        Shorthand for ``client.invocations.iter(...)``::
+
+            for invocation in client.iter_invocations(contract_id, status="FAILED"):
+                ...
+        """
+        return self.invocations.iter(
+            contract_id,
+            limit=limit,
+            network=network,
+            status=status,
+            fn=fn,
+            from_ledger=from_ledger,
+            to_ledger=to_ledger,
+        )
+
 
 # --------------------------------------------------------------------------- #
 # Asynchronous resources
@@ -912,15 +997,25 @@ class _AsyncContracts(_AsyncResource):
         network: str | None = None,
         status: str | None = None,
     ) -> AsyncIterator[Contract]:
-        """Yield every contract across all cursor pages."""
+        """Yield every contract across all cursor pages, fetching each page lazily.
+
+        A page is requested only once the previous one is used up, and the walk
+        stops on the first empty ``next_cursor``. ``limit`` is the page size,
+        clamped to the server maximum of 200. If a request fails part-way, the
+        contracts already yielded stay with the caller and the error is raised on
+        the next step; a repeated cursor raises
+        :class:`~sorolens.exceptions.PaginationError`.
+        """
         cursor: str | None = None
+        limit = page_limit(limit)
+        cursors = CursorTracker()
         while True:
             page = await self.list(cursor=cursor, limit=limit, network=network, status=status)
             for contract in page.contracts:
                 yield contract
-            if not page.next_cursor:
+            cursor = cursors.advance(page.next_cursor)
+            if cursor is None:
                 return
-            cursor = page.next_cursor
 
     async def list(
         self,
@@ -997,8 +1092,18 @@ class _AsyncEvents(_AsyncResource):
         from_ledger: int | None = None,
         to_ledger: int | None = None,
     ) -> AsyncIterator[Any]:
-        """Yield every event across all cursor pages."""
+        """Yield every event across all cursor pages, fetching each page lazily.
+
+        A page is requested only once the previous one is used up, and the walk
+        stops on the first empty ``next_cursor``. ``limit`` is the page size,
+        clamped to the server maximum of 200. If a request fails part-way, the
+        events already yielded stay with the caller and the error is raised on
+        the next step; a repeated cursor raises
+        :class:`~sorolens.exceptions.PaginationError`.
+        """
         cursor: str | None = None
+        limit = page_limit(limit)
+        cursors = CursorTracker()
         while True:
             page = await self.list(
                 contract_id,
@@ -1011,9 +1116,9 @@ class _AsyncEvents(_AsyncResource):
             )
             for event in page.events:
                 yield event
-            if not page.next_cursor:
+            cursor = cursors.advance(page.next_cursor)
+            if cursor is None:
                 return
-            cursor = page.next_cursor
 
     async def list(
         self,
@@ -1057,8 +1162,18 @@ class _AsyncInvocations(_AsyncResource):
         from_ledger: int | None = None,
         to_ledger: int | None = None,
     ) -> AsyncIterator[Any]:
-        """Yield every invocation across all cursor pages."""
+        """Yield every invocation across all cursor pages, fetching each page lazily.
+
+        A page is requested only once the previous one is used up, and the walk
+        stops on the first empty ``next_cursor``. ``limit`` is the page size,
+        clamped to the server maximum of 200. If a request fails part-way, the
+        invocations already yielded stay with the caller and the error is raised on
+        the next step; a repeated cursor raises
+        :class:`~sorolens.exceptions.PaginationError`.
+        """
         cursor: str | None = None
+        limit = page_limit(limit)
+        cursors = CursorTracker()
         while True:
             page = await self.list(
                 contract_id,
@@ -1072,9 +1187,9 @@ class _AsyncInvocations(_AsyncResource):
             )
             for invocation in page.invocations:
                 yield invocation
-            if not page.next_cursor:
+            cursor = cursors.advance(page.next_cursor)
+            if cursor is None:
                 return
-            cursor = page.next_cursor
 
     async def list(
         self,
@@ -1096,7 +1211,7 @@ class _AsyncInvocations(_AsyncResource):
                 limit=_value(limit),
                 network=_enum(ListContractInvocationsNetwork, network),
                 status=_enum(ListContractInvocationsStatus, status),
-                fn=_value(fn),
+                function_name=_value(fn),
                 from_=_value(from_ledger),
                 to=_value(to_ledger),
             )
@@ -1530,3 +1645,57 @@ class AsyncClient:
 
     async def __aexit__(self, *exc_info: Any) -> None:
         await self._client.get_async_httpx_client().__aexit__(*exc_info)
+
+    def iter_events(
+        self,
+        contract_id: str,
+        *,
+        limit: int | None = None,
+        network: str | None = None,
+        type: str | None = None,
+        from_ledger: int | None = None,
+        to_ledger: int | None = None,
+    ) -> AsyncIterator[Any]:
+        """Iterate over every event of ``contract_id``, following cursors lazily.
+
+        Shorthand for ``async_client.events.iter(...)``::
+
+            async for event in async_client.iter_events(contract_id, limit=200):
+                ...
+        """
+        return self.events.iter(
+            contract_id,
+            limit=limit,
+            network=network,
+            type=type,
+            from_ledger=from_ledger,
+            to_ledger=to_ledger,
+        )
+
+    def iter_invocations(
+        self,
+        contract_id: str,
+        *,
+        limit: int | None = None,
+        network: str | None = None,
+        status: str | None = None,
+        fn: str | None = None,
+        from_ledger: int | None = None,
+        to_ledger: int | None = None,
+    ) -> AsyncIterator[Any]:
+        """Iterate over every invocation of ``contract_id``, following cursors lazily.
+
+        Shorthand for ``async_client.invocations.iter(...)``::
+
+            async for invocation in async_client.iter_invocations(contract_id, status="FAILED"):
+                ...
+        """
+        return self.invocations.iter(
+            contract_id,
+            limit=limit,
+            network=network,
+            status=status,
+            fn=fn,
+            from_ledger=from_ledger,
+            to_ledger=to_ledger,
+        )
