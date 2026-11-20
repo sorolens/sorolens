@@ -392,7 +392,6 @@
         "operations": [
           "batchContracts",
           "deleteContract",
-          "compareContracts",
           "listRuleLibrary"
         ]
       },
