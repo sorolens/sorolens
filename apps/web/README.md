@@ -13,6 +13,7 @@ The official web dashboard for **SoroLens** — a real-time analytics, observabi
 - [Route Map](#route-map)
 - [End-to-End (E2E) Mock Strategy](#end-to-end-e2e-mock-strategy)
 - [How to Add a Page](#how-to-add-a-page)
+- [Dead Code & Unused-Export Guard](#dead-code--unused-export-guard)
 - [Project Structure](#project-structure)
 
 ---
@@ -99,11 +100,11 @@ cp .env.example .env.local
 | :-------------------------------- | :-------------- | :-------- | :------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_API_URL`             | Client & Server | Optional  | `http://localhost:8080`         | Base URL pointing to the SoroLens REST API backend.                                                                               |
 | `API_URL`                         | Server-only     | Optional  | `http://localhost:8080`         | Server-side override / fallback for the REST API URL in server components.                                                        |
-| `NEXT_PUBLIC_APP_URL`             | Client & Server | Optional  | `https://sorolens.dev`          | Canonical public origin. The single source for `metadataBase`, `robots.txt` and `sitemap.xml` (see `lib/siteUrl.ts`).             |
+| `NEXT_PUBLIC_APP_URL`             | Client & Server | Optional  | `https://sorolens.xyz`          | Canonical public origin. The single source for `metadataBase`, `robots.txt` and `sitemap.xml` (see `lib/siteUrl.ts`).             |
 | `NEXT_PUBLIC_PWA_ENABLED`         | Client & Server | Optional  | `false`                         | Set to `"true"` to enable service worker registration in development mode. Always active in production.                           |
 | `VAPID_PUBLIC_KEY`                | Client & Server | Optional* | —                               | Base64url-encoded EC P-256 public key for Web Push. Exposed via `/api/push/key`. Required only if push notifications are enabled. |
 | `VAPID_PRIVATE_KEY`               | Server-only     | Secret*   | —                               | Base64url-encoded EC P-256 private key for Web Push. **Never commit or expose publicly.**                                         |
-| `VAPID_SUBJECT`                   | Server-only     | Optional  | `mailto:admin@sorolens.dev`     | Contact URI for the VAPID JWT `sub` claim.                                                                                        |
+| `VAPID_SUBJECT`                   | Server-only     | Optional  | `mailto:admin@sorolens.xyz`     | Contact URI for the VAPID JWT `sub` claim.                                                                                        |
 | `PUSH_INTERNAL_SECRET`            | Server-only     | Secret*   | —                               | Shared secret token guarding `PUT /api/push/subscribe` (`x-push-secret` header).                                                  |
 | `NEXT_PUBLIC_SENTRY_DSN`          | Client & Server | Optional  | —                               | Client-side Sentry DSN for frontend exception tracking. Leave empty to disable.                                                   |
 | `NEXT_PUBLIC_PLAUSIBLE_DOMAIN`    | Client & Server | Optional  | —                               | Domain for Plausible Analytics. Only injected into production builds.                                                             |
@@ -122,17 +123,18 @@ See [.env.example](.env.example) for detailed comments and safe development plac
 
 Run these scripts from `apps/web/` (or from the root using `pnpm --filter @sorolens/web <script>`):
 
-| Command                 | Action                                                                             |
-| :---------------------- | :--------------------------------------------------------------------------------- |
-| `pnpm dev`              | Starts the Next.js development server on port 3000 with Fast Refresh.              |
-| `pnpm build`            | Automatically runs `openapi:generate`, then compiles the Next.js production build. |
-| `pnpm start`            | Runs the compiled Next.js server on port 3000.                                     |
-| `pnpm lint`             | Runs Next.js ESLint rules and code style checks.                                   |
-| `pnpm typecheck`        | Runs `tsc --noEmit` to verify TypeScript typings across the app.                   |
-| `pnpm test`             | Runs `openapi:check` followed by Vitest in a JSDOM environment.                    |
-| `pnpm test:e2e`         | Runs the Playwright end-to-end integration test suite.                             |
-| `pnpm openapi:generate` | Parses `docs/openapi.yaml` and regenerates `lib/openapi.generated.ts`.             |
-| `pnpm openapi:check`    | Verifies that `lib/openapi.generated.ts` is up-to-date with `docs/openapi.yaml`.   |
+| Command                     | Action                                                                             |
+| :-------------------------- | :--------------------------------------------------------------------------------- |
+| `pnpm dev`                  | Starts the Next.js development server on port 3000 with Fast Refresh.              |
+| `pnpm build`                | Automatically runs `openapi:generate`, then compiles the Next.js production build. |
+| `pnpm start`                | Runs the compiled Next.js server on port 3000.                                     |
+| `pnpm lint`                 | Runs Next.js ESLint rules and code style checks.                                   |
+| `pnpm typecheck`            | Runs `tsc --noEmit` to verify TypeScript typings across the app.                   |
+| `pnpm test`                 | Runs `openapi:check` followed by Vitest in a JSDOM environment.                    |
+| `pnpm test:e2e`             | Runs the Playwright end-to-end integration test suite.                             |
+| `pnpm check:unused-exports` | Scans for dead files, unused components, and orphaned exports via Knip guard.      |
+| `pnpm openapi:generate`     | Parses `docs/openapi.yaml` and regenerates `lib/openapi.generated.ts`.             |
+| `pnpm openapi:check`        | Verifies that `lib/openapi.generated.ts` is up-to-date with `docs/openapi.yaml`.   |
 
 ---
 
@@ -323,6 +325,30 @@ If your route should appear in the main navigation:
 
 ---
 
+## Dead Code & Unused-Export Guard
+
+To keep bundle size lean and prevent dead code accumulation, `apps/web` enforces an unused-export and unused-file check powered by [Knip](https://knip.dev/).
+
+### The Rule
+
+- No component, hook, utility function, or type definition should remain in `apps/web` if it is not imported anywhere in the dashboard application.
+- All dead code must be deleted together with tests that only cover it.
+- If an export or reusable primitive is intentional (for example, shared primitives like `Spinner`, public API client methods in `lib/api.ts`, or URL query state defaults), it must be documented with an explicit rationale in [`apps/web/unused-exports.allowlist.json`](unused-exports.allowlist.json).
+
+### Running the Check
+
+```bash
+# Run locally
+pnpm check:unused-exports
+
+# Or via node script directly
+node scripts/check-unused-exports.mjs
+```
+
+This guard runs inside the `web` job in GitHub Actions CI and fails the build whenever new unlisted dead exports or orphaned files are introduced.
+
+---
+
 ## Project Structure
 
 ```text
@@ -351,14 +377,16 @@ apps/web/
 ├── hooks/                # Custom React hooks (useContracts, useEventStream, useOfflineAlertQueue)
 ├── lib/                  # Utilities, SWR configs, i18n dictionary, API client, VAPID helpers
 ├── public/               # Static assets (favicons, PWA icons, manifest, logos)
-├── scripts/              # Build-time scripts (generate-openapi.mjs)
+├── scripts/              # Build-time scripts (check-unused-exports.mjs, generate-openapi.mjs)
 ├── tests/
 │   └── e2e/              # Playwright E2E test specs and shared mock fixtures (helpers.ts)
 ├── worker/               # Custom service worker logic (index.ts) injected into next-pwa
 ├── .env.example          # Template environment variable file
+├── knip.json             # Knip unused-export detector configuration
 ├── next.config.ts        # Next.js and next-pwa configuration
 ├── package.json          # Dependencies and package scripts
 ├── playwright.config.ts  # Playwright test runner configuration
 ├── tsconfig.json         # TypeScript compiler configuration
+├── unused-exports.allowlist.json # Documented allow-list for intentional exports
 └── vitest.config.ts      # Vitest unit test configuration
 ```

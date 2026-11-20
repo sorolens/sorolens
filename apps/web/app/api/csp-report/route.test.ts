@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const validReport = JSON.stringify({
   "csp-report": {
-    "document-uri": "https://sorolens.dev/contracts?secret=1",
+    "document-uri": "https://sorolens.xyz/contracts?secret=1",
     "effective-directive": "script-src-elem",
     "blocked-uri": "inline",
   },
@@ -56,7 +56,7 @@ describe("POST /api/csp-report", () => {
           {
             type: "csp-violation",
             body: {
-              documentURL: "https://sorolens.dev/",
+              documentURL: "https://sorolens.xyz/",
               effectiveDirective: "img-src",
               blockedURL: "https://x.example/a.png",
             },

@@ -211,7 +211,7 @@ Required environment variables:
 | `STELLAR_NETWORK`      | `testnet`, `mainnet`, or `futurenet`                                                                           |
 | `SOROBAN_RPC_URL`      | Soroban JSON-RPC endpoint                                                                                      |
 | `WATCHDOG_CONTRACT_ID` | Deployed watchdog contract address                                                                             |
-| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins (e.g. `https://sorolens-web-iota.vercel.app`); omit or set to `*` to allow all |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins (e.g. `https://sorolens.xyz`); omit or set to `*` to allow all |
 
 The API is healthy once `GET /health` returns `{"status":"ok"}`. `GET /readyz`
 additionally checks Postgres and Redis reachability.
