@@ -63,6 +63,24 @@ go run ./services/indexer --mode once
 
 The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
 
+### Authenticating the CLI
+
+Commands that write to the API (`track`, `label`, `tui`, ...) authenticate
+with an API key. Provide it one of these ways, in precedence order:
+
+1. `--api-key` flag, accepted before or after the subcommand:
+   `sorolens --api-key <key> track <contract-id>`
+2. `SOROLENS_API_KEY` environment variable.
+3. `api_key` entry in `~/.sorolens.yml` — stored in plaintext, so prefer
+   one of the options above or a profile key.
+4. The active profile's stored key (`sorolens config profile add <name>
+   --api-key-stdin`), which lives in the OS keyring.
+
+`sorolens config show` reports whether a key is configured (masked, never
+printed). See [`docs/authentication.md`](docs/authentication.md) for scopes
+and key management, and [`docs/configuration.md`](docs/configuration.md) for
+every CLI option.
+
 ### 4. Optional: local metrics stack
 
 ```bash

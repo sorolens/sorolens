@@ -739,6 +739,34 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Contracts]
+      summary: Untrack one contract
+      description: |
+        Stops tracking a contract. Untracking is a soft delete: the contract
+        status flips to "paused" while the row and all indexed history are
+        retained, and the indexer stops polling it. Re-registering the
+        contract resumes tracking. Deleting a contract that is already paused
+        is a no-op; deleting one that was never registered returns 404. This
+        differs from the batch "untrack" action, which permanently deletes
+        the contracts and their indexed data.
+      operationId: deleteContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/contracts/{id}/tags:
     post:
@@ -2800,6 +2828,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/V2Contract"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [API v2]
+      summary: Untrack one contract
+      description: |
+        Stops tracking a contract. Same semantics as DELETE /api/v1/contracts/{id}:
+        the contract status flips to "paused" while the row and all indexed history
+        are retained, and the indexer stops polling it.
+      operationId: v2DeleteContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
         "404":
           $ref: "#/components/responses/Error"
         "429":

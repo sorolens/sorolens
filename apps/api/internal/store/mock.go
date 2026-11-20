@@ -57,6 +57,7 @@ type MockStore struct {
 	// Error injection
 	UpsertContractErr                 error
 	GetContractErr                    error
+	UntrackContractErr                error
 	ListContractsErr                  error
 	DeleteContractsErr                error
 	SetContractLabelErr               error
@@ -196,6 +197,19 @@ func (m *MockStore) GetContract(_ context.Context, contractID string) (Contract,
 	}
 	c.Tags = m.tagsFor(contractID)
 	return c, nil
+}
+
+func (m *MockStore) UntrackContract(_ context.Context, contractID string) error {
+	if m.UntrackContractErr != nil {
+		return m.UntrackContractErr
+	}
+	c, ok := m.contracts[contractID]
+	if !ok {
+		return ErrNotFound
+	}
+	c.Status = "paused"
+	m.contracts[contractID] = c
+	return nil
 }
 
 func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {
