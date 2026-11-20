@@ -49,7 +49,9 @@ export default function RulesPage() {
   const [previewing, setPreviewing] = useState(false);
 
   const [rules, setRules] = useState<AlertRule[]>([]);
-  const [pendingDeleteRule, setPendingDeleteRule] = useState<AlertRule | null>(null);
+  const [pendingDeleteRule, setPendingDeleteRule] = useState<AlertRule | null>(
+    null
+  );
   const [library, setLibrary] = useState<RuleLibraryEntry[]>([]);
   const [catalog, setCatalog] = useState<RuleCatalogResponse | null>(null);
   const [status, setStatus] = useState<string | null>(null);

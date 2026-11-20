@@ -1,5 +1,11 @@
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  cleanup,
+} from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import ImportContractsCsv, { parseCsv } from "./ImportContractsCsv";
 import { trackContract } from "@/lib/api";
@@ -77,14 +83,18 @@ describe("ImportContractsCsv", () => {
       const fileContent = `contract_id,network,label\n${validId1},testnet,Contract 1\n${validId2},testnet,Contract 2`;
       const file = makeMockFile(fileContent, "test.csv");
 
-      const input = document.getElementById("import-csv-file") as HTMLInputElement;
+      const input = document.getElementById(
+        "import-csv-file"
+      ) as HTMLInputElement;
       fireEvent.change(input, { target: { files: [file] } });
 
       await waitFor(() => {
         expect(screen.getByText("2 row(s)")).toBeInTheDocument();
       });
 
-      const submitBtn = screen.getByRole("button", { name: /import 2 contracts/i });
+      const submitBtn = screen.getByRole("button", {
+        name: /import 2 contracts/i,
+      });
       fireEvent.click(submitBtn);
 
       await waitFor(() => {
@@ -107,19 +117,31 @@ describe("ImportContractsCsv", () => {
       const fileContent = `contract_id,network,label\n${validId1},testnet,Contract 1\n${validId1},testnet,Duplicate Contract`;
       const file = makeMockFile(fileContent, "dups.csv");
 
-      const input = document.getElementById("import-csv-file") as HTMLInputElement;
+      const input = document.getElementById(
+        "import-csv-file"
+      ) as HTMLInputElement;
       fireEvent.change(input, { target: { files: [file] } });
 
       await waitFor(() => {
-        expect(screen.getByText("Duplicate contract ID in file")).toBeInTheDocument();
+        expect(
+          screen.getByText("Duplicate contract ID in file")
+        ).toBeInTheDocument();
       });
     });
 
     it("allows retrying failed rows only after an API error", async () => {
       vi.mocked(trackContract)
         .mockRejectedValueOnce(new Error("Network timeout"))
-        .mockResolvedValueOnce({ id: validId2, network: "testnet", status: "active" } as any)
-        .mockResolvedValueOnce({ id: validId1, network: "testnet", status: "active" } as any);
+        .mockResolvedValueOnce({
+          id: validId2,
+          network: "testnet",
+          status: "active",
+        } as any)
+        .mockResolvedValueOnce({
+          id: validId1,
+          network: "testnet",
+          status: "active",
+        } as any);
 
       render(
         <ImportContractsCsv
@@ -133,14 +155,18 @@ describe("ImportContractsCsv", () => {
       const fileContent = `contract_id,network,label\n${validId1},testnet,Contract 1\n${validId2},testnet,Contract 2`;
       const file = makeMockFile(fileContent, "test.csv");
 
-      const input = document.getElementById("import-csv-file") as HTMLInputElement;
+      const input = document.getElementById(
+        "import-csv-file"
+      ) as HTMLInputElement;
       fireEvent.change(input, { target: { files: [file] } });
 
       await waitFor(() => {
         expect(screen.getByText("2 row(s)")).toBeInTheDocument();
       });
 
-      const submitBtn = screen.getByRole("button", { name: /import 2 contracts/i });
+      const submitBtn = screen.getByRole("button", {
+        name: /import 2 contracts/i,
+      });
       fireEvent.click(submitBtn);
 
       await waitFor(() => {
@@ -176,7 +202,9 @@ describe("ImportContractsCsv", () => {
       }
 
       const file = makeMockFile(rows.join("\n"), "500_contracts.csv");
-      const input = document.getElementById("import-csv-file") as HTMLInputElement;
+      const input = document.getElementById(
+        "import-csv-file"
+      ) as HTMLInputElement;
       fireEvent.change(input, { target: { files: [file] } });
 
       await waitFor(() => {

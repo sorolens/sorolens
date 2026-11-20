@@ -210,7 +210,9 @@ export default function ImportContractsCsv({
 
         if (
           rawNetwork &&
-          !KNOWN_NETWORKS.includes(rawNetwork as (typeof KNOWN_NETWORKS)[number])
+          !KNOWN_NETWORKS.includes(
+            rawNetwork as (typeof KNOWN_NETWORKS)[number]
+          )
         ) {
           return {
             ...base,
@@ -549,10 +551,14 @@ export default function ImportContractsCsv({
             </div>
 
             {/* Progress bar */}
-            <div className="mb-4 space-y-1.5" data-testid="import-progress-area">
+            <div
+              className="mb-4 space-y-1.5"
+              data-testid="import-progress-area"
+            >
               <div className="flex justify-between text-xs text-[var(--color-text-secondary)]">
                 <span>
-                  Progress: {processedCount} of {totalCount} ({progressPercent}%)
+                  Progress: {processedCount} of {totalCount} ({progressPercent}
+                  %)
                 </span>
                 <span>
                   <span className="text-green-400">{okCount} imported</span>
