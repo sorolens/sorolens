@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `sorolens doctor` checks the config file and active profile, API reachability and TLS, the API key and its scopes, server version compatibility and clock skew, printing pass, warn or fail with a fix hint for each. `--json` gives a stable, documented report, secrets are redacted from all output, and the command exits non-zero when a check fails (#815).
 - Automated GitHub Actions release workflow (`release.yml`) for publishing container images to GHCR and creating GitHub Releases with SHA256 checksums on semver tag push (#544).
 - Release process documentation in `CONTRIBUTING.md`.
 - The browser extension is now discoverable from the product: a callout on the landing page and a **Browser extension** card in Settings that mints a key scoped to exactly the endpoints the extension calls (`read:contracts`, `write:contracts`) for pairing (#764).
