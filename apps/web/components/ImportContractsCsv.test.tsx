@@ -177,9 +177,7 @@ describe("ImportContractsCsv", () => {
 
     await upload(
       container,
-      csvFile(`\uFEFFContract ID,Network,Label\n${
-        ID
-      },testnet,Payments\n`)
+      csvFile(`\uFEFFContract ID,Network,Label\n${ID},testnet,Payments\n`)
     );
 
     await waitFor(() => expect(rowCount()).toBe(1));
@@ -193,14 +191,7 @@ describe("ImportContractsCsv", () => {
   it("skips blank lines between records", async () => {
     const { container } = renderModal();
 
-    await upload(
-      container,
-      csvFile(`${
-        ID
-      },testnet\n\n${
-        OTHER_ID
-      },testnet\n\n`)
-    );
+    await upload(container, csvFile(`${ID},testnet\n\n${OTHER_ID},testnet\n\n`));
 
     await waitFor(() => expect(rowCount()).toBe(2));
     expect(screen.getByText("2 row(s)")).toBeVisible();
@@ -209,11 +200,7 @@ describe("ImportContractsCsv", () => {
   it("lists duplicate rows individually so both are imported", async () => {
     const { container } = renderModal();
 
-    await upload(container, csvFile(`${
-      ID
-    },testnet\n${
-      ID
-    },testnet\n`));
+    await upload(container, csvFile(`${ID},testnet\n${ID},testnet\n`));
 
     await waitFor(() => expect(rowCount()).toBe(2));
     fireEvent.click(screen.getByRole("button", { name: "Import 2 contracts" }));
@@ -245,9 +232,7 @@ describe("ImportContractsCsv", () => {
   it("flags an unknown network", async () => {
     const { container } = renderModal();
 
-    await upload(container, csvFile(`${
-      ID
-    },devnet\n`));
+    await upload(container, csvFile(`${ID},devnet\n`));
 
     expect(await screen.findByText("Unknown network 'devnet'")).toBeVisible();
   });
@@ -255,9 +240,7 @@ describe("ImportContractsCsv", () => {
   it("flags a row that targets a different network than the dashboard", async () => {
     const { container } = renderModal();
 
-    await upload(container, csvFile(`${
-      ID
-    },mainnet\n`));
+    await upload(container, csvFile(`${ID},mainnet\n`));
 
     expect(
       await screen.findByText(
@@ -269,9 +252,7 @@ describe("ImportContractsCsv", () => {
   it("imports valid rows and reports success once", async () => {
     const { container, onImported } = renderModal();
 
-    await upload(container, csvFile(`${
-      ID
-    },testnet,Payments\n`));
+    await upload(container, csvFile(`${ID},testnet,Payments\n`));
     await waitFor(() => expect(rowCount()).toBe(1));
 
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
@@ -290,9 +271,7 @@ describe("ImportContractsCsv", () => {
   it("passes the user id through to the API", async () => {
     const { container } = renderModal({ userId: "user-42" });
 
-    await upload(container, csvFile(`${
-      ID
-    },testnet\n`));
+    await upload(container, csvFile(`${ID},testnet\n`));
     await waitFor(() => expect(rowCount()).toBe(1));
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
 
@@ -307,14 +286,7 @@ describe("ImportContractsCsv", () => {
       .mockResolvedValueOnce({ id: OTHER_ID });
     const { container, onImported } = renderModal();
 
-    await upload(
-      container,
-      csvFile(`${
-        ID
-      },testnet\n${
-        OTHER_ID
-      },testnet\n`)
-    );
+    await upload(container, csvFile(`${ID},testnet\n${OTHER_ID},testnet\n`));
     await waitFor(() => expect(rowCount()).toBe(2));
 
     fireEvent.click(screen.getByRole("button", { name: "Import 2 contracts" }));
@@ -331,9 +303,7 @@ describe("ImportContractsCsv", () => {
     mockTrackContract.mockRejectedValue(new Error("Service unavailable."));
     const { container, onImported } = renderModal();
 
-    await upload(container, csvFile(`${
-      ID
-    },testnet\n`));
+    await upload(container, csvFile(`${ID},testnet\n`));
     await waitFor(() => expect(rowCount()).toBe(1));
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
 
@@ -346,12 +316,7 @@ describe("ImportContractsCsv", () => {
   it("skips invalid rows and imports only the valid ones", async () => {
     const { container } = renderModal();
 
-    await upload(
-      container,
-      csvFile(`bad-id,testnet\n${
-        ID
-      },testnet\n`)
-    );
+    await upload(container, csvFile(`bad-id,testnet\n${ID},testnet\n`));
     await waitFor(() => expect(rowCount()).toBe(2));
 
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
@@ -365,9 +330,7 @@ describe("ImportContractsCsv", () => {
     mockTrackContract.mockReturnValue(pending.promise);
     const { container, onClose, onImported } = renderModal();
 
-    await upload(container, csvFile(`${
-      ID
-    },testnet\n`));
+    await upload(container, csvFile(`${ID},testnet\n`));
     await waitFor(() => expect(rowCount()).toBe(1));
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
 
