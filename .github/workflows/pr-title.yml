@@ -8,7 +8,12 @@ on:
       - synchronize
 
 permissions:
+  contents: read
   pull-requests: read
+
+concurrency:
+  group: pr-title-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   main:
