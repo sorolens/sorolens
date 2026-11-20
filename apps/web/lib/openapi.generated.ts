@@ -2529,6 +2529,22 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/contracts/{id}/event-schemas": {
+      get: {
+        operationId: "getContractEventSchemas",
+        summary: "Get inferred and declared event schemas for a contract",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/contracts/{id}/wasm": {
       get: {
         operationId: "getContractWasm",

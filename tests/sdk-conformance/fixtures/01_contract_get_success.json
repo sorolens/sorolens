@@ -1,0 +1,27 @@
+{
+  "id": "01_contract_get_success",
+  "description": "Retrieve an active contract by ID",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts/CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2",
+      "network": "testnet",
+      "label": "counter",
+      "status": "active",
+      "created_at_ledger": 100,
+      "added_at": "2026-08-01T00:00:00Z"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "type": "contract",
+    "id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2"
+  }
+}

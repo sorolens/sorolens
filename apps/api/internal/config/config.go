@@ -116,6 +116,11 @@ func PoolSettingsFromEnv() (PoolSettings, error) {
 type Config struct {
 	// DatabaseURL is the pooled Postgres connection string used by the API.
 	DatabaseURL string
+	// DatabaseReadURL is the optional Postgres replica connection string.
+	DatabaseReadURL string
+	// ReplicaLagThreshold is the maximum tolerable replication lag before
+	// falling back to the primary database. Defaults to 10s.
+	ReplicaLagThreshold time.Duration
 	// DatabasePool contains the API's pgx pool limits and recycling settings.
 	DatabasePool PoolSettings
 	// DirectDatabaseURL is the non-pooled connection string used for migrations.
@@ -218,6 +223,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		DatabaseReadURL:      os.Getenv("DATABASE_READ_URL"),
 		DatabasePool:         databasePool,
 		DirectDatabaseURL:    os.Getenv("DIRECT_DATABASE_URL"),
 		RedisURL:             os.Getenv("REDIS_URL"),
@@ -248,6 +254,13 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("INDEXER_POLL_INTERVAL: invalid duration %q: %w", pollStr, err)
 	}
 	cfg.IndexerPollInterval = poll
+
+	replicaLagStr := getEnvDefault("DATABASE_REPLICA_LAG_THRESHOLD", "10s")
+	replicaLag, err := time.ParseDuration(replicaLagStr)
+	if err != nil || replicaLag <= 0 {
+		return nil, fmt.Errorf("DATABASE_REPLICA_LAG_THRESHOLD: invalid duration %q (must be > 0)", replicaLagStr)
+	}
+	cfg.ReplicaLagThreshold = replicaLag
 
 	windowStr := getEnvDefault("INDEXER_LEDGER_WINDOW", "120960")
 	window, err := strconv.Atoi(windowStr)

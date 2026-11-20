@@ -1163,3 +1163,10 @@ the one-object-per-month layout bounds the work to the months touched.
 - `apps/web/hooks/usePushSubscription.ts` — React hook managing the push subscription lifecycle (idle → subscribing → subscribed → denied).
 - `apps/web/components/OfflineAlert.tsx` — `OfflineBanner` (shown when offline) + `OfflineAlertPanel` (the `/offline-alerts` page body).
 - `apps/web/app/offline-alerts/page.tsx` — dedicated page for the queued-alert view.
+
+### 5.8 Read-Replica Routing and Replication-Lag Guard (issue #794)
+
+**Decision:** Route read-only queries to a secondary PostgreSQL read replica pool (`DATABASE_READ_URL`) with an automated replication-lag guard (`DATABASE_REPLICA_LAG_THRESHOLD`).
+
+**Rationale:** Heavy dashboard reads must not starve indexer writes or compromise read-your-writes guarantees. All writes and read-after-write mutations are directed to the primary pool. If replica replication lag exceeds the configured threshold, read queries fall back to the primary pool automatically. See [docs/read_replica.md](docs/read_replica.md).
+

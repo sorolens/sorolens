@@ -42,6 +42,7 @@ type MockStore struct {
 	contractTags          map[string]map[string]bool
 	wasmBinaries          map[string]ContractWasm
 	contractSpecs         map[string]ContractSpec
+	contractEventSchemas  map[string]map[string]ContractEventSchema
 	contractVerifications map[string]ContractVerification
 	alertRules            []AlertRule
 	contractNotes         map[string][]ContractNote

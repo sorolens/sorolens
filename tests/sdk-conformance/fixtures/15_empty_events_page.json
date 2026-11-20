@@ -1,0 +1,22 @@
+{
+  "id": "15_empty_events_page",
+  "description": "Empty events collection returns empty array",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts/CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2/events"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "events": [],
+      "next_cursor": ""
+    }
+  },
+  "expected": {
+    "status": 200,
+    "count": 0
+  }
+}

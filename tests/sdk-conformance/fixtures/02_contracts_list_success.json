@@ -1,0 +1,36 @@
+{
+  "id": "02_contracts_list_success",
+  "description": "List contracts with limit",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts?limit=2"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "contracts": [
+        {
+          "id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2",
+          "network": "testnet",
+          "status": "active",
+          "created_at_ledger": 100
+        },
+        {
+          "id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH3",
+          "network": "testnet",
+          "status": "active",
+          "created_at_ledger": 102
+        }
+      ],
+      "next_cursor": "eyJvZmZzZXQiOjJ9"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "count": 2,
+    "has_next": true
+  }
+}
