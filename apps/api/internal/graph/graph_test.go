@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -382,6 +383,55 @@ func TestComplexityLimitRejectsHeavyQuery(t *testing.T) {
 	}
 	if s.getContract.Load() != 0 || s.listAlerts.Load() != 0 {
 		t.Fatal("rejected query must not touch the store")
+	}
+}
+
+func TestHostileAliasAmplificationRejection(t *testing.T) {
+	s := seedStore(t)
+	h := newHandler(t, s, graph.Options{ComplexityLimit: 2000})
+
+	var sb strings.Builder
+	sb.WriteString("{")
+	for i := 0; i < 80; i++ {
+		sb.WriteString(" a" + strconv.Itoa(i) + ": contracts(first: 50) { nodes { id } }")
+	}
+	sb.WriteString(" }")
+
+	resp := post(t, h, map[string]any{"query": sb.String()})
+	if len(resp.Errors) == 0 || !strings.Contains(resp.Errors[0].Message, "complexity") {
+		t.Fatalf("want complexity error for alias attack, got %+v", resp.Errors)
+	}
+	if s.getContract.Load() != 0 || s.listAlerts.Load() != 0 {
+		t.Fatal("alias amplified query must not touch store")
+	}
+}
+
+func TestHostileDeepNestingRejection(t *testing.T) {
+	s := seedStore(t)
+	h := newHandler(t, s, graph.Options{MaxDepth: 5, ComplexityLimit: 1_000_000})
+
+	deepQuery := `{
+		contracts {
+			nodes {
+				events {
+					contract {
+						events {
+							contract {
+								events { id }
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+
+	resp := post(t, h, map[string]any{"query": deepQuery})
+	if len(resp.Errors) == 0 || !strings.Contains(resp.Errors[0].Message, "exceeds max depth limit") {
+		t.Fatalf("want max depth error, got %+v", resp.Errors)
+	}
+	if s.getContract.Load() != 0 || s.listAlerts.Load() != 0 {
+		t.Fatal("deeply nested hostile query must not touch store")
 	}
 }
 

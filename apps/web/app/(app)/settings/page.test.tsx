@@ -331,6 +331,11 @@ describe("SettingsPage", () => {
       })
     );
 
+    const confirmButton = await screen.findByRole("button", {
+      name: "Revoke key",
+    });
+    fireEvent.click(confirmButton);
+
     await waitFor(() => expect(revokeMyApiKey).toHaveBeenCalledWith("key-1"));
     expect(screen.queryByTestId("settings-api-key-row")).toBeNull();
   });
