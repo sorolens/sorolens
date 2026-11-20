@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/sorolens/sorolens/cli/internal/client"
 	"github.com/sorolens/sorolens/cli/internal/format"
+	"github.com/spf13/cobra"
 )
 
 var inspectCmd = &cobra.Command{
@@ -27,7 +27,7 @@ func runInspect(cmd *cobra.Command, args []string) error {
 		_ = os.Setenv("NO_COLOR", "1")
 	}
 
-	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
+	c := newClient(globalConfig.Timeout)
 
 	stop := startSpinner("Fetching contract...")
 	contract, err := c.GetContract(cmd.Context(), contractID)

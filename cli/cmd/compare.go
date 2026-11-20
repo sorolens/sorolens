@@ -81,7 +81,7 @@ func runCompare(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid --window %q: must be 24h, 7d or 30d", compareWindow)
 	}
 
-	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
+	c := newClient(globalConfig.Timeout)
 	compare, err := fetchComparison(cmd.Context(), c, args, window)
 	if err != nil {
 		return err
