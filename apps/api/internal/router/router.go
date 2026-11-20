@@ -334,6 +334,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/verification", h.GetContractVerification)
 		get("/contracts/{id}/wasm", h.GetContractWasm)
 		get("/contracts/{id}/spec", h.GetContractSpec)
+		get("/contracts/{id}/event-schemas", h.GetContractEventSchemas)
 
 		// User-defined contract tags (issue #459). Wrapped by the contributor
 		// role so an anonymous caller cannot label a contract even though the
@@ -503,6 +504,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/snapshot", h.V2ContractSnapshot)
 		get("/contracts/{id}/upgrades", h.V2ListContractUpgrades)
 		get("/contracts/{id}/health-score", h.V2GetContractHealthScore)
+		get("/contracts/{id}/event-schemas", h.GetContractEventSchemas)
 		get("/contracts/{id}/stream", h.V2StreamEvents)
 		get("/contracts/{id}/graph", h.V2ContractGraph)
 

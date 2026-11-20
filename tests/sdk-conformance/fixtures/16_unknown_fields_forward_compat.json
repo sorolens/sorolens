@@ -1,0 +1,28 @@
+{
+  "id": "16_unknown_fields_forward_compat",
+  "description": "Payload containing unknown future fields tolerated by SDK deserializers",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts/CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2",
+      "network": "testnet",
+      "status": "active",
+      "future_feature_flag": true,
+      "experimental_metadata": {
+        "version": 2,
+        "alpha": "enabled"
+      }
+    }
+  },
+  "expected": {
+    "status": 200,
+    "id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2"
+  }
+}

@@ -16,7 +16,22 @@ import (
 var ErrNotFound = errors.New("store: not found")
 
 type postgresStore struct {
-	pool *pgxpool.Pool
+	pool            *pgxpool.Pool
+	readPool        *pgxpool.Pool
+	replicaLagGuard *ReplicaLagGuard
+}
+
+func (s *postgresStore) readDB(ctx context.Context) *pgxpool.Pool {
+	if s.readPool == nil {
+		return s.pool
+	}
+	if IsPrimaryOnly(ctx) {
+		return s.pool
+	}
+	if s.replicaLagGuard != nil && !s.replicaLagGuard.IsHealthy() {
+		return s.pool
+	}
+	return s.readPool
 }
 
 func (s *postgresStore) UpsertLabel(ctx context.Context, label Label) error {
@@ -29,7 +44,7 @@ func (s *postgresStore) UpsertLabel(ctx context.Context, label Label) error {
 }
 
 func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error) {
-	rows, err := s.pool.Query(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public FROM labels_workspace WHERE workspace_id = $1) labels WHERE label ILIKE '%' || $2 || '%' OR value ILIKE '%' || $2 || '%' ORDER BY label LIMIT 100`, workspaceID, query)
+	rows, err := s.readDB(ctx).Query(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public FROM labels_workspace WHERE workspace_id = $1) labels WHERE label ILIKE '%' || $2 || '%' OR value ILIKE '%' || $2 || '%' ORDER BY label LIMIT 100`, workspaceID, query)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +62,7 @@ func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query strin
 
 func (s *postgresStore) ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error) {
 	var label Label
-	err := s.pool.QueryRow(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public, 2 AS priority FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public, 1 AS priority FROM labels_workspace WHERE workspace_id = $1) labels WHERE lower(label) = lower($2) ORDER BY priority LIMIT 1`, workspaceID, query).Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public)
+	err := s.readDB(ctx).QueryRow(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public, 2 AS priority FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public, 1 AS priority FROM labels_workspace WHERE workspace_id = $1) labels WHERE lower(label) = lower($2) ORDER BY priority LIMIT 1`, workspaceID, query).Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Label{}, ErrNotFound
 	}
@@ -78,7 +93,7 @@ func (s *postgresStore) UpsertContract(ctx context.Context, c Contract) error {
 
 // GetContract retrieves a contract by its ID. Returns ErrNotFound if no contract exists.
 func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Contract, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
 		       c.backfill_complete_at, c.status, c.added_at, c.tracking_preset,
 		       b.oldest_ledger, b.newest_ledger, b.next_ledger,
@@ -138,7 +153,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 	}
 	// cursor is the last-seen contract ID (lexicographic order); id is always
 	// appended as a stable tie-breaker.
-	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
+	rows, err := s.readDB(ctx).Query(ctx, fmt.Sprintf(`
 		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
 		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at, c.tracking_preset
 		FROM contracts c
@@ -462,7 +477,7 @@ func (s *postgresStore) UpsertStorageEntries(ctx context.Context, entries []Stor
 
 // GetSyncState retrieves the sync state for a given contract ID. If no sync state exists, it returns a default SyncState with the contract ID set.
 func (s *postgresStore) GetSyncState(ctx context.Context, contractID string) (SyncState, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT contract_id, last_ledger, last_run_at, error_message, updated_at
 		FROM sync_state WHERE contract_id = $1`, contractID)
 	var ss SyncState
@@ -492,7 +507,7 @@ func (s *postgresStore) UpsertSyncState(ctx context.Context, ss SyncState) error
 
 // GetIndexerCursor retrieves the last committed ledger for a network.
 func (s *postgresStore) GetIndexerCursor(ctx context.Context, network string) (uint32, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT ledger
 		FROM indexer_cursors
 		WHERE network = $1`, networkOrDefault(network))
@@ -623,7 +638,7 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 
 // GetGlobalStats retrieves aggregated statistics about the tracked contracts, events, invocations, and storage entries.
 func (s *postgresStore) GetGlobalStats(ctx context.Context) (GlobalStats, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM contracts)       AS tracked_contracts,
 			(SELECT COUNT(*) FROM events)          AS total_events,
@@ -669,7 +684,7 @@ func (s *postgresStore) ArchiveOldEvents(ctx context.Context, retentionDays int)
 
 // GetPartitionStats returns information about all existing partitions of the events table.
 func (s *postgresStore) GetPartitionStats(ctx context.Context) ([]PartitionStats, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT
 			c.relname AS partition_name,
 			pg_total_relation_size(c.oid) AS table_size,
@@ -724,7 +739,7 @@ func (s *postgresStore) RemoveFromWatchlist(ctx context.Context, userID, contrac
 }
 
 func (s *postgresStore) ListWatchlist(ctx context.Context, userID string) ([]string, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT contract_id FROM watchlist_items
 		WHERE user_id = $1 ORDER BY added_at DESC`, userID)
 	if err != nil {
@@ -744,7 +759,7 @@ func (s *postgresStore) ListWatchlist(ctx context.Context, userID string) ([]str
 
 func (s *postgresStore) IsInWatchlist(ctx context.Context, userID, contractID string) (bool, error) {
 	var count int64
-	err := s.pool.QueryRow(ctx, `
+	err := s.readDB(ctx).QueryRow(ctx, `
 		SELECT COUNT(*) FROM watchlist_items
 		WHERE user_id = $1 AND contract_id = $2`,
 		userID, contractID,
@@ -770,7 +785,7 @@ func (s *postgresStore) RecordContractVersion(ctx context.Context, v ContractVer
 }
 
 func (s *postgresStore) ListContractVersions(ctx context.Context, contractID string) ([]ContractVersion, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT id, contract_id, wasm_hash, first_seen_ledger,
 		       COALESCE(tx_hash, ''), COALESCE(verified_source_ref, ''), recorded_at
 		FROM contract_versions
@@ -796,7 +811,7 @@ func (s *postgresStore) ListContractVersions(ctx context.Context, contractID str
 }
 
 func (s *postgresStore) GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT id, contract_id, wasm_hash, first_seen_ledger,
 		       COALESCE(tx_hash, ''), COALESCE(verified_source_ref, ''), recorded_at
 		FROM contract_versions
@@ -849,7 +864,7 @@ func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit
 	// Add % wildcards for simple ILIKE search
 	searchPattern := "%" + query + "%"
 
-	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	rows, err := s.readDB(ctx).Query(ctx, q, searchPattern, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -903,7 +918,7 @@ func (s *postgresStore) SearchEvents(ctx context.Context, query string, limit in
 
 	searchPattern := "%" + query + "%"
 
-	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	rows, err := s.readDB(ctx).Query(ctx, q, searchPattern, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -957,7 +972,7 @@ func (s *postgresStore) SearchFunctions(ctx context.Context, query string, limit
 
 	searchPattern := "%" + query + "%"
 
-	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	rows, err := s.readDB(ctx).Query(ctx, q, searchPattern, limit)
 	if err != nil {
 		return nil, err
 	}
