@@ -63,6 +63,18 @@ go run ./services/indexer --mode once
 
 The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
 
+### 4. Optional: local metrics stack
+
+```bash
+docker compose --profile observability up -d
+./scripts/observability-smoke.sh
+```
+
+Prometheus (<http://localhost:9090>) and Grafana (<http://localhost:3001>) start with the
+`Sorolens Overview` dashboard and the alert rules already provisioned. Grafana's admin
+password is generated on first start; see
+[docs/observability.md](./docs/observability.md) for how to read it and what is scraped.
+
 The indexer processes contracts concurrently. Set `INDEXER_WORKERS` to tune
 the worker count; it defaults to `GOMAXPROCS`. Each contract is handled by one
 worker at a time, preserving that contract's processing order.
@@ -243,7 +255,7 @@ Required environment variables:
 | `STELLAR_NETWORK`      | `testnet`, `mainnet`, or `futurenet`                                                                           |
 | `SOROBAN_RPC_URL`      | Soroban JSON-RPC endpoint                                                                                      |
 | `WATCHDOG_CONTRACT_ID` | Deployed watchdog contract address                                                                             |
-| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins (e.g. `https://sorolens-web-iota.vercel.app`); omit or set to `*` to allow all |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins (e.g. `https://sorolens.xyz`); omit or set to `*` to allow all |
 
 The API is healthy once `GET /health` returns `{"status":"ok"}`. `GET /readyz`
 additionally checks Postgres and Redis reachability.

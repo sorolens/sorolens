@@ -180,6 +180,66 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         parameters: [],
       },
     },
+    "/api/v1/exports": {
+      post: {
+        operationId: "createExportJob",
+        summary: "Create an asynchronous export job",
+        tags: ["Exports"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/exports/{id}": {
+      get: {
+        operationId: "getExportJob",
+        summary: "Get export job status and progress",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+      delete: {
+        operationId: "deleteExportJob",
+        summary: "Delete an export job",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/exports/{id}/download": {
+      get: {
+        operationId: "downloadExport",
+        summary: "Download completed export file",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+          {
+            name: "token",
+            in: "query",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/contracts": {
       get: {
         operationId: "listContracts",
@@ -1397,6 +1457,66 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             required: false,
             description: "Page size (default 50, clamped to 200).",
             type: "integer",
+          },
+        ],
+      },
+    },
+    "/api/v2/exports": {
+      post: {
+        operationId: "createExportJobV2",
+        summary: "Create an asynchronous export job",
+        tags: ["Exports"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v2/exports/{id}": {
+      get: {
+        operationId: "getExportJobV2",
+        summary: "Get export job status and progress",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+      delete: {
+        operationId: "deleteExportJobV2",
+        summary: "Delete an export job",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v2/exports/{id}/download": {
+      get: {
+        operationId: "downloadExportV2",
+        summary: "Download completed export file",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+          {
+            name: "token",
+            in: "query",
+            required: true,
+            type: "string",
           },
         ],
       },

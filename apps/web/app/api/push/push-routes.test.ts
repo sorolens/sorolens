@@ -30,7 +30,7 @@ beforeEach(() => {
   process.env.VAPID_PUBLIC_KEY =
     "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U";
   process.env.VAPID_PRIVATE_KEY = "q-LAJMHFUsJ5CjJf4KGS3m5c7ANoKRjn0gOj1N_kla0";
-  process.env.VAPID_SUBJECT = "mailto:test@sorolens.dev";
+  process.env.VAPID_SUBJECT = "mailto:test@sorolens.xyz";
   vi.resetModules();
 });
 

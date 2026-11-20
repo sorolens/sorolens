@@ -317,6 +317,11 @@ test.describe("Watchdog notification channels", () => {
     await expectHeading(page, "Notification channels");
 
     await page.getByRole("button", { name: "Remove" }).click();
+    await expect(page.getByTestId("confirm-dialog")).toBeVisible();
+    await page
+      .getByTestId("confirm-dialog")
+      .getByRole("button", { name: "Delete subscription" })
+      .click();
     await expect(page.getByRole("table")).toHaveCount(0);
     await expect(page.getByText(/No notification channels yet/)).toBeVisible();
     expect(deletes).toBe(1);

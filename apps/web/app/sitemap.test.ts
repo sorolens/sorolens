@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import sitemap from "@/app/sitemap";
 
-const ORIGIN = "https://staging.sorolens.dev";
+const ORIGIN = "https://staging.sorolens.xyz";
 
 /** An entry's timestamp; `sitemap.xml` must carry real `Date`s, not strings. */
 function stampOf(entry: MetadataRoute.Sitemap[number]): number {

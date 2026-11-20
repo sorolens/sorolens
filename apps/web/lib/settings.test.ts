@@ -32,7 +32,7 @@ function memoryStorage(): Storage {
 describe("isValidEmail", () => {
   it("accepts ordinary addresses", () => {
     expect(isValidEmail("dev@example.com")).toBe(true);
-    expect(isValidEmail("first.last+tag@sorolens.dev")).toBe(true);
+    expect(isValidEmail("first.last+tag@sorolens.xyz")).toBe(true);
   });
 
   it("rejects malformed addresses", () => {

@@ -11,6 +11,7 @@ OAPI_CODEGEN_GO := go1.22
 OAPI_CODEGEN := $(CURDIR)/.bin/oapi-codegen
 OAPI_SPEC    := docs/openapi.yaml
 CLIENT_DIR   := packages/go-client
+PROMETHEUS_IMAGE := prom/prometheus:v3.1.0
 
 # Build metadata for GET /api/version. Override on the command line, e.g.
 #   make build VERSION=1.2.3
@@ -22,6 +23,7 @@ API_BUILDINFO := github.com/sorolens/sorolens/apps/api/internal/buildinfo
 API_LDFLAGS   := -ldflags "-X $(API_BUILDINFO).Version=$(VERSION) -X $(API_BUILDINFO).GitSHA=$(GIT_SHA) -X $(API_BUILDINFO).BuiltAt=$(BUILT_AT)"
 
 .PHONY: up down logs psql migrate-up migrate-down migrate-version migrate-force migrate-new migrate-check config-docs test lint dev api build client-go openapi lint-openapi
+.PHONY: observability-up observability-down observability-check observability-smoke
 
 ## up: start all Docker services in the background
 up:
@@ -165,6 +167,30 @@ lint:
 ## dev: start the Next.js dev server (and any other parallel dev scripts)
 dev:
 	pnpm dev
+
+## observability-up: start Prometheus + Grafana with dashboards and alerts provisioned
+observability-up:
+	docker compose --profile observability up -d
+
+## observability-down: stop Prometheus + Grafana (the data volumes are kept)
+observability-down:
+	docker compose --profile observability down
+
+## observability-check: validate the compose file, Prometheus config and rules,
+## and the dashboard JSON without starting the stack
+observability-check:
+	docker compose --profile observability config -q
+	docker run --rm -v "$(CURDIR)/observability/prometheus:/etc/prometheus:ro" \
+		--entrypoint promtool $(PROMETHEUS_IMAGE) check config /etc/prometheus/prometheus.yml
+	@if command -v python3 >/dev/null 2>&1; then \
+		python3 -m json.tool "$(CURDIR)/observability/grafana/dashboards/sorolens-overview.json" >/dev/null; \
+	else \
+		echo "python3 unavailable; skipped dashboard JSON check"; \
+	fi
+
+## observability-smoke: verify the running stack, its rules and scrape targets
+observability-smoke:
+	./scripts/observability-smoke.sh
 
 ## api: run the Go API against the Docker services, using the .env.example defaults
 api:

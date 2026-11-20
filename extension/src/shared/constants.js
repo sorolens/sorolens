@@ -94,6 +94,6 @@ export const ALERTS = {
 };
 
 /** Dashboard origin opened by alert notifications. */
-export const DEFAULT_WEB_URL = "https://sorolens-web-iota.vercel.app";
+export const DEFAULT_WEB_URL = "https://sorolens.xyz";
 
 export const PRODUCT_NAME = "Sorolens";

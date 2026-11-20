@@ -7,12 +7,12 @@ describe("PlausibleAnalytics (#191)", () => {
 
   it("renders the cookieless script in production when a domain is set", () => {
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("NEXT_PUBLIC_PLAUSIBLE_DOMAIN", "sorolens.dev");
+    vi.stubEnv("NEXT_PUBLIC_PLAUSIBLE_DOMAIN", "sorolens.xyz");
 
     const html = renderToStaticMarkup(<PlausibleAnalytics />);
 
     expect(html).toContain('src="https://plausible.io/js/script.js"');
-    expect(html).toContain('data-domain="sorolens.dev"');
+    expect(html).toContain('data-domain="sorolens.xyz"');
     expect(html).toContain("defer");
     // Cookieless: the standard script needs no extra attributes and sets no cookies.
     expect(html).not.toContain("cookie");
@@ -20,7 +20,7 @@ describe("PlausibleAnalytics (#191)", () => {
 
   it("renders nothing outside a production build", () => {
     vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("NEXT_PUBLIC_PLAUSIBLE_DOMAIN", "sorolens.dev");
+    vi.stubEnv("NEXT_PUBLIC_PLAUSIBLE_DOMAIN", "sorolens.xyz");
 
     expect(renderToStaticMarkup(<PlausibleAnalytics />)).toBe("");
   });

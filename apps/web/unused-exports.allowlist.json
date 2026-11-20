@@ -1,0 +1,117 @@
+{
+  "$comment": "Documented allow-list of intentional exports, types, and reusable primitives in @sorolens/web verified as active and non-dead code.",
+  "files": [
+    {
+      "path": "components/Spinner.tsx",
+      "reason": "Shared loading spinner design primitive created in #236 as a reusable component."
+    },
+    {
+      "path": "hooks/useSubscription.ts",
+      "reason": "WebSocket real-time subscription client hook created in #126 for contract event/alert streaming."
+    }
+  ],
+  "exports": [
+    {
+      "file": "components/compare/index.ts",
+      "name": "CompareColumn",
+      "reason": "Barrel re-export for comparison column view component."
+    },
+    {
+      "file": "components/compare/index.ts",
+      "name": "ContractSelector",
+      "reason": "Barrel re-export for contract selector dropdown component."
+    },
+    {
+      "file": "components/compare/index.ts",
+      "name": "EventVolumeSparkline",
+      "reason": "Barrel re-export for comparison sparkline visualization."
+    },
+    {
+      "file": "hooks/useContracts.ts",
+      "name": "useContract",
+      "reason": "Public hook for fetching an individual contract by ID; companion to useContracts."
+    },
+    {
+      "file": "lib/alertQueue.ts",
+      "name": "_closeForTests",
+      "reason": "Database connection cleanup helper for test teardown."
+    },
+    {
+      "file": "lib/alertQueue.ts",
+      "name": "getPendingCount",
+      "reason": "Queue utility for querying pending offline alerts count."
+    },
+    {
+      "file": "lib/alertQueue.ts",
+      "name": "deleteAlert",
+      "reason": "Queue helper for removing an alert by ID."
+    },
+    {
+      "file": "lib/alertQueue.ts",
+      "name": "purgeDismissed",
+      "reason": "Queue maintenance helper for clearing dismissed alerts."
+    },
+    {
+      "file": "lib/api.ts",
+      "name": "watchlistStatus",
+      "reason": "REST API client method for GET /api/v1/watchlist/{contractId}/status."
+    },
+    {
+      "file": "lib/api.ts",
+      "name": "renameGroup",
+      "reason": "REST API client method for PATCH /api/v1/groups/{id}."
+    },
+    {
+      "file": "lib/contractsUrl.ts",
+      "name": "DEFAULT_CONTRACTS_URL_STATE",
+      "reason": "Default URL query parameter state for contract filters and sorting."
+    },
+    {
+      "file": "lib/eventsExplorer.ts",
+      "name": "currentCursor",
+      "reason": "Pagination utility for events cursor positioning."
+    },
+    {
+      "file": "lib/eventsExplorer.ts",
+      "name": "pageNumber",
+      "reason": "Pagination helper deriving page indices from cursors."
+    },
+    {
+      "file": "lib/eventsExplorer.ts",
+      "name": "DEFAULT_EVENTS_URL_STATE",
+      "reason": "Default URL query parameter state for events explorer."
+    },
+    {
+      "file": "lib/invocationsUrl.ts",
+      "name": "DEFAULT_INVOCATIONS_URL_STATE",
+      "reason": "Default URL query parameter state for invocation filters."
+    },
+    {
+      "file": "lib/lastUpdated.ts",
+      "name": "resetLastUpdated",
+      "reason": "Timer reset utility for last-updated visual indicators."
+    },
+    {
+      "file": "lib/optimisticTrack.ts",
+      "name": "trackContractOptimistically",
+      "reason": "Optimistic UI state helper for newly tracked contracts."
+    },
+    {
+      "file": "lib/settings.ts",
+      "name": "clearSettings",
+      "reason": "Settings reset helper for user configuration."
+    }
+  ],
+  "types": [
+    {
+      "file": "lib/types.ts",
+      "name": "EventType",
+      "reason": "Core contract event type union definition."
+    },
+    {
+      "file": "lib/types.ts",
+      "name": "CompareStats",
+      "reason": "Type definition for contract comparison statistics."
+    }
+  ]
+}
