@@ -37,6 +37,7 @@ Settings are read from the environment, then `~/.sorolens.yml`, then the default
 | `sorolens status <contract-id>` | Watchdog status for a contract |
 | `sorolens ttl <contract-id>` | Entry TTL report |
 
-Add `--json` to any command for machine-readable output. The full command list,
+Add `--json` to any command for machine-readable output. Every command and flag
+is documented in the [generated command reference](reference/sorolens.md). The full command list,
 profiles and API keys are in the [CLI README](https://github.com/sorolens/sorolens/blob/main/cli/README.md); extending the
 CLI is covered in [Plugins](../cli-plugins.md).
