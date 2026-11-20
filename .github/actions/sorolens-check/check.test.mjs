@@ -48,7 +48,7 @@ describe('sorolens-check action', () => {
     const logs = [];
     const outputs = await runCheck({
       contractId,
-      apiUrl: 'https://api.sorolens.com',
+      apiUrl: 'https://api.sorolens.xyz',
       minTtlLedgers: 400,
       minHealthScore: 85,
       fetchImpl,

@@ -15,7 +15,7 @@
 #   WATCHDOG_CONTRACT_ID - deployed watchdog contract address
 #   PORT               - API listen port (default: 8080)
 #   CORS_ALLOWED_ORIGINS - comma-separated list of allowed origins
-#                          (e.g. https://sorolens-web-iota.vercel.app)
+#                          (e.g. https://sorolens.xyz)
 #
 # Optional:
 #   INITIAL_ADMIN_GITHUB_ID - seeds the first admin user on startup

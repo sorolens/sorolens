@@ -193,7 +193,7 @@ func TestRunDigestUnsubscribeTokenIsExactHMAC(t *testing.T) {
 	mailer := &fakeMailer{}
 	if _, err := reportdigest.RunDigest(context.Background(), fs, mailer, reportdigest.Config{
 		Frequency:  store.ReportDaily,
-		BaseURL:    "https://sorolens.dev/",
+		BaseURL:    "https://sorolens.xyz/",
 		SigningKey: []byte("secret"),
 	}, time.Now()); err != nil {
 		t.Fatal(err)
@@ -224,7 +224,7 @@ func TestRunDigestUnsignedTokenWithoutKey(t *testing.T) {
 	mailer := &fakeMailer{}
 	if _, err := reportdigest.RunDigest(context.Background(), fs, mailer, reportdigest.Config{
 		Frequency: store.ReportDaily,
-		BaseURL:   "https://sorolens.dev",
+		BaseURL:   "https://sorolens.xyz",
 	}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -246,14 +246,14 @@ func TestRunDigestTrimsBaseURLSlash(t *testing.T) {
 	mailer := &fakeMailer{}
 	if _, err := reportdigest.RunDigest(context.Background(), fs, mailer, reportdigest.Config{
 		Frequency: store.ReportDaily,
-		BaseURL:   "https://sorolens.dev///",
+		BaseURL:   "https://sorolens.xyz///",
 	}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(mailer.sent[0].text, "sorolens.dev//") {
+	if strings.Contains(mailer.sent[0].text, "sorolens.xyz//") {
 		t.Errorf("base URL slash not trimmed:\n%s", mailer.sent[0].text)
 	}
-	if !strings.Contains(mailer.sent[0].text, "https://sorolens.dev/api/v1/reports/unsubscribe?token=") {
+	if !strings.Contains(mailer.sent[0].text, "https://sorolens.xyz/api/v1/reports/unsubscribe?token=") {
 		t.Errorf("unsubscribe URL malformed:\n%s", mailer.sent[0].text)
 	}
 }
