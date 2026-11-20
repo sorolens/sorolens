@@ -11,6 +11,7 @@
           "v2AdminListKeys",
           "v2AdminRevokeKey",
           "v2AdminRotateKey",
+          "v2ContractEventSchemas",
           "v2ContractForecast",
           "v2ContractGraph",
           "v2ContractSnapshot",
@@ -71,6 +72,7 @@
       {
         "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
         "operations": [
+          "getContractEventSchemas",
           "getContractGraph",
           "getContractHealthScore",
           "getContractSpec",
@@ -213,6 +215,7 @@
           "v2AdminListKeys",
           "v2AdminRevokeKey",
           "v2AdminRotateKey",
+          "v2ContractEventSchemas",
           "v2ContractForecast",
           "v2ContractGraph",
           "v2ContractSnapshot",
@@ -275,6 +278,7 @@
         "operations": [
           "createReportSubscription",
           "deleteReportSubscription",
+          "getContractEventSchemas",
           "getContractGraph",
           "getContractHealthScore",
           "getContractReport",
@@ -555,7 +559,9 @@
           "listRuleMetrics",
           "listRuleLibrary",
           "setAlertRuleEnabled",
-          "deleteAlertRule"
+          "deleteAlertRule",
+          "getContractEventSchemas",
+          "v2ContractEventSchemas"
         ]
       },
       {
@@ -713,7 +719,9 @@
           "listRuleMetrics",
           "listRuleLibrary",
           "setAlertRuleEnabled",
-          "deleteAlertRule"
+          "deleteAlertRule",
+          "getContractEventSchemas",
+          "v2ContractEventSchemas"
         ]
       },
       {
