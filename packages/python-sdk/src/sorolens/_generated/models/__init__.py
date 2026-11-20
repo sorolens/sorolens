@@ -186,6 +186,7 @@ from .list_watched_accounts_response_200 import ListWatchedAccountsResponse200
 from .live_activity_response_200 import LiveActivityResponse200
 from .monitored_contract import MonitoredContract
 from .monthly_sla import MonthlySLA
+from .percentile_values import PercentileValues
 from .post_api_v1_labels_body import PostApiV1LabelsBody
 from .post_api_v1_labels_body_scope import PostApiV1LabelsBodyScope
 from .preview_alert_rule_body import PreviewAlertRuleBody
@@ -203,6 +204,7 @@ from .remove_group_contract_body import RemoveGroupContractBody
 from .report_subscription import ReportSubscription
 from .report_subscription_frequency import ReportSubscriptionFrequency
 from .requeue_failed_event_response_200 import RequeueFailedEventResponse200
+from .resource_percentiles import ResourcePercentiles
 from .role_error import RoleError
 from .rotate_api_key_admin_response_200 import RotateApiKeyAdminResponse200
 from .rotate_api_key_response_200 import RotateApiKeyResponse200
@@ -474,6 +476,7 @@ __all__ = (
     "LiveActivityResponse200",
     "MonitoredContract",
     "MonthlySLA",
+    "PercentileValues",
     "PostApiV1LabelsBody",
     "PostApiV1LabelsBodyScope",
     "PreviewAlertRuleBody",
@@ -489,6 +492,7 @@ __all__ = (
     "ReportSubscription",
     "ReportSubscriptionFrequency",
     "RequeueFailedEventResponse200",
+    "ResourcePercentiles",
     "RoleError",
     "RotateApiKeyAdminResponse200",
     "RotateApiKeyResponse200",

@@ -835,14 +835,23 @@ func (h *Handler) ContractStats(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch stats")
 		return
 	}
-	writeJSON(w, http.StatusOK, contractStatsResponse{
-		EventCount:            cs.EventCount,
-		InvocationCount:       cs.InvocationCount,
-		StorageCount:          cs.StorageCount,
-		LastSyncedLedger:      cs.LastSyncedLedger,
-		WindowEventCount:      cs.WindowEventCount,
-		WindowInvocationCount: cs.WindowInvocationCount,
-		WindowDuration:        cs.WindowDuration,
+	percentiles, err := h.Store.GetContractResourcePercentiles(r.Context(), contractID, window)
+	if err != nil {
+		h.Logger.Error("get contract resource percentiles", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch stats")
+		return
+	}
+	writeJSON(w, http.StatusOK, contractStatsDetailResponse{
+		contractStatsResponse: contractStatsResponse{
+			EventCount:            cs.EventCount,
+			InvocationCount:       cs.InvocationCount,
+			StorageCount:          cs.StorageCount,
+			LastSyncedLedger:      cs.LastSyncedLedger,
+			WindowEventCount:      cs.WindowEventCount,
+			WindowInvocationCount: cs.WindowInvocationCount,
+			WindowDuration:        cs.WindowDuration,
+		},
+		ResourcePercentiles: resourcePercentilesFromStore(percentiles),
 	})
 }
 

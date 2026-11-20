@@ -64,7 +64,11 @@ export function baseUrlToOriginPattern(baseUrl) {
   }
 }
 
-/** Dashboard identity format, mirrored from apps/web (`sorolens_user_id`). */
+/**
+ * Placeholder identity so `X-User-ID` is never sent empty. The API ignores an
+ * unsigned `X-User-ID` header (issue #518), so real identity comes from the API
+ * key's bound user, not from this value.
+ */
 export function generateUserId() {
   const random = Math.random().toString(36).slice(2, 10);
   return `user_${Date.now()}_${random}`;

@@ -53,31 +53,32 @@ type MockStore struct {
 	auditEvents []AuditEvent
 
 	// Error injection
-	UpsertContractErr             error
-	GetContractErr                error
-	ListContractsErr              error
-	DeleteContractsErr            error
-	SetContractLabelErr           error
-	GetGlobalStatsErr             error
-	ListEventsErr                 error
-	ListInvocationsErr            error
-	GetInvocationErr              error
-	GetInvocationWithEventsErr    error
-	GetCallEdgesErr               error
-	ListStorageErr                error
-	GetContractStatsErr           error
-	GetContractInvocationStatsErr error
-	RecentEventsErr               error
-	RecentInvocationsErr          error
-	CreateAPIKeyErr               error
-	GetAPIKeyErr                  error
-	UpsertUserErr                 error
-	GetUserErr                    error
-	ListUpgradesErr               error
-	GetHealthScoreErr             error
-	RecordContractVersionErr      error
-	ListContractVersionsErr       error
-	GetLatestContractVersionErr   error
+	UpsertContractErr                 error
+	GetContractErr                    error
+	ListContractsErr                  error
+	DeleteContractsErr                error
+	SetContractLabelErr               error
+	GetGlobalStatsErr                 error
+	ListEventsErr                     error
+	ListInvocationsErr                error
+	GetInvocationErr                  error
+	GetInvocationWithEventsErr        error
+	GetCallEdgesErr                   error
+	ListStorageErr                    error
+	GetContractStatsErr               error
+	GetContractInvocationStatsErr     error
+	GetContractResourcePercentilesErr error
+	RecentEventsErr                   error
+	RecentInvocationsErr              error
+	CreateAPIKeyErr                   error
+	GetAPIKeyErr                      error
+	UpsertUserErr                     error
+	GetUserErr                        error
+	ListUpgradesErr                   error
+	GetHealthScoreErr                 error
+	RecordContractVersionErr          error
+	ListContractVersionsErr           error
+	GetLatestContractVersionErr       error
 
 	UpsertVerificationErr error
 	GetVerificationErr    error

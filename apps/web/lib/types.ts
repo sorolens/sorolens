@@ -90,6 +90,20 @@ export interface StorageResponse {
   next_cursor: string;
 }
 
+/** p50/p95/p99 of one per-invocation resource metric. */
+export interface PercentileValues {
+  p50: number;
+  p95: number;
+  p99: number;
+}
+
+/** Resource usage percentiles over the requested stats window (issue #329). */
+export interface ResourcePercentiles {
+  cpu_insn: PercentileValues;
+  mem_byte: PercentileValues;
+  fee: PercentileValues;
+}
+
 /** Documented shape of GET /api/v1/contracts/{id}/stats. */
 export interface ContractStats {
   event_count: number;
@@ -99,6 +113,7 @@ export interface ContractStats {
   window_event_count: number;
   window_invocation_count: number;
   window_duration: string;
+  resource_percentiles?: ResourcePercentiles;
 }
 
 export interface VolumePoint {

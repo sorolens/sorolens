@@ -43,6 +43,33 @@ the defaults:
 
 `SOROLENS_OUTPUT_FORMAT` is accepted as an alias of `SOROLENS_OUTPUT`.
 
+### Profiles and API keys
+
+Named profiles hold an API URL, a network and an API key for different
+deployments. Selection order: `--profile`, then `SOROLENS_PROFILE`, then the
+default profile in `~/.sorolens.yml`. Within a profile, flags and
+`SOROLENS_API_URL` / `SOROLENS_NETWORK` still win over stored values.
+
+```sh
+printf '%s' "$KEY" | sorolens config profile add prod \
+  --api-url https://api.example.com --network mainnet --api-key-stdin --use
+sorolens config profile list
+sorolens config profile use prod
+sorolens --profile staging contracts list
+sorolens config profile remove staging
+sorolens config show        # keys are always masked
+```
+
+API keys are stored in the OS keyring (macOS Keychain, Windows Credential
+Manager, Secret Service) through `github.com/zalando/go-keyring`. When no
+keyring is available the key is written to `~/.sorolens-credentials.yml` with
+mode `0600` and a warning is printed. Keys are never written to
+`~/.sorolens.yml` and never printed. The active profile's key is sent as the
+`X-API-Key` / bearer header on API requests.
+
+Existing config files keep working. The first time a profile is written, the
+top-level `api_url` and `network` are migrated into a `default` profile.
+
 ```sh
 sorolens --api-url https://api.sorolens.xyz --network testnet inspect CDLZ...
 ```
@@ -66,6 +93,25 @@ sorolens --api-url https://api.sorolens.xyz --network testnet inspect CDLZ...
 
 Add `--json` to any command for machine-readable output.
 
+### Output formats and `--query`
+
+`--output` (or `SOROLENS_OUTPUT`) accepts `table` (default), `json`, `yaml` and
+`jsonl`; `--json` is shorthand for `--output json`. `jsonl` writes one compact
+JSON document per line, element by element for list results.
+
+`--query` applies a jq-style path filter to structured output. Supported
+syntax: `.key`, `."quoted key"`, `[N]` (negative counts from the end), `[]`
+(iterate) and `|` to chain, for example:
+
+```bash
+sorolens contracts list --output jsonl --query '.[] | .id'
+sorolens watchdog status CAAA... --output yaml --query '.status'
+```
+
+A query implies `--output json` unless a structured format is chosen, and is
+rejected with `--output table`. Syntax and runtime errors report the position
+in the expression. The filter is implemented in Go; no external program runs.
+
 `compare` renders events, invocations, failure rate, CPU and fee averages,
 health scores and a unicode event-volume sparkline for each contract. Pick a
 window with `--window 24h|7d|30d`; missing data becomes an em dash instead of
@@ -75,6 +121,13 @@ failing the command:
 sorolens compare CAAA... CBBB... --window 7d
 sorolens compare CAAA... CBBB... CCCC... --json
 ```
+
+## Plugins
+
+Executables named `sorolens-<name>` on `PATH` become subcommands
+(`sorolens <name>`); `sorolens plugin list` shows them. Built-in commands cannot
+be shadowed and API keys are not passed to plugins unless `--plugin-api-key` is
+set. See [docs/cli-plugins.md](../docs/cli-plugins.md).
 
 ## Releasing
 

@@ -40,6 +40,12 @@ test.describe("Settings", () => {
     await expect(page.getByLabel("Critical alerts")).toBeChecked();
     await expect(page.getByLabel("Weekly digest")).not.toBeChecked();
     await expect(page.getByTestId("settings-identity")).toBeVisible();
+    await expect(page.getByTestId("settings-extension")).toBeVisible();
+    await expect(
+      page.getByTestId("settings-extension").getByRole("link", {
+        name: "Install instructions",
+      })
+    ).toBeVisible();
     await expect(page.getByTestId("settings-api-key")).toContainText(
       "No API key yet"
     );

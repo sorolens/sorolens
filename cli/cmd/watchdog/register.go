@@ -145,7 +145,7 @@ func runRegister(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	jsonOut, _ := cmd.Flags().GetBool("json")
+	jsonOut := format.Structured()
 
 	if registerDryRun {
 		if jsonOut {

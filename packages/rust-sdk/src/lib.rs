@@ -105,6 +105,7 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod policy;
 pub mod types;
 pub mod webhooks;
 
