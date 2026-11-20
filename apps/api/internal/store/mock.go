@@ -48,6 +48,8 @@ type MockStore struct {
 	alertRules            []AlertRule
 	contractNotes         map[string][]ContractNote
 	watchedAccounts       map[string]WatchedAccount
+	maintenanceWindows    map[int64]MaintenanceWindow
+	maintenanceWindowSeq  int64
 	*MockExportJobStore
 
 	// auditMu guards auditEvents: the audit middleware writes asynchronously.

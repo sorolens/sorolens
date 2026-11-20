@@ -48,6 +48,7 @@ var catalog = []Metric{
 	{Name: "expiring_storage_entries", Unit: UnitCount, Description: "Storage entries expiring within seven days."},
 	{Name: "min_storage_ttl_ledgers", Unit: UnitLedgers, Description: "Ledgers until the soonest storage entry expires."},
 	{Name: "health_score", Unit: UnitScore, Description: "Composite 0-100 contract health score."},
+	{Name: "resource_utilisation", Unit: UnitRatio, Description: "Maximum ratio of network resource limits consumed by an invocation."},
 }
 
 var metricByName = func() map[string]Metric {

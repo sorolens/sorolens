@@ -34,12 +34,22 @@ type healthCheckResponse struct {
 }
 
 type contractAlertResponse struct {
-	ContractID string    `json:"contract_id"`
-	Severity   string    `json:"severity"`
-	Message    string    `json:"message"`
-	Ledger     int64     `json:"ledger"`
-	TxHash     string    `json:"tx_hash"`
-	Timestamp  time.Time `json:"timestamp"`
+	ID                  int64      `json:"id,omitempty"`
+	ContractID          string     `json:"contract_id"`
+	Severity            string     `json:"severity"`
+	Message             string     `json:"message"`
+	Ledger              int64      `json:"ledger"`
+	TxHash              string     `json:"tx_hash"`
+	Timestamp           time.Time  `json:"timestamp"`
+	State               string     `json:"state,omitempty"`
+	AcknowledgedAt      *time.Time `json:"acknowledged_at,omitempty"`
+	AcknowledgedBy      string     `json:"acknowledged_by,omitempty"`
+	SnoozedUntil        *time.Time `json:"snoozed_until,omitempty"`
+	SnoozedAt           *time.Time `json:"snoozed_at,omitempty"`
+	SnoozedBy           string     `json:"snoozed_by,omitempty"`
+	ResolvedAt          *time.Time `json:"resolved_at,omitempty"`
+	ResolvedBy          string     `json:"resolved_by,omitempty"`
+	MaintenanceWindowID *int64     `json:"maintenance_window_id,omitempty"`
 }
 
 type watchdogStatsResponse struct {
@@ -80,12 +90,22 @@ func healthCheckFromStore(h store.HealthCheck) healthCheckResponse {
 
 func alertFromStore(a store.ContractAlert) contractAlertResponse {
 	return contractAlertResponse{
-		ContractID: a.ContractID,
-		Severity:   a.Severity,
-		Message:    a.Message,
-		Ledger:     a.Ledger,
-		TxHash:     a.TxHash,
-		Timestamp:  a.Timestamp,
+		ID:                  a.ID,
+		ContractID:          a.ContractID,
+		Severity:            a.Severity,
+		Message:             a.Message,
+		Ledger:              a.Ledger,
+		TxHash:              a.TxHash,
+		Timestamp:           a.Timestamp,
+		State:               a.State,
+		AcknowledgedAt:      a.AcknowledgedAt,
+		AcknowledgedBy:      a.AcknowledgedBy,
+		SnoozedUntil:        a.SnoozedUntil,
+		SnoozedAt:           a.SnoozedAt,
+		SnoozedBy:           a.SnoozedBy,
+		ResolvedAt:          a.ResolvedAt,
+		ResolvedBy:          a.ResolvedBy,
+		MaintenanceWindowID: a.MaintenanceWindowID,
 	}
 }
 
@@ -166,7 +186,8 @@ func (h *Handler) ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
-	alerts, next, err := h.Store.ListAlerts(r.Context(), id, severity, network, r.URL.Query().Get("cursor"), intQuery(r, "limit", 100))
+	state := r.URL.Query().Get("state")
+	alerts, next, err := h.Store.ListAlertsWithState(r.Context(), id, severity, network, state, r.URL.Query().Get("cursor"), intQuery(r, "limit", 100))
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidCursor) {
 			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")

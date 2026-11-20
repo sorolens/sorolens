@@ -282,3 +282,58 @@ func TestDispatchSkipsNonCritical(t *testing.T) {
 		t.Fatal("non-critical alerts must not be dispatched")
 	}
 }
+
+func TestDispatchSkipsAcknowledgedAndSnoozed(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
+	defer srv.Close()
+
+	// Acknowledged
+	aAck := criticalAlert()
+	aAck.State = "acknowledged"
+	DispatchAlerts(context.Background(), aAck, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Critical", SigningSecret: "whsec_test_w"}}},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	time.Sleep(50 * time.Millisecond)
+	if called {
+		t.Fatal("acknowledged alert must not be dispatched")
+	}
+
+	// Snoozed (future)
+	future := time.Now().Add(1 * time.Hour)
+	aSnz := criticalAlert()
+	aSnz.State = "snoozed"
+	aSnz.SnoozedUntil = &future
+	DispatchAlerts(context.Background(), aSnz, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Critical", SigningSecret: "whsec_test_w"}}},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	time.Sleep(50 * time.Millisecond)
+	if called {
+		t.Fatal("snoozed alert must not be dispatched")
+	}
+
+	// Resolved
+	aRes := criticalAlert()
+	aRes.State = "resolved"
+	DispatchAlerts(context.Background(), aRes, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Critical", SigningSecret: "whsec_test_w"}}},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	time.Sleep(50 * time.Millisecond)
+	if called {
+		t.Fatal("resolved alert must not be dispatched")
+	}
+}
+
+func TestDispatchSkipsMaintenanceWindow(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
+	defer srv.Close()
+
+	winID := int64(42)
+	aMaint := criticalAlert()
+	aMaint.MaintenanceWindowID = &winID
+
+	DispatchAlerts(context.Background(), aMaint, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Critical", SigningSecret: "whsec_test_w"}}},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	time.Sleep(50 * time.Millisecond)
+	if called {
+		t.Fatal("alert inside maintenance window must not be dispatched")
+	}
+}

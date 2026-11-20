@@ -218,6 +218,20 @@
           "getExportJob",
           "getExportJobV2"
         ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
       }
     ],
     "python": [
@@ -440,6 +454,20 @@
           "getExportJob",
           "getExportJobV2"
         ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
       }
     ],
     "go": [
@@ -623,6 +651,20 @@
           "getExportJob",
           "getExportJobV2"
         ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
       }
     ],
     "typescript": [
@@ -797,6 +839,20 @@
           "downloadExportV2",
           "getExportJob",
           "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
         ]
       }
     ]

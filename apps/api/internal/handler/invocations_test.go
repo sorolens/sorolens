@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
@@ -378,5 +379,53 @@ func TestGetInvocation_Scope(t *testing.T) {
 	}
 	if scope != middleware.ScopeReadContracts {
 		t.Errorf("want %q, got %q", middleware.ScopeReadContracts, scope)
+	}
+}
+
+func TestGetInvocation_NearLimitUtilisation(t *testing.T) {
+	ms := store.NewMockStore()
+	contractID := "C12345678901234567890123456789012345678901234567890123456"
+	tx := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+	_ = ms.BatchInsertInvocations(nil, []store.Invocation{
+		{
+			TxHash:             tx,
+			ContractID:         contractID,
+			Network:            "testnet",
+			Ledger:             100,
+			LedgerClosedAt:     time.Now().UTC(),
+			Status:             "SUCCESS",
+			FunctionName:       "heavy_compute",
+			CPUInsn:            90_000_000, // 90% of 100M
+			MemByte:            1_000_000,
+			LedgerReadByte:     10_000,
+			LedgerWriteByte:    5_000,
+			ResourceFeeCharged: 5000,
+		},
+	})
+
+	srv := newTestHandler(ms, true, true)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/contracts/"+contractID+"/invocations/"+tx, nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+
+	var res struct {
+		Utilisation *handler.ResourceUtilisation `json:"utilisation"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if res.Utilisation == nil {
+		t.Fatalf("expected utilisation in response, got nil")
+	}
+	if !res.Utilisation.NearLimit {
+		t.Errorf("expected NearLimit = true for 90%% CPU, got false")
+	}
+	if res.Utilisation.CPUInstructionsRatio != 0.90 {
+		t.Errorf("expected CPUInstructionsRatio = 0.90, got %.2f", res.Utilisation.CPUInstructionsRatio)
 	}
 }
