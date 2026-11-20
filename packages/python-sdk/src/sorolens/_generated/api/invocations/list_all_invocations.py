@@ -20,6 +20,7 @@ def _get_kwargs(
     contract_id: str | Unset = UNSET,
     fn: str | Unset = UNSET,
     status: ListAllInvocationsStatus | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     network: ListAllInvocationsNetwork | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
@@ -42,6 +43,8 @@ def _get_kwargs(
         json_status = status.value
 
     params["status"] = json_status
+
+    params["failure_category"] = failure_category
 
     json_network: str | Unset = UNSET
     if not isinstance(network, Unset):
@@ -117,6 +120,7 @@ def sync_detailed(
     contract_id: str | Unset = UNSET,
     fn: str | Unset = UNSET,
     status: ListAllInvocationsStatus | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     network: ListAllInvocationsNetwork | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
@@ -133,6 +137,7 @@ def sync_detailed(
         contract_id (str | Unset):
         fn (str | Unset):
         status (ListAllInvocationsStatus | Unset):
+        failure_category (str | Unset):
         network (ListAllInvocationsNetwork | Unset):
         from_ (int | Unset):
         to (int | Unset):
@@ -153,6 +158,7 @@ def sync_detailed(
         contract_id=contract_id,
         fn=fn,
         status=status,
+        failure_category=failure_category,
         network=network,
         from_=from_,
         to=to,
@@ -175,6 +181,7 @@ def sync(
     contract_id: str | Unset = UNSET,
     fn: str | Unset = UNSET,
     status: ListAllInvocationsStatus | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     network: ListAllInvocationsNetwork | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
@@ -191,6 +198,7 @@ def sync(
         contract_id (str | Unset):
         fn (str | Unset):
         status (ListAllInvocationsStatus | Unset):
+        failure_category (str | Unset):
         network (ListAllInvocationsNetwork | Unset):
         from_ (int | Unset):
         to (int | Unset):
@@ -212,6 +220,7 @@ def sync(
         contract_id=contract_id,
         fn=fn,
         status=status,
+        failure_category=failure_category,
         network=network,
         from_=from_,
         to=to,
@@ -228,6 +237,7 @@ async def asyncio_detailed(
     contract_id: str | Unset = UNSET,
     fn: str | Unset = UNSET,
     status: ListAllInvocationsStatus | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     network: ListAllInvocationsNetwork | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
@@ -244,6 +254,7 @@ async def asyncio_detailed(
         contract_id (str | Unset):
         fn (str | Unset):
         status (ListAllInvocationsStatus | Unset):
+        failure_category (str | Unset):
         network (ListAllInvocationsNetwork | Unset):
         from_ (int | Unset):
         to (int | Unset):
@@ -264,6 +275,7 @@ async def asyncio_detailed(
         contract_id=contract_id,
         fn=fn,
         status=status,
+        failure_category=failure_category,
         network=network,
         from_=from_,
         to=to,
@@ -284,6 +296,7 @@ async def asyncio(
     contract_id: str | Unset = UNSET,
     fn: str | Unset = UNSET,
     status: ListAllInvocationsStatus | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     network: ListAllInvocationsNetwork | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
@@ -300,6 +313,7 @@ async def asyncio(
         contract_id (str | Unset):
         fn (str | Unset):
         status (ListAllInvocationsStatus | Unset):
+        failure_category (str | Unset):
         network (ListAllInvocationsNetwork | Unset):
         from_ (int | Unset):
         to (int | Unset):
@@ -322,6 +336,7 @@ async def asyncio(
             contract_id=contract_id,
             fn=fn,
             status=status,
+            failure_category=failure_category,
             network=network,
             from_=from_,
             to=to,

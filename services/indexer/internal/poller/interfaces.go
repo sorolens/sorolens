@@ -219,6 +219,13 @@ type Invocation struct {
 	MemByte         *int64
 	LedgerReadByte  *int64
 	LedgerWriteByte *int64
+
+	// Decoded from the transaction result and diagnostic events for a failed
+	// invocation (see the failure package). FailureCategory is always set for
+	// a failed invocation and empty for a successful one; FailureCode carries
+	// the raw host or transaction error code the category came from.
+	FailureCategory string
+	FailureCode     string
 }
 
 // SyncState mirrors store.SyncState.

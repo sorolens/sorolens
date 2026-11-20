@@ -12,10 +12,12 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
 	"github.com/sorolens/sorolens/services/indexer/internal/callgraph"
+	"github.com/sorolens/sorolens/services/indexer/internal/failure"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
@@ -852,6 +854,7 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 			ApplicationOrder: tx.ApplicationOrder,
 		}
 		p.applyDiagnostics(&inv, tx.DiagnosticEventsXDR, fnCallTopics[txHash])
+		p.applyFailure(&inv, tx)
 		invocations = append(invocations, inv)
 	}
 
@@ -889,6 +892,20 @@ func (p *Poller) applyDiagnostics(inv *Invocation, diagnosticEventsXDR []string,
 			"events", len(diagnosticEventsXDR),
 		)
 	}
+}
+
+// applyFailure classifies why a failed transaction failed (issue #806). The
+// category and raw host/transaction error code are derived from the result XDR
+// and the host diagnostic events; see the failure package. A failed invocation
+// always receives a category (unknown causes are "other"), and a successful one
+// keeps both fields empty so the columns stay NULL.
+func (p *Poller) applyFailure(inv *Invocation, tx *TransactionResult) {
+	if tx == nil || !strings.EqualFold(tx.Status, "FAILED") {
+		return
+	}
+	f := failure.Classify(tx.ResultXDR, tx.DiagnosticEventsXDR)
+	inv.FailureCategory = f.Category
+	inv.FailureCode = f.Code
 }
 
 func (p *Poller) selectRPCClient(network string) (RPCClient, bool) {

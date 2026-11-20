@@ -626,6 +626,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             type: "string",
           },
           {
+            name: "failure_category",
+            in: "query",
+            required: false,
+            description:
+              "Failure category filter: budget, contract, auth, storage, wasm_trap, value, crypto, events, object, context, transaction or other. Only failed invocations carry a category; an unrecognized value simply matches nothing.",
+            type: "string",
+          },
+          {
             name: "from",
             in: "query",
             required: false,
@@ -1761,6 +1769,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             type: "string",
           },
           {
+            name: "failure_category",
+            in: "query",
+            required: false,
+            description:
+              "Failure category filter for failed invocations: budget, contract, auth, storage, wasm_trap, value, crypto, events, object, context, transaction or other.",
+            type: "string",
+          },
+          {
             name: "from",
             in: "query",
             required: false,
@@ -2591,6 +2607,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             in: "query",
             required: false,
             description: "Invocation status filter.",
+            type: "string",
+          },
+          {
+            name: "failure_category",
+            in: "query",
+            required: false,
+            description:
+              "Failure category filter: budget, contract, auth, storage, wasm_trap, value, crypto, events, object, context, transaction or other. Only failed invocations carry a category; an unrecognized value simply matches nothing.",
             type: "string",
           },
           {

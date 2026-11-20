@@ -36,6 +36,11 @@ class InvocationDetail:
         ledger_read_byte (int):
         ledger_write_byte (int):
         application_order (int):
+        failure_category (str): Category of a failed invocation: budget, contract, auth, storage, wasm_trap, value,
+            crypto, events, object, context, transaction or other. Unknown causes are `other` and are never dropped. Empty
+            for a successful invocation. See docs/indexer.md.
+        failure_code (str): Raw host or transaction error code the category was derived from, for example
+            `sce_storage:3` or `tx_bad_seq`. Empty when the failure could not be decoded.
         events (list[Event]):
     """
 
@@ -55,6 +60,8 @@ class InvocationDetail:
     ledger_read_byte: int
     ledger_write_byte: int
     application_order: int
+    failure_category: str
+    failure_code: str
     events: list[Event]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -91,6 +98,10 @@ class InvocationDetail:
 
         application_order = self.application_order
 
+        failure_category = self.failure_category
+
+        failure_code = self.failure_code
+
         events = []
         for events_item_data in self.events:
             events_item = events_item_data.to_dict()
@@ -116,6 +127,8 @@ class InvocationDetail:
                 "ledger_read_byte": ledger_read_byte,
                 "ledger_write_byte": ledger_write_byte,
                 "application_order": application_order,
+                "failure_category": failure_category,
+                "failure_code": failure_code,
                 "events": events,
             }
         )
@@ -160,6 +173,10 @@ class InvocationDetail:
 
         application_order = d.pop("application_order")
 
+        failure_category = d.pop("failure_category")
+
+        failure_code = d.pop("failure_code")
+
         events = []
         _events = d.pop("events")
         for events_item_data in _events:
@@ -184,6 +201,8 @@ class InvocationDetail:
             ledger_read_byte=ledger_read_byte,
             ledger_write_byte=ledger_write_byte,
             application_order=application_order,
+            failure_category=failure_category,
+            failure_code=failure_code,
             events=events,
         )
 

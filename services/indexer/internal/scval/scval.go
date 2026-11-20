@@ -15,25 +15,26 @@ type scVal struct {
 }
 
 const (
-	scvBool   = 0
-	scvVoid   = 1
-	scvU32    = 3
-	scvI32    = 4
-	scvU64    = 5
-	scvI64    = 6
-	scvU128   = 9
-	scvI128   = 10
-	scvBytes  = 13
-	scvString = 14
-	scvSymbol = 15
-	scvVec    = 16
-	scvMap    = 17
+	scvBool    = 0
+	scvVoid    = 1
+	scvError   = 2
+	scvU32     = 3
+	scvI32     = 4
+	scvU64     = 5
+	scvI64     = 6
+	scvU128    = 9
+	scvI128    = 10
+	scvBytes   = 13
+	scvString  = 14
+	scvSymbol  = 15
+	scvVec     = 16
+	scvMap     = 17
 	scvAddress = 18
 )
 
 var scvTypeNames = map[uint32]string{
 	scvBool: "scvBool", scvVoid: "scvVoid",
-	2: "scvError", scvU32: "scvU32", scvI32: "scvI32",
+	scvError: "scvError", scvU32: "scvU32", scvI32: "scvI32",
 	scvU64: "scvU64", scvI64: "scvI64",
 	7: "scvTimePoint", 8: "scvDuration",
 	scvU128: "scvU128", scvI128: "scvI128",
@@ -41,6 +42,28 @@ var scvTypeNames = map[uint32]string{
 	scvBytes: "scvBytes", scvString: "scvString", scvSymbol: "scvSymbol",
 	scvVec: "scvVec", scvMap: "scvMap", scvAddress: "scvAddress",
 	19: "scvContractInstance", 20: "scvLedgerKeyContractInstance", 21: "scvLedgerKeyNonce",
+}
+
+// Error is a decoded Soroban SCError, the payload of an ScVal of type
+// scvError. Type is the SCErrorType discriminant (0 contract, 1 wasm_vm,
+// 2 context, 3 storage, 4 object, 5 crypto, 6 events, 7 budget, 8 value,
+// 9 auth); Code is either the contract-defined error number (type 0) or an
+// SCErrorCode for the host subsystems.
+type Error struct {
+	Type uint32 `json:"type"`
+	Code uint32 `json:"code"`
+}
+
+// DecodeError decodes a base64-encoded XDR ScVal that carries an SCError
+// (ScVal::Error). It reports false when the value is not an error or cannot be
+// decoded.
+func DecodeError(b64 string) (Error, bool) {
+	v, err := Decode(b64)
+	if err != nil {
+		return Error{}, false
+	}
+	e, ok := v.Value.(Error)
+	return e, ok
 }
 
 // Decode decodes a base64-encoded XDR ScVal.
@@ -67,6 +90,17 @@ func Decode(b64 string) (scVal, error) {
 		}
 		v := binary.BigEndian.Uint32(body[:4]) != 0
 		return scVal{Type: typeName, Value: v, Human: fmt.Sprintf("%v", v)}, nil
+	case scvError:
+		// union SCError switch (SCErrorType type) { case 0: uint32;
+		// default: SCErrorCode }; — both arms are 32-bit.
+		if len(body) < 8 {
+			break
+		}
+		e := Error{
+			Type: binary.BigEndian.Uint32(body[:4]),
+			Code: binary.BigEndian.Uint32(body[4:8]),
+		}
+		return scVal{Type: typeName, Value: e, Human: fmt.Sprintf("error(%d,%d)", e.Type, e.Code)}, nil
 	case scvU32:
 		if len(body) < 4 {
 			break

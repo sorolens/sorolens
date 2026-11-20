@@ -38,6 +38,9 @@ class V2Invocation:
         args_decoded (None | Unset | V2InvocationArgsDecodedType0):
         result_decoded (Any | Unset):
         result_xdr (str | Unset):
+        failure_category (None | str | Unset): Category of a failed invocation (see the v1 Invocation schema and
+            docs/indexer.md). Null for a successful invocation.
+        failure_code (None | str | Unset): Raw host or transaction error code the category came from.
     """
 
     tx_hash: str
@@ -56,6 +59,8 @@ class V2Invocation:
     args_decoded: None | Unset | V2InvocationArgsDecodedType0 = UNSET
     result_decoded: Any | Unset = UNSET
     result_xdr: str | Unset = UNSET
+    failure_category: None | str | Unset = UNSET
+    failure_code: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -102,6 +107,18 @@ class V2Invocation:
 
         result_xdr = self.result_xdr
 
+        failure_category: None | str | Unset
+        if isinstance(self.failure_category, Unset):
+            failure_category = UNSET
+        else:
+            failure_category = self.failure_category
+
+        failure_code: None | str | Unset
+        if isinstance(self.failure_code, Unset):
+            failure_code = UNSET
+        else:
+            failure_code = self.failure_code
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -127,6 +144,10 @@ class V2Invocation:
             field_dict["result_decoded"] = result_decoded
         if result_xdr is not UNSET:
             field_dict["result_xdr"] = result_xdr
+        if failure_category is not UNSET:
+            field_dict["failure_category"] = failure_category
+        if failure_code is not UNSET:
+            field_dict["failure_code"] = failure_code
 
         return field_dict
 
@@ -191,6 +212,24 @@ class V2Invocation:
 
         result_xdr = d.pop("result_xdr", UNSET)
 
+        def _parse_failure_category(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        failure_category = _parse_failure_category(d.pop("failure_category", UNSET))
+
+        def _parse_failure_code(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        failure_code = _parse_failure_code(d.pop("failure_code", UNSET))
+
         v2_invocation = cls(
             tx_hash=tx_hash,
             contract_id=contract_id,
@@ -208,6 +247,8 @@ class V2Invocation:
             args_decoded=args_decoded,
             result_decoded=result_decoded,
             result_xdr=result_xdr,
+            failure_category=failure_category,
+            failure_code=failure_code,
         )
 
         v2_invocation.additional_properties = d

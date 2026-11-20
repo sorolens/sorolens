@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"math"
 	"net/http"
 	"regexp"
@@ -121,6 +121,13 @@ type invocationResponse struct {
 	LedgerReadByte     int64          `json:"ledger_read_byte"`
 	LedgerWriteByte    int64          `json:"ledger_write_byte"`
 	ApplicationOrder   int            `json:"application_order"`
+	// FailureCategory classifies a failed invocation (budget, contract, auth,
+	// storage, wasm_trap, value, crypto, events, object, context, transaction,
+	// other). Empty for a successful invocation.
+	FailureCategory string `json:"failure_category"`
+	// FailureCode is the raw host or transaction error code the category was
+	// derived from, e.g. "sce_storage:3" or "tx_bad_seq".
+	FailureCode string `json:"failure_code"`
 }
 
 type invocationDetailResponse struct {
@@ -160,6 +167,9 @@ type invocationWindowStatsResponse struct {
 	P95Fee            float64 `json:"p95_fee"`
 	AvgCPU            float64 `json:"avg_cpu"`
 	P95CPU            float64 `json:"p95_cpu"`
+	// FailureCategories counts the window's failed invocations per category
+	// (issue #806). Always present, possibly empty.
+	FailureCategories map[string]int64 `json:"failure_categories"`
 }
 
 type contractInvocationStatsResponse struct {
@@ -291,6 +301,8 @@ func invocationFromStore(inv store.Invocation) invocationResponse {
 		LedgerReadByte:     inv.LedgerReadByte,
 		LedgerWriteByte:    inv.LedgerWriteByte,
 		ApplicationOrder:   inv.ApplicationOrder,
+		FailureCategory:    inv.FailureCategory,
+		FailureCode:        inv.FailureCode,
 	}
 }
 
@@ -635,11 +647,12 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := store.InvocationFilters{
-		Status:       r.URL.Query().Get("status"),
-		FunctionName: r.URL.Query().Get("function_name"),
-		Network:      network,
-		From:         uint32Query(r, "from"),
-		To:           uint32Query(r, "to"),
+		Status:          r.URL.Query().Get("status"),
+		FunctionName:    r.URL.Query().Get("function_name"),
+		FailureCategory: r.URL.Query().Get("failure_category"),
+		Network:         network,
+		From:            uint32Query(r, "from"),
+		To:              uint32Query(r, "to"),
 	}
 	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
 	if err != nil {
@@ -677,6 +690,10 @@ func (h *Handler) ContractInvocationStats(w http.ResponseWriter, r *http.Request
 }
 
 func invocationWindowStatsFromStore(stats store.InvocationWindowStats) invocationWindowStatsResponse {
+	categories := stats.FailureCategories
+	if categories == nil {
+		categories = map[string]int64{}
+	}
 	return invocationWindowStatsResponse{
 		InvocationCount:   stats.InvocationCount,
 		FailedInvocations: stats.FailedInvocations,
@@ -685,6 +702,7 @@ func invocationWindowStatsFromStore(stats store.InvocationWindowStats) invocatio
 		P95Fee:            stats.P95Fee,
 		AvgCPU:            stats.AvgCPU,
 		P95CPU:            stats.P95CPU,
+		FailureCategories: categories,
 	}
 }
 
@@ -777,14 +795,15 @@ func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	f := store.InvocationFilters{
-		ContractID:   strings.TrimSpace(r.URL.Query().Get("contract_id")),
-		Status:       r.URL.Query().Get("status"),
-		FunctionName: r.URL.Query().Get("fn"),
-		Network:      network,
-		From:         uint32Query(r, "from"),
-		To:           uint32Query(r, "to"),
-		Since:        since,
-		Until:        until,
+		ContractID:      strings.TrimSpace(r.URL.Query().Get("contract_id")),
+		Status:          r.URL.Query().Get("status"),
+		FunctionName:    r.URL.Query().Get("fn"),
+		FailureCategory: r.URL.Query().Get("failure_category"),
+		Network:         network,
+		From:            uint32Query(r, "from"),
+		To:              uint32Query(r, "to"),
+		Since:           since,
+		Until:           until,
 	}
 	invs, nextLedger, nextTxHash, err := h.Store.ListAllInvocations(
 		r.Context(), cursorLedger, cursorTxHash, intQuery(r, "limit", 50), f,

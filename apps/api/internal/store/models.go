@@ -101,7 +101,14 @@ type Invocation struct {
 	LedgerReadByte     int64
 	LedgerWriteByte    int64
 	ApplicationOrder   int
-	InsertedAt         time.Time
+	// FailureCategory classifies a failed invocation (budget, contract, auth,
+	// storage, wasm_trap, value, crypto, events, object, context, transaction,
+	// other); empty for a successful one or a row indexed before the feature.
+	FailureCategory string
+	// FailureCode is the raw host or transaction error code the category was
+	// derived from, e.g. "sce_storage:3" or "tx_bad_seq".
+	FailureCode string
+	InsertedAt  time.Time
 }
 
 // CallEdge is one parent -> child invocation edge of a transaction's

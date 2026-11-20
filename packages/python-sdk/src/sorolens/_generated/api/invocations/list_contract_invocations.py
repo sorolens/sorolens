@@ -23,6 +23,7 @@ def _get_kwargs(
     network: ListContractInvocationsNetwork | Unset = UNSET,
     status: ListContractInvocationsStatus | Unset = UNSET,
     function_name: str | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
 ) -> dict[str, Any]:
@@ -46,6 +47,8 @@ def _get_kwargs(
     params["status"] = json_status
 
     params["function_name"] = function_name
+
+    params["failure_category"] = failure_category
 
     params["from"] = from_
 
@@ -108,6 +111,7 @@ def sync_detailed(
     network: ListContractInvocationsNetwork | Unset = UNSET,
     status: ListContractInvocationsStatus | Unset = UNSET,
     function_name: str | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
 ) -> Response[Error | ListContractInvocationsResponse200]:
@@ -120,6 +124,7 @@ def sync_detailed(
         network (ListContractInvocationsNetwork | Unset):
         status (ListContractInvocationsStatus | Unset):
         function_name (str | Unset):
+        failure_category (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
 
@@ -138,6 +143,7 @@ def sync_detailed(
         network=network,
         status=status,
         function_name=function_name,
+        failure_category=failure_category,
         from_=from_,
         to=to,
     )
@@ -158,6 +164,7 @@ def sync(
     network: ListContractInvocationsNetwork | Unset = UNSET,
     status: ListContractInvocationsStatus | Unset = UNSET,
     function_name: str | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
 ) -> Error | ListContractInvocationsResponse200 | None:
@@ -170,6 +177,7 @@ def sync(
         network (ListContractInvocationsNetwork | Unset):
         status (ListContractInvocationsStatus | Unset):
         function_name (str | Unset):
+        failure_category (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
 
@@ -189,6 +197,7 @@ def sync(
         network=network,
         status=status,
         function_name=function_name,
+        failure_category=failure_category,
         from_=from_,
         to=to,
     ).parsed
@@ -203,6 +212,7 @@ async def asyncio_detailed(
     network: ListContractInvocationsNetwork | Unset = UNSET,
     status: ListContractInvocationsStatus | Unset = UNSET,
     function_name: str | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
 ) -> Response[Error | ListContractInvocationsResponse200]:
@@ -215,6 +225,7 @@ async def asyncio_detailed(
         network (ListContractInvocationsNetwork | Unset):
         status (ListContractInvocationsStatus | Unset):
         function_name (str | Unset):
+        failure_category (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
 
@@ -233,6 +244,7 @@ async def asyncio_detailed(
         network=network,
         status=status,
         function_name=function_name,
+        failure_category=failure_category,
         from_=from_,
         to=to,
     )
@@ -251,6 +263,7 @@ async def asyncio(
     network: ListContractInvocationsNetwork | Unset = UNSET,
     status: ListContractInvocationsStatus | Unset = UNSET,
     function_name: str | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
 ) -> Error | ListContractInvocationsResponse200 | None:
@@ -263,6 +276,7 @@ async def asyncio(
         network (ListContractInvocationsNetwork | Unset):
         status (ListContractInvocationsStatus | Unset):
         function_name (str | Unset):
+        failure_category (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
 
@@ -283,6 +297,7 @@ async def asyncio(
             network=network,
             status=status,
             function_name=function_name,
+            failure_category=failure_category,
             from_=from_,
             to=to,
         )

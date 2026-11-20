@@ -21,6 +21,7 @@ def _get_kwargs(
     network: V2ListInvocationsNetwork | Unset = UNSET,
     status: V2ListInvocationsStatus | Unset = UNSET,
     function_name: str | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
 ) -> dict[str, Any]:
@@ -44,6 +45,8 @@ def _get_kwargs(
     params["status"] = json_status
 
     params["function_name"] = function_name
+
+    params["failure_category"] = failure_category
 
     params["from"] = from_
 
@@ -106,6 +109,7 @@ def sync_detailed(
     network: V2ListInvocationsNetwork | Unset = UNSET,
     status: V2ListInvocationsStatus | Unset = UNSET,
     function_name: str | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
 ) -> Response[Error | V2InvocationList]:
@@ -118,6 +122,7 @@ def sync_detailed(
         network (V2ListInvocationsNetwork | Unset):
         status (V2ListInvocationsStatus | Unset):
         function_name (str | Unset):
+        failure_category (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
 
@@ -136,6 +141,7 @@ def sync_detailed(
         network=network,
         status=status,
         function_name=function_name,
+        failure_category=failure_category,
         from_=from_,
         to=to,
     )
@@ -156,6 +162,7 @@ def sync(
     network: V2ListInvocationsNetwork | Unset = UNSET,
     status: V2ListInvocationsStatus | Unset = UNSET,
     function_name: str | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
 ) -> Error | V2InvocationList | None:
@@ -168,6 +175,7 @@ def sync(
         network (V2ListInvocationsNetwork | Unset):
         status (V2ListInvocationsStatus | Unset):
         function_name (str | Unset):
+        failure_category (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
 
@@ -187,6 +195,7 @@ def sync(
         network=network,
         status=status,
         function_name=function_name,
+        failure_category=failure_category,
         from_=from_,
         to=to,
     ).parsed
@@ -201,6 +210,7 @@ async def asyncio_detailed(
     network: V2ListInvocationsNetwork | Unset = UNSET,
     status: V2ListInvocationsStatus | Unset = UNSET,
     function_name: str | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
 ) -> Response[Error | V2InvocationList]:
@@ -213,6 +223,7 @@ async def asyncio_detailed(
         network (V2ListInvocationsNetwork | Unset):
         status (V2ListInvocationsStatus | Unset):
         function_name (str | Unset):
+        failure_category (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
 
@@ -231,6 +242,7 @@ async def asyncio_detailed(
         network=network,
         status=status,
         function_name=function_name,
+        failure_category=failure_category,
         from_=from_,
         to=to,
     )
@@ -249,6 +261,7 @@ async def asyncio(
     network: V2ListInvocationsNetwork | Unset = UNSET,
     status: V2ListInvocationsStatus | Unset = UNSET,
     function_name: str | Unset = UNSET,
+    failure_category: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
 ) -> Error | V2InvocationList | None:
@@ -261,6 +274,7 @@ async def asyncio(
         network (V2ListInvocationsNetwork | Unset):
         status (V2ListInvocationsStatus | Unset):
         function_name (str | Unset):
+        failure_category (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
 
@@ -281,6 +295,7 @@ async def asyncio(
             network=network,
             status=status,
             function_name=function_name,
+            failure_category=failure_category,
             from_=from_,
             to=to,
         )

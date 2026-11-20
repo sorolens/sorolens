@@ -251,6 +251,8 @@ CREATE TABLE invocations (
     ledger_read_byte   BIGINT,                        -- from core_metrics diagnostic event
     ledger_write_byte  BIGINT,                        -- from core_metrics diagnostic event
     application_order  INTEGER,                       -- index of tx within the ledger
+    failure_category   TEXT,                          -- failed invocations only: budget | contract | auth | storage | wasm_trap | value | crypto | events | object | context | transaction | other
+    failure_code       TEXT,                          -- raw host/transaction code behind the category, e.g. sce_storage:3 or tx_bad_seq
     inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -262,6 +264,10 @@ CREATE INDEX idx_invocations_ledger_closed_at ON invocations (ledger_closed_at D
 
 -- Filter by status (e.g. "show only failed invocations").
 CREATE INDEX idx_invocations_status ON invocations (contract_id, status);
+
+-- Failure causes are decoded by the indexer (issue #806); rows indexed before
+-- the feature, and successful invocations, leave both columns NULL. See
+-- docs/indexer.md for the category table.
 
 -- ============================================================
 -- storage_entries

@@ -1096,6 +1096,16 @@ paths:
           schema:
             type: string
           description: Function name filter.
+        - name: failure_category
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >-
+            Failure category filter: budget, contract, auth, storage, wasm_trap,
+            value, crypto, events, object, context, transaction or other. Only
+            failed invocations carry a category; an unrecognized value simply
+            matches nothing.
         - name: from
           in: query
           required: false
@@ -2967,6 +2977,15 @@ paths:
           description: Renamed from v1's `fn`; `fn` is still accepted.
           schema:
             type: string
+        - name: failure_category
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >-
+            Failure category filter for failed invocations: budget, contract,
+            auth, storage, wasm_trap, value, crypto, events, object, context,
+            transaction or other.
         - name: from
           in: query
           required: false
@@ -4256,6 +4275,16 @@ paths:
             type: string
             enum: [SUCCESS, FAILED, NOT_FOUND]
           description: Invocation status filter.
+        - name: failure_category
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >-
+            Failure category filter: budget, contract, auth, storage, wasm_trap,
+            value, crypto, events, object, context, transaction or other. Only
+            failed invocations carry a category; an unrecognized value simply
+            matches nothing.
         - $ref: "#/components/parameters/NetworkParam"
         - name: from
           in: query
@@ -6064,6 +6093,8 @@ components:
         - ledger_read_byte
         - ledger_write_byte
         - application_order
+        - failure_category
+        - failure_code
       properties:
         tx_hash:
           type: string
@@ -6104,6 +6135,19 @@ components:
           format: int64
         application_order:
           type: integer
+        failure_category:
+          type: string
+          description: >-
+            Category of a failed invocation: budget, contract, auth, storage,
+            wasm_trap, value, crypto, events, object, context, transaction or
+            other. Unknown causes are `other` and are never dropped. Empty for
+            a successful invocation. See docs/indexer.md.
+        failure_code:
+          type: string
+          description: >-
+            Raw host or transaction error code the category was derived from,
+            for example `sce_storage:3` or `tx_bad_seq`. Empty when the failure
+            could not be decoded.
 
     InvocationDetail:
       allOf:
@@ -6225,7 +6269,7 @@ components:
     InvocationWindowStats:
       type: object
       description: Fees are measured in stroops, CPU in instructions, and failure_rate is a ratio from 0 to 1.
-      required: [invocation_count, failed_invocations, failure_rate, avg_fee, p95_fee, avg_cpu, p95_cpu]
+      required: [invocation_count, failed_invocations, failure_rate, avg_fee, p95_fee, avg_cpu, p95_cpu, failure_categories]
       properties:
         invocation_count:
           type: integer
@@ -6250,6 +6294,15 @@ components:
         p95_cpu:
           type: number
           format: double
+        failure_categories:
+          type: object
+          description: >-
+            Count of the window's failed invocations per category. Rows indexed
+            before failure classification existed are counted as `other`, so the
+            counts add up to failed_invocations.
+          additionalProperties:
+            type: integer
+            format: int64
 
     ForecastPoint:
       type: object
@@ -6776,6 +6829,16 @@ components:
           format: int64
         application_order:
           type: integer
+        failure_category:
+          type: string
+          nullable: true
+          description: >-
+            Category of a failed invocation (see the v1 Invocation schema and
+            docs/indexer.md). Null for a successful invocation.
+        failure_code:
+          type: string
+          nullable: true
+          description: Raw host or transaction error code the category came from.
 
     V2StorageEntry:
       type: object

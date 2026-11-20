@@ -16,7 +16,7 @@ func TestContractInvocationStats(t *testing.T) {
 	ms := store.NewMockStore()
 	if err := ms.BatchInsertInvocations(nil, []store.Invocation{
 		{TxHash: "recent-success", ContractID: invocationContractID, LedgerClosedAt: now.Add(-2 * time.Hour), Status: "SUCCESS", ResourceFeeCharged: 10, CPUInsn: 100},
-		{TxHash: "recent-failure", ContractID: invocationContractID, LedgerClosedAt: now.Add(-4 * time.Hour), Status: "FAILED", ResourceFeeCharged: 20, CPUInsn: 200},
+		{TxHash: "recent-failure", ContractID: invocationContractID, LedgerClosedAt: now.Add(-4 * time.Hour), Status: "FAILED", ResourceFeeCharged: 20, CPUInsn: 200, FailureCategory: "contract", FailureCode: "sce_contract:5"},
 		{TxHash: "weekly-failure", ContractID: invocationContractID, LedgerClosedAt: now.Add(-48 * time.Hour), Status: "NOT_FOUND", ResourceFeeCharged: 30, CPUInsn: 300},
 		{TxHash: "monthly-success", ContractID: invocationContractID, LedgerClosedAt: now.Add(-11 * 24 * time.Hour), Status: "SUCCESS", ResourceFeeCharged: 40, CPUInsn: 400},
 		{TxHash: "too-old", ContractID: invocationContractID, LedgerClosedAt: now.Add(-31 * 24 * time.Hour), Status: "FAILED", ResourceFeeCharged: 100, CPUInsn: 1000},
@@ -35,13 +35,14 @@ func TestContractInvocationStats(t *testing.T) {
 
 	var response struct {
 		Windows map[string]struct {
-			InvocationCount   int64   `json:"invocation_count"`
-			FailedInvocations int64   `json:"failed_invocations"`
-			FailureRate       float64 `json:"failure_rate"`
-			AvgFee            float64 `json:"avg_fee"`
-			P95Fee            float64 `json:"p95_fee"`
-			AvgCPU            float64 `json:"avg_cpu"`
-			P95CPU            float64 `json:"p95_cpu"`
+			InvocationCount   int64            `json:"invocation_count"`
+			FailedInvocations int64            `json:"failed_invocations"`
+			FailureRate       float64          `json:"failure_rate"`
+			AvgFee            float64          `json:"avg_fee"`
+			P95Fee            float64          `json:"p95_fee"`
+			AvgCPU            float64          `json:"avg_cpu"`
+			P95CPU            float64          `json:"p95_cpu"`
+			FailureCategories map[string]int64 `json:"failure_categories"`
 		} `json:"windows"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
@@ -53,10 +54,11 @@ func TestContractInvocationStats(t *testing.T) {
 		rate            float64
 		avgFee, p95Fee  float64
 		avgCPU, p95CPU  float64
+		categories      map[string]int64
 	}{
-		"24h": {count: 2, failures: 1, rate: 0.5, avgFee: 15, p95Fee: 19.5, avgCPU: 150, p95CPU: 195},
-		"7d":  {count: 3, failures: 2, rate: 2.0 / 3.0, avgFee: 20, p95Fee: 29, avgCPU: 200, p95CPU: 290},
-		"30d": {count: 4, failures: 2, rate: 0.5, avgFee: 25, p95Fee: 38.5, avgCPU: 250, p95CPU: 385},
+		"24h": {count: 2, failures: 1, rate: 0.5, avgFee: 15, p95Fee: 19.5, avgCPU: 150, p95CPU: 195, categories: map[string]int64{"contract": 1}},
+		"7d":  {count: 3, failures: 2, rate: 2.0 / 3.0, avgFee: 20, p95Fee: 29, avgCPU: 200, p95CPU: 290, categories: map[string]int64{"contract": 1, "other": 1}},
+		"30d": {count: 4, failures: 2, rate: 0.5, avgFee: 25, p95Fee: 38.5, avgCPU: 250, p95CPU: 385, categories: map[string]int64{"contract": 1, "other": 1}},
 	}
 	if len(response.Windows) != len(wants) {
 		t.Fatalf("windows = %v, want keys 24h, 7d, and 30d", response.Windows)
@@ -69,6 +71,14 @@ func TestContractInvocationStats(t *testing.T) {
 		}
 		if got.InvocationCount != want.count || got.FailedInvocations != want.failures {
 			t.Errorf("%s counts = %d/%d, want %d/%d", name, got.InvocationCount, got.FailedInvocations, want.count, want.failures)
+		}
+		if len(got.FailureCategories) != len(want.categories) {
+			t.Errorf("%s failure_categories = %v, want %v", name, got.FailureCategories, want.categories)
+		}
+		for category, count := range want.categories {
+			if got.FailureCategories[category] != count {
+				t.Errorf("%s failure_categories[%s] = %d, want %d", name, category, got.FailureCategories[category], count)
+			}
 		}
 		for field, pair := range map[string][2]float64{
 			"failure_rate": {got.FailureRate, want.rate},

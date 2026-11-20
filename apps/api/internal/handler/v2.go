@@ -25,9 +25,9 @@ package handler
 // The field-level v1 → v2 mapping is documented in docs/api-v2.md.
 
 import (
-	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"encoding/json"
 	"errors"
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"net/http"
 	"strings"
 	"time"
@@ -210,6 +210,8 @@ type v2Invocation struct {
 	LedgerReadBytes           int64          `json:"ledger_read_bytes"`
 	LedgerWriteBytes          int64          `json:"ledger_write_bytes"`
 	ApplicationOrder          int            `json:"application_order"`
+	FailureCategory           *string        `json:"failure_category"`
+	FailureCode               *string        `json:"failure_code"`
 }
 
 func v2InvocationFromStore(inv store.Invocation) v2Invocation {
@@ -230,6 +232,8 @@ func v2InvocationFromStore(inv store.Invocation) v2Invocation {
 		LedgerReadBytes:           inv.LedgerReadByte,
 		LedgerWriteBytes:          inv.LedgerWriteByte,
 		ApplicationOrder:          inv.ApplicationOrder,
+		FailureCategory:           v2Str(inv.FailureCategory),
+		FailureCode:               v2Str(inv.FailureCode),
 	}
 }
 
@@ -571,11 +575,12 @@ func (h *Handler) V2ListInvocations(w http.ResponseWriter, r *http.Request) {
 		fn = r.URL.Query().Get("fn")
 	}
 	f := store.InvocationFilters{
-		Status:       r.URL.Query().Get("status"),
-		FunctionName: fn,
-		Network:      network,
-		From:         uint32Query(r, "from"),
-		To:           uint32Query(r, "to"),
+		Status:          r.URL.Query().Get("status"),
+		FunctionName:    fn,
+		FailureCategory: r.URL.Query().Get("failure_category"),
+		Network:         network,
+		From:            uint32Query(r, "from"),
+		To:              uint32Query(r, "to"),
 	}
 	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
 	if err != nil {

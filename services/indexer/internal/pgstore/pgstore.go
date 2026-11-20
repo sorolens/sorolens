@@ -254,12 +254,14 @@ func queueInvocation(batch *pgx.Batch, inv poller.Invocation, now time.Time) {
 		INSERT INTO invocations
 			(tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 			 result_xdr, application_order, inserted_at,
-			 function_name, cpu_insn, mem_byte, ledger_read_byte, ledger_write_byte)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			 function_name, cpu_insn, mem_byte, ledger_read_byte, ledger_write_byte,
+			 failure_category, failure_code)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 		ON CONFLICT (tx_hash) DO NOTHING`,
 		inv.TxHash, inv.ContractID, networkOrDefault(inv.Network), int64(inv.Ledger), inv.LedgerClosedAt, inv.Status,
 		inv.ResultXDR, inv.ApplicationOrder, now,
 		nullableString(inv.FunctionName), inv.CPUInsn, inv.MemByte, inv.LedgerReadByte, inv.LedgerWriteByte,
+		nullableString(inv.FailureCategory), nullableString(inv.FailureCode),
 	)
 }
 

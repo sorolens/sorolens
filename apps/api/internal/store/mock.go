@@ -575,6 +575,9 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 		if f.FunctionName != "" && inv.FunctionName != f.FunctionName {
 			continue
 		}
+		if f.FailureCategory != "" && inv.FailureCategory != f.FailureCategory {
+			continue
+		}
 		out = append(out, inv)
 		if len(out) > limit {
 			break
@@ -672,6 +675,9 @@ func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, c
 			continue
 		}
 		if f.FunctionName != "" && inv.FunctionName != f.FunctionName {
+			continue
+		}
+		if f.FailureCategory != "" && inv.FailureCategory != f.FailureCategory {
 			continue
 		}
 		if f.From != 0 && inv.Ledger < f.From {
@@ -775,12 +781,22 @@ func (m *MockStore) GetContractInvocationStats(_ context.Context, contractID str
 }
 
 func invocationWindowStats(invocations []Invocation) InvocationWindowStats {
-	stats := InvocationWindowStats{InvocationCount: int64(len(invocations))}
+	stats := InvocationWindowStats{
+		InvocationCount:   int64(len(invocations)),
+		FailureCategories: map[string]int64{},
+	}
 	fees := make([]float64, 0, len(invocations))
 	cpus := make([]float64, 0, len(invocations))
 	for _, inv := range invocations {
 		if inv.Status != "SUCCESS" {
 			stats.FailedInvocations++
+			category := inv.FailureCategory
+			if category == "" {
+				// Mirrors the postgres COALESCE: an unclassified failure is
+				// counted as "other" rather than dropped.
+				category = "other"
+			}
+			stats.FailureCategories[category]++
 		}
 		fees = append(fees, float64(inv.ResourceFeeCharged))
 		cpus = append(cpus, float64(inv.CPUInsn))

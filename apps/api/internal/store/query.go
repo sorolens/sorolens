@@ -82,8 +82,12 @@ type InvocationFilters struct {
 	Status       string
 	FunctionName string
 	Network      string
-	From         uint32
-	To           uint32
+	// FailureCategory restricts the listing to one failure category
+	// (issue #806). Empty means no filter; only failed invocations carry a
+	// category.
+	FailureCategory string
+	From            uint32
+	To              uint32
 	// Since and Until are inclusive bounds on ledger_closed_at. The
 	// per-contract listing ignores them; the global listing uses them for its
 	// date-range filter.
@@ -119,6 +123,10 @@ type InvocationWindowStats struct {
 	P95Fee            float64
 	AvgCPU            float64
 	P95CPU            float64
+	// FailureCategories counts the window's failed invocations per category
+	// (issue #806). Rows indexed before failure classification existed are
+	// counted as "other", so the counts always add up to FailedInvocations.
+	FailureCategories map[string]int64
 }
 
 // ContractInvocationStats contains the fixed windows exposed by the contract
@@ -418,6 +426,8 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, ''),
 		       inserted_at
 		FROM invocations
 		WHERE contract_id = $1
@@ -438,7 +448,8 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 			&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
-			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder,
+			&inv.FailureCategory, &inv.FailureCode, &inv.InsertedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -465,6 +476,8 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, ''),
 		       inserted_at
 		FROM invocations
 		WHERE contract_id = $1
@@ -472,11 +485,12 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		  AND ($3 = '' OR network = $3)
 		  AND ($4 = '' OR status = $4)
 		  AND ($5 = '' OR function_name = $5)
-		  AND ($6 = 0   OR ledger >= $6)
-		  AND ($7 = 0   OR ledger <= $7)
+		  AND ($6 = '' OR failure_category = $6)
+		  AND ($7 = 0   OR ledger >= $7)
+		  AND ($8 = 0   OR ledger <= $8)
 		ORDER BY ledger ASC, tx_hash ASC
-		LIMIT $8`,
-		contractID, cursor, f.Network, f.Status, f.FunctionName, f.From, f.To, limit+1,
+		LIMIT $9`,
+		contractID, cursor, f.Network, f.Status, f.FunctionName, f.FailureCategory, f.From, f.To, limit+1,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("list invocations: %w", err)
@@ -491,7 +505,8 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 			&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
-			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder,
+			&inv.FailureCategory, &inv.FailureCode, &inv.InsertedAt,
 		); err != nil {
 			return nil, "", err
 		}
@@ -526,6 +541,8 @@ func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invoc
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, ''),
 		       inserted_at
 		FROM invocations
 		WHERE tx_hash = $1`, txHash)
@@ -536,7 +553,8 @@ func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invoc
 		&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
 		&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 		&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
-		&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+		&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder,
+		&inv.FailureCategory, &inv.FailureCode, &inv.InsertedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Invocation{}, ErrNotFound
@@ -564,6 +582,8 @@ func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID,
 		       COALESCE(i.ledger_read_byte, 0),
 		       COALESCE(i.ledger_write_byte, 0),
 		       COALESCE(i.application_order, 0),
+		       COALESCE(i.failure_category, ''),
+		       COALESCE(i.failure_code, ''),
 		       i.inserted_at,
 		       e.id, e.contract_id, e.network, e.ledger, e.ledger_closed_at, e.tx_hash, e.type,
 		       e.topic_xdr, e.value_xdr, e.topic_decoded, e.value_decoded,
@@ -595,7 +615,8 @@ func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID,
 			&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
-			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder,
+			&inv.FailureCategory, &inv.FailureCode, &inv.InsertedAt,
 			&evID, &evContractID, &evNetwork, &evLedger, &evLedgerClosedAt, &evTxHash, &evType,
 			&evTopicXDR, &evValueXDR, &evTopicDec, &evValDec,
 			&evInSuccessfulCall, &evInsertedAt,
@@ -727,20 +748,23 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, ''),
 		       inserted_at
 		FROM invocations
 		WHERE ($1 = '' OR contract_id = $1)
 		  AND ($2 = '' OR network = $2)
 		  AND ($3 = '' OR status = $3)
 		  AND ($4 = '' OR function_name = $4)
-		  AND ($5 = 0   OR ledger >= $5)
-		  AND ($6 = 0   OR ledger <= $6)
-		  AND ($7::timestamptz IS NULL OR ledger_closed_at >= $7)
-		  AND ($8::timestamptz IS NULL OR ledger_closed_at <= $8)
-		  AND ($9 = 0   OR (ledger, tx_hash) < ($9, $10))
+		  AND ($5 = '' OR failure_category = $5)
+		  AND ($6 = 0   OR ledger >= $6)
+		  AND ($7 = 0   OR ledger <= $7)
+		  AND ($8::timestamptz IS NULL OR ledger_closed_at >= $8)
+		  AND ($9::timestamptz IS NULL OR ledger_closed_at <= $9)
+		  AND ($10 = 0   OR (ledger, tx_hash) < ($10, $11))
 		ORDER BY ledger DESC, tx_hash DESC
-		LIMIT $11`,
-		f.ContractID, f.Network, f.Status, f.FunctionName, f.From, f.To,
+		LIMIT $12`,
+		f.ContractID, f.Network, f.Status, f.FunctionName, f.FailureCategory, f.From, f.To,
 		f.Since, f.Until, cursorLedger, cursorTxHash, limit+1,
 	)
 	if err != nil {
@@ -756,7 +780,8 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 			&inv.TxHash, &inv.ContractID, &inv.Network, &inv.Ledger, &inv.LedgerClosedAt, &inv.Status,
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
-			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder,
+			&inv.FailureCategory, &inv.FailureCode, &inv.InsertedAt,
 		); err != nil {
 			return nil, 0, "", err
 		}
@@ -922,7 +947,65 @@ func (s *postgresStore) GetContractInvocationStats(ctx context.Context, contract
 	if err != nil {
 		return ContractInvocationStats{}, fmt.Errorf("contract invocation stats: %w", err)
 	}
-	return stats, err
+
+	byCategory, err := s.contractFailureCategoryCounts(ctx, contractID)
+	if err != nil {
+		return ContractInvocationStats{}, err
+	}
+	stats.Last24Hours.FailureCategories = byCategory["24h"]
+	stats.Last7Days.FailureCategories = byCategory["7d"]
+	stats.Last30Days.FailureCategories = byCategory["30d"]
+	return stats, nil
+}
+
+// contractFailureCategoryCounts groups a contract's failed invocations by
+// failure category for each stats window (issue #806). Rows indexed before the
+// classification existed have a NULL category and are counted as "other", so
+// the totals always reconcile with the window's failed_invocations.
+func (s *postgresStore) contractFailureCategoryCounts(ctx context.Context, contractID string) (map[string]map[string]int64, error) {
+	rows, err := s.readDB(ctx).Query(ctx, `
+		SELECT COALESCE(failure_category, 'other')                                            AS category,
+		       COUNT(*) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours')        AS last_24h,
+		       COUNT(*) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days')          AS last_7d,
+		       COUNT(*)                                                                      AS last_30d
+		FROM invocations
+		WHERE contract_id = $1
+		  AND status <> 'SUCCESS'
+		  AND ledger_closed_at >= NOW() - INTERVAL '30 days'
+		  AND ledger_closed_at <= NOW()
+		GROUP BY 1`, contractID)
+	if err != nil {
+		return nil, fmt.Errorf("contract failure category counts: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]map[string]int64{
+		"24h": {},
+		"7d":  {},
+		"30d": {},
+	}
+	for rows.Next() {
+		var (
+			category              string
+			last24, last7, last30 int64
+		)
+		if err := rows.Scan(&category, &last24, &last7, &last30); err != nil {
+			return nil, fmt.Errorf("scan failure category counts: %w", err)
+		}
+		if last24 > 0 {
+			out["24h"][category] = last24
+		}
+		if last7 > 0 {
+			out["7d"][category] = last7
+		}
+		if last30 > 0 {
+			out["30d"][category] = last30
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("contract failure category counts: %w", err)
+	}
+	return out, nil
 }
 
 // DailyAggregates queries the last `days` calendar days (oldest first),

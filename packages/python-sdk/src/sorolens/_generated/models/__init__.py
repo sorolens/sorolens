@@ -143,6 +143,9 @@ from .invocation import Invocation
 from .invocation_args_decoded import InvocationArgsDecoded
 from .invocation_detail import InvocationDetail
 from .invocation_window_stats import InvocationWindowStats
+from .invocation_window_stats_failure_categories import (
+    InvocationWindowStatsFailureCategories,
+)
 from .key_usage_summary import KeyUsageSummary
 from .key_usage_summary_by_group import KeyUsageSummaryByGroup
 from .list_alert_rules_response_200 import ListAlertRulesResponse200
@@ -455,6 +458,7 @@ __all__ = (
     "InvocationArgsDecoded",
     "InvocationDetail",
     "InvocationWindowStats",
+    "InvocationWindowStatsFailureCategories",
     "KeyUsageSummary",
     "KeyUsageSummaryByGroup",
     "ListAlertRulesResponse200",
