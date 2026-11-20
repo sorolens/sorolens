@@ -248,6 +248,15 @@ jobs:
       - name: Check unused exports
         working-directory: apps/web
         run: node scripts/check-unused-exports.mjs
+      # Issue #768: the browser extension has no dependencies, so it needs no
+      # install step. These run inside the existing Web job so the PR check
+      # count stays at five. Packaging runs in extension-release.yml.
+      - name: Lint browser extension (syntax and manifests)
+        working-directory: extension
+        run: node scripts/check.mjs
+      - name: Browser extension tests
+        working-directory: extension
+        run: node --test "tests/*.test.mjs"
       # These tests were never run in CI before this job existed, and 10 tests
       # in 5 files (NavigationProgress, CmdkSearch, LastUpdated, app layout, og)
       # already fail on main. The step is reported but does not fail the check

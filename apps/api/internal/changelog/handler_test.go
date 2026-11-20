@@ -39,6 +39,16 @@ func (f *fakeStore) GetContract(_ context.Context, id string) (store.Contract, e
 	return store.Contract{}, store.ErrNotFound
 }
 
+func (f *fakeStore) UntrackContract(_ context.Context, id string) error {
+	for i, c := range f.contracts {
+		if c.ID == id {
+			f.contracts[i].Status = "paused"
+			return nil
+		}
+	}
+	return store.ErrNotFound
+}
+
 func (f *fakeStore) ListContracts(_ context.Context, _ string, _ int, _ store.ContractFilters) ([]store.Contract, string, error) {
 	return f.contracts, "", nil
 }

@@ -11,6 +11,7 @@
           "v2AdminListKeys",
           "v2AdminRevokeKey",
           "v2AdminRotateKey",
+          "v2ContractEventSchemas",
           "v2ContractForecast",
           "v2ContractGraph",
           "v2ContractSnapshot",
@@ -35,6 +36,7 @@
           "v2LiveActivity",
           "v2RecentEvents",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2RemoveFromWatchlist",
           "v2RevokeAPIKey",
           "v2RotateAPIKey",
@@ -71,6 +73,7 @@
       {
         "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
         "operations": [
+          "getContractEventSchemas",
           "getContractGraph",
           "getContractHealthScore",
           "getContractSpec",
@@ -183,6 +186,7 @@
         "reason": "Not part of this SDK's implemented surface yet.",
         "operations": [
           "batchContracts",
+          "deleteContract",
           "compareContracts",
           "listRuleLibrary"
         ]
@@ -226,6 +230,7 @@
           "v2AdminListKeys",
           "v2AdminRevokeKey",
           "v2AdminRotateKey",
+          "v2ContractEventSchemas",
           "v2ContractForecast",
           "v2ContractGraph",
           "v2ContractSnapshot",
@@ -250,6 +255,7 @@
           "v2LiveActivity",
           "v2RecentEvents",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2RemoveFromWatchlist",
           "v2RevokeAPIKey",
           "v2RotateAPIKey",
@@ -288,6 +294,7 @@
         "operations": [
           "createReportSubscription",
           "deleteReportSubscription",
+          "getContractEventSchemas",
           "getContractGraph",
           "getContractHealthScore",
           "getContractReport",
@@ -401,6 +408,7 @@
         "reason": "Not part of this SDK's implemented surface yet.",
         "operations": [
           "batchContracts",
+          "deleteContract",
           "compareContracts",
           "listRuleLibrary"
         ]
@@ -459,6 +467,7 @@
           "listAuditEventsRoot",
           "registerContract",
           "batchContracts",
+          "deleteContract",
           "addContractTag",
           "removeContractTag",
           "listContractNotes",
@@ -511,6 +520,7 @@
           "v2RecentEvents",
           "v2ListContracts",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2ValidateContract",
           "v2GetContract",
           "v2ListEvents",
@@ -581,7 +591,9 @@
           "listRuleMetrics",
           "listRuleLibrary",
           "setAlertRuleEnabled",
-          "deleteAlertRule"
+          "deleteAlertRule",
+          "getContractEventSchemas",
+          "v2ContractEventSchemas"
         ]
       },
       {
@@ -630,6 +642,7 @@
           "listAuditEventsRoot",
           "registerContract",
           "batchContracts",
+          "deleteContract",
           "addContractTag",
           "removeContractTag",
           "listContractNotes",
@@ -682,6 +695,7 @@
           "v2RecentEvents",
           "v2ListContracts",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2ValidateContract",
           "v2GetContract",
           "v2ListEvents",
@@ -752,7 +766,9 @@
           "listRuleMetrics",
           "listRuleLibrary",
           "setAlertRuleEnabled",
-          "deleteAlertRule"
+          "deleteAlertRule",
+          "getContractEventSchemas",
+          "v2ContractEventSchemas"
         ]
       },
       {

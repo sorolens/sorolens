@@ -1,0 +1,22 @@
+{
+  "id": "14_empty_contracts_page",
+  "description": "Empty contracts collection returns empty list not null",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts?network=futurenet"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "contracts": [],
+      "next_cursor": ""
+    }
+  },
+  "expected": {
+    "status": 200,
+    "count": 0
+  }
+}

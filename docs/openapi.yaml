@@ -727,6 +727,34 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Contracts]
+      summary: Untrack one contract
+      description: |
+        Stops tracking a contract. Untracking is a soft delete: the contract
+        status flips to "paused" while the row and all indexed history are
+        retained, and the indexer stops polling it. Re-registering the
+        contract resumes tracking. Deleting a contract that is already paused
+        is a no-op; deleting one that was never registered returns 404. This
+        differs from the batch "untrack" action, which permanently deletes
+        the contracts and their indexed data.
+      operationId: deleteContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/contracts/{id}/tags:
     post:
@@ -2794,6 +2822,32 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [API v2]
+      summary: Untrack one contract
+      description: |
+        Stops tracking a contract. Same semantics as DELETE /api/v1/contracts/{id}:
+        the contract status flips to "paused" while the row and all indexed history
+        are retained, and the indexer stops polling it.
+      operationId: v2DeleteContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v2/contracts/{id}/events:
     get:
@@ -3097,6 +3151,34 @@ paths:
                 type: object
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/contracts/{id}/event-schemas:
+    get:
+      tags: [API v2]
+      summary: Inferred and declared event schemas for a contract (v2)
+      operationId: v2ContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -4374,6 +4456,34 @@ paths:
                 $ref: "#/components/schemas/ContractSpec"
         "404":
           description: Contract not found, or its interface spec has not been parsed yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/event-schemas:
+    get:
+      tags: [Contracts]
+      summary: Get inferred and declared event schemas for a contract
+      operationId: getContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
           content:
             application/json:
               schema:
@@ -7356,6 +7466,63 @@ components:
                 type: string
               count:
                 type: integer
+
+    ContractEventSchemasResponse:
+      type: object
+      required: [contract_id, event_schemas]
+      properties:
+        contract_id:
+          type: string
+        event_schemas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractEventSchema"
+        declared_spec:
+          type: object
+          description: Declared SEP-48 interface spec if available.
+
+    ContractEventSchema:
+      type: object
+      required: [contract_id, event_name, topic_arity, topic_types, value_shape, observed_shapes, first_seen_ledger, last_seen_ledger, updated_at]
+      properties:
+        contract_id:
+          type: string
+        event_name:
+          type: string
+        topic_arity:
+          type: integer
+        topic_types:
+          type: array
+          items:
+            type: string
+        value_shape:
+          type: string
+        observed_shapes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObservedShape"
+        first_seen_ledger:
+          type: integer
+        last_seen_ledger:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+
+    ObservedShape:
+      type: object
+      required: [topic_arity, topic_types, value_type, count]
+      properties:
+        topic_arity:
+          type: integer
+        topic_types:
+          type: array
+          items:
+            type: string
+        value_type:
+          type: string
+        count:
+          type: integer
 
     ContractSpec:
       type: object

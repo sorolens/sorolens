@@ -23,6 +23,7 @@ type APIStore interface {
 	store.WatchdogStore
 	store.ContractUpgradeStore
 	store.ContractSpecStore
+	store.ContractEventSchemaStore
 	store.ContractTagStore
 	store.ContractNoteStore
 	store.HealthScoreStore
