@@ -327,6 +327,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
 
+		// Contract changelog (issue: register changelog routes).
+		get("/contracts/{id}/changelog", h.ContractChangelog)
+		get("/changelog/feed", h.ChangelogFeed)
+		get("/changelog/badge", h.ChangelogBadge)
+
 		// Source verification (issue #263). Submitting source mutates the
 		// verification record, so it requires at least contributor role;
 		// reading the cached verdict stays open.

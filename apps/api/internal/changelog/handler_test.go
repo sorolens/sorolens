@@ -211,6 +211,33 @@ func TestGetChangelog_404_unknownContract(t *testing.T) {
 	}
 }
 
+// TestGetChangelog_200_emptyHistory verifies an empty JSON array for a known
+// contract with no recorded versions.
+func TestGetChangelog_200_emptyHistory(t *testing.T) {
+	s := &fakeStore{
+		contracts: []store.Contract{{
+			ID: "CEMPTY", Network: "testnet", Status: "active", AddedAt: time.Now(),
+		}},
+	}
+	h := changelog.New(s)
+
+	req := makeRequest(http.MethodGet, "/contracts/CEMPTY/changelog")
+	w := httptest.NewRecorder()
+	h.GetChangelog(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: want 200, got %d", resp.StatusCode)
+	}
+	var payload []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload) != 0 {
+		t.Fatalf("expected empty changelog, got %d entries", len(payload))
+	}
+}
+
 // TestGetFeed_200_returnsAtomXML verifies the Atom feed endpoint returns valid XML.
 func TestGetFeed_200_returnsAtomXML(t *testing.T) {
 	h := changelog.New(seededStore())
@@ -242,6 +269,19 @@ func TestGetFeed_200_returnsAtomXML(t *testing.T) {
 	}
 	if len(feed.Entries) != 2 {
 		t.Fatalf("expected 2 feed entries, got %d", len(feed.Entries))
+	}
+}
+
+// TestGetFeed_404_unknownContract verifies the feed returns 404 for unknown contracts.
+func TestGetFeed_404_unknownContract(t *testing.T) {
+	h := changelog.New(seededStore())
+
+	req := makeRequest(http.MethodGet, "/contracts/CUNKNOWN/changelog/feed")
+	w := httptest.NewRecorder()
+	h.GetFeed(w, req)
+
+	if w.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Result().StatusCode)
 	}
 }
 
