@@ -89,9 +89,19 @@ fn test_replays_sdk_conformance_fixtures() {
         }
 
         if let Some(expected_count) = fixture.expected.count {
-            let count = if let Some(arr) = fixture.response.body.get("contracts").and_then(|v| v.as_array()) {
+            let count = if let Some(arr) = fixture
+                .response
+                .body
+                .get("contracts")
+                .and_then(|v| v.as_array())
+            {
                 arr.len()
-            } else if let Some(arr) = fixture.response.body.get("events").and_then(|v| v.as_array()) {
+            } else if let Some(arr) = fixture
+                .response
+                .body
+                .get("events")
+                .and_then(|v| v.as_array())
+            {
                 arr.len()
             } else {
                 0
