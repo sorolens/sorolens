@@ -31,6 +31,7 @@ jobs:
   terraform:
     name: Terraform (fmt, validate, test, tflint)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: deploy/terraform
@@ -77,6 +78,7 @@ jobs:
     # themselves need 1.11+, so they are skipped here.)
     name: Terraform 1.9 compatibility (validate)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: deploy/terraform
@@ -102,6 +104,7 @@ jobs:
   pulumi:
     name: Pulumi (build, unit tests, offline preview)
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: deploy/pulumi
@@ -147,6 +150,7 @@ jobs:
   helm:
     name: Helm (lint, template, kubeconform)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
