@@ -12,7 +12,6 @@ import (
 )
 
 var (
-	tuiAPIKey  string
 	tuiRefresh time.Duration
 )
 
@@ -41,11 +40,6 @@ passed via --api-key or the SOROLENS_API_KEY environment variable.`,
 }
 
 func init() {
-	tuiCmd.Flags().StringVar(
-		&tuiAPIKey, "api-key",
-		envOrDefault("SOROLENS_API_KEY", ""),
-		"API key for authenticating with the Sorolens API",
-	)
 	tuiCmd.Flags().DurationVar(&tuiRefresh, "refresh", 5*time.Second, "Polling interval for live data")
 	rootCmd.AddCommand(tuiCmd)
 }
@@ -55,10 +49,9 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		_ = os.Setenv("NO_COLOR", "1")
 	}
 
+	// The API key comes from the global --api-key flag, SOROLENS_API_KEY, the
+	// config file, or the active profile (resolved by newClient).
 	c := newClient(globalConfig.Timeout)
-	if tuiAPIKey != "" {
-		c = c.WithAPIKey(tuiAPIKey)
-	}
 
 	model := tui.New(c, tui.Options{
 		APIURL:          globalConfig.APIURL,

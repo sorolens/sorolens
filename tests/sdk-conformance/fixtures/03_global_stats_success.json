@@ -1,0 +1,24 @@
+{
+  "id": "03_global_stats_success",
+  "description": "Get platform global statistics",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/stats/global"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "tracked_contracts": 42,
+      "total_events": 1048576,
+      "total_invocations": 524288,
+      "total_storage_entries": 16384
+    }
+  },
+  "expected": {
+    "status": 200,
+    "tracked_contracts": 42
+  }
+}

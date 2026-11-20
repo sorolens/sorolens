@@ -10,10 +10,12 @@ raw status codes.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
+import json
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import Any
 
 from . import exceptions
+from ._generated.api.alerts import list_alerts
 from ._generated.api.api_keys import (
     create_api_key,
     create_api_key_admin,
@@ -22,14 +24,47 @@ from ._generated.api.api_keys import (
     revoke_api_key,
     revoke_api_key_admin,
 )
-from ._generated.api.contracts import get_contract, list_contracts, register_contract
+from ._generated.api.contracts import (
+    get_api_v1_search,
+    get_contract,
+    get_contract_graph,
+    list_contract_upgrades,
+    list_contracts,
+    register_contract,
+)
+from ._generated.api.default import (
+    get_api_v1_labels,
+    get_api_v1_resolve,
+    post_api_v1_labels,
+)
+from ._generated.api.dlq import list_failed_events, requeue_failed_event
 from ._generated.api.events import list_contract_events, stream_contract_events
 from ._generated.api.forecast import get_contract_forecast
 from ._generated.api.health import health as health_operation
 from ._generated.api.health import readyz
 from ._generated.api.invocations import list_contract_invocations
+from ._generated.api.notifications import (
+    create_alert_subscription,
+    delete_alert_subscription,
+    list_alert_subscriptions,
+)
+from ._generated.api.reports import (
+    create_report_subscription,
+    delete_report_subscription,
+    get_contract_report,
+    get_contract_report_history,
+    get_contract_sla_badge,
+    list_report_subscriptions,
+    unsubscribe_report,
+)
 from ._generated.api.snapshots import get_contract_snapshot
-from ._generated.api.stats import get_contract_stats, get_global_stats
+from ._generated.api.stats import (
+    compare_contracts,
+    get_contract_health_score,
+    get_contract_stats,
+    get_contract_summary,
+    get_global_stats,
+)
 from ._generated.api.storage import list_contract_storage
 from ._generated.api.watchdog import (
     get_monitored_contract,
@@ -49,17 +84,36 @@ from ._generated.client import AuthenticatedClient
 from ._generated.client import Client as _GeneratedClient
 from ._generated.models import (
     AddToWatchlistBody,
+    AlertSubscription,
+    CompareContractsWindow,
+    CompareResponse,
     Contract,
+    ContractGraph,
+    ContractReport,
     ContractSnapshot,
     ContractStats,
+    ContractSummary,
+    CreateAlertSubscription,
+    CreateAlertSubscriptionChannelType,
+    CreateAlertSubscriptionSeverityFilter,
     CreateApiKeyAdminBody,
     CreateApiKeyBody,
     CreateApiKeyBodyScopesItem,
+    CreateReportSubscriptionBody,
+    CreateReportSubscriptionBodyFrequency,
+    GetApiV1SearchResponse200,
     GetContractForecastResponse200,
+    GetContractReportFormat,
+    GetContractReportHistoryResponse200,
     GetGlobalStatsResponse200,
     GetWatchdogStatsNetwork,
     HealthResponse200,
+    HealthScore,
     InWatchlist,
+    ListAlertsNetwork,
+    ListAlertsResponse200,
+    ListAlertsSeverity,
+    ListAlertSubscriptionsResponse200,
     ListApiKeysResponse200,
     ListContractAlertsNetwork,
     ListContractAlertsResponse200,
@@ -76,14 +130,21 @@ from ._generated.models import (
     ListContractStorageNetwork,
     ListContractStorageResponse200,
     ListContractStorageStatus,
+    ListContractUpgradesResponse200,
+    ListFailedEventsResponse200,
     ListMonitoredContractsNetwork,
     ListMonitoredContractsResponse200,
+    ListReportSubscriptionsResponse200,
     ListWatchdogAlertsNetwork,
     ListWatchdogAlertsResponse200,
     ListWatchdogAlertsSeverity,
     MonitoredContract,
+    PostApiV1LabelsBody,
+    PostApiV1LabelsBodyScope,
     RegisterContractBody,
     RegisterContractBodyNetwork,
+    ReportSubscription,
+    RequeueFailedEventResponse200,
     StreamContractEventsResponse200,
     WatchdogStats,
     Watchlist,
@@ -141,6 +202,22 @@ def _unwrap(response: Response[Any]) -> Any:
     return response.parsed
 
 
+def _payload(response: Response[Any]) -> Any:
+    """Raise on error, then decode the JSON body of an untyped endpoint.
+
+    A handful of operations (the label endpoints) declare no response schema,
+    so the generated parser discards the body. Decode it here instead of
+    returning ``None``.
+    """
+    exceptions.raise_for_response(response.status_code, response.parsed, response.content)
+    if response.content:
+        try:
+            return json.loads(response.content)
+        except ValueError:
+            return response.content.decode()
+    return response.parsed
+
+
 def _value(value: Any) -> Any:
     return UNSET if value is None else value
 
@@ -176,6 +253,19 @@ class _Stats(_SyncResource):
     def global_stats(self) -> GetGlobalStatsResponse200:
         """Counts across every tracked contract."""
         return _unwrap(get_global_stats.sync_detailed(client=self._client))
+
+    def compare(
+        self, ids: str | Sequence[str], *, window: str | None = None
+    ) -> CompareResponse:
+        """Compare one to four contracts side by side; ``window`` is 24h/7d/30d."""
+        joined = ids if isinstance(ids, str) else ",".join(ids)
+        return _unwrap(
+            compare_contracts.sync_detailed(
+                client=self._client,
+                ids=joined,
+                window=_enum(CompareContractsWindow, window),
+            )
+        )
 
     def contract(self, contract_id: str, *, window: str | None = None) -> ContractStats:
         """Per-contract counters; ``window`` accepts ``"24h"``, ``"7d"`` or ``"30d"``."""
@@ -231,6 +321,34 @@ class _Contracts(_SyncResource):
             label=_value(label),
         )
         return _unwrap(register_contract.sync_detailed(client=self._client, body=body))
+
+    def upgrades(
+        self, contract_id: str, *, limit: int | None = None
+    ) -> ListContractUpgradesResponse200:
+        """List a contract's Wasm code upgrades, newest first."""
+        return _unwrap(
+            list_contract_upgrades.sync_detailed(
+                contract_id, client=self._client, limit=_value(limit) or 50
+            )
+        )
+
+    def graph(self, contract_id: str) -> ContractGraph:
+        """Cross-contract call graph derived from the contract's recent invocations."""
+        return _unwrap(get_contract_graph.sync_detailed(contract_id, client=self._client))
+
+    def health_score(
+        self, contract_id: str, *, history_limit: int | None = None
+    ) -> HealthScore:
+        """Composite 0-100 health score, optionally with hourly history snapshots."""
+        return _unwrap(
+            get_contract_health_score.sync_detailed(
+                contract_id, client=self._client, history_limit=_value(history_limit)
+            )
+        )
+
+    def summary(self, contract_id: str) -> ContractSummary:
+        """Dashboard summary: metadata, stats and the latest event/invocation."""
+        return _unwrap(get_contract_summary.sync_detailed(contract_id, client=self._client))
 
 
 class _Events(_SyncResource):
@@ -518,6 +636,179 @@ class _Watchdog(_SyncResource):
         )
 
 
+class _Alerts(_SyncResource):
+    def list(
+        self,
+        *,
+        flat: bool | None = None,
+        contract_id: str | None = None,
+        severity: str | None = None,
+        network: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> ListAlertsResponse200:
+        """List alert groups; pass ``flat=True`` for the raw per-event feed."""
+        return _unwrap(
+            list_alerts.sync_detailed(
+                client=self._client,
+                flat=_value(flat),
+                contract_id=_value(contract_id),
+                severity=_enum(ListAlertsSeverity, severity),
+                network=_enum(ListAlertsNetwork, network),
+                cursor=_value(cursor),
+                limit=_value(limit),
+            )
+        )
+
+
+class _Search(_SyncResource):
+    def contracts(self, q: str, *, limit: int = 10) -> GetApiV1SearchResponse200:
+        """Search tracked contracts by ID or label."""
+        return _unwrap(get_api_v1_search.sync_detailed(client=self._client, q=q, limit=limit))
+
+
+class _Labels(_SyncResource):
+    def list(self, *, query: str | None = None) -> Any:
+        """Search visible account labels, optionally narrowed by ``query``.
+
+        Returns the decoded JSON body (the operation declares no response
+        schema in ``docs/openapi.yaml``).
+        """
+        return _payload(
+            get_api_v1_labels.sync_detailed(client=self._client, query=_value(query))
+        )
+
+    def create(self, label: str, value: str, *, scope: str = "public") -> Any:
+        """Create or update a label; ``scope`` is ``"public"`` or ``"workspace"``."""
+        body = PostApiV1LabelsBody(
+            label=label,
+            value=value,
+            scope=PostApiV1LabelsBodyScope(scope),
+        )
+        return _payload(post_api_v1_labels.sync_detailed(client=self._client, body=body))
+
+    def resolve(self, query: str) -> Any:
+        """Resolve a visible label to its Stellar identifier."""
+        return _payload(
+            get_api_v1_resolve.sync_detailed(client=self._client, query=query)
+        )
+
+
+class _Dlq(_SyncResource):
+    def list(
+        self, *, cursor: str | None = None, limit: int | None = None
+    ) -> ListFailedEventsResponse200:
+        """List dead-lettered indexer events, newest first."""
+        return _unwrap(
+            list_failed_events.sync_detailed(
+                client=self._client, cursor=_value(cursor), limit=_value(limit)
+            )
+        )
+
+    def requeue(self, event_id: int) -> RequeueFailedEventResponse200:
+        """Requeue a dead-lettered event by its DLQ row id."""
+        return _unwrap(requeue_failed_event.sync_detailed(event_id, client=self._client))
+
+
+class _Reports(_SyncResource):
+    def contract(
+        self,
+        contract_id: str,
+        *,
+        month: str | None = None,
+        format_: str | None = None,
+    ) -> ContractReport:
+        """Monthly SLA/uptime report; ``format_`` is ``json``, ``csv`` or ``pdf``."""
+        return _unwrap(
+            get_contract_report.sync_detailed(
+                contract_id,
+                client=self._client,
+                month=_value(month),
+                format_=_enum(GetContractReportFormat, format_),
+            )
+        )
+
+    def history(
+        self, contract_id: str, *, months: int | None = None
+    ) -> GetContractReportHistoryResponse200:
+        """SLA history across the trailing ``months`` months."""
+        return _unwrap(
+            get_contract_report_history.sync_detailed(
+                contract_id, client=self._client, months=_value(months)
+            )
+        )
+
+    def badge(self, contract_id: str, *, month: str | None = None) -> str:
+        """Shields.io-style SVG badge for a month's uptime."""
+        response = get_contract_sla_badge.sync_detailed(
+            contract_id, client=self._client, month=_value(month)
+        )
+        exceptions.raise_for_response(response.status_code, response.parsed, response.content)
+        return response.content.decode("utf-8")
+
+    def create_subscription(
+        self, email: str, frequency: str, *, day_of_week: int | None = None
+    ) -> ReportSubscription:
+        """Subscribe an email to daily or weekly digest reports."""
+        body = CreateReportSubscriptionBody(
+            email=email,
+            frequency=CreateReportSubscriptionBodyFrequency(frequency),
+            day_of_week=_value(day_of_week),
+        )
+        return _unwrap(
+            create_report_subscription.sync_detailed(client=self._client, body=body)
+        )
+
+    def subscriptions(self, email: str) -> ListReportSubscriptionsResponse200:
+        """Active digest subscriptions for an email address."""
+        return _unwrap(
+            list_report_subscriptions.sync_detailed(client=self._client, email=email)
+        )
+
+    def delete_subscription(self, subscription_id: str) -> None:
+        """Delete a digest subscription."""
+        _unwrap(
+            delete_report_subscription.sync_detailed(subscription_id, client=self._client)
+        )
+
+    def unsubscribe(self, token: str) -> str:
+        """One-click unsubscribe from digest emails."""
+        return _unwrap(unsubscribe_report.sync_detailed(client=self._client, token=token))
+
+
+class _Notifications(_SyncResource):
+    def list(self) -> ListAlertSubscriptionsResponse200:
+        """List alert notification subscriptions, newest first."""
+        return _unwrap(list_alert_subscriptions.sync_detailed(client=self._client))
+
+    def create(
+        self,
+        contract_id: str,
+        *,
+        channel_type: str = "webhook",
+        webhook_url: str | None = None,
+        routing_key: str | None = None,
+        severity_filter: str = "Critical",
+    ) -> AlertSubscription:
+        """Subscribe a channel (webhook/slack/discord/pagerduty) to alerts."""
+        body = CreateAlertSubscription(
+            contract_id=contract_id,
+            channel_type=CreateAlertSubscriptionChannelType(channel_type),
+            webhook_url=_value(webhook_url),
+            routing_key=_value(routing_key),
+            severity_filter=CreateAlertSubscriptionSeverityFilter(severity_filter),
+        )
+        return _unwrap(
+            create_alert_subscription.sync_detailed(client=self._client, body=body)
+        )
+
+    def delete(self, subscription_id: str) -> None:
+        """Delete an alert subscription."""
+        _unwrap(
+            delete_alert_subscription.sync_detailed(subscription_id, client=self._client)
+        )
+
+
 class Client:
     """Synchronous client for the Sorolens API.
 
@@ -559,6 +850,12 @@ class Client:
         self.api_keys = _ApiKeys(self)
         self.watchlist = _Watchlist(self)
         self.watchdog = _Watchdog(self)
+        self.alerts = _Alerts(self)
+        self.search = _Search(self)
+        self.labels = _Labels(self)
+        self.dlq = _Dlq(self)
+        self.reports = _Reports(self)
+        self.notifications = _Notifications(self)
 
     def close(self) -> None:
         self._client.get_httpx_client().close()
@@ -585,6 +882,19 @@ class _AsyncHealth(_AsyncResource):
 class _AsyncStats(_AsyncResource):
     async def global_stats(self) -> GetGlobalStatsResponse200:
         return _unwrap(await get_global_stats.asyncio_detailed(client=self._client))
+
+    async def compare(
+        self, ids: str | Sequence[str], *, window: str | None = None
+    ) -> CompareResponse:
+        """Compare one to four contracts side by side; ``window`` is 24h/7d/30d."""
+        joined = ids if isinstance(ids, str) else ",".join(ids)
+        return _unwrap(
+            await compare_contracts.asyncio_detailed(
+                client=self._client,
+                ids=joined,
+                window=_enum(CompareContractsWindow, window),
+            )
+        )
 
     async def contract(self, contract_id: str, *, window: str | None = None) -> ContractStats:
         return _unwrap(
@@ -642,6 +952,38 @@ class _AsyncContracts(_AsyncResource):
             label=_value(label),
         )
         return _unwrap(await register_contract.asyncio_detailed(client=self._client, body=body))
+
+    async def upgrades(
+        self, contract_id: str, *, limit: int | None = None
+    ) -> ListContractUpgradesResponse200:
+        """List a contract's Wasm code upgrades, newest first."""
+        return _unwrap(
+            await list_contract_upgrades.asyncio_detailed(
+                contract_id, client=self._client, limit=_value(limit) or 50
+            )
+        )
+
+    async def graph(self, contract_id: str) -> ContractGraph:
+        """Cross-contract call graph derived from the contract's recent invocations."""
+        return _unwrap(
+            await get_contract_graph.asyncio_detailed(contract_id, client=self._client)
+        )
+
+    async def health_score(
+        self, contract_id: str, *, history_limit: int | None = None
+    ) -> HealthScore:
+        """Composite 0-100 health score, optionally with hourly history snapshots."""
+        return _unwrap(
+            await get_contract_health_score.asyncio_detailed(
+                contract_id, client=self._client, history_limit=_value(history_limit)
+            )
+        )
+
+    async def summary(self, contract_id: str) -> ContractSummary:
+        """Dashboard summary: metadata, stats and the latest event/invocation."""
+        return _unwrap(
+            await get_contract_summary.asyncio_detailed(contract_id, client=self._client)
+        )
 
 
 class _AsyncEvents(_AsyncResource):
@@ -943,6 +1285,195 @@ class _AsyncWatchdog(_AsyncResource):
         )
 
 
+class _AsyncAlerts(_AsyncResource):
+    async def list(
+        self,
+        *,
+        flat: bool | None = None,
+        contract_id: str | None = None,
+        severity: str | None = None,
+        network: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> ListAlertsResponse200:
+        """List alert groups; pass ``flat=True`` for the raw per-event feed."""
+        return _unwrap(
+            await list_alerts.asyncio_detailed(
+                client=self._client,
+                flat=_value(flat),
+                contract_id=_value(contract_id),
+                severity=_enum(ListAlertsSeverity, severity),
+                network=_enum(ListAlertsNetwork, network),
+                cursor=_value(cursor),
+                limit=_value(limit),
+            )
+        )
+
+
+class _AsyncSearch(_AsyncResource):
+    async def contracts(self, q: str, *, limit: int = 10) -> GetApiV1SearchResponse200:
+        """Search tracked contracts by ID or label."""
+        return _unwrap(
+            await get_api_v1_search.asyncio_detailed(client=self._client, q=q, limit=limit)
+        )
+
+
+class _AsyncLabels(_AsyncResource):
+    async def list(self, *, query: str | None = None) -> Any:
+        """Search visible account labels, optionally narrowed by ``query``.
+
+        Returns the decoded JSON body (the operation declares no response
+        schema in ``docs/openapi.yaml``).
+        """
+        return _payload(
+            await get_api_v1_labels.asyncio_detailed(
+                client=self._client, query=_value(query)
+            )
+        )
+
+    async def create(self, label: str, value: str, *, scope: str = "public") -> Any:
+        """Create or update a label; ``scope`` is ``"public"`` or ``"workspace"``."""
+        body = PostApiV1LabelsBody(
+            label=label,
+            value=value,
+            scope=PostApiV1LabelsBodyScope(scope),
+        )
+        return _payload(
+            await post_api_v1_labels.asyncio_detailed(client=self._client, body=body)
+        )
+
+    async def resolve(self, query: str) -> Any:
+        """Resolve a visible label to its Stellar identifier."""
+        return _payload(
+            await get_api_v1_resolve.asyncio_detailed(client=self._client, query=query)
+        )
+
+
+class _AsyncDlq(_AsyncResource):
+    async def list(
+        self, *, cursor: str | None = None, limit: int | None = None
+    ) -> ListFailedEventsResponse200:
+        """List dead-lettered indexer events, newest first."""
+        return _unwrap(
+            await list_failed_events.asyncio_detailed(
+                client=self._client, cursor=_value(cursor), limit=_value(limit)
+            )
+        )
+
+    async def requeue(self, event_id: int) -> RequeueFailedEventResponse200:
+        """Requeue a dead-lettered event by its DLQ row id."""
+        return _unwrap(
+            await requeue_failed_event.asyncio_detailed(event_id, client=self._client)
+        )
+
+
+class _AsyncReports(_AsyncResource):
+    async def contract(
+        self,
+        contract_id: str,
+        *,
+        month: str | None = None,
+        format_: str | None = None,
+    ) -> ContractReport:
+        """Monthly SLA/uptime report; ``format_`` is ``json``, ``csv`` or ``pdf``."""
+        return _unwrap(
+            await get_contract_report.asyncio_detailed(
+                contract_id,
+                client=self._client,
+                month=_value(month),
+                format_=_enum(GetContractReportFormat, format_),
+            )
+        )
+
+    async def history(
+        self, contract_id: str, *, months: int | None = None
+    ) -> GetContractReportHistoryResponse200:
+        """SLA history across the trailing ``months`` months."""
+        return _unwrap(
+            await get_contract_report_history.asyncio_detailed(
+                contract_id, client=self._client, months=_value(months)
+            )
+        )
+
+    async def badge(self, contract_id: str, *, month: str | None = None) -> str:
+        """Shields.io-style SVG badge for a month's uptime."""
+        response = await get_contract_sla_badge.asyncio_detailed(
+            contract_id, client=self._client, month=_value(month)
+        )
+        exceptions.raise_for_response(response.status_code, response.parsed, response.content)
+        return response.content.decode("utf-8")
+
+    async def create_subscription(
+        self, email: str, frequency: str, *, day_of_week: int | None = None
+    ) -> ReportSubscription:
+        """Subscribe an email to daily or weekly digest reports."""
+        body = CreateReportSubscriptionBody(
+            email=email,
+            frequency=CreateReportSubscriptionBodyFrequency(frequency),
+            day_of_week=_value(day_of_week),
+        )
+        return _unwrap(
+            await create_report_subscription.asyncio_detailed(client=self._client, body=body)
+        )
+
+    async def subscriptions(self, email: str) -> ListReportSubscriptionsResponse200:
+        """Active digest subscriptions for an email address."""
+        return _unwrap(
+            await list_report_subscriptions.asyncio_detailed(
+                client=self._client, email=email
+            )
+        )
+
+    async def delete_subscription(self, subscription_id: str) -> None:
+        """Delete a digest subscription."""
+        _unwrap(
+            await delete_report_subscription.asyncio_detailed(
+                subscription_id, client=self._client
+            )
+        )
+
+    async def unsubscribe(self, token: str) -> str:
+        """One-click unsubscribe from digest emails."""
+        return _unwrap(
+            await unsubscribe_report.asyncio_detailed(client=self._client, token=token)
+        )
+
+
+class _AsyncNotifications(_AsyncResource):
+    async def list(self) -> ListAlertSubscriptionsResponse200:
+        """List alert notification subscriptions, newest first."""
+        return _unwrap(await list_alert_subscriptions.asyncio_detailed(client=self._client))
+
+    async def create(
+        self,
+        contract_id: str,
+        *,
+        channel_type: str = "webhook",
+        webhook_url: str | None = None,
+        routing_key: str | None = None,
+        severity_filter: str = "Critical",
+    ) -> AlertSubscription:
+        """Subscribe a channel (webhook/slack/discord/pagerduty) to alerts."""
+        body = CreateAlertSubscription(
+            contract_id=contract_id,
+            channel_type=CreateAlertSubscriptionChannelType(channel_type),
+            webhook_url=_value(webhook_url),
+            routing_key=_value(routing_key),
+            severity_filter=CreateAlertSubscriptionSeverityFilter(severity_filter),
+        )
+        return _unwrap(
+            await create_alert_subscription.asyncio_detailed(client=self._client, body=body)
+        )
+
+    async def delete(self, subscription_id: str) -> None:
+        """Delete an alert subscription."""
+        _unwrap(
+            await delete_alert_subscription.asyncio_detailed(
+                subscription_id, client=self._client
+            )
+        )
+
+
 class AsyncClient:
     """Asynchronous (``httpx.AsyncClient``) client for the Sorolens API.
 
@@ -983,6 +1514,12 @@ class AsyncClient:
         self.api_keys = _AsyncApiKeys(self)
         self.watchlist = _AsyncWatchlist(self)
         self.watchdog = _AsyncWatchdog(self)
+        self.alerts = _AsyncAlerts(self)
+        self.search = _AsyncSearch(self)
+        self.labels = _AsyncLabels(self)
+        self.dlq = _AsyncDlq(self)
+        self.reports = _AsyncReports(self)
+        self.notifications = _AsyncNotifications(self)
 
     async def close(self) -> None:
         await self._client.get_async_httpx_client().aclose()

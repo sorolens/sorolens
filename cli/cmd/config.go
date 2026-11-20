@@ -19,6 +19,13 @@ type fileConfig struct {
 	Output       string `yaml:"output"`
 	OutputFormat string `yaml:"output_format"`
 
+	// APIKey is an API key for authenticating with the Sorolens API. It is
+	// stored in plaintext in the config file: prefer the --api-key flag, the
+	// SOROLENS_API_KEY env var, or a profile key in the OS keyring instead.
+	// Precedence: --api-key flag, then SOROLENS_API_KEY, then this entry,
+	// then the active profile's stored key (see applyConfig).
+	APIKey string `yaml:"api_key,omitempty"`
+
 	// DefaultProfile names the profile used when --profile and
 	// SOROLENS_PROFILE are not set. Profiles are optional: a config file with
 	// only the top-level fields above keeps working unchanged.
@@ -59,6 +66,15 @@ func applyConfig(cmd *cobra.Command, _ []string) error {
 		// SOROLENS_NETWORK is the default network for commands when --network is not
 		// given and the config file sets none; defaults to testnet.
 		globalConfig.Network = firstNonEmpty(os.Getenv("SOROLENS_NETWORK"), config.Network, "testnet")
+	}
+
+	// API key precedence: an explicit --api-key flag wins, then the
+	// SOROLENS_API_KEY env var, then the api_key entry in the config file.
+	// The active profile's stored key is the last resort, resolved in
+	// resolvedAPIKey when newClient builds the API client.
+	if !cmd.Flags().Changed("api-key") {
+		// API key for authenticating with the Sorolens API
+		globalConfig.APIKey = firstNonEmpty(os.Getenv("SOROLENS_API_KEY"), config.APIKey)
 	}
 
 	if cmd.Flags().Changed("json") {

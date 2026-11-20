@@ -304,7 +304,15 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Bulk untrack/tag over a selection (#176). Like registration it mutates
 		// shared state, so it needs the same contributor role, and it purges both
 		// caches since it can untrack contracts and retag them.
+    fix/776-list-limits-stats
 		r.With(scope, contributor, purgeContracts, purgeLabels, purgeStats).Post("/contracts/batch", h.BatchContracts)
+
+		r.With(scope, contributor, purgeContracts, purgeLabels).Post("/contracts/batch", h.BatchContracts)
+		// Single-contract untrack (#532). Same gate as registration and the
+		// batch untrack, and the same cache purge as the batch route since
+		// it changes the contract's status.
+		r.With(scope, contributor, purgeContracts, purgeLabels).Delete("/contracts/{id}", h.DeleteContract)
+    main
 		r.With(scope, contributor, purgeLabels).Post("/labels", h.CreateLabel)
 		r.With(scope, cacheLabels).Get("/labels", h.ListLabels)
 		r.With(scope, cacheLabels).Get("/resolve", h.ResolveLabel)
@@ -339,6 +347,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/verification", h.GetContractVerification)
 		get("/contracts/{id}/wasm", h.GetContractWasm)
 		get("/contracts/{id}/spec", h.GetContractSpec)
+		get("/contracts/{id}/event-schemas", h.GetContractEventSchemas)
 
 		// User-defined contract tags (issue #459). Wrapped by the contributor
 		// role so an anonymous caller cannot label a contract even though the
@@ -500,6 +509,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Post("/contracts", h.V2RegisterContract)
 		get("/contracts", h.V2ListContracts)
 		get("/contracts/{id}", h.V2GetContract)
+		// Single-contract untrack (#532). A 204 carries no body to reshape,
+		// so the v1 handler is reused directly. The purge keeps the v1
+		// contract/label caches coherent with the write.
+		purgeContracts := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceContracts)
+		purgeLabels := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceLabels)
+		r.With(scope, contributor, purgeContracts, purgeLabels).Delete("/contracts/{id}", h.DeleteContract)
 		get("/contracts/{id}/events", h.V2ListEvents)
 		get("/contracts/{id}/invocations", h.V2ListInvocations)
 		get("/contracts/{id}/storage", h.V2ListStorageEntries)
@@ -508,6 +523,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/snapshot", h.V2ContractSnapshot)
 		get("/contracts/{id}/upgrades", h.V2ListContractUpgrades)
 		get("/contracts/{id}/health-score", h.V2GetContractHealthScore)
+		get("/contracts/{id}/event-schemas", h.GetContractEventSchemas)
 		get("/contracts/{id}/stream", h.V2StreamEvents)
 		get("/contracts/{id}/graph", h.V2ContractGraph)
 
