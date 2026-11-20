@@ -1,0 +1,72 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-events-tail - Stream a contract's events live as they are indexed
+
+
+.SH SYNOPSIS
+\fBsorolens events tail --contract  [flags]\fP
+
+
+.SH DESCRIPTION
+Tail a contract's events using the Sorolens server-sent events endpoint.
+
+.PP
+Unlike "sorolens events ", which returns a page of already-indexed
+events, tail keeps the connection open and pretty-prints each event as it
+arrives. Press Ctrl-C to close the stream.
+
+
+.SH OPTIONS
+\fB--contract\fP=""
+	Contract ID to stream events for (required)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for tail
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH SEE ALSO
+\fBsorolens-events(1)\fP

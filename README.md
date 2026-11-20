@@ -79,7 +79,8 @@ with an API key. Provide it one of these ways, in precedence order:
 `sorolens config show` reports whether a key is configured (masked, never
 printed). See [`docs/authentication.md`](docs/authentication.md) for scopes
 and key management, and [`docs/configuration.md`](docs/configuration.md) for
-every CLI option.
+every CLI option. The [CLI command reference](docs/cli/README.md) documents
+every command and flag.
 
 ### 4. Optional: local metrics stack
 
