@@ -1903,6 +1903,22 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v2/contracts/{id}/event-schemas": {
+      get: {
+        operationId: "v2ContractEventSchemas",
+        summary: "Inferred and declared event schemas for a contract (v2)",
+        tags: ["API v2"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v2/watchlist": {
       get: {
         operationId: "v2ListWatchlist",
@@ -2675,6 +2691,22 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
       get: {
         operationId: "getContractSpec",
         summary: "Get a contract's parsed SEP-48 interface spec",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/event-schemas": {
+      get: {
+        operationId: "getContractEventSchemas",
+        summary: "Get inferred and declared event schemas for a contract",
         tags: ["Contracts"],
         parameters: [
           {

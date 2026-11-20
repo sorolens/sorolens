@@ -1,0 +1,24 @@
+{
+  "id": "10_error_404_not_found",
+  "description": "404 Not Found error envelope",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts/CUNKNOWN"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "contract not found"
+      }
+    }
+  },
+  "expected": {
+    "status": 404,
+    "error_code": "NOT_FOUND"
+  }
+}

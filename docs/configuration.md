@@ -22,7 +22,9 @@ there, not here.
 | `COLD_STORAGE_REGION` | `us-east-1` | no | ColdStorageRegion is the signing region for the archive bucket. |
 | `COLD_STORAGE_SECRET_ACCESS_KEY` | — | no | Explicit credentials. Leave both empty to use the default AWS credential chain (environment, shared config, IAM role). |
 | `COLD_STORAGE_THRESHOLD_DAYS` | `90` | no | Events older than this many days are exported to Parquet and deleted from Postgres by the nightly archive job. |
-| `CORS_ALLOWED_ORIGINS` | — | no | Comma-separated browser origins allowed by the API. A directly run API allows all origins when this is unset or set to *. Compose defaults to the local web origins below. |
+| `CORS_ALLOWED_ORIGINS` | — | no | corsMiddleware returns an http.Handler middleware that sets CORS headers. When CORS_ALLOWED_ORIGINS is unset or contains "*" all origins are allowed (Access-Control-Allow-Origin: *). When it is a comma-separated list of origins, only requests whose Origin header is in the list receive an echoed origin back; all others receive the first entry in the list (the browser will still block the mismatch). This lets a self-hosted API restrict cross-origin access to the Vercel dashboard domain without any code change. |
+| `DATABASE_READ_URL` | — | no | DatabaseReadURL is the optional Postgres replica connection string. |
+| `DATABASE_REPLICA_LAG_THRESHOLD` | `10s` | no | DATABASE_REPLICA_LAG_THRESHOLD is the maximum replication lag permitted before queries fall back to the primary database. |
 | `DATABASE_URL` | — | yes | DatabaseURL is the pooled Postgres connection string used by the API. |
 | `DB_MAX_CONNS` | `DefaultDBMaxConns` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
 | `DB_MAX_CONN_IDLE_TIME` | `DefaultDBMaxConnIdleTime` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |

@@ -1190,8 +1190,9 @@ the one-object-per-month layout bounds the work to the months touched.
 - `apps/web/components/OfflineAlert.tsx` — `OfflineBanner` (shown when offline) + `OfflineAlertPanel` (the `/offline-alerts` page body).
 - `apps/web/app/offline-alerts/page.tsx` — dedicated page for the queued-alert view.
 
+### 5.8 Read-Replica Routing and Replication-Lag Guard (issue #794)
 
-The API applies CORS and browser security headers before route authentication,
-so successful responses, errors, and OPTIONS responses follow the same policy.
-Key management and admin routes opt out of HTTP caching and ETag validation.
-See the [OpenAPI description](docs/openapi.yaml) for the header contract.
+**Decision:** Route read-only queries to a secondary PostgreSQL read replica pool (`DATABASE_READ_URL`) with an automated replication-lag guard (`DATABASE_REPLICA_LAG_THRESHOLD`).
+
+**Rationale:** Heavy dashboard reads must not starve indexer writes or compromise read-your-writes guarantees. All writes and read-after-write mutations are directed to the primary pool. If replica replication lag exceeds the configured threshold, read queries fall back to the primary pool automatically. See [docs/read_replica.md](docs/read_replica.md).
+

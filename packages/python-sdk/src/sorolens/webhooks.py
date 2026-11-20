@@ -87,13 +87,9 @@ def verify(
     try:
         header_timestamp = int(timestamp_header.strip())
     except (AttributeError, ValueError) as exc:
-        raise WebhookVerificationError(
-            "missing or non-numeric X-Sorolens-Timestamp"
-        ) from exc
+        raise WebhookVerificationError("missing or non-numeric X-Sorolens-Timestamp") from exc
     if header_timestamp != timestamp:
-        raise WebhookVerificationError(
-            "X-Sorolens-Timestamp does not match the signed timestamp"
-        )
+        raise WebhookVerificationError("X-Sorolens-Timestamp does not match the signed timestamp")
 
     current = int(time.time()) if now is None else now
     if abs(current - timestamp) > tolerance:
@@ -142,9 +138,7 @@ def _parse_signature_header(header: str) -> tuple[int, list[str]]:
     for piece in header.split(","):
         key, separator, value = piece.strip().partition("=")
         if not separator:
-            raise WebhookVerificationError(
-                "malformed X-Sorolens-Signature header"
-            )
+            raise WebhookVerificationError("malformed X-Sorolens-Signature header")
         key = key.strip()
         value = value.strip()
         if key == "t":
@@ -158,7 +152,5 @@ def _parse_signature_header(header: str) -> tuple[int, list[str]]:
             signatures.append(value)
 
     if timestamp is None:
-        raise WebhookVerificationError(
-            "X-Sorolens-Signature is missing the timestamp"
-        )
+        raise WebhookVerificationError("X-Sorolens-Signature is missing the timestamp")
     return timestamp, signatures
