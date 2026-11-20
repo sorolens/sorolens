@@ -263,7 +263,7 @@ scrape_configs:
 Because the indexer runs as a cron job (GitHub Actions) in the default
 deployment, its metrics are only scrapeable while a process is running. Run it
 with `--mode continuous` to keep the endpoint up; see
-[`ARCHITECTURE.md` § 5.1](../ARCHITECTURE.md) for the migration path from cron
+[`ARCHITECTURE.md` § 5.1](https://github.com/sorolens/sorolens/blob/main/ARCHITECTURE.md) for the migration path from cron
 to a persistent worker.
 
 ---

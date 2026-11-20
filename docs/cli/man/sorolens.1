@@ -1,0 +1,64 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens - Sorolens \- Soroban smart contract observability CLI
+
+
+.SH SYNOPSIS
+\fBsorolens [flags]\fP
+
+
+.SH DESCRIPTION
+sorolens is the command-line interface for the Sorolens observability
+platform. It lets you track, inspect, and monitor Soroban smart contracts
+on the Stellar network.
+
+
+.SH OPTIONS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for sorolens
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH SEE ALSO
+\fBsorolens-alerts(1)\fP, \fBsorolens-compare(1)\fP, \fBsorolens-config(1)\fP, \fBsorolens-contracts(1)\fP, \fBsorolens-doctor(1)\fP, \fBsorolens-events(1)\fP, \fBsorolens-inspect(1)\fP, \fBsorolens-invocations(1)\fP, \fBsorolens-label(1)\fP, \fBsorolens-plugin(1)\fP, \fBsorolens-report(1)\fP, \fBsorolens-snapshot(1)\fP, \fBsorolens-track(1)\fP, \fBsorolens-ttl(1)\fP, \fBsorolens-tui(1)\fP, \fBsorolens-version(1)\fP, \fBsorolens-watchdog(1)\fP

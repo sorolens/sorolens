@@ -44,6 +44,8 @@ type APIKey struct {
 	// RotatedAt is when the key's secret was last regenerated in place,
 	// or nil if it has never been rotated.
 	RotatedAt *time.Time
+	// MonthlyQuota is the optional hard quota on monthly requests (issue #792).
+	MonthlyQuota *int
 }
 
 // Revoked reports whether the key has been revoked.

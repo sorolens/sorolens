@@ -1731,6 +1731,57 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/usage:
+    get:
+      tags: [API Keys]
+      summary: Get API key usage metrics and quota status
+      description: |
+        Returns aggregated request counts, endpoint group breakdowns, daily timeline,
+        and monthly quota usage for the caller's API key, or for any key if requested
+        by an admin (issue #792).
+      operationId: getApiKeyUsage
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: key_id
+          in: query
+          required: false
+          description: API key ID to query. Required when calling with user/session auth; optional when authenticating with an API key (defaults to calling key). Querying another key requires admin:* scope.
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          description: Start of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to 30 days ago.
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          description: End of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to now.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Aggregated usage statistics and quota tracking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyUsageSummary"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/admin/keys:
     get:
       tags: [API Keys]
@@ -3680,6 +3731,50 @@ paths:
                     properties:
                       key:
                         type: string
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/usage:
+    get:
+      tags: [API v2]
+      summary: Get API key usage metrics and quota status (v2 passthrough)
+      operationId: v2GetApiKeyUsage
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: key_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Aggregated usage statistics and quota tracking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyUsageSummary"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -6307,6 +6402,67 @@ components:
           format: date-time
           nullable: true
           description: When the key expires, or null if it does not expire.
+        monthly_quota:
+          type: integer
+          nullable: true
+          description: Monthly request quota, or null if unmetered.
+
+    UsageTimelinePoint:
+      type: object
+      required: [date, total_requests, by_group]
+      properties:
+        date:
+          type: string
+          example: "2026-11-20"
+        total_requests:
+          type: integer
+          format: int64
+          example: 125
+        by_group:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+
+    KeyUsageSummary:
+      type: object
+      required: [key_id, from, to, total_requests, by_group, timeline, month_used]
+      properties:
+        key_id:
+          type: string
+          example: "key_01h7..."
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        total_requests:
+          type: integer
+          format: int64
+          example: 1540
+        by_group:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/UsageTimelinePoint"
+        monthly_quota:
+          type: integer
+          nullable: true
+          example: 50000
+        month_used:
+          type: integer
+          format: int64
+          example: 1540
+        month_remaining:
+          type: integer
+          format: int64
+          nullable: true
+          example: 48460
 
     ReportSubscription:
       type: object

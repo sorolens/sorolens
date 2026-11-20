@@ -1,0 +1,89 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-report - Get monthly SLA and uptime report for a contract
+
+
+.SH SYNOPSIS
+\fBsorolens report [contract-id] [flags]\fP
+
+
+.SH DESCRIPTION
+Display the monthly service-level agreement (SLA) and uptime report for a
+tracked contract, derived from watchdog health checks and alerts.
+
+.PP
+Validates the reporting month format (YYYY-MM). When omitted, the current UTC
+month is used.
+
+
+.SH OPTIONS
+\fB--contract\fP=""
+	Contract ID (alternative to positional argument)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for report
+
+.PP
+\fB--month\fP=""
+	Reporting month in YYYY-MM format (UTC)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH EXAMPLE
+.EX
+  # View report for the current month
+  sorolens report CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+  # View report for a specific month
+  sorolens report CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA --month 2026-02
+
+  # Output in machine-readable JSON format
+  sorolens report CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA --month 2026-02 --json
+.EE
+
+
+.SH SEE ALSO
+\fBsorolens(1)\fP

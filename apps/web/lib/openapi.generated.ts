@@ -982,6 +982,39 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/usage": {
+      get: {
+        operationId: "getApiKeyUsage",
+        summary: "Get API key usage metrics and quota status",
+        tags: ["API Keys"],
+        parameters: [
+          {
+            name: "key_id",
+            in: "query",
+            required: false,
+            description:
+              "API key ID to query. Required when calling with user/session auth; optional when authenticating with an API key (defaults to calling key). Querying another key requires admin:* scope.",
+            type: "string",
+          },
+          {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Start of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to 30 days ago.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "End of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to now.",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/admin/keys": {
       get: {
         operationId: "listApiKeysAdmin",
@@ -2281,6 +2314,33 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "id",
             in: "path",
             required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v2/usage": {
+      get: {
+        operationId: "v2GetApiKeyUsage",
+        summary: "Get API key usage metrics and quota status (v2 passthrough)",
+        tags: ["API v2"],
+        parameters: [
+          {
+            name: "key_id",
+            in: "query",
+            required: false,
+            type: "string",
+          },
+          {
+            name: "from",
+            in: "query",
+            required: false,
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
             type: "string",
           },
         ],

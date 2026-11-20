@@ -127,6 +127,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(middleware.Compression)
 
 	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
+	r.Use(middleware.UsageMeter(h.RedisClient, h.UsageFlusher))
 
 	// Health (not rate-limited)
 	r.Get("/health", h.Health)
@@ -149,6 +150,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	reg.MustRegister(middleware.CacheCollectors()...)
 	reg.MustRegister(middleware.RateLimitCollectors()...)
+	reg.MustRegister(middleware.UsageMeterCollectors()...)
 	reg.MustRegister(metrics.HTTPRequestsInFlight, metrics.HTTPRequestsTotal, metrics.HTTPRequestDuration)
 	reg.MustRegister(metrics.PoolCollector())
 	r.Get("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP)
@@ -380,6 +382,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope).Delete("/exports/{id}", h.DeleteExport)
 		r.Get("/exports/{id}/download", h.DownloadExport)
 
+		// API key request usage and quota tracking (issue #792).
+		get("/usage", h.GetUsage)
+
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
 		r.With(scope, admin).Post("/api-keys", h.CreateAPIKey)
@@ -526,6 +531,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/event-schemas", h.GetContractEventSchemas)
 		get("/contracts/{id}/stream", h.V2StreamEvents)
 		get("/contracts/{id}/graph", h.V2ContractGraph)
+
+		// API key request usage and quota tracking (issue #792).
+		get("/usage", h.GetUsage)
 
 		// API keys (admin scope + admin role). These reuse the v1 handlers and
 		// are declared passthrough in docs/api-v2.md.

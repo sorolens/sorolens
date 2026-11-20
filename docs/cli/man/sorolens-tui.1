@@ -1,0 +1,86 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-tui - Launch an interactive terminal dashboard for tracked contracts
+
+
+.SH SYNOPSIS
+\fBsorolens tui [flags]\fP
+
+
+.SH DESCRIPTION
+Launch a full-screen, k9s-style dashboard for the Sorolens API.
+
+.PP
+The dashboard shows tracked contracts alongside their live event stream,
+invocations, watchdog alerts and storage TTL warnings. Data is refreshed on a
+timer (default every 5s) and can be refreshed on demand with "r".
+
+.PP
+Key bindings:
+  tab / shift+tab   cycle panes
+  1-5               jump to contracts / events / invocations / alerts / storage
+  j / k, up / down  move the selection
+  enter             drill down into the selected contract (or alert target)
+  /                 filter the contract list
+  r                 refresh now
+  q, ctrl+c          quit
+
+.PP
+The dashboard talks to the API at --api-url and authenticates with an API key
+passed via --api-key or the SOROLENS_API_KEY environment variable.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for tui
+
+.PP
+\fB--refresh\fP=5s
+	Polling interval for live data
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH SEE ALSO
+\fBsorolens(1)\fP
