@@ -273,6 +273,11 @@ describe("NotificationsPage", () => {
 
     fireEvent.click(screen.getByText("Remove"));
 
+    const confirmBtn = await screen.findByRole("button", {
+      name: "Delete subscription",
+    });
+    fireEvent.click(confirmBtn);
+
     await waitFor(() => {
       expect(mockDeleteSubscription).toHaveBeenCalledWith(
         "sub_1",

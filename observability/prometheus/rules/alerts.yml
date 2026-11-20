@@ -1,0 +1,51 @@
+# Alert rules loaded by Prometheus in the `observability` compose profile.
+#
+# Thresholds follow docs/metrics.md: a Stellar ledger closes roughly every
+# 5 seconds, so 1000 ledgers is about 83 minutes of indexer lag.
+groups:
+  - name: sorolens-indexer
+    interval: 30s
+    rules:
+      - alert: SorolensIndexerLagging
+        expr: sorolens_indexer_lag_ledgers > 1000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Indexer is {{ $value }} ledgers behind on {{ $labels.network }}"
+          description: >-
+            The indexer cursor for {{ $labels.network }} has not caught up with
+            the network head for 15 minutes. At ~5s per ledger this is over an
+            hour of missing events. Check the indexer logs and its Redis
+            advisory lock, then confirm the Soroban RPC endpoint is reachable.
+
+      - alert: SorolensIndexerSeverelyLagging
+        expr: sorolens_indexer_lag_ledgers > 20000
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Indexer is {{ $value }} ledgers behind on {{ $labels.network }}"
+          description: >-
+            More than ~28 hours of {{ $labels.network }} events are missing.
+            Treat this as an outage of the indexer for that network.
+
+  - name: sorolens-api
+    interval: 30s
+    rules:
+      - alert: SorolensAPICacheHitRatioLow
+        expr: |
+          sum by (namespace) (rate(sorolens_api_cache_requests_total{result="hit"}[5m]))
+            /
+          sum by (namespace) (rate(sorolens_api_cache_requests_total[5m]))
+            < 0.4
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Response cache hit ratio is {{ $value | humanizePercentage }} for {{ $labels.namespace }}"
+          description: >-
+            Fewer than 40% of cacheable {{ $labels.namespace }} reads have been
+            served from cache for 30 minutes. Check that API_CACHE_TTL is set
+            and that the API can reach Redis. This rule stays silent while no
+            matching traffic is flowing.

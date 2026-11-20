@@ -63,6 +63,18 @@ go run ./services/indexer --mode once
 
 The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
 
+### 4. Optional: local metrics stack
+
+```bash
+docker compose --profile observability up -d
+./scripts/observability-smoke.sh
+```
+
+Prometheus (<http://localhost:9090>) and Grafana (<http://localhost:3001>) start with the
+`Sorolens Overview` dashboard and the alert rules already provisioned. Grafana's admin
+password is generated on first start; see
+[docs/observability.md](./docs/observability.md) for how to read it and what is scraped.
+
 The indexer processes contracts concurrently. Set `INDEXER_WORKERS` to tune
 the worker count; it defaults to `GOMAXPROCS`. Each contract is handled by one
 worker at a time, preserving that contract's processing order.

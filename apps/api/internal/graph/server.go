@@ -22,13 +22,19 @@ import (
 // fields cost their child complexity times their page size (see
 // complexityRoot), so e.g. contracts(first: 50) { events(first: 20) { type } }
 // costs about 1,000.
-const DefaultComplexityLimit = 5000
+const (
+	DefaultComplexityLimit = 5000
+	DefaultMaxDepth        = 10
+)
 
 // Options configures the GraphQL handler.
 type Options struct {
 	// ComplexityLimit rejects operations whose estimated cost exceeds it.
 	// Zero means DefaultComplexityLimit.
 	ComplexityLimit int
+	// MaxDepth rejects operations whose AST nesting depth exceeds it.
+	// Zero means DefaultMaxDepth.
+	MaxDepth int
 	// PersistedOnly rejects any operation that is not in the embedded
 	// allowlist (persisted/*.graphql) and disables introspection. Clients
 	// then send only {"extensions":{"persistedQuery":{"version":1,
@@ -88,22 +94,72 @@ func NewHandler(s Store, opts Options) (http.Handler, error) {
 	srv.Use(extension.AutomaticPersistedQuery{Cache: apqCache})
 	srv.Use(extension.FixedComplexityLimit(limit))
 
-	if opts.PersistedOnly {
-		srv.AroundOperations(func(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
-			oc := graphql.GetOperationContext(ctx)
+	maxDepth := opts.MaxDepth
+	if maxDepth <= 0 {
+		maxDepth = DefaultMaxDepth
+	}
+
+	srv.AroundOperations(func(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
+		oc := graphql.GetOperationContext(ctx)
+		if opts.PersistedOnly {
 			if _, ok := allowlist[queryHash(oc.RawQuery)]; !ok {
 				return graphql.OneShot(&graphql.Response{Errors: gqlerror.List{{
 					Message:    "only persisted queries are allowed",
 					Extensions: map[string]any{"code": "PERSISTED_QUERY_REQUIRED"},
 				}}})
 			}
-			return next(ctx)
-		})
-	} else {
+		}
+		if oc.Doc != nil {
+			depth := calculateDepth(oc.Doc)
+			if depth > maxDepth {
+				return graphql.OneShot(&graphql.Response{Errors: gqlerror.List{{
+					Message:    fmt.Sprintf("operation exceeds max depth limit of %d (depth was %d)", maxDepth, depth),
+					Extensions: map[string]any{"code": "MAX_DEPTH_EXCEEDED"},
+				}}})
+			}
+		}
+		return next(ctx)
+	})
+
+	if !opts.PersistedOnly {
 		srv.Use(extension.Introspection{})
 	}
 
 	return withLoaders(s, srv), nil
+}
+
+func calculateDepth(doc *ast.QueryDocument) int {
+	maxDepth := 0
+	for _, op := range doc.Operations {
+		d := selectionSetDepth(op.SelectionSet, 1)
+		if d > maxDepth {
+			maxDepth = d
+		}
+	}
+	return maxDepth
+}
+
+func selectionSetDepth(set ast.SelectionSet, current int) int {
+	maxDepth := current
+	for _, sel := range set {
+		switch s := sel.(type) {
+		case *ast.Field:
+			if len(s.SelectionSet) > 0 {
+				d := selectionSetDepth(s.SelectionSet, current+1)
+				if d > maxDepth {
+					maxDepth = d
+				}
+			}
+		case *ast.InlineFragment:
+			if len(s.SelectionSet) > 0 {
+				d := selectionSetDepth(s.SelectionSet, current)
+				if d > maxDepth {
+					maxDepth = d
+				}
+			}
+		}
+	}
+	return maxDepth
 }
 
 // listCost is the complexity of a list field: its per-item child cost times

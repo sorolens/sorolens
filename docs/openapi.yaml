@@ -505,6 +505,89 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/exports:
+    post:
+      tags: [Exports]
+      summary: Create an asynchronous export job
+      operationId: createExportJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, format]
+              properties:
+                type:
+                  type: string
+                  enum: [events, snapshot]
+                format:
+                  type: string
+                  enum: [csv, ndjson]
+                filters:
+                  type: object
+      responses:
+        "202":
+          description: Export job accepted
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/exports/{id}:
+    get:
+      tags: [Exports]
+      summary: Get export job status and progress
+      operationId: getExportJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export job details
+        "404":
+          description: Export job not found
+    delete:
+      tags: [Exports]
+      summary: Delete an export job
+      operationId: deleteExportJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Export job deleted
+        "404":
+          description: Export job not found
+
+  /api/v1/exports/{id}/download:
+    get:
+      tags: [Exports]
+      summary: Download completed export file
+      operationId: downloadExport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export file stream
+        "403":
+          description: Forbidden or invalid token
+        "410":
+          description: Download link expired
+
   /api/v1/contracts:
     get:
       tags: [Contracts]
@@ -2530,6 +2613,89 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/InternalError"
+
+  /api/v2/exports:
+    post:
+      tags: [Exports]
+      summary: Create an asynchronous export job
+      operationId: createExportJobV2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, format]
+              properties:
+                type:
+                  type: string
+                  enum: [events, snapshot]
+                format:
+                  type: string
+                  enum: [csv, ndjson]
+                filters:
+                  type: object
+      responses:
+        "202":
+          description: Export job accepted
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v2/exports/{id}:
+    get:
+      tags: [Exports]
+      summary: Get export job status and progress
+      operationId: getExportJobV2
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export job details
+        "404":
+          description: Export job not found
+    delete:
+      tags: [Exports]
+      summary: Delete an export job
+      operationId: deleteExportJobV2
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Export job deleted
+        "404":
+          description: Export job not found
+
+  /api/v2/exports/{id}/download:
+    get:
+      tags: [Exports]
+      summary: Download completed export file
+      operationId: downloadExportV2
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export file stream
+        "403":
+          description: Forbidden or invalid token
+        "410":
+          description: Download link expired
 
   /api/v2/contracts:
     get:

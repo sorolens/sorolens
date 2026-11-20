@@ -161,6 +161,11 @@ test.describe("Settings", () => {
       .getByTestId("settings-api-key-row")
       .getByRole("button", { name: "Revoke" })
       .click();
+    await expect(page.getByTestId("confirm-dialog")).toBeVisible();
+    await page
+      .getByTestId("confirm-dialog")
+      .getByRole("button", { name: "Revoke key" })
+      .click();
     await expect(page.getByTestId("settings-api-key-row")).toHaveCount(0);
     await expect(page.getByTestId("settings-api-key")).toContainText(
       "No API key yet"
