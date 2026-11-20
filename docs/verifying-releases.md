@@ -4,7 +4,7 @@ Every release artifact can be traced back to the workflow run in this
 repository that built it:
 
 - **Container images** (`ghcr.io/sorolens/sorolens-api`, `ghcr.io/sorolens/sorolens-indexer`)
-  are signed with [cosign](https://docs.sigstore.dev/cosign/overview/) and carry
+  are signed with [cosign](https://docs.sigstore.dev/cosign/signing/overview/) and carry
   a SLSA build provenance attestation. BuildKit also attaches an SPDX SBOM and
   its own provenance to the image index.
 - **CLI binaries** (`cli-v*` releases) ship a `checksums.txt` that is signed
@@ -104,12 +104,12 @@ archive and comparing checksums.
 
 ## How it is produced
 
-- [`release.yml`](../.github/workflows/release.yml) builds each image with
+- [`release.yml`](https://github.com/sorolens/sorolens/blob/main/.github/workflows/release.yml) builds each image with
   `sbom: true` and `provenance: mode=max`, signs the pushed digest with
   `cosign sign`, and runs `actions/attest-build-provenance` with
   `push-to-registry: true`.
-- [`cli-release.yml`](../.github/workflows/cli-release.yml) runs GoReleaser,
-  whose `signs` section in [`cli/.goreleaser.yml`](../cli/.goreleaser.yml)
+- [`cli-release.yml`](https://github.com/sorolens/sorolens/blob/main/.github/workflows/cli-release.yml) runs GoReleaser,
+  whose `signs` section in [`cli/.goreleaser.yml`](https://github.com/sorolens/sorolens/blob/main/cli/.goreleaser.yml)
   signs `checksums.txt` with `cosign sign-blob`, then attests the archives and
   the checksums file. The manual snapshot run skips signing, because it has no
   release identity.
