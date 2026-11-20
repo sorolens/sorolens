@@ -51,8 +51,9 @@ type MockStore struct {
 	*MockExportJobStore
 
 	// auditMu guards auditEvents: the audit middleware writes asynchronously.
-	auditMu     sync.Mutex
-	auditEvents []AuditEvent
+	auditMu      sync.Mutex
+	auditEvents  []AuditEvent
+	usageRecords []APIKeyUsageRecord
 
 	// Error injection
 	UpsertContractErr                 error

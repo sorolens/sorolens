@@ -24,6 +24,7 @@ import (
 
 const (
 	ApiKeyAuthScopes         = "ApiKeyAuth.Scopes"
+	BearerAuthScopes         = "BearerAuth.Scopes"
 	IdentityHeaderAuthScopes = "IdentityHeaderAuth.Scopes"
 	RoleAuthScopes           = "RoleAuth.Scopes"
 	SessionAuthScopes        = "SessionAuth.Scopes"
@@ -592,8 +593,11 @@ type APIKey struct {
 	Id         string     `json:"id"`
 	KeyPrefix  string     `json:"key_prefix"`
 	LastUsedAt *time.Time `json:"last_used_at"`
-	Name       string     `json:"name"`
-	RevokedAt  *time.Time `json:"revoked_at"`
+
+	// MonthlyQuota Monthly request quota, or null if unmetered.
+	MonthlyQuota *int       `json:"monthly_quota"`
+	Name         string     `json:"name"`
+	RevokedAt    *time.Time `json:"revoked_at"`
 
 	// RotatedAt When the key's secret was last rotated in place.
 	RotatedAt *time.Time `json:"rotated_at"`
@@ -1389,6 +1393,19 @@ type InvocationWindowStats struct {
 	P95Fee            float64 `json:"p95_fee"`
 }
 
+// KeyUsageSummary defines model for KeyUsageSummary.
+type KeyUsageSummary struct {
+	ByGroup        map[string]int64     `json:"by_group"`
+	From           time.Time            `json:"from"`
+	KeyId          string               `json:"key_id"`
+	MonthRemaining *int64               `json:"month_remaining"`
+	MonthUsed      int64                `json:"month_used"`
+	MonthlyQuota   *int                 `json:"monthly_quota"`
+	Timeline       []UsageTimelinePoint `json:"timeline"`
+	To             time.Time            `json:"to"`
+	TotalRequests  int64                `json:"total_requests"`
+}
+
 // MonitoredContract defines model for MonitoredContract.
 type MonitoredContract struct {
 	CheckInterval int64      `json:"check_interval"`
@@ -1539,6 +1556,13 @@ type UptimeResult struct {
 
 // UptimeResultWindow The time window over which uptime was computed.
 type UptimeResultWindow string
+
+// UsageTimelinePoint defines model for UsageTimelinePoint.
+type UsageTimelinePoint struct {
+	ByGroup       map[string]int64 `json:"by_group"`
+	Date          string           `json:"date"`
+	TotalRequests int64            `json:"total_requests"`
+}
 
 // V2ActivityResponse defines model for V2ActivityResponse.
 type V2ActivityResponse struct {
@@ -2551,6 +2575,18 @@ type StreamAllEventsParams struct {
 	ContractId *string `form:"contract_id,omitempty" json:"contract_id,omitempty"`
 }
 
+// GetApiKeyUsageParams defines parameters for GetApiKeyUsage.
+type GetApiKeyUsageParams struct {
+	// KeyId API key ID to query. Required when calling with user/session auth; optional when authenticating with an API key (defaults to calling key). Querying another key requires admin:* scope.
+	KeyId *string `form:"key_id,omitempty" json:"key_id,omitempty"`
+
+	// From Start of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to 30 days ago.
+	From *string `form:"from,omitempty" json:"from,omitempty"`
+
+	// To End of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to now.
+	To *string `form:"to,omitempty" json:"to,omitempty"`
+}
+
 // ListWatchdogAlertsParams defines parameters for ListWatchdogAlerts.
 type ListWatchdogAlertsParams struct {
 	// Severity Severity filter.
@@ -2833,6 +2869,13 @@ type V2CreateMyApiKeyJSONBody struct {
 type V2LiveActivityParams struct {
 	// Minutes Window size in one-minute buckets.
 	Minutes *V2Minutes `form:"minutes,omitempty" json:"minutes,omitempty"`
+}
+
+// V2GetApiKeyUsageParams defines parameters for V2GetApiKeyUsage.
+type V2GetApiKeyUsageParams struct {
+	KeyId *string `form:"key_id,omitempty" json:"key_id,omitempty"`
+	From  *string `form:"from,omitempty" json:"from,omitempty"`
+	To    *string `form:"to,omitempty" json:"to,omitempty"`
 }
 
 // V2ListWatchdogAlertsParams defines parameters for V2ListWatchdogAlerts.
@@ -3665,6 +3708,9 @@ type ClientInterface interface {
 	// SubscribeEventsWS request
 	SubscribeEventsWS(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiKeyUsage request
+	GetApiKeyUsage(ctx context.Context, params *GetApiKeyUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListWatchdogAlerts request
 	ListWatchdogAlerts(ctx context.Context, params *ListWatchdogAlertsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -3853,6 +3899,9 @@ type ClientInterface interface {
 
 	// V2GlobalStats request
 	V2GlobalStats(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// V2GetApiKeyUsage request
+	V2GetApiKeyUsage(ctx context.Context, params *V2GetApiKeyUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// V2ListWatchdogAlerts request
 	V2ListWatchdogAlerts(ctx context.Context, params *V2ListWatchdogAlertsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5301,6 +5350,18 @@ func (c *Client) SubscribeEventsWS(ctx context.Context, reqEditors ...RequestEdi
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetApiKeyUsage(ctx context.Context, params *GetApiKeyUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiKeyUsageRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ListWatchdogAlerts(ctx context.Context, params *ListWatchdogAlertsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListWatchdogAlertsRequest(c.Server, params)
 	if err != nil {
@@ -6083,6 +6144,18 @@ func (c *Client) V2LiveActivity(ctx context.Context, params *V2LiveActivityParam
 
 func (c *Client) V2GlobalStats(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewV2GlobalStatsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) V2GetApiKeyUsage(ctx context.Context, params *V2GetApiKeyUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewV2GetApiKeyUsageRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -11207,6 +11280,87 @@ func NewSubscribeEventsWSRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetApiKeyUsageRequest generates requests for GetApiKeyUsage
+func NewGetApiKeyUsageRequest(server string, params *GetApiKeyUsageParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/usage")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.KeyId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "key_id", runtime.ParamLocationQuery, *params.KeyId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, *params.From); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, *params.To); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListWatchdogAlertsRequest generates requests for ListWatchdogAlerts
 func NewListWatchdogAlertsRequest(server string, params *ListWatchdogAlertsParams) (*http.Request, error) {
 	var err error
@@ -13935,6 +14089,87 @@ func NewV2GlobalStatsRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewV2GetApiKeyUsageRequest generates requests for V2GetApiKeyUsage
+func NewV2GetApiKeyUsageRequest(server string, params *V2GetApiKeyUsageParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v2/usage")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.KeyId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "key_id", runtime.ParamLocationQuery, *params.KeyId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, *params.From); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, *params.To); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewV2ListWatchdogAlertsRequest generates requests for V2ListWatchdogAlerts
 func NewV2ListWatchdogAlertsRequest(server string, params *V2ListWatchdogAlertsParams) (*http.Request, error) {
 	var err error
@@ -15007,6 +15242,9 @@ type ClientWithResponsesInterface interface {
 	// SubscribeEventsWSWithResponse request
 	SubscribeEventsWSWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SubscribeEventsWSResponse, error)
 
+	// GetApiKeyUsageWithResponse request
+	GetApiKeyUsageWithResponse(ctx context.Context, params *GetApiKeyUsageParams, reqEditors ...RequestEditorFn) (*GetApiKeyUsageResponse, error)
+
 	// ListWatchdogAlertsWithResponse request
 	ListWatchdogAlertsWithResponse(ctx context.Context, params *ListWatchdogAlertsParams, reqEditors ...RequestEditorFn) (*ListWatchdogAlertsResponse, error)
 
@@ -15196,6 +15434,9 @@ type ClientWithResponsesInterface interface {
 	// V2GlobalStatsWithResponse request
 	V2GlobalStatsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*V2GlobalStatsResponse, error)
 
+	// V2GetApiKeyUsageWithResponse request
+	V2GetApiKeyUsageWithResponse(ctx context.Context, params *V2GetApiKeyUsageParams, reqEditors ...RequestEditorFn) (*V2GetApiKeyUsageResponse, error)
+
 	// V2ListWatchdogAlertsWithResponse request
 	V2ListWatchdogAlertsWithResponse(ctx context.Context, params *V2ListWatchdogAlertsParams, reqEditors ...RequestEditorFn) (*V2ListWatchdogAlertsResponse, error)
 
@@ -15353,8 +15594,11 @@ type CreateApiKeyAdminResponse struct {
 		Key        string     `json:"key"`
 		KeyPrefix  string     `json:"key_prefix"`
 		LastUsedAt *time.Time `json:"last_used_at"`
-		Name       string     `json:"name"`
-		RevokedAt  *time.Time `json:"revoked_at"`
+
+		// MonthlyQuota Monthly request quota, or null if unmetered.
+		MonthlyQuota *int       `json:"monthly_quota"`
+		Name         string     `json:"name"`
+		RevokedAt    *time.Time `json:"revoked_at"`
 
 		// RotatedAt When the key's secret was last rotated in place.
 		RotatedAt *time.Time `json:"rotated_at"`
@@ -15448,8 +15692,11 @@ type RotateApiKeyAdminResponse struct {
 		Key        string     `json:"key"`
 		KeyPrefix  string     `json:"key_prefix"`
 		LastUsedAt *time.Time `json:"last_used_at"`
-		Name       string     `json:"name"`
-		RevokedAt  *time.Time `json:"revoked_at"`
+
+		// MonthlyQuota Monthly request quota, or null if unmetered.
+		MonthlyQuota *int       `json:"monthly_quota"`
+		Name         string     `json:"name"`
+		RevokedAt    *time.Time `json:"revoked_at"`
 
 		// RotatedAt When the key's secret was last rotated in place.
 		RotatedAt *time.Time `json:"rotated_at"`
@@ -15554,8 +15801,11 @@ type CreateApiKeyResponse struct {
 		Key        string     `json:"key"`
 		KeyPrefix  string     `json:"key_prefix"`
 		LastUsedAt *time.Time `json:"last_used_at"`
-		Name       string     `json:"name"`
-		RevokedAt  *time.Time `json:"revoked_at"`
+
+		// MonthlyQuota Monthly request quota, or null if unmetered.
+		MonthlyQuota *int       `json:"monthly_quota"`
+		Name         string     `json:"name"`
+		RevokedAt    *time.Time `json:"revoked_at"`
 
 		// RotatedAt When the key's secret was last rotated in place.
 		RotatedAt *time.Time `json:"rotated_at"`
@@ -15652,8 +15902,11 @@ type RotateApiKeyResponse struct {
 		Key        string     `json:"key"`
 		KeyPrefix  string     `json:"key_prefix"`
 		LastUsedAt *time.Time `json:"last_used_at"`
-		Name       string     `json:"name"`
-		RevokedAt  *time.Time `json:"revoked_at"`
+
+		// MonthlyQuota Monthly request quota, or null if unmetered.
+		MonthlyQuota *int       `json:"monthly_quota"`
+		Name         string     `json:"name"`
+		RevokedAt    *time.Time `json:"revoked_at"`
 
 		// RotatedAt When the key's secret was last rotated in place.
 		RotatedAt *time.Time `json:"rotated_at"`
@@ -17192,8 +17445,11 @@ type CreateMyApiKeyResponse struct {
 		Key        string     `json:"key"`
 		KeyPrefix  string     `json:"key_prefix"`
 		LastUsedAt *time.Time `json:"last_used_at"`
-		Name       string     `json:"name"`
-		RevokedAt  *time.Time `json:"revoked_at"`
+
+		// MonthlyQuota Monthly request quota, or null if unmetered.
+		MonthlyQuota *int       `json:"monthly_quota"`
+		Name         string     `json:"name"`
+		RevokedAt    *time.Time `json:"revoked_at"`
 
 		// RotatedAt When the key's secret was last rotated in place.
 		RotatedAt *time.Time `json:"rotated_at"`
@@ -17782,6 +18038,34 @@ func (r SubscribeEventsWSResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r SubscribeEventsWSResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiKeyUsageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *KeyUsageSummary
+	JSON400      *InvalidInput
+	JSON401      *Unauthorized
+	JSON403      *ForbiddenScope
+	JSON404      *NotFound
+	JSON429      *RateLimited
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiKeyUsageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiKeyUsageResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -18377,8 +18661,11 @@ type V2AdminRotateKeyResponse struct {
 		Key        string     `json:"key"`
 		KeyPrefix  string     `json:"key_prefix"`
 		LastUsedAt *time.Time `json:"last_used_at"`
-		Name       string     `json:"name"`
-		RevokedAt  *time.Time `json:"revoked_at"`
+
+		// MonthlyQuota Monthly request quota, or null if unmetered.
+		MonthlyQuota *int       `json:"monthly_quota"`
+		Name         string     `json:"name"`
+		RevokedAt    *time.Time `json:"revoked_at"`
 
 		// RotatedAt When the key's secret was last rotated in place.
 		RotatedAt *time.Time `json:"rotated_at"`
@@ -18515,8 +18802,11 @@ type V2RotateAPIKeyResponse struct {
 		Key        string     `json:"key"`
 		KeyPrefix  string     `json:"key_prefix"`
 		LastUsedAt *time.Time `json:"last_used_at"`
-		Name       string     `json:"name"`
-		RevokedAt  *time.Time `json:"revoked_at"`
+
+		// MonthlyQuota Monthly request quota, or null if unmetered.
+		MonthlyQuota *int       `json:"monthly_quota"`
+		Name         string     `json:"name"`
+		RevokedAt    *time.Time `json:"revoked_at"`
 
 		// RotatedAt When the key's secret was last rotated in place.
 		RotatedAt *time.Time `json:"rotated_at"`
@@ -19207,6 +19497,34 @@ func (r V2GlobalStatsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r V2GlobalStatsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type V2GetApiKeyUsageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *KeyUsageSummary
+	JSON400      *InvalidInput
+	JSON401      *Unauthorized
+	JSON403      *ForbiddenScope
+	JSON404      *NotFound
+	JSON429      *RateLimited
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r V2GetApiKeyUsageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r V2GetApiKeyUsageResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -20637,6 +20955,15 @@ func (c *ClientWithResponses) SubscribeEventsWSWithResponse(ctx context.Context,
 	return ParseSubscribeEventsWSResponse(rsp)
 }
 
+// GetApiKeyUsageWithResponse request returning *GetApiKeyUsageResponse
+func (c *ClientWithResponses) GetApiKeyUsageWithResponse(ctx context.Context, params *GetApiKeyUsageParams, reqEditors ...RequestEditorFn) (*GetApiKeyUsageResponse, error) {
+	rsp, err := c.GetApiKeyUsage(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiKeyUsageResponse(rsp)
+}
+
 // ListWatchdogAlertsWithResponse request returning *ListWatchdogAlertsResponse
 func (c *ClientWithResponses) ListWatchdogAlertsWithResponse(ctx context.Context, params *ListWatchdogAlertsParams, reqEditors ...RequestEditorFn) (*ListWatchdogAlertsResponse, error) {
 	rsp, err := c.ListWatchdogAlerts(ctx, params, reqEditors...)
@@ -21222,6 +21549,15 @@ func (c *ClientWithResponses) V2GlobalStatsWithResponse(ctx context.Context, req
 	return ParseV2GlobalStatsResponse(rsp)
 }
 
+// V2GetApiKeyUsageWithResponse request returning *V2GetApiKeyUsageResponse
+func (c *ClientWithResponses) V2GetApiKeyUsageWithResponse(ctx context.Context, params *V2GetApiKeyUsageParams, reqEditors ...RequestEditorFn) (*V2GetApiKeyUsageResponse, error) {
+	rsp, err := c.V2GetApiKeyUsage(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseV2GetApiKeyUsageResponse(rsp)
+}
+
 // V2ListWatchdogAlertsWithResponse request returning *V2ListWatchdogAlertsResponse
 func (c *ClientWithResponses) V2ListWatchdogAlertsWithResponse(ctx context.Context, params *V2ListWatchdogAlertsParams, reqEditors ...RequestEditorFn) (*V2ListWatchdogAlertsResponse, error) {
 	rsp, err := c.V2ListWatchdogAlerts(ctx, params, reqEditors...)
@@ -21582,8 +21918,11 @@ func ParseCreateApiKeyAdminResponse(rsp *http.Response) (*CreateApiKeyAdminRespo
 			Key        string     `json:"key"`
 			KeyPrefix  string     `json:"key_prefix"`
 			LastUsedAt *time.Time `json:"last_used_at"`
-			Name       string     `json:"name"`
-			RevokedAt  *time.Time `json:"revoked_at"`
+
+			// MonthlyQuota Monthly request quota, or null if unmetered.
+			MonthlyQuota *int       `json:"monthly_quota"`
+			Name         string     `json:"name"`
+			RevokedAt    *time.Time `json:"revoked_at"`
 
 			// RotatedAt When the key's secret was last rotated in place.
 			RotatedAt *time.Time `json:"rotated_at"`
@@ -21755,8 +22094,11 @@ func ParseRotateApiKeyAdminResponse(rsp *http.Response) (*RotateApiKeyAdminRespo
 			Key        string     `json:"key"`
 			KeyPrefix  string     `json:"key_prefix"`
 			LastUsedAt *time.Time `json:"last_used_at"`
-			Name       string     `json:"name"`
-			RevokedAt  *time.Time `json:"revoked_at"`
+
+			// MonthlyQuota Monthly request quota, or null if unmetered.
+			MonthlyQuota *int       `json:"monthly_quota"`
+			Name         string     `json:"name"`
+			RevokedAt    *time.Time `json:"revoked_at"`
 
 			// RotatedAt When the key's secret was last rotated in place.
 			RotatedAt *time.Time `json:"rotated_at"`
@@ -21933,8 +22275,11 @@ func ParseCreateApiKeyResponse(rsp *http.Response) (*CreateApiKeyResponse, error
 			Key        string     `json:"key"`
 			KeyPrefix  string     `json:"key_prefix"`
 			LastUsedAt *time.Time `json:"last_used_at"`
-			Name       string     `json:"name"`
-			RevokedAt  *time.Time `json:"revoked_at"`
+
+			// MonthlyQuota Monthly request quota, or null if unmetered.
+			MonthlyQuota *int       `json:"monthly_quota"`
+			Name         string     `json:"name"`
+			RevokedAt    *time.Time `json:"revoked_at"`
 
 			// RotatedAt When the key's secret was last rotated in place.
 			RotatedAt *time.Time `json:"rotated_at"`
@@ -22115,8 +22460,11 @@ func ParseRotateApiKeyResponse(rsp *http.Response) (*RotateApiKeyResponse, error
 			Key        string     `json:"key"`
 			KeyPrefix  string     `json:"key_prefix"`
 			LastUsedAt *time.Time `json:"last_used_at"`
-			Name       string     `json:"name"`
-			RevokedAt  *time.Time `json:"revoked_at"`
+
+			// MonthlyQuota Monthly request quota, or null if unmetered.
+			MonthlyQuota *int       `json:"monthly_quota"`
+			Name         string     `json:"name"`
+			RevokedAt    *time.Time `json:"revoked_at"`
 
 			// RotatedAt When the key's secret was last rotated in place.
 			RotatedAt *time.Time `json:"rotated_at"`
@@ -24703,8 +25051,11 @@ func ParseCreateMyApiKeyResponse(rsp *http.Response) (*CreateMyApiKeyResponse, e
 			Key        string     `json:"key"`
 			KeyPrefix  string     `json:"key_prefix"`
 			LastUsedAt *time.Time `json:"last_used_at"`
-			Name       string     `json:"name"`
-			RevokedAt  *time.Time `json:"revoked_at"`
+
+			// MonthlyQuota Monthly request quota, or null if unmetered.
+			MonthlyQuota *int       `json:"monthly_quota"`
+			Name         string     `json:"name"`
+			RevokedAt    *time.Time `json:"revoked_at"`
 
 			// RotatedAt When the key's secret was last rotated in place.
 			RotatedAt *time.Time `json:"rotated_at"`
@@ -25540,6 +25891,74 @@ func ParseSubscribeEventsWSResponse(rsp *http.Response) (*SubscribeEventsWSRespo
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiKeyUsageResponse parses an HTTP response from a GetApiKeyUsageWithResponse call
+func ParseGetApiKeyUsageResponse(rsp *http.Response) (*GetApiKeyUsageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiKeyUsageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KeyUsageSummary
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidInput
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenScope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest RateLimited
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -26558,8 +26977,11 @@ func ParseV2AdminRotateKeyResponse(rsp *http.Response) (*V2AdminRotateKeyRespons
 			Key        string     `json:"key"`
 			KeyPrefix  string     `json:"key_prefix"`
 			LastUsedAt *time.Time `json:"last_used_at"`
-			Name       string     `json:"name"`
-			RevokedAt  *time.Time `json:"revoked_at"`
+
+			// MonthlyQuota Monthly request quota, or null if unmetered.
+			MonthlyQuota *int       `json:"monthly_quota"`
+			Name         string     `json:"name"`
+			RevokedAt    *time.Time `json:"revoked_at"`
 
 			// RotatedAt When the key's secret was last rotated in place.
 			RotatedAt *time.Time `json:"rotated_at"`
@@ -26776,8 +27198,11 @@ func ParseV2RotateAPIKeyResponse(rsp *http.Response) (*V2RotateAPIKeyResponse, e
 			Key        string     `json:"key"`
 			KeyPrefix  string     `json:"key_prefix"`
 			LastUsedAt *time.Time `json:"last_used_at"`
-			Name       string     `json:"name"`
-			RevokedAt  *time.Time `json:"revoked_at"`
+
+			// MonthlyQuota Monthly request quota, or null if unmetered.
+			MonthlyQuota *int       `json:"monthly_quota"`
+			Name         string     `json:"name"`
+			RevokedAt    *time.Time `json:"revoked_at"`
 
 			// RotatedAt When the key's secret was last rotated in place.
 			RotatedAt *time.Time `json:"rotated_at"`
@@ -27831,6 +28256,74 @@ func ParseV2GlobalStatsResponse(rsp *http.Response) (*V2GlobalStatsResponse, err
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseV2GetApiKeyUsageResponse parses an HTTP response from a V2GetApiKeyUsageWithResponse call
+func ParseV2GetApiKeyUsageResponse(rsp *http.Response) (*V2GetApiKeyUsageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &V2GetApiKeyUsageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KeyUsageSummary
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidInput
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ForbiddenScope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest RateLimited

@@ -1,11 +1,12 @@
 "use client";
 
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { CopyButton, MonoId } from "@sorolens/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { decodeTopic } from "@sorolens/xdr";
 import { useLocale } from "@/lib/i18n";
 import type { ContractEvent } from "@/lib/types";
+import { EventInspectorDrawer } from "./event-inspector/EventInspectorDrawer";
 
 interface EventsTableProps {
   events: ContractEvent[];
@@ -18,10 +19,12 @@ function EventRow({
   event,
   expanded,
   onToggle,
+  onInspect,
 }: {
   event: ContractEvent;
   expanded: boolean;
   onToggle: () => void;
+  onInspect: (e: ContractEvent) => void;
 }) {
   const decodedTopics = event.topic_decoded ?? decodeTopic(event.topic_xdr);
 
@@ -63,16 +66,36 @@ function EventRow({
         </span>
       </td>
       <td className="px-4 py-3 text-right">
-        <CopyButton
-          text={decodedEventJson}
-          label={`Copy JSON for event ${event.id}`}
-        />
+        <div
+          className="flex items-center justify-end gap-1.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => onInspect(event)}
+            data-testid={`inspect-event-${event.id}`}
+            title={`Inspect event ${event.id}`}
+            className="rounded bg-white/10 px-2 py-1 text-xs text-gray-300 hover:bg-white/20 hover:text-white"
+          >
+            Inspect
+          </button>
+          <CopyButton
+            text={decodedEventJson}
+            label={`Copy JSON for event ${event.id}`}
+          />
+        </div>
       </td>
     </tr>
   );
 }
 
-function ExpandedEventRow({ event }: { event: ContractEvent }) {
+function ExpandedEventRow({
+  event,
+  onInspect,
+}: {
+  event: ContractEvent;
+  onInspect: (e: ContractEvent) => void;
+}) {
   const { formatDateTime } = useLocale();
   const decodedTopics = event.topic_decoded ?? decodeTopic(event.topic_xdr);
   return (
@@ -82,6 +105,15 @@ function ExpandedEventRow({ event }: { event: ContractEvent }) {
         className="border-b border-[var(--color-border)] px-8 py-4"
       >
         <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => onInspect(event)}
+              className="inline-flex items-center gap-1.5 rounded bg-indigo-600/30 border border-indigo-500/40 px-3 py-1 text-xs font-medium text-indigo-300 hover:bg-indigo-600/50"
+            >
+              Inspect ScVal Tree & Raw XDR
+            </button>
+          </div>
           <div>
             <div className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
               Decoded Topics
@@ -119,6 +151,9 @@ export function EventsTable({
 }: EventsTableProps) {
   const scrollElementRef = useRef<HTMLDivElement>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [inspectedEvent, setInspectedEvent] = useState<ContractEvent | null>(
+    null
+  );
   const virtualized = events.length > 100;
   const rowVirtualizer = useVirtualizer({
     count: virtualized ? events.length : 0,
@@ -128,6 +163,37 @@ export function EventsTable({
     initialRect: { width: 1024, height: 560 },
     overscan: 10,
   });
+
+  // URL sync for inspected event (e.g. ?event=<id>)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const eventId = params.get("event");
+    if (eventId) {
+      const match = events.find((e) => e.id === eventId);
+      if (match) {
+        setInspectedEvent(match);
+      }
+    }
+  }, [events]);
+
+  const handleInspect = (ev: ContractEvent) => {
+    setInspectedEvent(ev);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("event", ev.id);
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
+
+  const handleCloseInspect = () => {
+    setInspectedEvent(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("event");
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
 
   if (!loading && events.length === 0) {
     return (
@@ -193,8 +259,14 @@ export function EventsTable({
                             return next;
                           })
                         }
+                        onInspect={handleInspect}
                       />
-                      {expanded && <ExpandedEventRow event={event} />}
+                      {expanded && (
+                        <ExpandedEventRow
+                          event={event}
+                          onInspect={handleInspect}
+                        />
+                      )}
                     </Fragment>
                   );
                 })}
@@ -225,9 +297,10 @@ export function EventsTable({
                         return next;
                       })
                     }
+                    onInspect={handleInspect}
                   />
                   {expandedIds.has(event.id) && (
-                    <ExpandedEventRow event={event} />
+                    <ExpandedEventRow event={event} onInspect={handleInspect} />
                   )}
                 </Fragment>
               ))
@@ -248,6 +321,13 @@ export function EventsTable({
           </button>
         </div>
       )}
+
+      {/* Slide-over Event Inspector Drawer */}
+      <EventInspectorDrawer
+        event={inspectedEvent}
+        isOpen={inspectedEvent !== null}
+        onClose={handleCloseInspect}
+      />
     </div>
   );
 }

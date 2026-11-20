@@ -1,16 +1,20 @@
 version: 2
 
+# Builds the whole documentation site (mkdocs.yml at the repo root) for every
+# version Read the Docs is set to build: "latest" follows main, "stable" is the
+# newest release tag, and each activated release tag gets its own copy.
 build:
   os: ubuntu-24.04
   tools:
     python: "3.12"
 
 mkdocs:
-  configuration: packages/python-sdk/mkdocs.yml
+  configuration: mkdocs.yml
+  fail_on_warning: true
 
 python:
   install:
+    - requirements: docs/requirements.txt
+    # The Python SDK pages render its docstrings with mkdocstrings.
     - method: pip
       path: packages/python-sdk
-      extra_requirements:
-        - docs
