@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "./ThemeProvider";
 import { useNetwork, networkFilter } from "@/lib/network";
 import { ApiError, searchContracts } from "@/lib/api";
+import { OPEN_SEARCH_EVENT } from "@/lib/keyboard-shortcuts";
 import type { SearchContract } from "@/lib/types";
 
 const searchItemClassName =
@@ -56,6 +57,14 @@ export function CmdkSearch() {
 
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
+  }, []);
+
+  // The global `/` shortcut opens the palette (issue #831). cmdk focuses the
+  // input when the dialog opens, so focusing the search box comes for free.
+  React.useEffect(() => {
+    const openSearch = () => setOpen(true);
+    window.addEventListener(OPEN_SEARCH_EVENT, openSearch);
+    return () => window.removeEventListener(OPEN_SEARCH_EVENT, openSearch);
   }, []);
 
   React.useEffect(() => {
