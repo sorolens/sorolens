@@ -14,12 +14,24 @@ from ...types import UNSET, Response, Unset
 
 def _get_kwargs(
     *,
+    from_: datetime.datetime | Unset = UNSET,
+    to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
+
+    json_from_: str | Unset = UNSET
+    if not isinstance(from_, Unset):
+        json_from_ = from_.isoformat()
+    params["from"] = json_from_
+
+    json_to: str | Unset = UNSET
+    if not isinstance(to, Unset):
+        json_to = to.isoformat()
+    params["to"] = json_to
 
     json_since: str | Unset = UNSET
     if not isinstance(since, Unset):
@@ -89,6 +101,8 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient,
+    from_: datetime.datetime | Unset = UNSET,
+    to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
@@ -99,6 +113,8 @@ def sync_detailed(
     request body is stored, never the body.
 
     Args:
+        from_ (datetime.datetime | Unset):
+        to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         limit (int | Unset):
         cursor (str | Unset):
@@ -112,6 +128,8 @@ def sync_detailed(
     """
 
     kwargs = _get_kwargs(
+        from_=from_,
+        to=to,
         since=since,
         limit=limit,
         cursor=cursor,
@@ -127,6 +145,8 @@ def sync_detailed(
 def sync(
     *,
     client: AuthenticatedClient,
+    from_: datetime.datetime | Unset = UNSET,
+    to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
@@ -137,6 +157,8 @@ def sync(
     request body is stored, never the body.
 
     Args:
+        from_ (datetime.datetime | Unset):
+        to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         limit (int | Unset):
         cursor (str | Unset):
@@ -151,6 +173,8 @@ def sync(
 
     return sync_detailed(
         client=client,
+        from_=from_,
+        to=to,
         since=since,
         limit=limit,
         cursor=cursor,
@@ -160,6 +184,8 @@ def sync(
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
+    from_: datetime.datetime | Unset = UNSET,
+    to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
@@ -170,6 +196,8 @@ async def asyncio_detailed(
     request body is stored, never the body.
 
     Args:
+        from_ (datetime.datetime | Unset):
+        to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         limit (int | Unset):
         cursor (str | Unset):
@@ -183,6 +211,8 @@ async def asyncio_detailed(
     """
 
     kwargs = _get_kwargs(
+        from_=from_,
+        to=to,
         since=since,
         limit=limit,
         cursor=cursor,
@@ -196,6 +226,8 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: AuthenticatedClient,
+    from_: datetime.datetime | Unset = UNSET,
+    to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
@@ -206,6 +238,8 @@ async def asyncio(
     request body is stored, never the body.
 
     Args:
+        from_ (datetime.datetime | Unset):
+        to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         limit (int | Unset):
         cursor (str | Unset):
@@ -221,6 +255,8 @@ async def asyncio(
     return (
         await asyncio_detailed(
             client=client,
+            from_=from_,
+            to=to,
             since=since,
             limit=limit,
             cursor=cursor,

@@ -119,10 +119,27 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         tags: ["Audit"],
         parameters: [
           {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).",
+            type: "string",
+          },
+          {
             name: "since",
             in: "query",
             required: false,
-            description: "Only events at or after this RFC 3339 timestamp.",
+            description:
+              "Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.",
             type: "string",
           },
           {
@@ -149,10 +166,27 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         tags: ["Audit"],
         parameters: [
           {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).",
+            type: "string",
+          },
+          {
             name: "since",
             in: "query",
             required: false,
-            description: "Only events at or after this RFC 3339 timestamp.",
+            description:
+              "Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.",
             type: "string",
           },
           {
@@ -2534,11 +2568,27 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             type: "string",
           },
           {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive lower bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive upper bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `until` if both are sent.",
+            type: "string",
+          },
+          {
             name: "since",
             in: "query",
             required: false,
             description:
-              "Inclusive lower bound on ledger_closed_at (RFC 3339).",
+              "Deprecated alias for `from`. Inclusive lower bound on ledger_closed_at (RFC 3339).",
             type: "string",
           },
           {
@@ -2546,7 +2596,7 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             in: "query",
             required: false,
             description:
-              "Inclusive upper bound on ledger_closed_at (RFC 3339).",
+              "Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).",
             type: "string",
           },
         ],
