@@ -25,7 +25,7 @@ func assertDataCompleteness(t *testing.T, expectedCount int) {
 	if expectedCount > 0 {
 		ev := resp.Events[0]
 		assert.Equal(t, eventID, ev.ID)
-		assert.Equal(t, int64(eventLedger), ev.Ledger)
+		assert.Equal(t, uint32(eventLedger), ev.Ledger)
 		assert.Equal(t, txHash, ev.TxHash)
 	}
 }
