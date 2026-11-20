@@ -1,4 +1,4 @@
-import { describe, expect, it } from \"vitest\";
+import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SETTINGS,
@@ -8,7 +8,7 @@ import {
   loadSettings,
   saveSettings,
   type UserSettings,
-} from \"./settings\";
+} from "./settings";
 
 /** Minimal in-memory Storage so these tests don't depend on jsdom. */
 function memoryStorage(): Storage {
@@ -26,36 +26,36 @@ function memoryStorage(): Storage {
     setItem: (key: string, value: string) => {
       map.set(key, value);
     },
-  } as Storage;
+  };
 }
 
-describe(\"isValidEmail\", () => {
-  it(\"accepts ordinary addresses\", () => {
-    expect(isValidEmail(\"dev@example.com\")).toBe(true);
-    expect(isValidEmail(\"first.last+tag@sorolens.dev\")).toBe(true);
+describe("isValidEmail", () => {
+  it("accepts ordinary addresses", () => {
+    expect(isValidEmail("dev@example.com")).toBe(true);
+    expect(isValidEmail("first.last+tag@sorolens.dev")).toBe(true);
   });
 
-  it(\"rejects malformed addresses\", () => {
-    expect(isValidEmail(\"\")).toBe(false);
-    expect(isValidEmail(\"not-an-email\")).toBe(false);
-    expect(isValidEmail(\"missing@tld\")).toBe(false);
-    expect(isValidEmail(\"@example.com\")).toBe(false);
-    expect(isValidEmail(\"has space@example.com\")).toBe(false);
-    expect(isValidEmail(\"trailing@example.\")).toBe(false);
+  it("rejects malformed addresses", () => {
+    expect(isValidEmail("")).toBe(false);
+    expect(isValidEmail("not-an-email")).toBe(false);
+    expect(isValidEmail("missing@tld")).toBe(false);
+    expect(isValidEmail("@example.com")).toBe(false);
+    expect(isValidEmail("has space@example.com")).toBe(false);
+    expect(isValidEmail("trailing@example.")).toBe(false);
   });
 });
 
-describe(\"loadSettings / saveSettings\", () => {
-  it(\"returns defaults when nothing is stored\", () => {
+describe("loadSettings / saveSettings", () => {
+  it("returns defaults when nothing is stored", () => {
     expect(loadSettings(memoryStorage())).toEqual(DEFAULT_SETTINGS);
   });
 
-  it(\"round-trips a saved settings object\", () => {
+  it("round-trips a saved settings object", () => {
     const storage = memoryStorage();
     const settings: UserSettings = {
-      defaultNetwork: \"mainnet\",
+      defaultNetwork: "mainnet",
       notifications: {
-        email: \"dev@example.com\",
+        email: "dev@example.com",
         channels: {
           critical_alerts: false,
           health_changes: true,
@@ -68,32 +68,32 @@ describe(\"loadSettings / saveSettings\", () => {
     expect(loadSettings(storage)).toEqual(settings);
   });
 
-  it(\"fills missing fields from defaults for older or partial blobs\", () => {
+  it("fills missing fields from defaults for older or partial blobs", () => {
     const storage = memoryStorage();
     storage.setItem(
       SETTINGS_STORAGE_KEY,
       JSON.stringify({
-        defaultNetwork: \"futurenet\",
-        notifications: { email: \"a@b.co\" },
+        defaultNetwork: "futurenet",
+        notifications: { email: "a@b.co" },
       })
     );
 
     const loaded = loadSettings(storage);
-    expect(loaded.defaultNetwork).toBe(\"futurenet\");
-    expect(loaded.notifications.email).toBe(\"a@b.co\");
+    expect(loaded.defaultNetwork).toBe("futurenet");
+    expect(loaded.notifications.email).toBe("a@b.co");
     expect(loaded.notifications.channels).toEqual(
       DEFAULT_SETTINGS.notifications.channels
     );
   });
 
-  it(\"drops a legacy plaintext apiKey from an older blob\", () => {
+  it("drops a legacy plaintext apiKey from an older blob", () => {
     const storage = memoryStorage();
     storage.setItem(
       SETTINGS_STORAGE_KEY,
       JSON.stringify({
-        defaultNetwork: \"mainnet\",
-        apiKey: \"sl_live_fabricated\",
-        apiKeyCreatedAt: \"2026-09-25T00:00:00.000Z\",
+        defaultNetwork: "mainnet",
+        apiKey: "sl_live_fabricated",
+        apiKeyCreatedAt: "2026-09-25T00:00:00.000Z",
       })
     );
 
@@ -102,13 +102,13 @@ describe(\"loadSettings / saveSettings\", () => {
     expect(loaded.apiKeyCreatedAt).toBeUndefined();
   });
 
-  it(\"falls back to defaults when the stored blob is corrupt\", () => {
+  it("falls back to defaults when the stored blob is corrupt", () => {
     const storage = memoryStorage();
-    storage.setItem(SETTINGS_STORAGE_KEY, \"{not json\");
+    storage.setItem(SETTINGS_STORAGE_KEY, "{not json");
     expect(loadSettings(storage)).toEqual(DEFAULT_SETTINGS);
   });
 
-  it(\"clearSettings removes the stored blob\", () => {
+  it("clearSettings removes the stored blob", () => {
     const storage = memoryStorage();
     saveSettings(DEFAULT_SETTINGS, storage);
     clearSettings(storage);
@@ -116,45 +116,45 @@ describe(\"loadSettings / saveSettings\", () => {
   });
 });
 
-describe(\"unavailable storage\", () => {
+describe("unavailable storage", () => {
   /** A Storage whose reads fail, as when the browser blocks site data. */
   function throwingStorage(): Storage {
     const storage = memoryStorage();
     return {
       ...storage,
       getItem: () => {
-        throw new Error(\"Storage is blocked\");
+        throw new Error("Storage is blocked");
       },
       setItem: () => {
-        throw new Error(\"QuotaExceededError\");
+        throw new Error("QuotaExceededError");
       },
       removeItem: () => {
-        throw new Error(\"Storage is blocked\");
+        throw new Error("Storage is blocked");
       },
     } as Storage;
   }
 
-  it(\"loadSettings falls back to defaults when a read throws\", () => {
+  it("loadSettings falls back to defaults when a read throws", () => {
     expect(loadSettings(throwingStorage())).toEqual(DEFAULT_SETTINGS);
   });
 
-  it(\"saveSettings reports failure when a write throws\", () => {
+  it("saveSettings reports failure when a write throws", () => {
     expect(saveSettings(DEFAULT_SETTINGS, throwingStorage())).toBe(false);
   });
 
-  it(\"clearSettings swallows a failing removal\", () => {
+  it("clearSettings swallows a failing removal", () => {
     expect(() => clearSettings(throwingStorage())).not.toThrow();
   });
 
-  it(\"all helpers fall back safely when localStorage itself throws\", () => {
+  it("all helpers fall back safely when localStorage itself throws", () => {
     const descriptor = Object.getOwnPropertyDescriptor(
       globalThis,
-      \"localStorage\"
+      "localStorage"
     );
-    Object.defineProperty(globalThis, \"localStorage\", {
+    Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       get() {
-        throw new Error(\"Access is denied for this document\");
+        throw new Error("Access is denied for this document");
       },
     });
 
@@ -164,7 +164,7 @@ describe(\"unavailable storage\", () => {
       expect(() => clearSettings()).not.toThrow();
     } finally {
       if (descriptor) {
-        Object.defineProperty(globalThis, \"localStorage\", descriptor);
+        Object.defineProperty(globalThis, "localStorage", descriptor);
       }
     }
   });

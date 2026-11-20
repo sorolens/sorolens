@@ -1,1 +1,180 @@
-/**\n * Tests for apps/web/components/StoragePanel.tsx (issue #765).\n *\n * The panel sorts by TTL urgency and filters by durability, so these tests pin\n * both: a danger entry must come first regardless of input order, and the\n * filter must not hide rows the user filtered for. Pure rendering, no network.\n */\n\nimport \"@testing-library/jest-dom/vitest\";\nimport {\n  cleanup,\n  fireEvent,\n  render,\n  screen,\n  within,\n} from \"@testing-library/react\";\nimport { afterEach, describe, expect, it, vi } from \"vitest\";\nimport { StoragePanel } from \"./StoragePanel\";\nimport type { StorageEntry } from \"@/lib/types\";\n\nafterEach(cleanup);\n\nfunction entry(overrides: Partial<StorageEntry> = {}): StorageEntry {\n  return {\n    key_xdr: \"AAAAFAKEKEY000000000000000000000000000000000000000000\",\n    key_decoded: \"balance\",\n    value_xdr: \"AAAAVALUE\",\n    value_decoded: null,\n    durability: \"persistent\",\n    live_until_ledger: 1200,\n    ledgers_until_expiry: 1000,\n    status: \"live\",\n    last_modified_ledger: 900,\n    ...overrides,\n  };\n}\n\nfunction renderPanel(\n  entries: StorageEntry[],\n  overrides: Partial<Parameters<typeof StoragePanel>[0]> = {}\n) {\n  render(\n    <StoragePanel entries={entries} currentLedger={1000} {...overrides} />\n  );\n}\n\n/** First column of every body row, in render order. */\nfunction renderedKeys(): string[] {\n  return screen\n    .getAllByRole(\"row\")\n    .slice(1)\n    .map((row) => row.querySelector(\"td\")?.textContent ?? \"\");\n}\n\ndescribe(\"StoragePanel\", () => {\n  it(\"renders an empty state when there are no entries\", () => {\n    renderPanel([]);\n\n    expect(screen.getByText(\"No storage entries found\")).toBeVisible();\n    expect(screen.queryByRole(\"table\")).toBeNull();\n  });\n\n  it(\"keeps the table while loading, even with no entries yet\", () => {\n    renderPanel([], { loading: true });\n\n    expect(screen.queryByText(\"No storage entries found\")).toBeNull();\n    expect(screen.getByRole(\"table\")).toBeVisible();\n    expect(screen.getByText(/Current ledger:/)).toBeVisible();\n  });\n\n  it(\"renders the decoded key, durability, TTL and age\", () => {\n    renderPanel([\n      entry({\n        ledgers_until_expiry: 34560,\n        last_modified_ledger: 400,\n        durability: \"temporary\",\n      }),\n    ]);\n\n    const row = screen.getAllByRole(\"row\")[1];\n    expect(within(row).getByText(\"balance\")).toBeVisible();\n    // “temporary” is also a filter button, so scope the assertion to the row.\n    expect(within(row).getByText(\"temporary\")).toBeVisible();\n    expect(within(row).getByText((34560).toLocaleString())).toBeVisible();\n    expect(within(row).getByText((1000 - 400).toLocaleString())).toBeVisible();\n    expect(screen.getByText(/Current ledger:/)).toHaveTextContent(\n      (1000).toLocaleString()\n    );\n  });\n\n  it(\"falls back to a truncated XDR key and dashes for unknown values\", () => {\n    renderPanel([\n      entry({\n        key_decoded: null,\n        ledgers_until_expiry: null,\n        last_modified_ledger: null,\n      }),\n    ]);\n\n    const key = renderedKeys()[0];\n    expect(key).toContain(\"...\");\n    expect(key).not.toBe(\n      \"AAAAFAKEKEY000000000000000000000000000000000000000000\"\n    );\n    // TTL and age both render a dash when the indexer did not report them.\n    expect(screen.getAllByText(\"-\")).toHaveLength(2);\n  });\n\n  it(\"sorts danger entries before warning and safe ones\", () => {\n    renderPanel([\n      entry({ key_decoded: \"safe\", ledgers_until_expiry: 500_000 }),\n      entry({ key_decoded: \"warning\", ledgers_until_expiry: 50_000 }),\n      entry({ key_decoded: \"danger\", ledgers_until_expiry: 1_000 }),\n    ]);\n\n    expect(renderedKeys()).toEqual([\"danger\", \"warning\", \"safe\"]);\n  });\n\n  it(\"filters by durability without losing the rest of the table\", () => {\n    renderPanel([\n      entry({ key_decoded: \"persist\", durability: \"persistent\" }),\n      entry({ key_decoded: \"temp\", durability: \"temporary\" }),\n      entry({ key_decoded: \"inst\", durability: \"instance\" }),\n    ]);\n\n    fireEvent.click(screen.getByRole(\"button\", { name: \"temporary\" }));\n\n    expect(renderedKeys()).toEqual([\"temp\"]);\n    expect(screen.queryByText(\"persist\")).toBeNull();\n\n    fireEvent.click(screen.getByRole(\"button\", { name: \"all\" }));\n\n    expect(renderedKeys()).toHaveLength(3);\n  });\n\n  it(\"shows a filter with no matches as an empty table, not the empty state\", () => {\n    renderPanel([entry({ durability: \"persistent\" })]);\n\n    fireEvent.click(screen.getByRole(\"button\", { name: \"instance\" }));\n\n    expect(renderedKeys()).toEqual([]);\n    expect(screen.getByRole(\"table\")).toBeVisible();\n    expect(screen.queryByText(\"No storage entries found\")).toBeNull();\n  });\n\n  it(\"loads more pages through the callback\", () => {\n    const onLoadMore = vi.fn();\n    renderPanel([entry()], { hasMore: true, onLoadMore });\n\n    fireEvent.click(screen.getByRole(\"button\", { name: \"Load More\" }));\n\n    expect(onLoadMore).toHaveBeenCalledTimes(1);\n  });\n\n  it(\"disables Load More while a page is loading\", () => {\n    renderPanel([entry()], {\n      hasMore: true,\n      onLoadMore: vi.fn(),\n      loading: true,\n    });\n\n    const button = screen.getByRole(\"button\", { name: \"Loading...\" });\n    expect(button).toBeDisabled();\n    expect(button).toHaveAttribute(\"aria-busy\", \"true\");\n  });\n\n  it(\"hides Load More when there are no further pages\", () => {\n    renderPanel([entry()]);\n\n    expect(screen.queryByRole(\"button\", { name: /Load More/ })).toBeNull();\n  });\n\n  it(\"documents the TTL thresholds in the legend\", () => {\n    renderPanel([entry()]);\n\n    expect(screen.getByText(/Safe \\(>7d\\)/)).toBeVisible();\n    expect(screen.getByText(/Warning \\(2-7d\\)/)).toBeVisible();\n    expect(screen.getByText(/Danger \\(<2d\\)/)).toBeVisible();\n  });\n});\n\n
+/**
+ * Tests for apps/web/components/StoragePanel.tsx (issue #765).
+ *
+ * The panel sorts by TTL urgency and filters by durability, so these tests pin
+ * both: a danger entry must come first regardless of input order, and the
+ * filter must not hide rows the user filtered for. Pure rendering, no network.
+ */
+
+import "@testing-library/jest-dom/vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { StoragePanel } from "./StoragePanel";
+import type { StorageEntry } from "@/lib/types";
+
+afterEach(cleanup);
+
+function entry(overrides: Partial<StorageEntry> = {}): StorageEntry {
+  return {
+    key_xdr: "AAAAFAKEKEY000000000000000000000000000000000000000000",
+    key_decoded: "balance",
+    value_xdr: "AAAAVALUE",
+    value_decoded: null,
+    durability: "persistent",
+    live_until_ledger: 1200,
+    ledgers_until_expiry: 1000,
+    status: "live",
+    last_modified_ledger: 900,
+    ...overrides,
+  };
+}
+
+function renderPanel(
+  entries: StorageEntry[],
+  overrides: Partial<Parameters<typeof StoragePanel>[0]> = {}
+) {
+  render(
+    <StoragePanel entries={entries} currentLedger={1000} {...overrides} />
+  );
+}
+
+/** First column of every body row, in render order. */
+function renderedKeys(): string[] {
+  return screen
+    .getAllByRole("row")
+    .slice(1)
+    .map((row) => row.querySelector("td")?.textContent ?? "");
+}
+
+describe("StoragePanel", () => {
+  it("renders an empty state when there are no entries", () => {
+    renderPanel([]);
+
+    expect(screen.getByText("No storage entries found")).toBeVisible();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("keeps the table while loading, even with no entries yet", () => {
+    renderPanel([], { loading: true });
+
+    expect(screen.queryByText("No storage entries found")).toBeNull();
+    expect(screen.getByRole("table")).toBeVisible();
+    expect(screen.getByText(/Current ledger:/)).toBeVisible();
+  });
+
+  it("renders the decoded key, durability, TTL and age", () => {
+    renderPanel([
+      entry({
+        ledgers_until_expiry: 34560,
+        last_modified_ledger: 400,
+        durability: "temporary",
+      }),
+    ]);
+
+    const row = screen.getAllByRole("row")[1];
+    expect(within(row).getByText("balance")).toBeVisible();
+    // “temporary” is also a filter button, so scope the assertion to the row.
+    expect(within(row).getByText("temporary")).toBeVisible();
+    expect(within(row).getByText((34560).toLocaleString())).toBeVisible();
+    expect(within(row).getByText((1000 - 400).toLocaleString())).toBeVisible();
+    expect(screen.getByText(/Current ledger:/)).toHaveTextContent(
+      (1000).toLocaleString()
+    );
+  });
+
+  it("falls back to a truncated XDR key and dashes for unknown values", () => {
+    renderPanel([
+      entry({
+        key_decoded: null,
+        ledgers_until_expiry: null,
+        last_modified_ledger: null,
+      }),
+    ]);
+
+    const key = renderedKeys()[0];
+    expect(key).toContain("...");
+    expect(key).not.toBe(
+      "AAAAFAKEKEY000000000000000000000000000000000000000000"
+    );
+    // TTL and age both render a dash when the indexer did not report them.
+    expect(screen.getAllByText("-")).toHaveLength(2);
+  });
+
+  it("sorts danger entries before warning and safe ones", () => {
+    renderPanel([
+      entry({ key_decoded: "safe", ledgers_until_expiry: 500_000 }),
+      entry({ key_decoded: "warning", ledgers_until_expiry: 50_000 }),
+      entry({ key_decoded: "danger", ledgers_until_expiry: 1_000 }),
+    ]);
+
+    expect(renderedKeys()).toEqual(["danger", "warning", "safe"]);
+  });
+
+  it("filters by durability without losing the rest of the table", () => {
+    renderPanel([
+      entry({ key_decoded: "persist", durability: "persistent" }),
+      entry({ key_decoded: "temp", durability: "temporary" }),
+      entry({ key_decoded: "inst", durability: "instance" }),
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "temporary" }));
+
+    expect(renderedKeys()).toEqual(["temp"]);
+    expect(screen.queryByText("persist")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "all" }));
+
+    expect(renderedKeys()).toHaveLength(3);
+  });
+
+  it("shows a filter with no matches as an empty table, not the empty state", () => {
+    renderPanel([entry({ durability: "persistent" })]);
+
+    fireEvent.click(screen.getByRole("button", { name: "instance" }));
+
+    expect(renderedKeys()).toEqual([]);
+    expect(screen.getByRole("table")).toBeVisible();
+    expect(screen.queryByText("No storage entries found")).toBeNull();
+  });
+
+  it("loads more pages through the callback", () => {
+    const onLoadMore = vi.fn();
+    renderPanel([entry()], { hasMore: true, onLoadMore });
+
+    fireEvent.click(screen.getByRole("button", { name: "Load More" }));
+
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Load More while a page is loading", () => {
+    renderPanel([entry()], {
+      hasMore: true,
+      onLoadMore: vi.fn(),
+      loading: true,
+    });
+
+    const button = screen.getByRole("button", { name: "Loading..." });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("hides Load More when there are no further pages", () => {
+    renderPanel([entry()]);
+
+    expect(screen.queryByRole("button", { name: /Load More/ })).toBeNull();
+  });
+
+  it("documents the TTL thresholds in the legend", () => {
+    renderPanel([entry()]);
+
+    expect(screen.getByText(/Safe \(>7d\)/)).toBeVisible();
+    expect(screen.getByText(/Warning \(2-7d\)/)).toBeVisible();
+    expect(screen.getByText(/Danger \(<2d\)/)).toBeVisible();
+  });
+});

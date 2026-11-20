@@ -1,1 +1,165 @@
-/**\n * Tests for apps/web/components/StarButton.tsx (issue #765).\n *\n * The button flips local state after the API call resolves, and swallows a\n * failure so the next fetch can correct it — so the negative test asserts the\n * star does *not* flip when the call rejects. `@/lib/api` is mocked.\n */\n\nimport \"@testing-library/jest-dom/vitest\";\nimport {\n  cleanup,\n  fireEvent,\n  render,\n  screen,\n  waitFor,\n} from \"@testing-library/react\";\nimport { afterEach, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport { StarButton } from \"./StarButton\";\n\nconst mockAddToWatchlist = vi.fn();\nconst mockRemoveFromWatchlist = vi.fn();\n\nvi.mock(\"@/lib/api\", () => ({\n  addToWatchlist: (...args: unknown[]) => mockAddToWatchlist(...args),\n  removeFromWatchlist: (...args: unknown[]) => mockRemoveFromWatchlist(...args),\n}));\n\nconst CONTRACT_ID = `C${\"A\".repeat(55)}`;\nconst USER_ID = \"user-1\";\n\nfunction deferred() {\n  let resolve!: (value: unknown) => void;\n  const promise = new Promise((res) => {\n    resolve = res;\n  });\n  return { promise, resolve };\n}\n\nbeforeEach(() => {\n  vi.clearAllMocks();\n  mockAddToWatchlist.mockResolvedValue({ in_watchlist: true });\n  mockRemoveFromWatchlist.mockResolvedValue({ in_watchlist: false });\n});\n\nafterEach(cleanup);\n\ndescribe(\"StarButton\", () => {\n  it(\"offers to add when the contract is not watched\", () => {\n    render(<StarButton contractId={CONTRACT_ID} userId={USER_ID} />);\n\n    const button = screen.getByRole(\"button\", { name: \"Add to watchlist\" });\n    expect(button).toHaveAttribute(\"title\", \"Add to watchlist\");\n    expect(button).toBeEnabled();\n  });\n\n  it(\"offers to remove when the contract is already watched\", () => {\n    render(\n      <StarButton\n        contractId={CONTRACT_ID}\n        userId={USER_ID}\n        initialInWatchlist\n      />\n    );\n\n    expect(\n      screen.getByRole(\"button\", { name: \"Remove from watchlist\" })\n    ).toBeVisible();\n  });\n\n  it(\"adds the contract to the watchlist and flips the label\", async () => {\n    render(<StarButton contractId={CONTRACT_ID} userId={USER_ID} />);\n\n    fireEvent.click(screen.getByRole(\"button\", { name: \"Add to watchlist\" }));\n\n    await waitFor(() =>\n      expect(\n        screen.getByRole(\"button\", { name: \"Remove from watchlist\" })\n      ).toBeVisible()\n    );\n    expect(mockAddToWatchlist).toHaveBeenCalledWith(CONTRACT_ID, USER_ID);\n    expect(mockRemoveFromWatchlist).not.toHaveBeenCalled();\n  });\n\n  it(\"removes the contract from the watchlist and flips the label\", async () => {\n    render(\n      <StarButton\n        contractId={CONTRACT_ID}\n        userId={USER_ID}\n        initialInWatchlist\n      />\n    );\n\n    fireEvent.click(\n      screen.getByRole(\"button\", { name: \"Remove from watchlist\" })\n    );\n\n    await waitFor(() =>\n      expect(\n        screen.getByRole(\"button\", { name: \"Add to watchlist\" })\n      ).toBeVisible()\n    );\n    expect(mockRemoveFromWatchlist).toHaveBeenCalledWith(CONTRACT_ID, USER_ID);\n    expect(mockAddToWatchlist).not.toHaveBeenCalled();\n  });\n\n  it(\"keeps the star unchanged when adding fails\", async () => {\n    mockAddToWatchlist.mockRejectedValue(new Error(\"401 Unauthorized\"));\n    render(<StarButton contractId={CONTRACT_ID} userId={USER_ID} />);\n\n    fireEvent.click(screen.getByRole(\"button\", { name: \"Add to watchlist\" }));\n\n    await waitFor(() => expect(mockAddToWatchlist).toHaveBeenCalledTimes(1));\n    // The optimistic update must not claim success after a rejection.\n    expect(\n      screen.getByRole(\"button\", { name: \"Add to watchlist\" })\n    ).toBeVisible();\n    expect(\n      screen.queryByRole(\"button\", { name: \"Remove from watchlist\" })\n    ).toBeNull();\n  });\n\n  it(\"keeps the star unchanged when removing fails\", async () => {\n    mockRemoveFromWatchlist.mockRejectedValue(new Error(\"401 Unauthorized\"));\n    render(\n      <StarButton\n        contractId={CONTRACT_ID}\n        userId={USER_ID}\n        initialInWatchlist\n      />\n    );\n\n    fireEvent.click(\n      screen.getByRole(\"button\", { name: \"Remove from watchlist\" })\n    );\n\n    await waitFor(() =>\n      expect(mockRemoveFromWatchlist).toHaveBeenCalledTimes(1)\n    );\n    expect(\n      screen.getByRole(\"button\", { name: \"Remove from watchlist\" })\n    ).toBeVisible();\n  });\n\n  it(\"disables itself while the request is pending\", async () => {\n    const pending = deferred();\n    mockAddToWatchlist.mockReturnValue(pending.promise);\n    render(<StarButton contractId={CONTRACT_ID} userId={USER_ID} />);\n\n    fireEvent.click(screen.getByRole(\"button\", { name: \"Add to watchlist\" }));\n\n    await waitFor(() =>\n      expect(\n        screen.getByRole(\"button\", { name: \"Add to watchlist\" })\n      ).toBeDisabled()\n    );\n\n    pending.resolve({ in_watchlist: true });\n\n    await waitFor(() =>\n      expect(\n        screen.getByRole(\"button\", { name: \"Remove from watchlist\" })\n      ).toBeEnabled()\n    );\n  });\n});\n\n
+/**
+ * Tests for apps/web/components/StarButton.tsx (issue #765).
+ *
+ * The button flips local state after the API call resolves, and swallows a
+ * failure so the next fetch can correct it — so the negative test asserts the
+ * star does *not* flip when the call rejects. `@/lib/api` is mocked.
+ */
+
+import "@testing-library/jest-dom/vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { StarButton } from "./StarButton";
+
+const mockAddToWatchlist = vi.fn();
+const mockRemoveFromWatchlist = vi.fn();
+
+vi.mock("@/lib/api", () => ({
+  addToWatchlist: (...args: unknown[]) => mockAddToWatchlist(...args),
+  removeFromWatchlist: (...args: unknown[]) => mockRemoveFromWatchlist(...args),
+}));
+
+const CONTRACT_ID = `C${"A".repeat(55)}`;
+const USER_ID = "user-1";
+
+function deferred() {
+  let resolve!: (value: unknown) => void;
+  const promise = new Promise((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockAddToWatchlist.mockResolvedValue({ in_watchlist: true });
+  mockRemoveFromWatchlist.mockResolvedValue({ in_watchlist: false });
+});
+
+afterEach(cleanup);
+
+describe("StarButton", () => {
+  it("offers to add when the contract is not watched", () => {
+    render(<StarButton contractId={CONTRACT_ID} userId={USER_ID} />);
+
+    const button = screen.getByRole("button", { name: "Add to watchlist" });
+    expect(button).toHaveAttribute("title", "Add to watchlist");
+    expect(button).toBeEnabled();
+  });
+
+  it("offers to remove when the contract is already watched", () => {
+    render(
+      <StarButton
+        contractId={CONTRACT_ID}
+        userId={USER_ID}
+        initialInWatchlist
+      />
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Remove from watchlist" })
+    ).toBeVisible();
+  });
+
+  it("adds the contract to the watchlist and flips the label", async () => {
+    render(<StarButton contractId={CONTRACT_ID} userId={USER_ID} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to watchlist" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Remove from watchlist" })
+      ).toBeVisible()
+    );
+    expect(mockAddToWatchlist).toHaveBeenCalledWith(CONTRACT_ID, USER_ID);
+    expect(mockRemoveFromWatchlist).not.toHaveBeenCalled();
+  });
+
+  it("removes the contract from the watchlist and flips the label", async () => {
+    render(
+      <StarButton
+        contractId={CONTRACT_ID}
+        userId={USER_ID}
+        initialInWatchlist
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove from watchlist" })
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Add to watchlist" })
+      ).toBeVisible()
+    );
+    expect(mockRemoveFromWatchlist).toHaveBeenCalledWith(CONTRACT_ID, USER_ID);
+    expect(mockAddToWatchlist).not.toHaveBeenCalled();
+  });
+
+  it("keeps the star unchanged when adding fails", async () => {
+    mockAddToWatchlist.mockRejectedValue(new Error("401 Unauthorized"));
+    render(<StarButton contractId={CONTRACT_ID} userId={USER_ID} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to watchlist" }));
+
+    await waitFor(() => expect(mockAddToWatchlist).toHaveBeenCalledTimes(1));
+    // The optimistic update must not claim success after a rejection.
+    expect(
+      screen.getByRole("button", { name: "Add to watchlist" })
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Remove from watchlist" })
+    ).toBeNull();
+  });
+
+  it("keeps the star unchanged when removing fails", async () => {
+    mockRemoveFromWatchlist.mockRejectedValue(new Error("401 Unauthorized"));
+    render(
+      <StarButton
+        contractId={CONTRACT_ID}
+        userId={USER_ID}
+        initialInWatchlist
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove from watchlist" })
+    );
+
+    await waitFor(() =>
+      expect(mockRemoveFromWatchlist).toHaveBeenCalledTimes(1)
+    );
+    expect(
+      screen.getByRole("button", { name: "Remove from watchlist" })
+    ).toBeVisible();
+  });
+
+  it("disables itself while the request is pending", async () => {
+    const pending = deferred();
+    mockAddToWatchlist.mockReturnValue(pending.promise);
+    render(<StarButton contractId={CONTRACT_ID} userId={USER_ID} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to watchlist" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Add to watchlist" })
+      ).toBeDisabled()
+    );
+
+    pending.resolve({ in_watchlist: true });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Remove from watchlist" })
+      ).toBeEnabled()
+    );
+  });
+});

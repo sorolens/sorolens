@@ -1,1 +1,262 @@
-/**\n * Tests for apps/web/components/SnapshotPanel.tsx (issue #765).\n *\n * The panel downloads one snapshot per asked ledger, so the tests mock\n * `getContractSnapshot`: they check the request arguments, the rendered\n * storage/event rows, the loading state, and that an API failure is shown with\n * the server's message rather than an empty table.\n */\n\nimport \"@testing-library/jest-dom/vitest\";\nimport {\n  cleanup,\n  fireEvent,\n  render,\n  screen,\n  waitFor,\n} from \"@testing-library/react\";\nimport { afterEach, beforeEach, describe, expect, it, vi } from \"vitest\";\nimport type { ContractSnapshot, SnapshotStorageEntry } from \"@/lib/types\";\nimport { ApiError } from \"@/lib/api\";\nimport { SnapshotPanel } from \"./SnapshotPanel\";\n\nconst mockGetContractSnapshot = vi.fn();\n\nvi.mock(\"@/lib/api\", () => ({\n  // Mirrors the real class so `err instanceof ApiError` still holds.\n  ApiError: class ApiError extends Error {\n    constructor(\n      public status: number,\n      message: string,\n      public code?: string\n    ) {\n      super(message);\n      this.name = \"ApiError\";\n    }\n  },\n  getContractSnapshot: (...args: unknown[]) => mockGetContractSnapshot(...args),\n}));\n\nconst CONTRACT_ID = `C${\"A\".repeat(55)}`;\n\nfunction storageEntry(\n  overrides: Partial<SnapshotStorageEntry> = {}\n): SnapshotStorageEntry {\n  return {\n    key_xdr: \"AAAAFAKEKEY\",\n    key_decoded: \"balance\",\n    value_xdr: \"AAAABVALUE\",\n    value_decoded: 1250,\n    durability: \"persistent\",\n    live_until_ledger: 900,\n    ledgers_until_expiry: 200,\n    status: \"live\",\n    last_modified_ledger: 640,\n    network: \"testnet\",\n    ...overrides,\n  };\n}\n\nfunction snapshot(overrides: Partial<ContractSnapshot> = {}): ContractSnapshot {\n  return {\n    contract_id: CONTRACT_ID,\n    network: \"testnet\",\n    ledger: 1000,\n    first_tracked_ledger: 512,\n    storage: [storageEntry()],\n    last_event: {\n      id: \"event-1\",\n      ledger: 990,\n      tx_hash: \"abc123\",\n      type: \"contract\",\n      ledger_closed_at: \"2026-09-01T00:00:00Z\",\n      value_decoded: null,\n      value_xdr: \"AAAA\",\n    },\n    ...overrides,\n  };\n}\n\nfunction deferred<T>() {\n  let resolve!: (value: T) => void;\n  let reject!: (reason: unknown) => void;\n  const promise = new Promise<T>((res, rej) => {\n    resolve = res;\n    reject = rej;\n  });\n  return { promise, resolve, reject };\n}\n\nfunction renderPanel() {\n  render(<SnapshotPanel contractId={CONTRACT_ID} currentLedger={12345} />);\n  return {\n    input: screen.getByLabelText<HTMLInputElement>(\"Replay state at ledger\"),\n    button: screen.getByRole(\"button\", { name: \"View snapshot\" }),\n  };\n}\n\nbeforeEach(() => {\n  vi.clearAllMocks();\n  mockGetContractSnapshot.mockResolvedValue(snapshot());\n});\n\nafterEach(cleanup);\n\ndescribe(\"SnapshotPanel\", () => {\n  it(\"starts with an empty prompt and a disabled button\", () => {\n    const { input, button } = renderPanel();\n\n    expect(input.value).toBe(\"\");\n    expect(input).toHaveAttribute(\"placeholder\", \"12345\");\n    expect(button).toBeDisabled();\n    expect(screen.getByText(/Enter a ledger to see/)).toBeVisible();\n  });\n\n  it(\"prefills the placeholder from the latest indexed ledger\", async () => {\n    render(<SnapshotPanel contractId={CONTRACT_ID} currentLedger={0} />);\n\n    expect(screen.getByLabelText(\"Replay state at ledger\")).toHaveAttribute(\n      \"placeholder\",\n      \"e.g. 12345\"\n    );\n  });\n\n  it(\"downloads the snapshot for the requested ledger\", async () => {\n    const { input, button } = renderPanel();\n\n    fireEvent.change(input, { target: { value: \"1000\" } });\n    fireEvent.click(button);\n\n    expect(await screen.findByText(\"balance\")).toBeVisible();\n    expect(mockGetContractSnapshot).toHaveBeenCalledWith(CONTRACT_ID, 1000);\n    // Numbers are formatted for the reader, not printed raw.\n    expect(screen.getByText(/First tracked ledger:/)).toHaveTextContent(\n      `First tracked ledger: ${(512).toLocaleString()}`\n    );\n  });\n\n  it(\"renders the last known event and the TTL columns\", async () => {\n    const { input, button } = renderPanel();\n\n    fireEvent.change(input, { target: { value: \"1000\" } });\n    fireEvent.click(button);\n    await screen.findByText(\"balance\");\n\n    expect(\n      screen.getByText(/Last known event at or before ledger/)\n    ).toBeVisible();\n    expect(screen.getByText(/event-1/)).toBeVisible();\n    expect(screen.getByText(/abc123/)).toBeVisible();\n    expect(\n      screen.getByRole(\"columnheader\", { name: \"Durability\" })\n    ).toBeVisible();\n    expect(screen.getByText(\"persistent\")).toBeVisible();\n    expect(screen.getByText(\"640\")).toBeVisible();\n    expect(screen.getByText(\"AAAABVALUE\")).toBeVisible();\n  });\n\n  it(\"explains an empty storage set at that ledger\", async () {\n    mockGetContractSnapshot.mockResolvedValue(\n      snapshot({ storage: [], last_event: null })\n    );\n    const { input, button } = renderPanel();\n\n    fireEvent.change(input, { target: { value: \"1000\" } });\n    fireEvent.click(button);\n\n    expect(\n      await screen.findByText(/No storage entries were live at ledger/)\n    ).toBeVisible();\n    expect(\n      screen.getByText(/No event was recorded at or before ledger/)\n    ).toBeVisible();\n    expect(screen.queryByRole(\"table\")).toBeNull();\n  });\n\n  it(\"rejects a non-positive ledger without calling the API\", async () => {\n    const { input, button } = renderPanel();\n\n    fireEvent.change(input, { target: { value: \"0\" } });\n    fireEvent.click(button);\n\n    expect(screen.getByRole(\"alert\")).toHaveTextContent(\n      \"Enter a positive ledger number\"\n    );\n    expect(mockGetContractSnapshot).not.toHaveBeenCalled();\n  });\n\n  it(\"rejects a fractional ledger without calling the API\", () => {\n    const { input, button } = renderPanel();\n\n    fireEvent.change(input, { target: { value: \"1.5\" } });\n    fireEvent.click(button);\n\n    expect(screen.getByRole(\"alert\")).toHaveTextContent(\n      \"Enter a positive ledger number\"\n    );\n    expect(mockGetContractSnapshot).not.toHaveBeenCalled();\n  });\n\n  it(\"surfaces the API's own error message\", async () => {\n    mockGetContractSnapshot.mockRejectedValue(\n      new ApiError(404, \"No snapshot exists for that ledger.\", \"not_found\")\n    );\n    const { input, button } = renderPanel();\n\n    fireEvent.change(input, { target: { value: \"42\" } });\n    fireEvent.click(button);\n\n    expect(await screen.findByRole(\"alert\")).toHaveTextContent(\n      \"No snapshot exists for that ledger.\"\n    );\n    expect(screen.queryByText(\"balance\")).toBeNull();\n  });\n\n  it(\"falls back to a generic message for a non-ApiError failure\", async () => {\n    mockGetContractSnapshot.mockRejectedValue(new TypeError(\"network down\"));\n    const { input, button } = renderPanel();\n\n    fireEvent.change(input, { target: { value: \"42\" } });\n    fireEvent.click(button);\n\n    expect(await screen.findByRole(\"alert\")).toHaveTextContent(\n      \"Failed to load snapshot for that ledger\"\n    );\n  });\n\n  it(\"clears a previous error when the ledger is edited\", async () {\n    mockGetContractSnapshot.mockRejectedValue(\n      new ApiError(500, \"Indexer unavailable.\")\n    );\n    const { input, button } = renderPanel();\n\n    fireEvent.change(input, { target: { value: \"42\" } });\n    fireEvent.click(button);\n    await screen.findByRole(\"alert\");\n\n    fireEvent.change(input, { target: { value: \"43\" } });\n\n    expect(screen.queryByRole(\"alert\")).toBeNull();\n  });\n\n  it(\"shows a loading state while the request is in flight\", async () {\n    const pending = deferred<ContractSnapshot>();\n    mockGetContractSnapshot.mockReturnValue(pending.promise);\n    const { input } = renderPanel();\n\n    fireEvent.change(input, { target: { value: \"1000\" } });\n    fireEvent.click(screen.getByRole(\"button\", { name: \"View snapshot\" }));\n\n    const busy = screen.getByRole(\"button\", { name: \"Loading…\" });\n    expect(busy).toBeDisabled();\n    expect(busy).toHaveAttribute(\"aria-busy\", \"true\");\n\n    pending.resolve(snapshot());\n    await waitFor(() =>\n      expect(\n        screen.getByRole(\"button\", { name: \"View snapshot\" })\n      ).toBeEnabled()\n    );\n    expect(screen.getByText(\"balance\")).toBeVisible();\n  });\n});\n\n
+/**
+ * Tests for apps/web/components/SnapshotPanel.tsx (issue #765).
+ *
+ * The panel downloads one snapshot per asked ledger, so the tests mock
+ * `getContractSnapshot`: they check the request arguments, the rendered
+ * storage/event rows, the loading state, and that an API failure is shown with
+ * the server's message rather than an empty table.
+ */
+
+import "@testing-library/jest-dom/vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ContractSnapshot, SnapshotStorageEntry } from "@/lib/types";
+import { ApiError } from "@/lib/api";
+import { SnapshotPanel } from "./SnapshotPanel";
+
+const mockGetContractSnapshot = vi.fn();
+
+vi.mock("@/lib/api", () => ({
+  // Mirrors the real class so `err instanceof ApiError` still holds.
+  ApiError: class ApiError extends Error {
+    constructor(
+      public status: number,
+      message: string,
+      public code?: string
+    ) {
+      super(message);
+      this.name = "ApiError";
+    }
+  },
+  getContractSnapshot: (...args: unknown[]) => mockGetContractSnapshot(...args),
+}));
+
+const CONTRACT_ID = `C${"A".repeat(55)}`;
+
+function storageEntry(
+  overrides: Partial<SnapshotStorageEntry> = {}
+): SnapshotStorageEntry {
+  return {
+    key_xdr: "AAAAFAKEKEY",
+    key_decoded: "balance",
+    value_xdr: "AAAABVALUE",
+    value_decoded: 1250,
+    durability: "persistent",
+    live_until_ledger: 900,
+    ledgers_until_expiry: 200,
+    status: "live",
+    last_modified_ledger: 640,
+    network: "testnet",
+    ...overrides,
+  };
+}
+
+function snapshot(overrides: Partial<ContractSnapshot> = {}): ContractSnapshot {
+  return {
+    contract_id: CONTRACT_ID,
+    network: "testnet",
+    ledger: 1000,
+    first_tracked_ledger: 512,
+    storage: [storageEntry()],
+    last_event: {
+      id: "event-1",
+      ledger: 990,
+      tx_hash: "abc123",
+      type: "contract",
+      ledger_closed_at: "2026-09-01T00:00:00Z",
+      value_decoded: null,
+      value_xdr: "AAAA",
+    },
+    ...overrides,
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function renderPanel() {
+  render(<SnapshotPanel contractId={CONTRACT_ID} currentLedger={12345} />);
+  return {
+    input: screen.getByLabelText<HTMLInputElement>("Replay state at ledger"),
+    button: screen.getByRole("button", { name: "View snapshot" }),
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockGetContractSnapshot.mockResolvedValue(snapshot());
+});
+
+afterEach(cleanup);
+
+describe("SnapshotPanel", () => {
+  it("starts with an empty prompt and a disabled button", () => {
+    const { input, button } = renderPanel();
+
+    expect(input.value).toBe("");
+    expect(input).toHaveAttribute("placeholder", "12345");
+    expect(button).toBeDisabled();
+    expect(screen.getByText(/Enter a ledger to see/)).toBeVisible();
+  });
+
+  it("prefills the placeholder from the latest indexed ledger", async () => {
+    render(<SnapshotPanel contractId={CONTRACT_ID} currentLedger={0} />);
+
+    expect(screen.getByLabelText("Replay state at ledger")).toHaveAttribute(
+      "placeholder",
+      "e.g. 12345"
+    );
+  });
+
+  it("downloads the snapshot for the requested ledger", async () => {
+    const { input, button } = renderPanel();
+
+    fireEvent.change(input, { target: { value: "1000" } });
+    fireEvent.click(button);
+
+    expect(await screen.findByText("balance")).toBeVisible();
+    expect(mockGetContractSnapshot).toHaveBeenCalledWith(CONTRACT_ID, 1000);
+    // Numbers are formatted for the reader, not printed raw.
+    expect(screen.getByText(/First tracked ledger:/)).toHaveTextContent(
+      `First tracked ledger: ${(512).toLocaleString()}`
+    );
+  });
+
+  it("renders the last known event and the TTL columns", async () => {
+    const { input, button } = renderPanel();
+
+    fireEvent.change(input, { target: { value: "1000" } });
+    fireEvent.click(button);
+    await screen.findByText("balance");
+
+    expect(
+      screen.getByText(/Last known event at or before ledger/)
+    ).toBeVisible();
+    expect(screen.getByText(/event-1/)).toBeVisible();
+    expect(screen.getByText(/abc123/)).toBeVisible();
+    expect(
+      screen.getByRole("columnheader", { name: "Durability" })
+    ).toBeVisible();
+    expect(screen.getByText("persistent")).toBeVisible();
+    expect(screen.getByText("640")).toBeVisible();
+    expect(screen.getByText("AAAABVALUE")).toBeVisible();
+  });
+
+  it("explains an empty storage set at that ledger", async () => {
+    mockGetContractSnapshot.mockResolvedValue(
+      snapshot({ storage: [], last_event: null })
+    );
+    const { input, button } = renderPanel();
+
+    fireEvent.change(input, { target: { value: "1000" } });
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByText(/No storage entries were live at ledger/)
+    ).toBeVisible();
+    expect(
+      screen.getByText(/No event was recorded at or before ledger/)
+    ).toBeVisible();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("rejects a non-positive ledger without calling the API", async () => {
+    const { input, button } = renderPanel();
+
+    fireEvent.change(input, { target: { value: "0" } });
+    fireEvent.click(button);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a positive ledger number"
+    );
+    expect(mockGetContractSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("rejects a fractional ledger without calling the API", () => {
+    const { input, button } = renderPanel();
+
+    fireEvent.change(input, { target: { value: "1.5" } });
+    fireEvent.click(button);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a positive ledger number"
+    );
+    expect(mockGetContractSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the API's own error message", async () => {
+    mockGetContractSnapshot.mockRejectedValue(
+      new ApiError(404, "No snapshot exists for that ledger.", "not_found")
+    );
+    const { input, button } = renderPanel();
+
+    fireEvent.change(input, { target: { value: "42" } });
+    fireEvent.click(button);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No snapshot exists for that ledger."
+    );
+    expect(screen.queryByText("balance")).toBeNull();
+  });
+
+  it("falls back to a generic message for a non-ApiError failure", async () => {
+    mockGetContractSnapshot.mockRejectedValue(new TypeError("network down"));
+    const { input, button } = renderPanel();
+
+    fireEvent.change(input, { target: { value: "42" } });
+    fireEvent.click(button);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Failed to load snapshot for that ledger"
+    );
+  });
+
+  it("clears a previous error when the ledger is edited", async () => {
+    mockGetContractSnapshot.mockRejectedValue(
+      new ApiError(500, "Indexer unavailable.")
+    );
+    const { input, button } = renderPanel();
+
+    fireEvent.change(input, { target: { value: "42" } });
+    fireEvent.click(button);
+    await screen.findByRole("alert");
+
+    fireEvent.change(input, { target: { value: "43" } });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows a loading state while the request is in flight", async () => {
+    const pending = deferred<ContractSnapshot>();
+    mockGetContractSnapshot.mockReturnValue(pending.promise);
+    const { input } = renderPanel();
+
+    fireEvent.change(input, { target: { value: "1000" } });
+    fireEvent.click(screen.getByRole("button", { name: "View snapshot" }));
+
+    const busy = screen.getByRole("button", { name: "Loading…" });
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute("aria-busy", "true");
+
+    pending.resolve(snapshot());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "View snapshot" })
+      ).toBeEnabled()
+    );
+    expect(screen.getByText("balance")).toBeVisible();
+  });
+});
