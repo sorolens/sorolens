@@ -111,11 +111,13 @@ var routeScopes = map[string]string{
 	// that authenticate with a scoped key.
 	"GET /api/v1/me/api-keys":         ScopeReadContracts,
 	"POST /api/v1/me/api-keys":        ScopeWriteContracts,
+	"PATCH /api/v1/me/api-keys/{id}":  ScopeWriteContracts,
 	"DELETE /api/v1/me/api-keys/{id}": ScopeWriteContracts,
 
 	"GET /api/v1/api-keys":              ScopeAdmin,
 	"POST /api/v1/api-keys":             ScopeAdmin,
 	"GET /api/v1/api-keys/{id}":         ScopeAdmin,
+	"PATCH /api/v1/api-keys/{id}":       ScopeAdmin,
 	"DELETE /api/v1/api-keys/{id}":      ScopeAdmin,
 	"POST /api/v1/api-keys/{id}/rotate": ScopeAdmin,
 
@@ -149,11 +151,13 @@ var routeScopes = map[string]string{
 	"POST /api/v2/integrations/{id}/test": ScopeWriteContracts,
 	"GET /api/v2/me/api-keys":             ScopeReadContracts,
 	"POST /api/v2/me/api-keys":            ScopeWriteContracts,
+	"PATCH /api/v2/me/api-keys/{id}":      ScopeWriteContracts,
 	"DELETE /api/v2/me/api-keys/{id}":     ScopeWriteContracts,
 
 	"GET /api/v2/api-keys":              ScopeAdmin,
 	"POST /api/v2/api-keys":             ScopeAdmin,
 	"GET /api/v2/api-keys/{id}":         ScopeAdmin,
+	"PATCH /api/v2/api-keys/{id}":       ScopeAdmin,
 	"DELETE /api/v2/api-keys/{id}":      ScopeAdmin,
 	"POST /api/v2/api-keys/{id}/rotate": ScopeAdmin,
 }

@@ -182,6 +182,10 @@ type Config struct {
 	// reverse proxy (TRUSTED_IDENTITY_PROXY_SECRET). Empty disables that
 	// identity source; raw identity headers are never trusted.
 	TrustedIdentityProxySecret string
+	// TrustedProxyCIDRs lists the proxy networks whose X-Forwarded-For header
+	// is believed when resolving a client IP for API key allowlists
+	// (TRUSTED_PROXY_CIDRS). Empty trusts no proxy.
+	TrustedProxyCIDRs []string
 	// SentryDSN is the Sentry project DSN. Error reporting is disabled
 	// entirely when this is empty.
 	SentryDSN string
@@ -233,6 +237,12 @@ func Load() (*Config, error) {
 		SentryDSN:                  os.Getenv("SENTRY_DSN"),
 		SentryEnvironment:          getEnvDefault("SENTRY_ENVIRONMENT", "production"),
 		SlackSigningSecret:         os.Getenv("SLACK_SIGNING_SECRET"),
+	}
+
+	for _, cidr := range strings.Split(os.Getenv("TRUSTED_PROXY_CIDRS"), ",") {
+		if cidr = strings.TrimSpace(cidr); cidr != "" {
+			cfg.TrustedProxyCIDRs = append(cfg.TrustedProxyCIDRs, cidr)
+		}
 	}
 
 	sessionTTLStr := getEnvDefault("IDENTITY_SESSION_TTL", "720h")

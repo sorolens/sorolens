@@ -5,6 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"net"
+	"net/url"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -43,6 +48,12 @@ type APIKey struct {
 	// RotatedAt is when the key's secret was last regenerated in place,
 	// or nil if it has never been rotated.
 	RotatedAt *time.Time
+	// AllowedCIDRs restricts the key to these source networks (issue #793).
+	// Empty or nil means the key is not restricted by address.
+	AllowedCIDRs []string
+	// AllowedOrigins restricts browser use of the key to these origins.
+	// Empty or nil means the key is not restricted by Origin header.
+	AllowedOrigins []string
 }
 
 // Revoked reports whether the key has been revoked.
@@ -76,6 +87,134 @@ func HashKey(token string) string {
 // ErrInvalidScope is returned when a key is created with an unknown scope.
 var ErrInvalidScope = errors.New("store: invalid scope")
 
+// InvalidAllowlistError reports a malformed CIDR range or origin in a key's
+// allowlist. Its message is safe to return to an API caller.
+type InvalidAllowlistError struct{ Reason string }
+
+func (e *InvalidAllowlistError) Error() string { return e.Reason }
+
+// NormalizeAllowedCIDRs trims, validates, de-duplicates and sorts a CIDR
+// allowlist. Empty entries are ignored and an all-empty input returns nil,
+// which the store persists as NULL and the middleware treats as unrestricted.
+// Each range is reduced to its network form (203.0.113.7/24 becomes
+// 203.0.113.0/24) so stored values compare predictably.
+func NormalizeAllowedCIDRs(raw []string) ([]string, error) {
+	out := make([]string, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, entry := range raw {
+		s := strings.TrimSpace(entry)
+		if s == "" {
+			continue
+		}
+		_, network, err := net.ParseCIDR(s)
+		if err != nil {
+			return nil, &InvalidAllowlistError{Reason: fmt.Sprintf("invalid CIDR range %q", s)}
+		}
+		normalized := network.String()
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
+// NormalizeAllowedOrigins trims, validates, de-duplicates and sorts an origin
+// allowlist. An origin is scheme://host[:port] with an http or https scheme;
+// paths, queries, fragments and embedded credentials are rejected. Empty
+// entries are ignored and an all-empty input returns nil (unrestricted).
+func NormalizeAllowedOrigins(raw []string) ([]string, error) {
+	out := make([]string, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, entry := range raw {
+		s := strings.TrimSpace(entry)
+		if s == "" {
+			continue
+		}
+		origin, err := normalizeOrigin(s)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[origin]; ok {
+			continue
+		}
+		seen[origin] = struct{}{}
+		out = append(out, origin)
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
+// normalizeOrigin canonicalises one origin to lowercase scheme and host.
+func normalizeOrigin(raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	u, err := url.Parse(s)
+	if err != nil || u.Opaque != "" {
+		return "", &InvalidAllowlistError{Reason: fmt.Sprintf("invalid origin %q: want scheme://host[:port]", s)}
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if (scheme != "http" && scheme != "https") || u.Host == "" {
+		return "", &InvalidAllowlistError{Reason: fmt.Sprintf("invalid origin %q: want an http or https origin", s)}
+	}
+	if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+		return "", &InvalidAllowlistError{Reason: fmt.Sprintf("invalid origin %q: must not contain credentials, a path, a query or a fragment", s)}
+	}
+	return scheme + "://" + strings.ToLower(u.Host), nil
+}
+
+// AllowsClientIP reports whether ip is permitted by the key's allowlist. An
+// empty allowlist permits every address; a non-empty one fails closed when the
+// address cannot be resolved.
+func (k APIKey) AllowsClientIP(ip net.IP) bool {
+	if len(k.AllowedCIDRs) == 0 {
+		return true
+	}
+	if ip == nil {
+		return false
+	}
+	for _, entry := range k.AllowedCIDRs {
+		_, network, err := net.ParseCIDR(entry)
+		if err != nil {
+			continue
+		}
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// AllowsOrigin reports whether origin is permitted by the key's allowlist. An
+// empty allowlist permits every origin (including no Origin header); a
+// non-empty one requires an exact, case-normalised origin match.
+func (k APIKey) AllowsOrigin(origin string) bool {
+	if len(k.AllowedOrigins) == 0 {
+		return true
+	}
+	got, err := normalizeOrigin(origin)
+	if err != nil {
+		return false
+	}
+	for _, allowed := range k.AllowedOrigins {
+		want, err := normalizeOrigin(allowed)
+		if err != nil {
+			continue
+		}
+		if got == want {
+			return true
+		}
+	}
+	return false
+}
+
 // APIKeyStore is the data-access surface for scoped API keys.
 type APIKeyStore interface {
 	// CreateAPIKey persists a new key. It returns ErrInvalidScope if any
@@ -98,4 +237,7 @@ type APIKeyStore interface {
 	RevokeAPIKey(ctx context.Context, id string) error
 	// TouchAPIKey records the last time a key authenticated a request.
 	TouchAPIKey(ctx context.Context, id string) error
+	// UpdateAPIKeyAllowlists replaces a key's allowlists. Nil or empty
+	// slices clear the restriction. Returns ErrNotFound if the key is absent.
+	UpdateAPIKeyAllowlists(ctx context.Context, id string, allowedCIDRs, allowedOrigins []string) error
 }

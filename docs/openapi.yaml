@@ -1330,6 +1330,21 @@ paths:
                     type: string
                     enum: [read:contracts, write:contracts, read:watchdog]
                   description: Defaults to read:contracts when omitted.
+                allowed_cidrs:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    CIDR ranges the key may be used from (issue #793). Omit or
+                    leave empty for no address restriction.
+                allowed_origins:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    Browser origins the key may be used from, as
+                    scheme://host[:port]. Omit or leave empty for no Origin
+                    restriction.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -1351,6 +1366,47 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /api/v1/me/api-keys/{id}:
+    patch:
+      tags: [API Keys]
+      summary: Update one of the signed-in user's API keys
+      description: |
+        Replaces the key's source allowlists (issue #793). Omit a field to
+        leave it unchanged; send `[]` or `null` to clear a restriction. An
+        empty list means unrestricted.
+      operationId: updateMyApiKey
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/APIKeyAllowlistUpdate"
+      responses:
+        "200":
+          description: Updated API key metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenAllowlist"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
     delete:
       tags: [API Keys]
       summary: Revoke one of the signed-in user's API keys
@@ -1435,6 +1491,21 @@ paths:
                     enum: [read:contracts, write:contracts, read:watchdog, admin:*]
                   minItems: 1
                   description: Scopes granted to the key.
+                allowed_cidrs:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    CIDR ranges the key may be used from (issue #793). Omit or
+                    leave empty for no address restriction.
+                allowed_origins:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    Browser origins the key may be used from, as
+                    scheme://host[:port]. Omit or leave empty for no Origin
+                    restriction.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -1461,6 +1532,49 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /api/v1/api-keys/{id}:
+    patch:
+      tags: [API Keys]
+      summary: Update an API key's allowlists
+      description: |
+        Replaces the key's source allowlists (issue #793). Omit a field to
+        leave it unchanged; send `[]` or `null` to clear a restriction. An
+        empty list means unrestricted.
+      operationId: updateApiKey
+      security:
+        - ApiKeyAuth: [admin:*]
+        - RoleAuth: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: API key ID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/APIKeyAllowlistUpdate"
+      responses:
+        "200":
+          description: Updated API key metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenAllowlist"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
     get:
       tags: [API Keys]
       summary: Get an API key
@@ -1606,6 +1720,21 @@ paths:
                   items:
                     type: string
                   minItems: 1
+                allowed_cidrs:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    CIDR ranges the key may be used from (issue #793). Omit or
+                    leave empty for no address restriction.
+                allowed_origins:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    Browser origins the key may be used from, as
+                    scheme://host[:port]. Omit or leave empty for no Origin
+                    restriction.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -3210,6 +3339,21 @@ paths:
                   type: array
                   items:
                     type: string
+                allowed_cidrs:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    CIDR ranges the key may be used from (issue #793). Omit or
+                    leave empty for no address restriction.
+                allowed_origins:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    Browser origins the key may be used from, as
+                    scheme://host[:port]. Omit or leave empty for no Origin
+                    restriction.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -3219,6 +3363,42 @@ paths:
           $ref: "#/components/responses/InvalidInput"
 
   /api/v2/me/api-keys/{id}:
+    patch:
+      tags: [API Keys]
+      summary: Update one of the signed-in user's API keys (v2 passthrough)
+      description: |
+        Replaces the key's source allowlists (issue #793). Omit a field to
+        leave it unchanged; send `[]` or `null` to clear a restriction.
+      operationId: v2UpdateMyApiKey
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/APIKeyAllowlistUpdate"
+      responses:
+        "200":
+          description: Updated API key metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenAllowlist"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
     delete:
       tags: [API Keys]
       summary: Revoke one of the signed-in user's API keys (v2 passthrough)
@@ -3281,6 +3461,21 @@ paths:
                   type: array
                   items:
                     type: string
+                allowed_cidrs:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    CIDR ranges the key may be used from (issue #793). Omit or
+                    leave empty for no address restriction.
+                allowed_origins:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    Browser origins the key may be used from, as
+                    scheme://host[:port]. Omit or leave empty for no Origin
+                    restriction.
       responses:
         "201":
           description: Key created; the plaintext token is returned exactly once
@@ -3294,6 +3489,43 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /api/v2/api-keys/{id}:
+    patch:
+      tags: [API Keys]
+      summary: Update an API key's allowlists (v2 passthrough)
+      description: |
+        Replaces the key's source allowlists (issue #793). Omit a field to
+        leave it unchanged; send `[]` or `null` to clear a restriction.
+      operationId: v2UpdateAPIKey
+      security:
+        - ApiKeyAuth: []
+        - RoleAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/APIKeyAllowlistUpdate"
+      responses:
+        "200":
+          description: Updated API key metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenAllowlist"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
     get:
       tags: [API v2]
       summary: Get an API key (admin)
@@ -5254,6 +5486,14 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/RoleError"
+    ForbiddenAllowlist:
+      description: >
+        The API key was presented from an address or origin outside its
+        allowlist (code API_KEY_IP_NOT_ALLOWED or API_KEY_ORIGIN_NOT_ALLOWED)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     NotFound:
       description: Resource not found
       content:
@@ -5401,7 +5641,7 @@ components:
               properties:
                 code:
                   type: string
-                  enum: [NOT_FOUND, INVALID_INPUT, INTERNAL, RATE_LIMITED, UNSUPPORTED_MEDIA_TYPE]
+                  enum: [NOT_FOUND, INVALID_INPUT, INTERNAL, RATE_LIMITED, UNSUPPORTED_MEDIA_TYPE, API_KEY_IP_NOT_ALLOWED, API_KEY_ORIGIN_NOT_ALLOWED]
                 message:
                   type: string
                 request_id:
@@ -5850,6 +6090,42 @@ components:
           format: date-time
           nullable: true
           description: When the key's secret was last rotated in place.
+        allowed_cidrs:
+          type: array
+          description: >
+            CIDR ranges the key may be used from (issue #793). Empty means no
+            address restriction.
+          items:
+            type: string
+            example: 203.0.113.0/24
+        allowed_origins:
+          type: array
+          description: >
+            Browser origins the key may be used from. Empty means no Origin
+            restriction.
+          items:
+            type: string
+            example: https://app.example.com
+
+    APIKeyAllowlistUpdate:
+      type: object
+      description: >
+        Partial update of an API key's source allowlists (issue #793). Omit a
+        field to leave it unchanged; send an empty array or null to clear it.
+      minProperties: 1
+      properties:
+        allowed_cidrs:
+          type: array
+          description: CIDR ranges the key may be used from. Empty clears the restriction.
+          items:
+            type: string
+            example: 203.0.113.0/24
+        allowed_origins:
+          type: array
+          description: Browser origins the key may be used from. Empty clears the restriction.
+          items:
+            type: string
+            example: https://app.example.com
 
     ReportSubscription:
       type: object

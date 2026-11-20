@@ -866,14 +866,28 @@ Scoped credentials are managed under `/api/v1/api-keys` and require the
 
 #### `POST /api/v1/api-keys`
 
-Create a key. Body: `{ "name": string, "scopes": string[], "user_id"?: string }`.
-When `user_id` is set the key acts as that user (role checks use the user's
-role); otherwise it only authenticates scopes. Returns `201` with the plaintext
-`key` exactly once; only its SHA-256 hash is persisted.
+Create a key. Body: `{ "name": string, "scopes": string[], "user_id"?: string,
+"allowed_cidrs"?: string[], "allowed_origins"?: string[] }`. When `user_id` is
+set the key acts as that user (role checks use the user's role); otherwise it
+only authenticates scopes. Returns `201` with the plaintext `key` exactly once;
+only its SHA-256 hash is persisted.
+
+`allowed_cidrs` and `allowed_origins` restrict where the key may be used
+(issue #793). The `Identity` middleware checks them against the trusted-proxy
+client IP and the request `Origin`, answering `403` with
+`API_KEY_IP_NOT_ALLOWED` or `API_KEY_ORIGIN_NOT_ALLOWED` outside the list. An
+empty list is unrestricted; `TRUSTED_PROXY_CIDRS` names the proxies whose
+`X-Forwarded-For` is believed.
 
 #### `GET /api/v1/api-keys`
 
 List key metadata (never the token), including the optional `user_id` binding.
+
+#### `PATCH /api/v1/api-keys/:id`
+
+Replace the key's `allowed_cidrs` and/or `allowed_origins`; an omitted field is
+left unchanged and an empty array or `null` clears it. The self-service
+counterpart is `PATCH /api/v1/me/api-keys/:id`.
 
 #### `DELETE /api/v1/api-keys/:id`
 

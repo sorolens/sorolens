@@ -769,6 +769,22 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
       },
     },
     "/api/v1/me/api-keys/{id}": {
+      patch: {
+        operationId: "updateMyApiKey",
+        summary: "Update one of the signed-in user's API keys",
+        tags: ["API Keys"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
+      },
       delete: {
         operationId: "revokeMyApiKey",
         summary: "Revoke one of the signed-in user's API keys",
@@ -829,6 +845,23 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             type: "string",
           },
         ],
+      },
+      patch: {
+        operationId: "updateApiKey",
+        summary: "Update an API key's allowlists",
+        tags: ["API Keys"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "API key ID.",
+            type: "string",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
       },
       delete: {
         operationId: "revokeApiKey",
@@ -1983,6 +2016,22 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
       },
     },
     "/api/v2/me/api-keys/{id}": {
+      patch: {
+        operationId: "v2UpdateMyApiKey",
+        summary: "Update one of the signed-in user's API keys (v2 passthrough)",
+        tags: ["API Keys"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
+      },
       delete: {
         operationId: "v2RevokeMyApiKey",
         summary: "Revoke one of the signed-in user's API keys (v2 passthrough)",
@@ -2027,6 +2076,22 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             type: "string",
           },
         ],
+      },
+      patch: {
+        operationId: "v2UpdateAPIKey",
+        summary: "Update an API key's allowlists (v2 passthrough)",
+        tags: ["API Keys"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
       },
       delete: {
         operationId: "v2RevokeAPIKey",

@@ -22,6 +22,10 @@ export interface APIKey {
   last_used_at: string | null;
   revoked_at: string | null;
   rotated_at: string | null;
+  /** CIDR ranges the key may be used from (issue #793). Empty = unrestricted. */
+  allowed_cidrs: string[];
+  /** Browser origins the key may be used from. Empty = unrestricted. */
+  allowed_origins: string[];
 }
 
 export interface CreatedAPIKey extends APIKey {

@@ -28,7 +28,8 @@ func TestAPIKeyStorePostgres(t *testing.T) {
 		{ID: "key-b", Name: "Beta", KeyPrefix: "sk_b", KeyHash: store.HashKey("secret-b"),
 			Scopes: []string{store.ScopeReadWatchdog, store.ScopeWriteContracts}, CreatedAt: created.Add(time.Minute)},
 		{ID: "key-c", Name: "Gamma", KeyPrefix: "sk_c", KeyHash: store.HashKey("secret-c"),
-			Scopes: []string{store.ScopeAdmin}, CreatedAt: created.Add(2 * time.Minute)},
+			Scopes: []string{store.ScopeAdmin}, CreatedAt: created.Add(2 * time.Minute),
+			AllowedCIDRs: []string{"203.0.113.0/24"}, AllowedOrigins: []string{"https://app.example.com"}},
 	}
 	for _, k := range keys {
 		if err := s.CreateAPIKey(ctx, k); err != nil {
@@ -112,6 +113,31 @@ func TestAPIKeyStorePostgres(t *testing.T) {
 	}
 	if touched.LastUsedAt == nil {
 		t.Error("TouchAPIKey did not set last_used_at")
+	}
+
+	// Allowlists round-trip through Postgres and can be replaced or cleared
+	// (issue #793).
+	if len(touched.AllowedCIDRs) != 1 || touched.AllowedCIDRs[0] != "203.0.113.0/24" {
+		t.Errorf("allowed_cidrs = %v, want [203.0.113.0/24]", touched.AllowedCIDRs)
+	}
+	if len(touched.AllowedOrigins) != 1 || touched.AllowedOrigins[0] != "https://app.example.com" {
+		t.Errorf("allowed_origins = %v, want [https://app.example.com]", touched.AllowedOrigins)
+	}
+	if err := s.UpdateAPIKeyAllowlists(ctx, "key-c", []string{"2001:db8::/32"}, nil); err != nil {
+		t.Fatalf("UpdateAPIKeyAllowlists: %v", err)
+	}
+	updated, err := s.GetAPIKey(ctx, "key-c")
+	if err != nil {
+		t.Fatalf("GetAPIKey after allowlist update: %v", err)
+	}
+	if len(updated.AllowedCIDRs) != 1 || updated.AllowedCIDRs[0] != "2001:db8::/32" {
+		t.Errorf("allowed_cidrs after update = %v, want [2001:db8::/32]", updated.AllowedCIDRs)
+	}
+	if len(updated.AllowedOrigins) != 0 {
+		t.Errorf("allowed_origins after clear = %v, want empty", updated.AllowedOrigins)
+	}
+	if err := s.UpdateAPIKeyAllowlists(ctx, "key-missing", nil, nil); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("UpdateAPIKeyAllowlists(unknown): want ErrNotFound, got %v", err)
 	}
 
 	// Keyset pagination by id ASC.

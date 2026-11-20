@@ -26,6 +26,10 @@ class APIKey:
         revoked_at (datetime.datetime | None):
         user_id (None | str | Unset): User this key acts as. Null for scope-only keys.
         rotated_at (datetime.datetime | None | Unset): When the key's secret was last rotated in place.
+        allowed_cidrs (list[str] | Unset): CIDR ranges the key may be used from (issue #793). Empty means no address
+            restriction.
+        allowed_origins (list[str] | Unset): Browser origins the key may be used from. Empty means no Origin
+            restriction.
     """
 
     id: str
@@ -37,6 +41,8 @@ class APIKey:
     revoked_at: datetime.datetime | None
     user_id: None | str | Unset = UNSET
     rotated_at: datetime.datetime | None | Unset = UNSET
+    allowed_cidrs: list[str] | Unset = UNSET
+    allowed_origins: list[str] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -76,6 +82,14 @@ class APIKey:
         else:
             rotated_at = self.rotated_at
 
+        allowed_cidrs: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_cidrs, Unset):
+            allowed_cidrs = self.allowed_cidrs
+
+        allowed_origins: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_origins, Unset):
+            allowed_origins = self.allowed_origins
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -93,6 +107,10 @@ class APIKey:
             field_dict["user_id"] = user_id
         if rotated_at is not UNSET:
             field_dict["rotated_at"] = rotated_at
+        if allowed_cidrs is not UNSET:
+            field_dict["allowed_cidrs"] = allowed_cidrs
+        if allowed_origins is not UNSET:
+            field_dict["allowed_origins"] = allowed_origins
 
         return field_dict
 
@@ -165,6 +183,10 @@ class APIKey:
 
         rotated_at = _parse_rotated_at(d.pop("rotated_at", UNSET))
 
+        allowed_cidrs = cast(list[str], d.pop("allowed_cidrs", UNSET))
+
+        allowed_origins = cast(list[str], d.pop("allowed_origins", UNSET))
+
         api_key = cls(
             id=id,
             name=name,
@@ -175,6 +197,8 @@ class APIKey:
             revoked_at=revoked_at,
             user_id=user_id,
             rotated_at=rotated_at,
+            allowed_cidrs=allowed_cidrs,
+            allowed_origins=allowed_origins,
         )
 
         api_key.additional_properties = d

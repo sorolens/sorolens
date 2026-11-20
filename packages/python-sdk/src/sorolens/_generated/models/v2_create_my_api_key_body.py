@@ -18,10 +18,16 @@ class V2CreateMyApiKeyBody:
     Attributes:
         name (str):
         scopes (list[str] | Unset):
+        allowed_cidrs (list[str] | Unset): CIDR ranges the key may be used from (issue #793). Omit or leave empty for no
+            address restriction.
+        allowed_origins (list[str] | Unset): Browser origins the key may be used from, as scheme://host[:port]. Omit or
+            leave empty for no Origin restriction.
     """
 
     name: str
     scopes: list[str] | Unset = UNSET
+    allowed_cidrs: list[str] | Unset = UNSET
+    allowed_origins: list[str] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -30,6 +36,14 @@ class V2CreateMyApiKeyBody:
         scopes: list[str] | Unset = UNSET
         if not isinstance(self.scopes, Unset):
             scopes = self.scopes
+
+        allowed_cidrs: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_cidrs, Unset):
+            allowed_cidrs = self.allowed_cidrs
+
+        allowed_origins: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_origins, Unset):
+            allowed_origins = self.allowed_origins
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -40,6 +54,10 @@ class V2CreateMyApiKeyBody:
         )
         if scopes is not UNSET:
             field_dict["scopes"] = scopes
+        if allowed_cidrs is not UNSET:
+            field_dict["allowed_cidrs"] = allowed_cidrs
+        if allowed_origins is not UNSET:
+            field_dict["allowed_origins"] = allowed_origins
 
         return field_dict
 
@@ -50,9 +68,15 @@ class V2CreateMyApiKeyBody:
 
         scopes = cast(list[str], d.pop("scopes", UNSET))
 
+        allowed_cidrs = cast(list[str], d.pop("allowed_cidrs", UNSET))
+
+        allowed_origins = cast(list[str], d.pop("allowed_origins", UNSET))
+
         v2_create_my_api_key_body = cls(
             name=name,
             scopes=scopes,
+            allowed_cidrs=allowed_cidrs,
+            allowed_origins=allowed_origins,
         )
 
         v2_create_my_api_key_body.additional_properties = d

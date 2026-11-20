@@ -7,6 +7,8 @@ from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
 T = TypeVar("T", bound="CreateApiKeyAdminBody")
 
 
@@ -16,16 +18,30 @@ class CreateApiKeyAdminBody:
     Attributes:
         name (str):
         scopes (list[str]):
+        allowed_cidrs (list[str] | Unset): CIDR ranges the key may be used from (issue #793). Omit or leave empty for no
+            address restriction.
+        allowed_origins (list[str] | Unset): Browser origins the key may be used from, as scheme://host[:port]. Omit or
+            leave empty for no Origin restriction.
     """
 
     name: str
     scopes: list[str]
+    allowed_cidrs: list[str] | Unset = UNSET
+    allowed_origins: list[str] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         name = self.name
 
         scopes = self.scopes
+
+        allowed_cidrs: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_cidrs, Unset):
+            allowed_cidrs = self.allowed_cidrs
+
+        allowed_origins: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_origins, Unset):
+            allowed_origins = self.allowed_origins
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -35,6 +51,10 @@ class CreateApiKeyAdminBody:
                 "scopes": scopes,
             }
         )
+        if allowed_cidrs is not UNSET:
+            field_dict["allowed_cidrs"] = allowed_cidrs
+        if allowed_origins is not UNSET:
+            field_dict["allowed_origins"] = allowed_origins
 
         return field_dict
 
@@ -45,9 +65,15 @@ class CreateApiKeyAdminBody:
 
         scopes = cast(list[str], d.pop("scopes"))
 
+        allowed_cidrs = cast(list[str], d.pop("allowed_cidrs", UNSET))
+
+        allowed_origins = cast(list[str], d.pop("allowed_origins", UNSET))
+
         create_api_key_admin_body = cls(
             name=name,
             scopes=scopes,
+            allowed_cidrs=allowed_cidrs,
+            allowed_origins=allowed_origins,
         )
 
         create_api_key_admin_body.additional_properties = d

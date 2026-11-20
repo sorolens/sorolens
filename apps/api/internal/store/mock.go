@@ -1020,6 +1020,16 @@ func (m *MockStore) CreateAPIKey(_ context.Context, k APIKey) error {
 			return ErrInvalidScope
 		}
 	}
+	cidrs, err := NormalizeAllowedCIDRs(k.AllowedCIDRs)
+	if err != nil {
+		return err
+	}
+	origins, err := NormalizeAllowedOrigins(k.AllowedOrigins)
+	if err != nil {
+		return err
+	}
+	k.AllowedCIDRs = cidrs
+	k.AllowedOrigins = origins
 	m.apiKeys = append(m.apiKeys, k)
 	return nil
 }
@@ -1104,6 +1114,25 @@ func (m *MockStore) TouchAPIKey(_ context.Context, id string) error {
 		}
 	}
 	return nil
+}
+
+func (m *MockStore) UpdateAPIKeyAllowlists(_ context.Context, id string, allowedCIDRs, allowedOrigins []string) error {
+	cidrs, err := NormalizeAllowedCIDRs(allowedCIDRs)
+	if err != nil {
+		return err
+	}
+	origins, err := NormalizeAllowedOrigins(allowedOrigins)
+	if err != nil {
+		return err
+	}
+	for i := range m.apiKeys {
+		if m.apiKeys[i].ID == id {
+			m.apiKeys[i].AllowedCIDRs = cidrs
+			m.apiKeys[i].AllowedOrigins = origins
+			return nil
+		}
+	}
+	return ErrNotFound
 }
 
 // ---- store.ReportSubscriptionStore ------------------------------------------

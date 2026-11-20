@@ -23,6 +23,10 @@ import (
 type createMyAPIKeyRequest struct {
 	Name   string   `json:"name"`
 	Scopes []string `json:"scopes"`
+	// AllowedCIDRs and AllowedOrigins optionally restrict where the key may
+	// be used (issue #793). Omitted or empty means unrestricted.
+	AllowedCIDRs   []string `json:"allowed_cidrs,omitempty"`
+	AllowedOrigins []string `json:"allowed_origins,omitempty"`
 }
 
 // ListMyAPIKeys handles GET /api/v1/me/api-keys.
@@ -86,6 +90,17 @@ func (h *Handler) CreateMyAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	allowedCIDRs, err := store.NormalizeAllowedCIDRs(req.AllowedCIDRs)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	allowedOrigins, err := store.NormalizeAllowedOrigins(req.AllowedOrigins)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+
 	token, err := newAPIToken()
 	if err != nil {
 		h.Logger.Error("generate api key", "err", err)
@@ -93,13 +108,15 @@ func (h *Handler) CreateMyAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key := store.APIKey{
-		ID:        newID(),
-		Name:      req.Name,
-		KeyPrefix: token[:11],
-		KeyHash:   store.HashKey(token),
-		Scopes:    req.Scopes,
-		CreatedAt: time.Now().UTC(),
-		UserID:    &userID,
+		ID:             newID(),
+		Name:           req.Name,
+		KeyPrefix:      token[:11],
+		KeyHash:        store.HashKey(token),
+		Scopes:         req.Scopes,
+		CreatedAt:      time.Now().UTC(),
+		UserID:         &userID,
+		AllowedCIDRs:   allowedCIDRs,
+		AllowedOrigins: allowedOrigins,
 	}
 	if err := h.Store.CreateAPIKey(r.Context(), key); err != nil {
 		if errors.Is(err, store.ErrInvalidScope) {
@@ -115,6 +132,29 @@ func (h *Handler) CreateMyAPIKey(w http.ResponseWriter, r *http.Request) {
 		apiKeyResponse: apiKeyFromStore(key),
 		Key:            token,
 	})
+}
+
+// UpdateMyAPIKey handles PATCH /api/v1/me/api-keys/{id}. A key owned by
+// another user is reported as not found so its existence is not disclosed.
+func (h *Handler) UpdateMyAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.VerifiedUserID(r)
+	if userID == "" {
+		writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, "authentication required")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	key, err := h.Store.GetAPIKey(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) || (err == nil && (key.UserID == nil || *key.UserID != userID)) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "API key not found")
+		return
+	}
+	if err != nil {
+		h.Logger.Error("get api key", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch API key")
+		return
+	}
+	h.updateAPIKeyAllowlists(w, r, key)
 }
 
 // RevokeMyAPIKey handles DELETE /api/v1/me/api-keys/{id}. A key owned by

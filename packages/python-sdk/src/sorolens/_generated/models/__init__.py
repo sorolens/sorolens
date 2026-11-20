@@ -14,6 +14,7 @@ from .api_health_response_200 import ApiHealthResponse200
 from .api_health_response_200_db import ApiHealthResponse200Db
 from .api_health_response_200_redis import ApiHealthResponse200Redis
 from .api_key import APIKey
+from .api_key_allowlist_update import APIKeyAllowlistUpdate
 from .audit_event import AuditEvent
 from .batch_contracts_request import BatchContractsRequest
 from .batch_contracts_request_action import BatchContractsRequestAction
@@ -299,6 +300,7 @@ from .watchlist_item import WatchlistItem
 
 __all__ = (
     "APIKey",
+    "APIKeyAllowlistUpdate",
     "AddGroupContractBody",
     "AddToWatchlistBody",
     "AddWatchedAccountBody",

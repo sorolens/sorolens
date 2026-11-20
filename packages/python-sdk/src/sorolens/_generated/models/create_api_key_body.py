@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -20,11 +20,17 @@ class CreateApiKeyBody:
         name (str): Human-friendly key name.
         scopes (list[CreateApiKeyBodyScopesItem]): Scopes granted to the key.
         user_id (str | Unset): Optional user the key acts as. The user must exist. Omit for a scope-only key.
+        allowed_cidrs (list[str] | Unset): CIDR ranges the key may be used from (issue #793). Omit or leave empty for no
+            address restriction.
+        allowed_origins (list[str] | Unset): Browser origins the key may be used from, as scheme://host[:port]. Omit or
+            leave empty for no Origin restriction.
     """
 
     name: str
     scopes: list[CreateApiKeyBodyScopesItem]
     user_id: str | Unset = UNSET
+    allowed_cidrs: list[str] | Unset = UNSET
+    allowed_origins: list[str] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -37,6 +43,14 @@ class CreateApiKeyBody:
 
         user_id = self.user_id
 
+        allowed_cidrs: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_cidrs, Unset):
+            allowed_cidrs = self.allowed_cidrs
+
+        allowed_origins: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_origins, Unset):
+            allowed_origins = self.allowed_origins
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -47,6 +61,10 @@ class CreateApiKeyBody:
         )
         if user_id is not UNSET:
             field_dict["user_id"] = user_id
+        if allowed_cidrs is not UNSET:
+            field_dict["allowed_cidrs"] = allowed_cidrs
+        if allowed_origins is not UNSET:
+            field_dict["allowed_origins"] = allowed_origins
 
         return field_dict
 
@@ -64,10 +82,16 @@ class CreateApiKeyBody:
 
         user_id = d.pop("user_id", UNSET)
 
+        allowed_cidrs = cast(list[str], d.pop("allowed_cidrs", UNSET))
+
+        allowed_origins = cast(list[str], d.pop("allowed_origins", UNSET))
+
         create_api_key_body = cls(
             name=name,
             scopes=scopes,
             user_id=user_id,
+            allowed_cidrs=allowed_cidrs,
+            allowed_origins=allowed_origins,
         )
 
         create_api_key_body.additional_properties = d

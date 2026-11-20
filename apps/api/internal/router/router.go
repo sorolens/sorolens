@@ -105,6 +105,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(middleware.Identity(h.Store, middleware.IdentityOptions{
 		Sessions:    h.SessionSigner,
 		ProxySecret: h.TrustedProxySecret,
+		ClientIPs:   h.ClientIPs,
 	}, h.Logger))
 	// Audit trail for every mutating /api/ request (issue #122). It sits
 	// outside rate limiting, content-type and auth checks so their
@@ -352,12 +353,14 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// user and hide keys owned by anyone else.
 		r.With(scope, contributor).Get("/me/api-keys", h.ListMyAPIKeys)
 		r.With(scope, contributor).Post("/me/api-keys", h.CreateMyAPIKey)
+		r.With(scope, contributor).Patch("/me/api-keys/{id}", h.UpdateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
 
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
 		r.With(scope, admin).Post("/api-keys", h.CreateAPIKey)
 		r.With(scope, admin).Get("/api-keys/{id}", h.GetAPIKey)
+		r.With(scope, admin).Patch("/api-keys/{id}", h.UpdateAPIKey)
 		r.With(scope, admin).Delete("/api-keys/{id}", h.RevokeAPIKey)
 		r.With(scope, admin).Post("/api-keys/{id}/rotate", h.RotateAPIKey)
 
@@ -467,6 +470,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Post("/integrations/{id}/test", h.TestIntegration)
 		r.With(scope, contributor).Get("/me/api-keys", h.ListMyAPIKeys)
 		r.With(scope, contributor).Post("/me/api-keys", h.CreateMyAPIKey)
+		r.With(scope, contributor).Patch("/me/api-keys/{id}", h.UpdateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
 
 		// Stats
@@ -493,6 +497,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
 		r.With(scope, admin).Post("/api-keys", h.CreateAPIKey)
 		r.With(scope, admin).Get("/api-keys/{id}", h.GetAPIKey)
+		r.With(scope, admin).Patch("/api-keys/{id}", h.UpdateAPIKey)
 		r.With(scope, admin).Delete("/api-keys/{id}", h.RevokeAPIKey)
 		r.With(scope, admin).Post("/api-keys/{id}/rotate", h.RotateAPIKey)
 

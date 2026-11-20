@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -47,6 +49,13 @@ const (
 	proxyUserIDHeader    = "X-Identity-User-ID"
 	proxyTimestampHeader = "X-Identity-Timestamp"
 	proxySignatureHeader = "X-Identity-Signature"
+
+	// CodeAPIKeyIPNotAllowed and CodeAPIKeyOriginNotAllowed identify an API
+	// key presented from outside its allowlist (issue #793). They are
+	// distinct from FORBIDDEN so callers can tell a network restriction from
+	// a missing scope or role.
+	CodeAPIKeyIPNotAllowed     = "API_KEY_IP_NOT_ALLOWED"
+	CodeAPIKeyOriginNotAllowed = "API_KEY_ORIGIN_NOT_ALLOWED"
 )
 
 // VerifiedIdentity is the authenticated caller attached to a request context
@@ -201,6 +210,9 @@ type IdentityOptions struct {
 	// ProxyMaxSkew bounds the accepted clock difference for proxy headers.
 	// Zero uses DefaultProxyMaxSkew.
 	ProxyMaxSkew time.Duration
+	// ClientIPs resolves the address an API key's CIDR allowlist is checked
+	// against. Nil resolves only the transport peer, never X-Forwarded-For.
+	ClientIPs *ClientIPResolver
 	// Now overrides the clock in tests. Nil uses time.Now.
 	Now func() time.Time
 }
@@ -223,6 +235,15 @@ func Identity(lookup IdentityLookup, opts IdentityOptions, logger *slog.Logger) 
 				return
 			}
 			if id, ok := resolveIdentity(r, lookup, opts, logger); ok {
+				if code, message, denied := apiKeyAllowlistDenial(r, id.APIKey, opts.ClientIPs); denied {
+					writeIdentityError(w, r, http.StatusForbidden, code, message)
+					return
+				}
+				if id.APIKey != nil {
+					if err := lookup.TouchAPIKey(r.Context(), id.APIKey.ID); err != nil && logger != nil {
+						logger.Warn("touch api key", "err", err, "key_id", id.APIKey.ID)
+					}
+				}
 				r = r.WithContext(WithIdentity(r.Context(), id))
 			}
 			next.ServeHTTP(w, r)
@@ -236,7 +257,7 @@ func resolveIdentity(r *http.Request, lookup IdentityLookup, opts IdentityOption
 		if strings.HasPrefix(token, SessionTokenPrefix) {
 			return resolveSession(r, lookup, opts, token)
 		}
-		return resolveAPIKey(r, lookup, token, logger)
+		return resolveAPIKey(r, lookup, token)
 	}
 	if opts.ProxySecret != "" {
 		return resolveTrustedProxy(r, lookup, opts)
@@ -263,13 +284,10 @@ func resolveSession(r *http.Request, lookup IdentityLookup, opts IdentityOptions
 	}, true
 }
 
-func resolveAPIKey(r *http.Request, lookup IdentityLookup, token string, logger *slog.Logger) (VerifiedIdentity, bool) {
+func resolveAPIKey(r *http.Request, lookup IdentityLookup, token string) (VerifiedIdentity, bool) {
 	key, err := lookup.GetAPIKeyByHash(r.Context(), store.HashKey(token))
 	if err != nil || key.Revoked() {
 		return VerifiedIdentity{}, false
-	}
-	if err := lookup.TouchAPIKey(r.Context(), key.ID); err != nil && logger != nil {
-		logger.Warn("touch api key", "err", err, "key_id", key.ID)
 	}
 
 	id := VerifiedIdentity{Source: IdentitySourceAPIKey, APIKey: &key}
@@ -283,6 +301,45 @@ func resolveAPIKey(r *http.Request, lookup IdentityLookup, token string, logger 
 		id.Role = user.Role
 	}
 	return id, true
+}
+
+// apiKeyAllowlistDenial reports whether a verified key may be used from this
+// request. It returns the distinct error code and message to send when it may
+// not. The CIDR check runs first so an address-restricted key never depends on
+// a browser-supplied Origin header.
+func apiKeyAllowlistDenial(r *http.Request, key *store.APIKey, resolver *ClientIPResolver) (code, message string, denied bool) {
+	if key == nil {
+		return "", "", false
+	}
+	if len(key.AllowedCIDRs) > 0 {
+		var ip net.IP
+		if resolver != nil {
+			ip = resolver.ClientIP(r)
+		} else {
+			ip = PeerIP(r)
+		}
+		if !key.AllowsClientIP(ip) {
+			return CodeAPIKeyIPNotAllowed, "API key is not allowed from this IP address", true
+		}
+	}
+	if len(key.AllowedOrigins) > 0 && !key.AllowsOrigin(r.Header.Get("Origin")) {
+		return CodeAPIKeyOriginNotAllowed, "API key is not allowed from this origin", true
+	}
+	return "", "", false
+}
+
+// writeIdentityError writes the standard error envelope from middleware, which
+// cannot import the handler package (handler imports middleware).
+func writeIdentityError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]string{
+			"code":       code,
+			"message":    message,
+			"request_id": GetRequestID(r.Context()),
+		},
+	})
 }
 
 func resolveTrustedProxy(r *http.Request, lookup IdentityLookup, opts IdentityOptions) (VerifiedIdentity, bool) {

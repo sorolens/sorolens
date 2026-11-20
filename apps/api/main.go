@@ -83,6 +83,14 @@ func main() {
 		WorkspaceDir: cfg.VerifyWorkspaceDir,
 	})
 
+	// API key CIDR allowlists are checked against the address this resolver
+	// returns; forwarded headers are only believed from trusted proxies.
+	clientIPs, err := middleware.NewClientIPResolver(cfg.TrustedProxyCIDRs)
+	if err != nil {
+		logger.Error("trusted proxy CIDRs", "err", err)
+		os.Exit(1)
+	}
+
 	h := &handler.Handler{
 		Store:       store.NewFullStore(pool),
 		DB:          &dbPinger{pool: pool},
@@ -96,6 +104,7 @@ func main() {
 		SlackSigningSecret: cfg.SlackSigningSecret,
 		SessionSigner:      middleware.NewSessionSigner(identitySigningKey(cfg, logger), cfg.IdentitySessionTTL),
 		TrustedProxySecret: cfg.TrustedIdentityProxySecret,
+		ClientIPs:          clientIPs,
 		RequestTimeout:     cfg.RequestTimeout,
 		StreamTimeout:      cfg.StreamTimeout,
 		GraphQL: graph.Options{

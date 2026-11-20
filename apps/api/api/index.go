@@ -62,6 +62,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 		redisClient := redis.NewClient(redisOpts)
 
+		clientIPs, err := middleware.NewClientIPResolver(
+			middleware.ParseTrustedProxyCIDRs(os.Getenv("TRUSTED_PROXY_CIDRS")))
+		if err != nil {
+			logger.Error("trusted proxy CIDRs", "err", err)
+			return
+		}
+
 		h := &sorohandler.Handler{
 			Store:  store.NewFullStore(pool),
 			DB:     &dbPinger{pool: pool},
@@ -73,6 +80,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			SlackSigningSecret: os.Getenv("SLACK_SIGNING_SECRET"),
 			SessionSigner:      middleware.NewSessionSigner(os.Getenv("IDENTITY_SIGNING_KEY"), 0),
 			TrustedProxySecret: os.Getenv("TRUSTED_IDENTITY_PROXY_SECRET"),
+			ClientIPs:          clientIPs,
 		}
 		maxBodyBytes := apiconfig.DefaultRequestMaxBodyBytes
 		if n, err := apiconfig.MaxBodyBytesFromEnv(); err != nil {

@@ -141,9 +141,13 @@ Authorization: Bearer <admin_token>
 {
   "name": "monitoring-bot",
   "scopes": ["read:contracts", "read:watchdog"],
-  "user_id": "optional_user_id"
+  "user_id": "optional_user_id",
+  "allowed_cidrs": ["203.0.113.0/24"],
+  "allowed_origins": ["https://app.example.com"]
 }
 ```
+
+The two allowlist fields are optional; see [4.5](#45-restrict-a-key-by-source-address-and-origin).
 
 #### curl Example
 ```bash
@@ -282,7 +286,70 @@ curl -X POST https://api.sorolens.xyz/api/v1/api-keys/a1b2c3d4e5f60718293a4b5c6d
 
 ---
 
-### 4.5 Revoke an API Key
+### 4.5 Restrict a Key by Source Address and Origin
+
+A key can be limited to a list of CIDR ranges and, for browser use, a list of
+origins (issue #793). A leaked key that only works from the owner's servers is
+far less dangerous than an unrestricted one.
+
+Both lists are optional and start empty. An empty list means unrestricted;
+this is the default and keeps existing keys unchanged.
+
+- `allowed_cidrs` — CIDR ranges (IPv4 or IPv6). A bare address is rejected;
+  each range is stored in network form (`203.0.113.7/24` becomes
+  `203.0.113.0/24`).
+- `allowed_origins` — browser origins as `scheme://host[:port]` with an
+  `http` or `https` scheme. Paths, queries, fragments and embedded credentials
+  are rejected. Matching is case-insensitive on scheme and host.
+
+Pass either list on `POST /api/v1/api-keys` (or `POST /api/v1/me/api-keys`),
+or change them later with `PATCH /api/v1/api-keys/{id}` (or
+`PATCH /api/v1/me/api-keys/{id}` for a key the session user owns). On PATCH,
+an omitted field is left unchanged and `[]` or `null` clears the restriction.
+
+```bash
+curl -X PATCH https://api.sorolens.xyz/api/v1/api-keys/a1b2c3d4e5f60718293a4b5c6d7e8f90 \
+  -H "Authorization: Bearer sl_admin_secret_token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "allowed_cidrs": ["203.0.113.0/24", "2001:db8::/32"],
+    "allowed_origins": ["https://app.example.com"]
+  }'
+```
+
+A request that presents the key from outside its allowlist is rejected before
+the route runs, with the standard error envelope and a distinct code:
+
+| Code | Meaning |
+|---|---|
+| `API_KEY_IP_NOT_ALLOWED` | The resolved client address is outside `allowed_cidrs`. |
+| `API_KEY_ORIGIN_NOT_ALLOWED` | The request's `Origin` is missing from or not in `allowed_origins`. |
+
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "error": {
+    "code": "API_KEY_IP_NOT_ALLOWED",
+    "message": "API key is not allowed from this IP address",
+    "request_id": "req_5f7c3e1b8a9d0246"
+  }
+}
+```
+
+#### Resolving the client address behind a proxy
+
+The address is the transport peer by default. `X-Forwarded-For` is only
+believed when the peer is inside `TRUSTED_PROXY_CIDRS` (comma-separated
+CIDRs); the rightmost hop that is not itself a trusted proxy is used. This
+prevents a caller from choosing the address its key is checked against. Set
+the variable to your load balancer or CDN ranges when the API runs behind one;
+otherwise leave it empty.
+
+---
+
+### 4.6 Revoke an API Key
 
 Immediately deactivate an API key. Revoked keys cannot be rotated or used to authenticate.
 
