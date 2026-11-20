@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sorolens/sorolens/apps/api/internal/coldstorage"
 	"github.com/sorolens/sorolens/apps/api/internal/graph"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
@@ -41,6 +42,7 @@ type APIStore interface {
 	store.AlertRuleStore
 	store.WatchedAccountStore
 	store.AuditStore
+	store.ExportJobStore
 }
 
 // Pinger is implemented by both the postgres pool and the Redis client.
@@ -74,6 +76,11 @@ type Handler struct {
 	// ledger ranges that are no longer in Postgres.
 	Cold      ColdEventReader
 	StreamHub *StreamHub
+
+	// ObjectStore backs asynchronous exports (issue #785) and cold storage.
+	ObjectStore coldstorage.ObjectStore
+	// ExportSigningKey signs asynchronous export download tokens.
+	ExportSigningKey string
 
 	// Verifier rebuilds submitted contract source and compares the resulting
 	// Wasm hash against the on-chain hash (issue #263). It is nil on

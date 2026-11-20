@@ -201,6 +201,19 @@
           "v2RevokeMyApiKey",
           "v2TestIntegration"
         ]
+      },
+      {
+        "reason": "Async export jobs (issue #785) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "createExportJob",
+          "createExportJobV2",
+          "deleteExportJob",
+          "deleteExportJobV2",
+          "downloadExport",
+          "downloadExportV2",
+          "getExportJob",
+          "getExportJobV2"
+        ]
       }
     ],
     "python": [
@@ -388,6 +401,19 @@
           "v2RevokeMyApiKey",
           "v2TestIntegration"
         ]
+      },
+      {
+        "reason": "Async export jobs (issue #785) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "createExportJob",
+          "createExportJobV2",
+          "deleteExportJob",
+          "deleteExportJobV2",
+          "downloadExport",
+          "downloadExportV2",
+          "getExportJob",
+          "getExportJobV2"
+        ]
       }
     ],
     "go": [
@@ -554,6 +580,19 @@
           "v2RevokeMyApiKey",
           "v2TestIntegration"
         ]
+      },
+      {
+        "reason": "Async export jobs (issue #785) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "createExportJob",
+          "createExportJobV2",
+          "deleteExportJob",
+          "deleteExportJobV2",
+          "downloadExport",
+          "downloadExportV2",
+          "getExportJob",
+          "getExportJobV2"
+        ]
       }
     ],
     "typescript": [
@@ -711,6 +750,19 @@
           "v2ListMyApiKeys",
           "v2RevokeMyApiKey",
           "v2TestIntegration"
+        ]
+      },
+      {
+        "reason": "Async export jobs (issue #785) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "createExportJob",
+          "createExportJobV2",
+          "deleteExportJob",
+          "deleteExportJobV2",
+          "downloadExport",
+          "downloadExportV2",
+          "getExportJob",
+          "getExportJobV2"
         ]
       }
     ]

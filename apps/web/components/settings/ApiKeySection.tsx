@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
   createMyApiKey,
   listMyApiKeys,
@@ -23,6 +24,7 @@ export function ApiKeySection() {
   const [plaintext, setPlaintext] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
@@ -132,8 +134,9 @@ export function ApiKeySection() {
                 </code>
                 <button
                   type="button"
+                  data-testid="settings-api-key-revoke"
                   disabled={revoking === key.id}
-                  onClick={() => handleRevoke(key.id)}
+                  onClick={() => setPendingRevokeId(key.id)}
                   className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {revoking === key.id ? "Revoking…" : "Revoke"}
@@ -142,6 +145,22 @@ export function ApiKeySection() {
             ))}
           </ul>
         )}
+
+        <ConfirmDialog
+          isOpen={pendingRevokeId !== null}
+          title="Revoke API key"
+          description="Are you sure you want to revoke this API key? Any applications or scripts using it will lose access immediately."
+          confirmText="Revoke key"
+          isDestructive={true}
+          isLoading={revoking !== null}
+          onConfirm={async () => {
+            if (pendingRevokeId) {
+              await handleRevoke(pendingRevokeId);
+              setPendingRevokeId(null);
+            }
+          }}
+          onClose={() => setPendingRevokeId(null)}
+        />
 
         {plaintext && (
           <div

@@ -57,7 +57,7 @@ func runTrack(cmd *cobra.Command, args []string) error {
 		if _, err := presets.Lookup(presets.PresetType(trackPreset)); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 			fmt.Fprintf(os.Stderr, "Run %s track --help for available presets.\n", os.Args[0])
-			return nil
+			return err
 		}
 	}
 
@@ -70,7 +70,7 @@ func runTrack(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		if se, ok := err.(*client.SorolensError); ok {
 			fmt.Fprintf(os.Stderr, "Error (%s): %s\n", se.Code, se.Message)
-			return nil
+			return err
 		}
 		return err
 	}

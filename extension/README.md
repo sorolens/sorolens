@@ -128,6 +128,21 @@ python3 tools/generate-icons.py  # regenerate src/icons/*.png
 `npm run check`, `npm test`, `npm run build` and `npm run package` wrap the same
 commands. `npm run package:chrome` / `npm run package:firefox` build one target.
 
+### Continuous integration
+
+`.github/workflows/ci.yml` runs `node scripts/check.mjs` and
+`node --test "tests/*.test.mjs"` as steps of the existing **Web** job on every
+pull request, so a change to `src/shared/api.js` or the OpenAPI that breaks the
+extension fails an existing check (the PR check count stays at five). No
+`npm install` is needed.
+
+Packaging does not run on pull requests. `.github/workflows/extension-release.yml`
+runs the same checks, builds both targets, lints the Firefox build with
+`web-ext` and uploads `dist/*.zip` as the `sorolens-extension` artifact. Start it
+manually (Actions → Extension Release → Run workflow) or push an
+`extension-v*` tag, which also attaches the zips to a release. Run the same thing
+locally with `node scripts/package.mjs`.
+
 ### Testing both browsers
 
 1. Run `node scripts/build.mjs chrome` and load `dist/chrome/` as an unpacked
