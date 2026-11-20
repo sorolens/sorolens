@@ -222,9 +222,7 @@ describe("ImportContractsCsv", () => {
     await upload(container, csvFile(`${ID},testnet\n${ID},testnet\n`));
 
     await waitFor(() => expect(rowCount()).toBe(2));
-    expect(
-      screen.getByText("Duplicate contract ID in file")
-    ).toBeVisible();
+    expect(screen.getByText("Duplicate contract ID in file")).toBeVisible();
     expect(mockTrackContract).not.toHaveBeenCalled();
   });
 
@@ -278,7 +276,9 @@ describe("ImportContractsCsv", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
 
     await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Imported" })).toBeVisible());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Imported" })).toBeVisible()
+    );
     expect(mockTrackContract).toHaveBeenCalledWith(
       { id: ID, label: "Payments", network: "testnet" },
       undefined
@@ -327,7 +327,9 @@ describe("ImportContractsCsv", () => {
     await waitFor(() => expect(rowCount()).toBe(1));
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
 
-    expect(await screen.findByText("Failed: Service unavailable.")).toBeVisible();
+    expect(
+      await screen.findByText("Failed: Service unavailable.")
+    ).toBeVisible();
     expect(onImported).not.toHaveBeenCalled();
     expect(screen.getAllByText("0 imported")).toHaveLength(2);
     expect(screen.getByText("1 with problems")).toBeVisible();
