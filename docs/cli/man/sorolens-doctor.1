@@ -1,0 +1,86 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-doctor - Diagnose configuration, connectivity, authentication, version and clock problems
+
+
+.SH SYNOPSIS
+\fBsorolens doctor [flags]\fP
+
+
+.SH DESCRIPTION
+Run a set of checks against the active configuration and the Sorolens API and
+print pass, warn or fail for each, with a hint on how to fix anything that is
+not passing:
+
+.PP
+config        config file, active profile, API URL and where the API key comes from
+  reachability  the API answers at --api-url
+  tls           HTTPS is used and the server certificate is valid
+  auth          the API key is accepted and has the read scopes the CLI needs
+  version       the server version is in the range this CLI supports
+  clock         local clock skew against the server's Date header
+
+.PP
+API keys and tokens never appear in the output, so the report is safe to
+paste into an issue. Use --json for a stable machine-readable report. The
+command exits with status 1 when any check fails.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for doctor
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH EXAMPLE
+.EX
+  sorolens doctor
+  sorolens doctor --profile prod
+  sorolens doctor --json
+.EE
+
+
+.SH SEE ALSO
+\fBsorolens(1)\fP

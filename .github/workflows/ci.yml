@@ -142,6 +142,17 @@ jobs:
         run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
       - name: Verify Go client has no diff
         run: git diff --exit-code -- packages/go-client/internal
+      # Issue #819: keep the generated CLI reference and man pages in sync
+      # with the Cobra command tree without adding another pull request check.
+      - name: Verify CLI documentation is up to date
+        run: |
+          make docs-cli
+          changes=$(git status --porcelain --untracked-files=all -- docs/cli)
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            echo "::error::CLI documentation is stale; run make docs-cli and commit the result"
+            exit 1
+          fi
       # Issue #553: /api/v1 is frozen. Compare the PR spec with the base
       # commit only when docs/openapi.yaml changed; keep this in the existing
       # Go job so pull requests remain capped at five checks.

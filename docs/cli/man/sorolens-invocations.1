@@ -1,0 +1,89 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-invocations - List invocations of a tracked contract
+
+
+.SH SYNOPSIS
+\fBsorolens invocations  [flags]\fP
+
+
+.SH DESCRIPTION
+List the most recent invocations of a contract: transaction hash, ledger,
+status, function and resource usage.
+
+.PP
+Use --status and --fn to filter, --limit to cap the rows, and --json for
+machine-readable output. Pass a transaction hash to "sorolens inspect --tx" to
+see one invocation in detail.
+
+
+.SH OPTIONS
+\fB--fn\fP=""
+	Filter by function name
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for invocations
+
+.PP
+\fB--limit\fP=50
+	Maximum number of invocations to list
+
+.PP
+\fB--status\fP=""
+	Filter by status (SUCCESS, FAILED, NOT_FOUND)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH EXAMPLE
+.EX
+  sorolens invocations CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  sorolens invocations <contract-id> --status FAILED --fn transfer
+  sorolens invocations list <contract-id> --limit 10 --json
+.EE
+
+
+.SH SEE ALSO
+\fBsorolens(1)\fP, \fBsorolens-invocations-list(1)\fP
