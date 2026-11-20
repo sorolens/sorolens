@@ -89,6 +89,17 @@ export function openDb(path: string): Database.Database {
       pr_count INTEGER PRIMARY KEY,
       role_id  TEXT NOT NULL
     );
+
+    -- Channel alert subscriptions: channels subscribed to watchdog alerts for contracts.
+    CREATE TABLE IF NOT EXISTS alert_subscriptions (
+      channel_id  TEXT NOT NULL,
+      contract_id TEXT NOT NULL,
+      severity    TEXT NOT NULL DEFAULT 'all',
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (channel_id, contract_id)
+    );
+    CREATE INDEX IF NOT EXISTS alert_subs_contract ON alert_subscriptions (contract_id);
   `);
   // Added after the first release: when applications were last switched on
   // (ms since epoch). Messages sent before it are ignored.
@@ -501,4 +512,102 @@ export function allLinks(): Link[] {
       "SELECT discord_id AS discordId, github_login AS githubLogin, linked_at AS linkedAt FROM links"
     )
     .all() as Link[];
+}
+
+// ---- alert subscriptions ----------------------------------------------------
+
+export interface Subscription {
+  channelId: string;
+  contractId: string;
+  severity: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function upsertSubscription(
+  channelId: string,
+  contractId: string,
+  severity = "all"
+): Subscription {
+  const conn = requireDb();
+  const normalizedContract = contractId.trim().toUpperCase();
+  const normalizedSeverity = severity.trim().toLowerCase();
+  conn
+    .prepare(
+      `INSERT INTO alert_subscriptions (channel_id, contract_id, severity, created_at, updated_at)
+       VALUES (?, ?, ?, datetime('now'), datetime('now'))
+       ON CONFLICT(channel_id, contract_id) DO UPDATE SET
+         severity   = excluded.severity,
+         updated_at = datetime('now')`
+    )
+    .run(channelId, normalizedContract, normalizedSeverity);
+  return getSubscription(channelId, normalizedContract)!;
+}
+
+export function removeSubscription(
+  channelId: string,
+  contractId: string
+): boolean {
+  const conn = requireDb();
+  const normalizedContract = contractId.trim().toUpperCase();
+  const r = conn
+    .prepare(
+      "DELETE FROM alert_subscriptions WHERE channel_id = ? AND contract_id = ?"
+    )
+    .run(channelId, normalizedContract);
+  return r.changes > 0;
+}
+
+export function getSubscription(
+  channelId: string,
+  contractId: string
+): Subscription | null {
+  const conn = requireDb();
+  const normalizedContract = contractId.trim().toUpperCase();
+  const row = conn
+    .prepare(
+      `SELECT channel_id AS channelId, contract_id AS contractId, severity, created_at AS createdAt, updated_at AS updatedAt
+       FROM alert_subscriptions WHERE channel_id = ? AND contract_id = ?`
+    )
+    .get(channelId, normalizedContract) as Subscription | undefined;
+  return row ?? null;
+}
+
+export function listSubscriptionsForChannel(channelId: string): Subscription[] {
+  const conn = requireDb();
+  return conn
+    .prepare(
+      `SELECT channel_id AS channelId, contract_id AS contractId, severity, created_at AS createdAt, updated_at AS updatedAt
+       FROM alert_subscriptions WHERE channel_id = ? ORDER BY contract_id ASC`
+    )
+    .all(channelId) as Subscription[];
+}
+
+export function listSubscriptionsForContract(contractId: string): Subscription[] {
+  const conn = requireDb();
+  const normalizedContract = contractId.trim().toUpperCase();
+  return conn
+    .prepare(
+      `SELECT channel_id AS channelId, contract_id AS contractId, severity, created_at AS createdAt, updated_at AS updatedAt
+       FROM alert_subscriptions WHERE contract_id = ? ORDER BY channel_id ASC`
+    )
+    .all(normalizedContract) as Subscription[];
+}
+
+export function listAllSubscriptions(): Subscription[] {
+  const conn = requireDb();
+  return conn
+    .prepare(
+      `SELECT channel_id AS channelId, contract_id AS contractId, severity, created_at AS createdAt, updated_at AS updatedAt
+       FROM alert_subscriptions ORDER BY channel_id ASC, contract_id ASC`
+    )
+    .all() as Subscription[];
+}
+
+export function clearSubscriptionsForChannel(channelId: string): number {
+  const conn = requireDb();
+  const r = conn
+    .prepare("DELETE FROM alert_subscriptions WHERE channel_id = ?")
+    .run(channelId);
+  return r.changes;
 }

@@ -179,8 +179,8 @@ func TestListInvocationsPathAndFilters(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		if got := r.URL.Query().Get("fn"); got != "transfer" {
-			t.Errorf("fn query param: got %q, want transfer", got)
+		if got := r.URL.Query().Get("function_name"); got != "transfer" {
+			t.Errorf("function_name query param: got %q, want transfer", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(client.InvocationsResponse{

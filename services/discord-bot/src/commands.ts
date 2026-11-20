@@ -45,6 +45,7 @@ import { ensureUserApiKey, revokeUserApiKey } from "./apikey.js";
 import type { Config } from "./config.js";
 import { ASSIGN_COMMANDS, handleAssignCommand } from "./assign-discord.js";
 import { COMMUNITY_COMMANDS, handleCommunityCommand } from "./community-discord.js";
+import { SUBSCRIPTION_COMMANDS, handleSubscriptionCommand } from "./subscriptions-discord.js";
 
 // Re-exported from command-definitions.ts so callers that only import
 // commands.ts still get the definitions; the split lets the register
@@ -63,6 +64,8 @@ const CONTRACT_AUTOCOMPLETE_COMMANDS = new Set([
   "alerts",
   "watch",
   "unwatch",
+  "subscribe",
+  "unsubscribe",
 ]);
 const AUTOCOMPLETE_LIMIT = 25;
 const AUTOCOMPLETE_CACHE_TTL_MS = 5_000;
@@ -235,6 +238,9 @@ async function handle(
   }
   if (COMMUNITY_COMMANDS.has(interaction.commandName)) {
     return handleCommunityCommand(interaction, ctx.config);
+  }
+  if (SUBSCRIPTION_COMMANDS.has(interaction.commandName)) {
+    return handleSubscriptionCommand(interaction, ctx.config);
   }
   switch (interaction.commandName) {
     case "connect":
