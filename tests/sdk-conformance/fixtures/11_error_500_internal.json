@@ -1,0 +1,24 @@
+{
+  "id": "11_error_500_internal",
+  "description": "500 Internal Server Error envelope",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts/CRASH"
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "INTERNAL_ERROR",
+        "message": "unexpected database error"
+      }
+    }
+  },
+  "expected": {
+    "status": 500,
+    "error_code": "INTERNAL_ERROR"
+  }
+}

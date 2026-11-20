@@ -3100,6 +3100,34 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v2/contracts/{id}/event-schemas:
+    get:
+      tags: [API v2]
+      summary: Inferred and declared event schemas for a contract (v2)
+      operationId: v2ContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v2/watchlist:
     get:
       tags: [API v2]
@@ -4374,6 +4402,34 @@ paths:
                 $ref: "#/components/schemas/ContractSpec"
         "404":
           description: Contract not found, or its interface spec has not been parsed yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/event-schemas:
+    get:
+      tags: [Contracts]
+      summary: Get inferred and declared event schemas for a contract
+      operationId: getContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
           content:
             application/json:
               schema:
@@ -7356,6 +7412,63 @@ components:
                 type: string
               count:
                 type: integer
+
+    ContractEventSchemasResponse:
+      type: object
+      required: [contract_id, event_schemas]
+      properties:
+        contract_id:
+          type: string
+        event_schemas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractEventSchema"
+        declared_spec:
+          type: object
+          description: Declared SEP-48 interface spec if available.
+
+    ContractEventSchema:
+      type: object
+      required: [contract_id, event_name, topic_arity, topic_types, value_shape, observed_shapes, first_seen_ledger, last_seen_ledger, updated_at]
+      properties:
+        contract_id:
+          type: string
+        event_name:
+          type: string
+        topic_arity:
+          type: integer
+        topic_types:
+          type: array
+          items:
+            type: string
+        value_shape:
+          type: string
+        observed_shapes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObservedShape"
+        first_seen_ledger:
+          type: integer
+        last_seen_ledger:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+
+    ObservedShape:
+      type: object
+      required: [topic_arity, topic_types, value_type, count]
+      properties:
+        topic_arity:
+          type: integer
+        topic_types:
+          type: array
+          items:
+            type: string
+        value_type:
+          type: string
+        count:
+          type: integer
 
     ContractSpec:
       type: object

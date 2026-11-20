@@ -36,6 +36,11 @@ from .contract_alert import ContractAlert
 from .contract_alert_severity import ContractAlertSeverity
 from .contract_backfill import ContractBackfill
 from .contract_event_rate import ContractEventRate
+from .contract_event_schema import ContractEventSchema
+from .contract_event_schemas_response import ContractEventSchemasResponse
+from .contract_event_schemas_response_declared_spec import (
+    ContractEventSchemasResponseDeclaredSpec,
+)
 from .contract_graph import ContractGraph
 from .contract_graph_edges_type_0_item import ContractGraphEdgesType0Item
 from .contract_graph_nodes_type_0_item import ContractGraphNodesType0Item
@@ -194,6 +199,7 @@ from .list_watched_accounts_response_200 import ListWatchedAccountsResponse200
 from .live_activity_response_200 import LiveActivityResponse200
 from .monitored_contract import MonitoredContract
 from .monthly_sla import MonthlySLA
+from .observed_shape import ObservedShape
 from .percentile_values import PercentileValues
 from .post_api_v1_labels_body import PostApiV1LabelsBody
 from .post_api_v1_labels_body_scope import PostApiV1LabelsBodyScope
@@ -346,6 +352,9 @@ __all__ = (
     "ContractAlertSeverity",
     "ContractBackfill",
     "ContractEventRate",
+    "ContractEventSchema",
+    "ContractEventSchemasResponse",
+    "ContractEventSchemasResponseDeclaredSpec",
     "ContractGraph",
     "ContractGraphEdgesType0Item",
     "ContractGraphNodesType0Item",
@@ -492,6 +501,7 @@ __all__ = (
     "LiveActivityResponse200",
     "MonitoredContract",
     "MonthlySLA",
+    "ObservedShape",
     "PercentileValues",
     "PostApiV1LabelsBody",
     "PostApiV1LabelsBodyScope",
