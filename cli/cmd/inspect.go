@@ -11,17 +11,34 @@ import (
 )
 
 var inspectCmd = &cobra.Command{
-	Use:   "inspect <contract-id>",
-	Short: "Show detailed information about a tracked contract",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runInspect,
+	Use:   "inspect <contract-id> | inspect --tx <hash> [contract-id]",
+	Short: "Show detailed information about a tracked contract or a transaction",
+	Long: `Show detailed information about a tracked contract, or with --tx about a
+single transaction: its function, status, resource usage and emitted events.
+
+With --tx the contract is looked up from the transaction hash. Pass a contract
+ID as well to skip that lookup.`,
+	Example: `  sorolens inspect CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  sorolens inspect --tx <64-hex-hash>
+  sorolens inspect --tx <64-hex-hash> <contract-id> --json`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runInspect,
 }
 
+var inspectTx string
+
 func init() {
+	inspectCmd.Flags().StringVar(&inspectTx, "tx", "", "Inspect a transaction by its hash instead of a contract")
 	rootCmd.AddCommand(inspectCmd)
 }
 
 func runInspect(cmd *cobra.Command, args []string) error {
+	if inspectTx != "" {
+		return runInspectTx(cmd, inspectTx, args)
+	}
+	if len(args) != 1 {
+		return fmt.Errorf("accepts 1 arg(s), received %d: pass a contract ID, or use --tx <hash>", len(args))
+	}
 	contractID := args[0]
 	if globalConfig.NoColor {
 		_ = os.Setenv("NO_COLOR", "1")
