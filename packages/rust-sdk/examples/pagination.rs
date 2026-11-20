@@ -15,7 +15,6 @@
 
 #[cfg(feature = "async")]
 mod example {
-    use futures_util::{pin_mut, StreamExt};
     use httpmock::prelude::*;
     use httpmock::MockServer;
     use sorolens_sdk::{Client, ListContractEventsParams, ListContractsParams};
@@ -129,11 +128,10 @@ mod example {
             (Some(_), Some(first)) => first.clone(),
             _ => CONTRACT_ID.to_string(),
         };
-        let events = client.contract_events_stream(
+        let mut events = client.contract_events_stream(
             &events_contract,
             ListContractEventsParams::default().limit(200),
         );
-        pin_mut!(events);
         let mut event_ids: Vec<String> = Vec::new();
         while let Some(event) = events.next().await {
             event_ids.push(event?.id);

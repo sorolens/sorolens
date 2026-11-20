@@ -170,6 +170,8 @@ pub use labels::{AccountLabel, CreateLabelRequest, CreateLabelScope, LabelsRespo
 pub use pagination::MAX_PAGE_SIZE;
 #[cfg(feature = "blocking")]
 pub use pagination::{ContractEventsIter, ContractInvocationsIter};
+#[cfg(feature = "async")]
+pub use pagination::{ContractEventsStream, ContractInvocationsStream};
 
 #[cfg(any(feature = "async", feature = "blocking"))]
 pub use reports::{

@@ -128,9 +128,21 @@ fn hits(mocks: &[Mock<'_>]) -> Vec<usize> {
 
 #[cfg(feature = "async")]
 mod asynchronous {
-    use futures_util::{pin_mut, StreamExt};
 
     use super::*;
+
+    /// Drains an async pager into a `Vec`, the way a caller's
+    /// `while let Some(item) = pager.next().await` loop would.
+    macro_rules! drain {
+        ($pager:expr) => {{
+            let mut pager = $pager;
+            let mut items = Vec::new();
+            while let Some(item) = pager.next().await {
+                items.push(item);
+            }
+            items
+        }};
+    }
 
     fn client(server: &MockServer) -> Client {
         Client::builder()
@@ -145,11 +157,11 @@ mod asynchronous {
         let mocks = mount(&server, Kind::Events, 3, None, chained);
         let client = client(&server);
 
-        let ids: Vec<String> = client
-            .contract_events_stream(CONTRACT_ID, ListContractEventsParams::default().limit(2))
-            .map(|event| event.unwrap().id)
-            .collect()
-            .await;
+        let ids: Vec<String> = drain!(client
+            .contract_events_stream(CONTRACT_ID, ListContractEventsParams::default().limit(2)))
+        .into_iter()
+        .map(|event| event.unwrap().id)
+        .collect();
 
         assert_eq!(ids, expected(3));
         assert_eq!(hits(&mocks), vec![1, 1, 1]);
@@ -161,11 +173,11 @@ mod asynchronous {
         let mocks = mount(&server, Kind::Invocations, 3, None, chained);
         let client = client(&server);
 
-        let hashes: Vec<String> = client
-            .contract_invocations_stream(CONTRACT_ID, ListContractInvocationsParams::default())
-            .map(|invocation| invocation.unwrap().tx_hash)
-            .collect()
-            .await;
+        let hashes: Vec<String> = drain!(client
+            .contract_invocations_stream(CONTRACT_ID, ListContractInvocationsParams::default()))
+        .into_iter()
+        .map(|invocation| invocation.unwrap().tx_hash)
+        .collect();
 
         assert_eq!(hashes, expected(3));
         assert_eq!(hits(&mocks), vec![1, 1, 1]);
@@ -177,9 +189,8 @@ mod asynchronous {
         let mocks = mount(&server, Kind::Events, 3, None, chained);
         let client = client(&server);
 
-        let events =
+        let mut events =
             client.contract_events_stream(CONTRACT_ID, ListContractEventsParams::default());
-        pin_mut!(events);
         assert_eq!(hits(&mocks), vec![0, 0, 0], "nothing is fetched up front");
 
         assert_eq!(events.next().await.unwrap().unwrap().id, "0-0");
@@ -196,10 +207,8 @@ mod asynchronous {
         let mocks = mount(&server, Kind::Invocations, 3, Some(1), chained);
         let client = client(&server);
 
-        let results: Vec<Result<Invocation, Error>> = client
-            .contract_invocations_stream(CONTRACT_ID, ListContractInvocationsParams::default())
-            .collect()
-            .await;
+        let results: Vec<Result<Invocation, Error>> = drain!(client
+            .contract_invocations_stream(CONTRACT_ID, ListContractInvocationsParams::default()));
 
         assert_eq!(results.len(), 3, "two items, then the error, then the end");
         let received: Vec<String> = results[..2]
@@ -228,13 +237,11 @@ mod asynchronous {
         });
         let client = client(&server);
 
-        let count = client
-            .contract_events_stream(
-                CONTRACT_ID,
-                ListContractEventsParams::default().limit(5_000),
-            )
-            .count()
-            .await;
+        let count = drain!(client.contract_events_stream(
+            CONTRACT_ID,
+            ListContractEventsParams::default().limit(5_000),
+        ))
+        .len();
 
         assert_eq!(count, 2);
         clamped.assert();
@@ -246,10 +253,8 @@ mod asynchronous {
         let mocks = mount(&server, Kind::Events, 1, None, chained);
         let client = client(&server);
 
-        let results: Vec<Result<Event, Error>> = client
-            .contract_events_stream(CONTRACT_ID, ListContractEventsParams::default().limit(0))
-            .collect()
-            .await;
+        let results: Vec<Result<Event, Error>> = drain!(client
+            .contract_events_stream(CONTRACT_ID, ListContractEventsParams::default().limit(0)));
 
         assert!(matches!(
             results.as_slice(),
@@ -265,10 +270,8 @@ mod asynchronous {
         let mocks = mount(&server, Kind::Events, 4, None, |_| "p1".to_string());
         let client = client(&server);
 
-        let results: Vec<Result<Event, Error>> = client
-            .contract_events_stream(CONTRACT_ID, ListContractEventsParams::default())
-            .collect()
-            .await;
+        let results: Vec<Result<Event, Error>> =
+            drain!(client.contract_events_stream(CONTRACT_ID, ListContractEventsParams::default()));
 
         assert_eq!(results.len(), 5, "two pages of items, then the error");
         assert!(results[..4].iter().all(Result::is_ok));

@@ -2,7 +2,7 @@
 //!
 //! [`Client::contract_events_stream`](crate::Client::contract_events_stream)
 //! and [`Client::contract_invocations_stream`](crate::Client::contract_invocations_stream)
-//! return an async [`Stream`](futures_core::Stream);
+//! return an async pager with an `async fn next`;
 //! [`BlockingClient::contract_events_iter`](crate::BlockingClient::contract_events_iter)
 //! and [`BlockingClient::contract_invocations_iter`](crate::BlockingClient::contract_invocations_iter)
 //! return a blocking [`Iterator`]. All four share the rules below:
@@ -157,96 +157,98 @@ impl<P: PagedParams, T> Pager<P, T> {
     }
 }
 
-#[cfg(feature = "async")]
-mod stream {
-    use std::future::Future;
+macro_rules! async_pager {
+    (
+        $(#[$meta:meta])*
+        $name:ident, $item:ty, $params:ty, $list:ident, $method:ident, $doc:literal
+    ) => {
+        $(#[$meta])*
+        #[cfg(feature = "async")]
+        #[derive(Debug)]
+        pub struct $name<'a> {
+            client: &'a crate::Client,
+            id: &'a str,
+            pager: Pager<$params, $item>,
+        }
 
-    use futures_core::Stream;
-
-    use super::{Page, PagedParams, Pager};
-    use crate::error::Error;
-
-    /// Turns a page-fetching closure into a lazy stream of items.
-    pub(crate) fn paginate<'a, P, G, F, Fut>(
-        params: P,
-        fetch: F,
-    ) -> impl Stream<Item = Result<G::Item, Error>> + 'a
-    where
-        P: PagedParams + 'a,
-        G: Page + 'a,
-        G::Item: 'a,
-        F: Fn(P) -> Fut + 'a,
-        Fut: Future<Output = Result<G, Error>> + 'a,
-    {
-        let pager: Pager<P, G::Item> = Pager::new(params);
-        futures_util::stream::unfold((pager, fetch), |(mut pager, fetch)| async move {
-            loop {
-                if let Some(next) = pager.pop() {
-                    return next.map(|item| (item, (pager, fetch)));
-                }
-                match fetch(pager.next_request()).await {
-                    Ok(page) => pager.accept(page),
-                    Err(error) => pager.fail(error),
+        #[cfg(feature = "async")]
+        impl $name<'_> {
+            /// Returns the next item, fetching the next page only when the
+            /// current one is used up. Returns `None` once the walk is over;
+            /// an `Err` comes after every item already received and ends it.
+            pub async fn next(&mut self) -> Option<Result<$item, Error>> {
+                loop {
+                    if let Some(next) = self.pager.pop() {
+                        return next;
+                    }
+                    match self.client.$list(self.id, &self.pager.next_request()).await {
+                        Ok(page) => self.pager.accept(page),
+                        Err(error) => self.pager.fail(error),
+                    }
                 }
             }
-        })
-    }
+        }
+
+        #[cfg(feature = "async")]
+        impl crate::Client {
+            #[doc = $doc]
+            ///
+            /// Each page is requested only once the previous one has been
+            /// consumed, and the walk ends after the page whose
+            /// `next_cursor` is empty. A failed request is yielded as an
+            /// `Err` after the items already received, then the walk ends.
+            /// `params.limit` sets the page size, clamped to
+            /// [`MAX_PAGE_SIZE`]; `params.cursor` starts the walk part-way.
+            ///
+            /// ```no_run
+            /// use sorolens_sdk::{Client, Error, ListContractEventsParams};
+            ///
+            /// # async fn run(client: Client) -> Result<(), Error> {
+            /// let mut events = client.contract_events_stream(
+            ///     "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+            ///     ListContractEventsParams::default().limit(200),
+            /// );
+            /// while let Some(event) = events.next().await {
+            ///     println!("{}", event?.id);
+            /// }
+            /// # Ok(())
+            /// # }
+            /// ```
+            pub fn $method<'a>(&'a self, id: &'a str, params: $params) -> $name<'a> {
+                $name {
+                    client: self,
+                    id,
+                    pager: Pager::new(params),
+                }
+            }
+        }
+    };
 }
 
-#[cfg(feature = "async")]
-pub(crate) use stream::paginate;
+async_pager! {
+    /// Async pager over every event of a contract.
+    ///
+    /// Returned by `Client::contract_events_stream`; call
+    /// [`next`](Self::next) in a `while let` loop.
+    ContractEventsStream,
+    Event,
+    ListContractEventsParams,
+    list_contract_events,
+    contract_events_stream,
+    "Streams every event of a contract, following cursors lazily."
+}
 
-#[cfg(feature = "async")]
-impl crate::Client {
-    /// Streams every event of a contract, following cursors lazily.
+async_pager! {
+    /// Async pager over every invocation of a contract.
     ///
-    /// Each page is requested only once the previous one has been consumed,
-    /// and the stream ends after the page whose `next_cursor` is empty. A
-    /// failed request is yielded as an `Err` after the events already
-    /// received, then the stream ends. `params.limit` sets the page size,
-    /// clamped to [`MAX_PAGE_SIZE`]; `params.cursor` starts the walk part-way.
-    ///
-    /// ```no_run
-    /// use futures_util::{pin_mut, StreamExt};
-    /// use sorolens_sdk::{Client, Error, ListContractEventsParams};
-    ///
-    /// # async fn run(client: Client) -> Result<(), Error> {
-    /// let events = client.contract_events_stream(
-    ///     "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
-    ///     ListContractEventsParams::default().limit(200),
-    /// );
-    /// pin_mut!(events);
-    /// while let Some(event) = events.next().await {
-    ///     println!("{}", event?.id);
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn contract_events_stream<'a>(
-        &'a self,
-        id: &'a str,
-        params: ListContractEventsParams,
-    ) -> impl futures_core::Stream<Item = Result<Event, Error>> + 'a {
-        paginate(params, move |params: ListContractEventsParams| async move {
-            self.list_contract_events(id, &params).await
-        })
-    }
-
-    /// Streams every invocation of a contract, following cursors lazily.
-    ///
-    /// Same paging rules as [`Client::contract_events_stream`](crate::Client::contract_events_stream).
-    pub fn contract_invocations_stream<'a>(
-        &'a self,
-        id: &'a str,
-        params: ListContractInvocationsParams,
-    ) -> impl futures_core::Stream<Item = Result<Invocation, Error>> + 'a {
-        paginate(
-            params,
-            move |params: ListContractInvocationsParams| async move {
-                self.list_contract_invocations(id, &params).await
-            },
-        )
-    }
+    /// Returned by `Client::contract_invocations_stream`; call
+    /// [`next`](Self::next) in a `while let` loop.
+    ContractInvocationsStream,
+    Invocation,
+    ListContractInvocationsParams,
+    list_contract_invocations,
+    contract_invocations_stream,
+    "Streams every invocation of a contract, following cursors lazily."
 }
 
 macro_rules! blocking_iter {

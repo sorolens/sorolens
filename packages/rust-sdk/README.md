@@ -84,20 +84,18 @@ fn main() -> Result<(), Error> {
 ### Pagination
 
 `Client::contract_events_stream` and `Client::contract_invocations_stream` return an
-async `Stream` of `Result` items that follows `next_cursor` for you; with the `blocking`
+async pager (`while let Some(item) = stream.next().await`) of `Result` items that follows `next_cursor` for you; with the `blocking`
 feature, `BlockingClient::contract_events_iter` and `contract_invocations_iter` do the same
 as an `Iterator`. Pages are fetched lazily, the walk stops on the last page, `limit` is
 clamped to `MAX_PAGE_SIZE` (200), and a failed request is yielded as an `Err` after the
 items already received. A repeated cursor ends the walk with `Error::Pagination`.
 
 ```rust
-use futures_util::{pin_mut, StreamExt};
 use sorolens_sdk::{Client, Error, ListContractEventsParams};
 
 async fn print_events(client: &Client, contract_id: &str) -> Result<(), Error> {
-    let events =
+    let mut events =
         client.contract_events_stream(contract_id, ListContractEventsParams::default().limit(200));
-    pin_mut!(events);
     while let Some(event) = events.next().await {
         println!("{}", event?.id);
     }
