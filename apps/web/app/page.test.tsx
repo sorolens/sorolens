@@ -67,6 +67,28 @@ describe("Landing page footer", () => {
  * landing page says it exists (issue #764), so it is linked above the fold and
  * explained in one sentence.
  */
+describe("Landing page landmarks", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders exactly one main landmark targeted by the skip link", async () => {
+    const { default: Home } = await import("@/app/page");
+    render(<Home />);
+
+    const mains = screen.getAllByRole("main");
+    expect(mains).toHaveLength(1);
+    expect(mains[0]).toHaveAttribute("id", "main");
+  });
+
+  it("labels the landing navigation", async () => {
+    const { default: Home } = await import("@/app/page");
+    render(<Home />);
+
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeVisible();
+  });
+});
+
 describe("Landing page extension callout", () => {
   afterEach(() => {
     cleanup();

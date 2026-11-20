@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import "./globals.css";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import { PlausibleAnalytics } from "@/components/PlausibleAnalytics";
+import { SkipLink } from "@/components/SkipLink";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { NONCE_HEADER } from "@/lib/csp";
 import { siteOrigin } from "@/lib/siteUrl";
@@ -92,6 +93,7 @@ export default async function RootLayout({
         <PlausibleAnalytics nonce={nonce} />
       </head>
       <body className="min-h-screen antialiased">
+        <SkipLink />
         <ThemeProvider>
           {/* useSearchParams inside NavigationProgress requires a Suspense boundary */}
           <Suspense fallback={null}>
