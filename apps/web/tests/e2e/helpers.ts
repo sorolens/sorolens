@@ -16,7 +16,7 @@ export const TRACE_TX_HASH =
 export const NEWER_TRACE_TX_HASH =
   "b1c2d3e4f5061728394a5b6c7d8e9f01b1c2d3e4f5061728394a5b6c7d8e9f01";
 
-type Handler = (
+export type Handler = (
   route: Route,
   page: Page
 ) => {
