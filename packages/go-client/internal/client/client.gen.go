@@ -29033,6 +29033,7 @@ func ParseReadyzResponse(rsp *http.Response) (*ReadyzResponse, error) {
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
+
 	"H4sIAAAAAAAC/+z96XYbObIvir8KFs/+r5L6T1KD7eouee0PKsmDTnk6ouzq3s06JJgJkmglgWwAKZpV",
 	"y89xH+i+2F0IADkROZCipmp/6XaJSAyBQCAiEPGLPzoBX8ScEaZk5+SPzpzgkAj459/PcDAn+l8hkYGg",
 	"saKcdU46l0TGnEmCAv07kgqrRKK98duLqzHiAo3fXwwG4/0++iSIJEyh5ZwwpOYEnX66QCJhcsiWVM3R",
