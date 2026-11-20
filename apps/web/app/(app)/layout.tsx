@@ -24,6 +24,9 @@ import { LocalePreferences } from "@/components/LocalePreferences";
 import { LocaleProvider, useLocale } from "@/lib/i18n";
 import { useOfflineAlertQueue } from "@/hooks/useOfflineAlertQueue";
 
+const NAV_LINK_CLASS =
+  "text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]";
+
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const { pending, isOffline } = useOfflineAlertQueue();
   const { t } = useLocale();
@@ -50,70 +53,46 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="flex flex-wrap items-center gap-4">
             <nav className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-              <Link
-                href="/dashboard"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/dashboard" className={NAV_LINK_CLASS}>
                 Dashboard
               </Link>
-              <Link
-                href="/live"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/live" className={NAV_LINK_CLASS}>
                 {t("nav.live")}
               </Link>
-              <Link
-                href="/contracts"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/contracts" className={NAV_LINK_CLASS}>
                 {t("nav.contracts")}
               </Link>
-              <Link
-                href="/events"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/events" className={NAV_LINK_CLASS}>
                 {t("nav.events")}
               </Link>
-              <Link
-                href="/watchdog"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/watchdog" className={NAV_LINK_CLASS}>
                 {t("nav.watchdog")}
               </Link>
-              <Link
-                href="/watchdog/reports"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/watchdog/reports" className={NAV_LINK_CLASS}>
                 Reports
               </Link>
-              <Link
-                href="/integrations"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/invocations" className={NAV_LINK_CLASS}>
+                Invocations
+              </Link>
+              <Link href="/compare" className={NAV_LINK_CLASS}>
+                Compare
+              </Link>
+              <Link href="/watchlist" className={NAV_LINK_CLASS}>
+                Watchlist
+              </Link>
+              <Link href="/integrations" className={NAV_LINK_CLASS}>
                 Integrations
               </Link>
-              <Link
-                href="/groups"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/groups" className={NAV_LINK_CLASS}>
                 {t("nav.groups")}
               </Link>
-              <Link
-                href="/rules"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/rules" className={NAV_LINK_CLASS}>
                 {t("nav.rules")}
               </Link>
-              <Link
-                href="/playground"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/playground" className={NAV_LINK_CLASS}>
                 {t("nav.playground")}
               </Link>
-              <Link
-                href="/settings"
-                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-              >
+              <Link href="/settings" className={NAV_LINK_CLASS}>
                 {t("nav.settings")}
               </Link>
             </nav>

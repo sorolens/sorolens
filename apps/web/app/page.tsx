@@ -71,6 +71,30 @@ export default function HomePage() {
             >
               Dashboard
             </Link>
+            <Link
+              href="/invocations"
+              className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              Invocations
+            </Link>
+            <Link
+              href="/compare"
+              className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              Compare
+            </Link>
+            <Link
+              href="/watchlist"
+              className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              Watchlist
+            </Link>
+            <Link
+              href="/watchdog/reports"
+              className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              Reports
+            </Link>
             <a
               href="https://github.com/sorolens/sorolens"
               className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
@@ -104,6 +128,30 @@ export default function HomePage() {
               className="rounded-lg bg-[var(--color-accent)] px-6 py-3 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity hover:opacity-90"
             >
               View Dashboard
+            </Link>
+            <Link
+              href="/invocations"
+              className="rounded-lg border border-[var(--color-border)] px-6 py-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)]"
+            >
+              Invocations
+            </Link>
+            <Link
+              href="/compare"
+              className="rounded-lg border border-[var(--color-border)] px-6 py-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)]"
+            >
+              Compare
+            </Link>
+            <Link
+              href="/watchlist"
+              className="rounded-lg border border-[var(--color-border)] px-6 py-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)]"
+            >
+              Watchlist
+            </Link>
+            <Link
+              href="/watchdog/reports"
+              className="rounded-lg border border-[var(--color-border)] px-6 py-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)]"
+            >
+              Reports
             </Link>
             <a
               href="https://github.com/sorolens/sorolens"

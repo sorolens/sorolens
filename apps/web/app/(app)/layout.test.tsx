@@ -60,6 +60,19 @@ describe("AppLayout", () => {
     ).toBe("/status");
   });
 
+  it("links to every standalone page from the navigation", async () => {
+    await renderLayout();
+    expect(
+      screen.getByRole("link", { name: "Invocations" }).getAttribute("href")
+    ).toBe("/invocations");
+    expect(
+      screen.getByRole("link", { name: "Compare" }).getAttribute("href")
+    ).toBe("/compare");
+    expect(
+      screen.getByRole("link", { name: "Watchlist" }).getAttribute("href")
+    ).toBe("/watchlist");
+  });
+
   it("renders the footer after the page content", async () => {
     await renderLayout();
     const content = screen.getByText("page content");

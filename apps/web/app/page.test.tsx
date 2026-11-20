@@ -87,3 +87,32 @@ describe("Landing page extension callout", () => {
     expect(callout.textContent).toContain("Stellar Expert");
   });
 });
+
+/**
+ * Navigation coverage for the features that were previously unreachable
+ * (Invocations, Compare, Watchlist, Watchdog Reports). Each must be linked
+ * from the landing page so users can discover them.
+ */
+describe("Landing page feature navigation", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("links every previously hidden page", async () => {
+    const { default: Home } = await import("@/app/page");
+    render(<Home />);
+
+    const expected: Array<[string, string]> = [
+      ["Invocations", "/invocations"],
+      ["Compare", "/compare"],
+      ["Watchlist", "/watchlist"],
+      ["Reports", "/watchdog/reports"],
+    ];
+    for (const [name, href] of expected) {
+      const links = screen
+        .getAllByRole("link", { name })
+        .filter((a) => a.getAttribute("href") === href);
+      expect(links.length).toBeGreaterThan(0);
+    }
+  });
+});
