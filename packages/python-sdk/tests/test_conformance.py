@@ -8,6 +8,7 @@ FIXTURES_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../../tests/sdk-conformance/fixtures")
 )
 
+
 def load_fixtures():
     files = sorted([f for f in os.listdir(FIXTURES_DIR) if f.endswith(".json")])
     fixtures = []
@@ -16,10 +17,13 @@ def load_fixtures():
             fixtures.append(json.load(fh))
     return fixtures
 
+
 FIXTURES = load_fixtures()
+
 
 def test_fixture_count():
     assert len(FIXTURES) >= 15, f"Expected at least 15 fixtures, got {len(FIXTURES)}"
+
 
 @pytest.mark.parametrize("fixture", FIXTURES, ids=[f["id"] for f in FIXTURES])
 def test_replays_conformance_fixture(fixture):

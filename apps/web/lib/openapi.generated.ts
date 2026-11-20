@@ -1783,6 +1783,22 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v2/contracts/{id}/event-schemas": {
+      get: {
+        operationId: "v2ContractEventSchemas",
+        summary: "Inferred and declared event schemas for a contract (v2)",
+        tags: ["API v2"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v2/watchlist": {
       get: {
         operationId: "v2ListWatchlist",
