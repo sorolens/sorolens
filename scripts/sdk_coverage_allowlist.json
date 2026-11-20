@@ -218,6 +218,13 @@
           "getExportJob",
           "getExportJobV2"
         ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
+        ]
       }
     ],
     "python": [
@@ -278,33 +285,19 @@
         "reason": "Alert rules and alert subscriptions are surfaced through the webhooks/notifications product, not this SDK yet.",
         "operations": [
           "createAlertRule",
-          "createAlertSubscription",
           "deleteAlertRule",
-          "deleteAlertSubscription",
           "listAlertRules",
-          "listAlertSubscriptions",
-          "listAlerts",
           "previewAlertRule",
           "setAlertRuleEnabled",
           "validateAlertRule"
         ]
       },
       {
-        "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
+        "reason": "Event schema, contract spec, and uptime endpoints are not yet exposed by this SDK.",
         "operations": [
-          "createReportSubscription",
-          "deleteReportSubscription",
           "getContractEventSchemas",
-          "getContractGraph",
-          "getContractHealthScore",
-          "getContractReport",
-          "getContractReportHistory",
-          "getContractSLABadge",
           "getContractSpec",
-          "getContractSummary",
-          "getContractUptime",
-          "listReportSubscriptions",
-          "unsubscribeReport"
+          "getContractUptime"
         ]
       },
       {
@@ -378,9 +371,7 @@
           "listAllEvents",
           "listAuditEvents",
           "listAuditEventsRoot",
-          "listFailedEvents",
           "recentEvents",
-          "requeueFailedEvent",
           "streamAllEvents",
           "subscribeEventsWS"
         ]
@@ -399,7 +390,6 @@
         "operations": [
           "getContractVerification",
           "getContractWasm",
-          "listContractUpgrades",
           "validateContract",
           "verifyContractSource"
         ]
@@ -409,7 +399,6 @@
         "operations": [
           "batchContracts",
           "deleteContract",
-          "compareContracts",
           "listRuleLibrary"
         ]
       },
@@ -439,6 +428,13 @@
           "downloadExportV2",
           "getExportJob",
           "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
         ]
       }
     ],
@@ -623,6 +619,13 @@
           "getExportJob",
           "getExportJobV2"
         ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
+        ]
       }
     ],
     "typescript": [
@@ -797,6 +800,13 @@
           "downloadExportV2",
           "getExportJob",
           "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
         ]
       }
     ]

@@ -35,6 +35,11 @@ on the Stellar network.`,
 	PersistentPreRunE: applyConfig,
 }
 
+// RootCommand returns the root command for documentation generation.
+func RootCommand() *cobra.Command {
+	return rootCmd
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVar(
 		&globalConfig.APIURL, "api-url",

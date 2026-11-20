@@ -1,0 +1,90 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-compare - Compare 2 to 5 contracts side by side
+
+
+.SH SYNOPSIS
+\fBsorolens compare \&... [flags]\fP
+
+
+.SH DESCRIPTION
+Render events, invocations, failure rate, average CPU and fees, health
+score and hourly event-volume sparklines for 2 to 5 contracts side by side.
+
+.PP
+A contract with no indexed data yet still renders a column: its cells show an
+em dash instead of failing the whole comparison. Only request errors (a bad
+contract ID, an unreachable API) exit non-zero.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for compare
+
+.PP
+\fB--width\fP=0
+	Table width in columns (0 detects the terminal, minimum 40)
+
+.PP
+\fB--window\fP="24h"
+	Window to compare over (24h, 7d or 30d)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH EXAMPLE
+.EX
+  # Compare two contracts over the last 24 hours
+  sorolens compare CAAA... CBBB...
+
+  # Compare five contracts over 7 days
+  sorolens compare CAAA... CBBB... CCCC... CDDD... CEEE... --window 7d
+
+  # Machine-readable output for scripts
+  sorolens compare CAAA... CBBB... --json
+.EE
+
+
+.SH SEE ALSO
+\fBsorolens(1)\fP

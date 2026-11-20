@@ -1,0 +1,87 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-alerts-list - List watchdog alerts
+
+
+.SH SYNOPSIS
+\fBsorolens alerts list [flags]\fP
+
+
+.SH DESCRIPTION
+List watchdog alerts across monitored contracts, optionally filtered by severity.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for list
+
+.PP
+\fB-l\fP, \fB--limit\fP=50
+	Maximum number of alerts to fetch
+
+.PP
+\fB-s\fP, \fB--severity\fP=""
+	Filter alerts by severity (e.g. critical, warning, info)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH EXAMPLE
+.EX
+  # List recent alerts
+  sorolens alerts list
+
+  # Filter by severity
+  sorolens alerts list --severity critical
+
+  # Limit number of alerts returned
+  sorolens alerts list --limit 20
+
+  # Output in machine-readable JSON format
+  sorolens alerts list --json
+.EE
+
+
+.SH SEE ALSO
+\fBsorolens-alerts(1)\fP

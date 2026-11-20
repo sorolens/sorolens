@@ -330,8 +330,8 @@ docker compose exec postgres psql -U sorolens -d sorolens -c \
 ### Overview
 
 SoroLens utilizes PostgreSQL 16 with WAL (Write-Ahead Logging) archiving enabled. The repository provides two operational scripts:
-- [`scripts/backup.sh`](../scripts/backup.sh): Creates a logical backup (`pg_dump`) and physical base backup (`pg_basebackup`) and uploads both to S3 (`$S3_BUCKET`).
-- [`scripts/restore.sh`](../scripts/restore.sh): Downloads a base backup from S3, extracts it into `./postgres_data_restore`, and configures `postgresql.auto.conf` and `recovery.signal` for Point-In-Time-Recovery (PITR).
+- [`scripts/backup.sh`](https://github.com/sorolens/sorolens/blob/main/scripts/backup.sh): Creates a logical backup (`pg_dump`) and physical base backup (`pg_basebackup`) and uploads both to S3 (`$S3_BUCKET`).
+- [`scripts/restore.sh`](https://github.com/sorolens/sorolens/blob/main/scripts/restore.sh): Downloads a base backup from S3, extracts it into `./postgres_data_restore`, and configures `postgresql.auto.conf` and `recovery.signal` for Point-In-Time-Recovery (PITR).
 
 Environment variables:
 - `S3_BUCKET`: Target S3 bucket (default: `s3://sorolens-backups`).

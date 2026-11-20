@@ -112,8 +112,9 @@ Ask in the [Sorolens Discord](https://discord.gg/D9jATUezYX): setup and code que
 6. [Commit format](#commit-format)
 7. [PR checklist](#pr-checklist)
 8. [Running tests](#running-tests)
-9. [Release process](#release-process)
-10. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
+9. [Documentation](#documentation)
+10. [Release process](#release-process)
+11. [Walkthrough: adding a new XDR type decoder](#walkthrough-adding-a-new-xdr-type-decoder)
 
 See also: [MAINTAINER.md](MAINTAINER.md) for maintainer responsibilities and process, and the [new-decoder issue template](.github/ISSUE_TEMPLATE/new-decoder.yml) for proposing a new decoder.
 
@@ -128,7 +129,7 @@ See also: [MAINTAINER.md](MAINTAINER.md) for maintainer responsibilities and pro
 | pnpm                 | 9.x              | `npm install -g pnpm@9`                  |
 | Rust                 | stable (latest)  | `rustup install stable`                  |
 | Docker               | any recent       | https://docs.docker.com/get-docker/      |
-| golangci-lint        | 1.59.x           | https://golangci-lint.run/usage/install/ |
+| golangci-lint        | 1.59.x           | https://golangci-lint.run/welcome/install/ |
 | Check your versions: |
 
 ```bash
@@ -400,6 +401,25 @@ cd contracts/counter
 cargo test
 cargo check --target wasm32v1-none
 ```
+
+---
+
+## Documentation
+
+The documentation site is built with MkDocs (Material) from `docs/` and
+`mkdocs.yml`, and published on Read the Docs with one copy per version. The API
+reference is generated from `docs/openapi.yaml` on every build, so change the
+spec rather than the page.
+
+```bash
+make docs-install   # one-time: .venv-docs with the docs toolchain
+make docs-serve     # live preview on http://127.0.0.1:8000
+make docs-build     # strict build: fails on broken links, anchors or pages missing from nav
+```
+
+New pages go in `docs/` and in `nav` in `mkdocs.yml`. The full guide, including
+link conventions and how versions work, is
+[`docs/contributing/docs.md`](docs/contributing/docs.md).
 
 ---
 

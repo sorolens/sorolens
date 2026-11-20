@@ -91,9 +91,55 @@ sorolens --api-url https://api.sorolens.xyz --network testnet inspect CDLZ...
 | `sorolens compare <id> <id>...`      | Compare 2–5 contracts side by side             |
 | `sorolens label <name> <id>`         | Attach a public label to a contract or account |
 | `sorolens tui`                       | Interactive terminal UI                        |
+| `sorolens doctor`                    | Diagnose config, connectivity, auth and clock  |
 | `sorolens version`                   | Print the CLI version                          |
 
 Add `--json` to any command for machine-readable output.
+
+### Diagnostics: `sorolens doctor`
+
+`sorolens doctor` checks the active configuration and the API it points at, and
+prints `pass`, `warn` or `fail` for each check with a hint for anything that is
+not passing. It exits with status 1 when any check fails, so it can gate a
+script. API keys, bearer tokens and URL credentials are redacted from every
+output format, so the report is safe to paste into an issue.
+
+| Check          | What it verifies                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------- |
+| `config`       | `~/.sorolens.yml` parses, the active profile exists, the API URL is valid, where the key comes from |
+| `reachability` | `GET /health` answers at the API URL                                                               |
+| `tls`          | HTTPS is used for a remote API and the certificate is trusted and not about to expire              |
+| `auth`         | The API key is accepted and has `read:contracts` (fail) and `read:watchdog` (warn)                 |
+| `version`      | `GET /api/version` reports a server version this CLI supports (`>=0.1.0 <1.0.0`)                   |
+| `clock`        | Local clock skew against the server's `Date` header (warn at 30s, fail at 5m)                       |
+
+When the API URL is invalid or the API cannot be reached, the checks that need
+it report `warn` with "Not checked" rather than being left out, so the list of
+checks is always the same.
+
+`sorolens doctor --json` prints a stable document. `schema_version` changes
+only when a field or a check is removed or renamed; new fields and checks may
+be added without a bump.
+
+```json
+{
+  "schema_version": 1,
+  "ok": false,
+  "cli_version": "v0.2.0",
+  "api_url": "https://api.sorolens.xyz",
+  "profile": "prod",
+  "summary": { "pass": 5, "warn": 0, "fail": 1 },
+  "checks": [
+    { "name": "config", "status": "pass", "message": "Using ~/.sorolens.yml, profile \"prod\", API https://api.sorolens.xyz." },
+    { "name": "auth", "status": "fail", "message": "The API key was rejected (HTTP 401): it is unknown, revoked or expired.", "hint": "Create a new key and store it with 'sorolens config profile add <name> --api-key-stdin'." }
+  ]
+}
+```
+
+- `checks` always lists `config`, `reachability`, `tls`, `auth`, `version` and `clock`, in that order.
+- `status` is one of `pass`, `warn` or `fail`; `hint` is omitted on `pass`.
+- `ok` is `false` exactly when `summary.fail` is greater than zero.
+- `profile` is `(none)` when no profile is active.
 
 ### Output formats and `--query`
 
