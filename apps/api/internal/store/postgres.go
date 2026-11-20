@@ -91,6 +91,24 @@ func (s *postgresStore) UpsertContract(ctx context.Context, c Contract) error {
 	return err
 }
 
+// UntrackContract stops indexing a contract by flipping its status to
+// "paused". The row and all indexed history are retained, and re-registering
+// the contract (UpsertContract) flips the status back to "pending", resuming
+// tracking. The poller only indexes contracts whose status is pending,
+// backfilling or active, so a paused contract is skipped on every pass.
+// Returns ErrNotFound when the contract does not exist; untracking an
+// already-paused contract is a no-op success.
+func (s *postgresStore) UntrackContract(ctx context.Context, contractID string) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE contracts SET status = 'paused' WHERE id = $1`, contractID)
+	if err != nil {
+		return fmt.Errorf("untrack contract: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // GetContract retrieves a contract by its ID. Returns ErrNotFound if no contract exists.
 func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Contract, error) {
 	row := s.readDB(ctx).QueryRow(ctx, `

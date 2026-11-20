@@ -300,6 +300,10 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// shared state, so it needs the same contributor role, and it purges both
 		// caches since it can untrack contracts and retag them.
 		r.With(scope, contributor, purgeContracts, purgeLabels).Post("/contracts/batch", h.BatchContracts)
+		// Single-contract untrack (#532). Same gate as registration and the
+		// batch untrack, and the same cache purge as the batch route since
+		// it changes the contract's status.
+		r.With(scope, contributor, purgeContracts, purgeLabels).Delete("/contracts/{id}", h.DeleteContract)
 		r.With(scope, contributor, purgeLabels).Post("/labels", h.CreateLabel)
 		r.With(scope, cacheLabels).Get("/labels", h.ListLabels)
 		r.With(scope, cacheLabels).Get("/resolve", h.ResolveLabel)
@@ -496,6 +500,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Post("/contracts", h.V2RegisterContract)
 		get("/contracts", h.V2ListContracts)
 		get("/contracts/{id}", h.V2GetContract)
+		// Single-contract untrack (#532). A 204 carries no body to reshape,
+		// so the v1 handler is reused directly. The purge keeps the v1
+		// contract/label caches coherent with the write.
+		purgeContracts := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceContracts)
+		purgeLabels := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceLabels)
+		r.With(scope, contributor, purgeContracts, purgeLabels).Delete("/contracts/{id}", h.DeleteContract)
 		get("/contracts/{id}/events", h.V2ListEvents)
 		get("/contracts/{id}/invocations", h.V2ListInvocations)
 		get("/contracts/{id}/storage", h.V2ListStorageEntries)

@@ -36,6 +36,7 @@
           "v2LiveActivity",
           "v2RecentEvents",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2RemoveFromWatchlist",
           "v2RevokeAPIKey",
           "v2RotateAPIKey",
@@ -185,6 +186,7 @@
         "reason": "Not part of this SDK's implemented surface yet.",
         "operations": [
           "batchContracts",
+          "deleteContract",
           "compareContracts",
           "listRuleLibrary"
         ]
@@ -253,6 +255,7 @@
           "v2LiveActivity",
           "v2RecentEvents",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2RemoveFromWatchlist",
           "v2RevokeAPIKey",
           "v2RotateAPIKey",
@@ -388,6 +391,8 @@
         "reason": "Not part of this SDK's implemented surface yet.",
         "operations": [
           "batchContracts",
+          "deleteContract",
+          "compareContracts",
           "listRuleLibrary"
         ]
       },
@@ -445,6 +450,7 @@
           "listAuditEventsRoot",
           "registerContract",
           "batchContracts",
+          "deleteContract",
           "addContractTag",
           "removeContractTag",
           "listContractNotes",
@@ -497,6 +503,7 @@
           "v2RecentEvents",
           "v2ListContracts",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2ValidateContract",
           "v2GetContract",
           "v2ListEvents",
@@ -618,6 +625,7 @@
           "listAuditEventsRoot",
           "registerContract",
           "batchContracts",
+          "deleteContract",
           "addContractTag",
           "removeContractTag",
           "listContractNotes",
@@ -670,6 +678,7 @@
           "v2RecentEvents",
           "v2ListContracts",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2ValidateContract",
           "v2GetContract",
           "v2ListEvents",
