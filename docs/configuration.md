@@ -175,6 +175,7 @@ there, not here.
 |---|---|---|---|
 | `API_PORT` | `8080` | no | Port of the backend API server used by Playwright during E2E test runs (pnpm test:e2e). Exposed to browser: No (test runner only) |
 | `API_URL` | `http://localhost:8080 (or NEXT_PUBLIC_API_URL)` | no | Server-side API endpoint override/fallback. Used by server-side data fetching routines (e.g. server components). Falls back to NEXT_PUBLIC_API_URL if unset. Exposed to browser: No (server-only) |
+| `CSP_REPORT_ONLY` | `false (policy enforced)` | no | Set to "true" to send the Content-Security-Policy in report-only mode, which reports violations to /api/csp-report without blocking anything. Use it to stage a policy change before enforcing it. Exposed to browser: No (server-only) |
 | `INDEXER_METRICS_URL` | `http://localhost:9100/metrics` | no | Prometheus /metrics endpoint of the indexer service. Scraped server-side by the /api/status/indexer route handler to display sync lag and ledger progress. Exposed to browser: No (server-only) |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | no | Public base URL of the SoroLens REST API backend. Exposed to browser: Yes (NEXT_PUBLIC_*) |
 | `NEXT_PUBLIC_APP_URL` | `https://sorolens.dev` | no | Canonical public origin of the web application. The single source for every absolute URL the dashboard publishes: metadataBase (social cards and absolute metadata URLs), robots.txt (host and sitemap URL) and sitemap.xml entries. Read by lib/siteUrl.ts; a trailing slash is stripped. Exposed to browser: Yes (NEXT_PUBLIC_*) |
