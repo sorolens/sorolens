@@ -27,6 +27,7 @@ class APIKey:
         user_id (None | str | Unset): User this key acts as. Null for scope-only keys.
         rotated_at (datetime.datetime | None | Unset): When the key's secret was last rotated in place.
         expires_at (datetime.datetime | None | Unset): When the key expires, or null if it does not expire.
+        monthly_quota (int | None | Unset): Monthly request quota, or null if unmetered.
     """
 
     id: str
@@ -39,6 +40,7 @@ class APIKey:
     user_id: None | str | Unset = UNSET
     rotated_at: datetime.datetime | None | Unset = UNSET
     expires_at: datetime.datetime | None | Unset = UNSET
+    monthly_quota: int | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -86,6 +88,12 @@ class APIKey:
         else:
             expires_at = self.expires_at
 
+        monthly_quota: int | None | Unset
+        if isinstance(self.monthly_quota, Unset):
+            monthly_quota = UNSET
+        else:
+            monthly_quota = self.monthly_quota
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -105,6 +113,8 @@ class APIKey:
             field_dict["rotated_at"] = rotated_at
         if expires_at is not UNSET:
             field_dict["expires_at"] = expires_at
+        if monthly_quota is not UNSET:
+            field_dict["monthly_quota"] = monthly_quota
 
         return field_dict
 
@@ -194,6 +204,15 @@ class APIKey:
 
         expires_at = _parse_expires_at(d.pop("expires_at", UNSET))
 
+        def _parse_monthly_quota(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        monthly_quota = _parse_monthly_quota(d.pop("monthly_quota", UNSET))
+
         api_key = cls(
             id=id,
             name=name,
@@ -205,6 +224,7 @@ class APIKey:
             user_id=user_id,
             rotated_at=rotated_at,
             expires_at=expires_at,
+            monthly_quota=monthly_quota,
         )
 
         api_key.additional_properties = d

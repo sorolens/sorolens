@@ -218,6 +218,13 @@
           "getExportJob",
           "getExportJobV2"
         ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
+        ]
       }
     ],
     "python": [
@@ -422,6 +429,13 @@
           "getExportJob",
           "getExportJobV2"
         ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
+        ]
       }
     ],
     "go": [
@@ -605,6 +619,13 @@
           "getExportJob",
           "getExportJobV2"
         ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
+        ]
       }
     ],
     "typescript": [
@@ -779,6 +800,13 @@
           "downloadExportV2",
           "getExportJob",
           "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
         ]
       }
     ]
