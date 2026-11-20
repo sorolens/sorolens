@@ -49,6 +49,30 @@ and ledger window.
 Registration leaves a contract in `pending`. The single indexer pass the suite
 runs takes it through `backfilling` to `active`.
 
+## Fault Injection Testing
+
+The integration suite includes fault injection scenarios (issue #810) to verify indexer resilience against transient failures, timeouts, packet slicing, database disconnects, and process termination:
+
+```sh
+make fault-test
+```
+
+### Available Scenarios (`fault_test.go`)
+1. **RPC Timeout Mid-Window (`TestFault_RPCTimeoutMidWindow`):** Injects a 6-second timeout on RPC calls, verifying the indexer retries safely without corrupting the cursor or emitting partial state.
+2. **Partial / Truncated Response (`TestFault_RPCPartialResponse`):** Returns severed JSON packets, proving the transaction aborts and cleanly rolls back without saving malformed records.
+3. **Database Connection Loss (`TestFault_DatabaseConnectionLossDuringWrite`):** Simulates abrupt database socket resets, ensuring atomic transaction rollback and full recovery once connectivity is restored.
+4. **Process Termination & Restart (`TestFault_ProcessKillAndRestartCursorResume`):** Kills indexer mid-window, proving subsequent passes resume from the persisted Postgres cursor idempotently.
+5. **Transient 503 / Rate Limiting (`TestFault_TransientRPC503OrRateLimit`):** Simulates HTTP 503 / 429 backoff handling and recovery.
+
+### Adding a New Scenario
+1. In `tests/integration/fault_test.go`, create a new test `func TestFault_YourScenario(t *testing.T)`.
+2. Configure faults using `NewToxiproxyClient()` for network-level drops/latency or `NewMockRPCFaultClient()` for protocol-level status codes and truncations.
+3. Execute the indexer pass with `runIndexerOnce()`.
+4. Clear faults with `ResetAllFaults()` and trigger the recovery pass.
+5. Assert data completeness and idempotency using `assertDataCompleteness(t, expectedCount)`.
+
+---
+
 ## CI
 
 `.github/workflows/integration.yml` runs this suite on every pull request to

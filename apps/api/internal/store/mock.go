@@ -48,6 +48,7 @@ type MockStore struct {
 	alertRules            []AlertRule
 	contractNotes         map[string][]ContractNote
 	watchedAccounts       map[string]WatchedAccount
+	*MockExportJobStore
 
 	// auditMu guards auditEvents: the audit middleware writes asynchronously.
 	auditMu     sync.Mutex
@@ -168,6 +169,7 @@ func NewMockStore() *MockStore {
 		failedEvents:          make(map[int64]FailedEvent),
 		labels:                make([]Label, 0),
 		watchedAccounts:       make(map[string]WatchedAccount),
+		MockExportJobStore:    NewMockExportJobStore(),
 	}
 }
 

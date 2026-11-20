@@ -1028,6 +1028,19 @@ reference.
 
 ---
 
+### 4.12 GraphQL API & Security Controls
+
+The GraphQL endpoint (`/graphql`) provides flexible schema querying over contracts, events, invocations, storage entries, and watchdog alerts. To protect database performance and system availability against abusive or complex queries, the server enforces:
+
+- **AST Depth Limiting:** Queries exceeding maximum depth (default `10`) are rejected before execution.
+- **Complexity Budgeting:** Operations are budgeted based on field weights and pagination multipliers (default budget `5000`), rejecting alias amplification attacks.
+- **Page Size Limits:** List fields are hard-capped at 100 entries per page.
+- **Persisted Query Allowlist:** Production supports strict persisted query execution mode, locking down arbitrary query submission.
+
+See [`docs/graphql_security.md`](docs/graphql_security.md) for full threat modeling, configuration options, and attack resistance proofs.
+
+---
+
 ## 5. Design Decisions with Rationale
 
 ### 5.1 Cron-driven indexer over a persistent worker

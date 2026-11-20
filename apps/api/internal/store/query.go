@@ -43,6 +43,7 @@ type FullStore interface {
 	AlertRuleStore
 	WatchedAccountStore
 	AuditStore
+	ExportJobStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.

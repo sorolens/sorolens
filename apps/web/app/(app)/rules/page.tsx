@@ -25,6 +25,7 @@ import { classForToken, tokenizeRule } from "@/lib/ruleSyntax";
 import { parseDslToTree, treeToDsl, type VisualRuleTree } from "@/lib/ruleTree";
 import { VisualRuleBuilder } from "@/components/VisualRuleBuilder";
 import { useSessionUserId } from "@/lib/useSession";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
 
 const SEVERITIES: RuleSeverity[] = ["Info", "Warning", "Critical"];
@@ -54,6 +55,9 @@ export default function RulesPage() {
   const [previewing, setPreviewing] = useState(false);
 
   const [rules, setRules] = useState<AlertRule[]>([]);
+  const [pendingDeleteRule, setPendingDeleteRule] = useState<AlertRule | null>(
+    null
+  );
   const [library, setLibrary] = useState<RuleLibraryEntry[]>([]);
   const [catalog, setCatalog] = useState<RuleCatalogResponse | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -422,7 +426,7 @@ export default function RulesPage() {
                   {rule.enabled ? "Pause" : "Enable"}
                 </button>
                 <button
-                  onClick={() => remove(rule)}
+                  onClick={() => setPendingDeleteRule(rule)}
                   className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-rose-400"
                 >
                   Delete
@@ -431,6 +435,21 @@ export default function RulesPage() {
             ))}
           </ul>
         )}
+
+        <ConfirmDialog
+          isOpen={pendingDeleteRule !== null}
+          title="Delete alert rule"
+          description="Are you sure you want to delete this alert rule? It will no longer evaluate or fire alerts."
+          confirmText="Delete rule"
+          isDestructive={true}
+          onConfirm={async () => {
+            if (pendingDeleteRule) {
+              await remove(pendingDeleteRule);
+              setPendingDeleteRule(null);
+            }
+          }}
+          onClose={() => setPendingDeleteRule(null)}
+        />
       </section>
 
       {/* ---- metric reference ---- */}

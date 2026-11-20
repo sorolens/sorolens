@@ -141,10 +141,115 @@ services:
     networks:
       - sorolens_net
 
+  # ---------------------------------------------------------------------------
+  # Observability profile (issue #843): Prometheus + Grafana with the committed
+  # dashboards and alert rules provisioned. See docs/observability.md.
+  #
+  #   docker compose --profile observability up -d
+  #   ./scripts/observability-smoke.sh
+  #
+  # Prometheus scrapes the API (/metrics, PORT=8080) and the indexer
+  # (INDEXER_METRICS_ADDR=:9100) on the host through host.docker.internal, so
+  # start them with `make api` and the indexer to populate the dashboard.
+  # ---------------------------------------------------------------------------
+
+  # Generates the Grafana admin password once into a shared volume so the stack
+  # never runs with a default credential. Set GRAFANA_ADMIN_PASSWORD to choose
+  # it yourself; otherwise a random one is written to the volume and can be read
+  # with `docker compose exec grafana cat /etc/grafana-secrets/admin-password`.
+  grafana-secrets:
+    profiles: ["observability"]
+    image: alpine:3.21
+    environment:
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+    volumes:
+      - sorolens_grafana_secrets:/secrets
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        if [ -s /secrets/admin-password ]; then
+          echo "grafana admin password already generated; keeping it"
+          exit 0
+        fi
+        if [ -n "$$GRAFANA_ADMIN_PASSWORD" ]; then
+          printf '%s' "$$GRAFANA_ADMIN_PASSWORD" > /secrets/admin-password
+        else
+          head -c 32 /dev/urandom | base64 | tr -d '\n' > /secrets/admin-password
+        fi
+        chmod 0444 /secrets/admin-password
+        echo "grafana admin password written to the sorolens_grafana_secrets volume"
+    restart: "no"
+    networks:
+      - sorolens_net
+
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v3.1.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - sorolens_prometheus_data:/prometheus
+    # host.docker.internal lets Prometheus reach the API and indexer running on
+    # the host (Docker Desktop provides it; this adds it on Linux).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - sorolens_net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  grafana:
+    profiles: ["observability"]
+    image: grafana/grafana:11.5.1
+    depends_on:
+      grafana-secrets:
+        condition: service_completed_successfully
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /etc/grafana-secrets/admin-password
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3001
+    # 3001 on the host: 3000 belongs to the Next.js dev server.
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - sorolens_grafana_secrets:/etc/grafana-secrets:ro
+      - sorolens_grafana_data:/var/lib/grafana
+    networks:
+      - sorolens_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
 volumes:
   sorolens_postgres_data:
   sorolens_minio_data:
   sorolens_redis_data:
+  sorolens_prometheus_data:
+  sorolens_grafana_data:
+  sorolens_grafana_secrets:
 
 networks:
   sorolens_net:

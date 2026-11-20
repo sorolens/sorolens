@@ -15,7 +15,22 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
+)
+
+type faultConfig struct {
+	TimeoutMs      int    `json:"timeout_ms"`
+	StatusCode     int    `json:"status_code"`
+	Truncate       bool   `json:"truncate"`
+	DropConnection bool   `json:"drop_connection"`
+	FailCount      int    `json:"fail_count"`
+	Method         string `json:"method"`
+}
+
+var (
+	faultMu      sync.Mutex
+	activeFaults faultConfig
 )
 
 const (
@@ -71,6 +86,36 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("/fault/configure", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var cfg faultConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		faultMu.Lock()
+		activeFaults = cfg
+		faultMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "configured", "fault": cfg})
+	})
+	mux.HandleFunc("/fault/reset", func(w http.ResponseWriter, r *http.Request) {
+		faultMu.Lock()
+		activeFaults = faultConfig{}
+		faultMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "reset"})
+	})
+	mux.HandleFunc("/fault/status", func(w http.ResponseWriter, r *http.Request) {
+		faultMu.Lock()
+		cfg := activeFaults
+		faultMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(cfg)
+	})
 	mux.HandleFunc("/", handleRPC)
 
 	srv := &http.Server{
@@ -94,6 +139,50 @@ func handleRPC(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "invalid JSON-RPC body", http.StatusBadRequest)
 		return
+	}
+
+	faultMu.Lock()
+	cfg := activeFaults
+	faultActive := false
+	if cfg.Method == "" || cfg.Method == req.Method {
+		if cfg.TimeoutMs > 0 || cfg.StatusCode > 0 || cfg.Truncate || cfg.DropConnection {
+			faultActive = true
+			if cfg.FailCount > 0 {
+				activeFaults.FailCount--
+				if activeFaults.FailCount == 0 {
+					// auto-clear after exhausted fail count
+					activeFaults = faultConfig{}
+				}
+			}
+		}
+	}
+	faultMu.Unlock()
+
+	if faultActive {
+		if cfg.TimeoutMs > 0 {
+			time.Sleep(time.Duration(cfg.TimeoutMs) * time.Millisecond)
+		}
+		if cfg.DropConnection {
+			if hj, ok := w.(http.Hijacker); ok {
+				conn, _, _ := hj.Hijack()
+				if conn != nil {
+					_ = conn.Close()
+					return
+				}
+			}
+			http.Error(w, "connection dropped", http.StatusInternalServerError)
+			return
+		}
+		if cfg.StatusCode > 0 && cfg.StatusCode != http.StatusOK {
+			http.Error(w, "injected fault", cfg.StatusCode)
+			return
+		}
+		if cfg.Truncate {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","result":{"events":[`))
+			return
+		}
 	}
 
 	resp := rpcResponse{JSONRPC: "2.0", ID: req.ID}
