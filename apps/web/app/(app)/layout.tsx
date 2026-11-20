@@ -24,7 +24,6 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LocalePreferences } from "@/components/LocalePreferences";
 import { LocaleProvider, useLocale } from "@/lib/i18n";
 import { useOfflineAlertQueue } from "@/hooks/useOfflineAlertQueue";
-import { AppShortcuts } from "@/components/AppShortcuts";
 
 const NAV_HREFS = [
   "/dashboard",
@@ -177,7 +176,6 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
         <main id="main" tabIndex={-1}>
           {children}
         </main>
-        <AppShortcuts />
         <footer className="mt-12 border-t border-[var(--color-border)] pt-6 text-sm text-[var(--color-text-secondary)]">
           {t("shell.community")}
           <Link

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiKeySection } from "@/components/settings/ApiKeySection";
 import { ExtensionSection } from "@/components/settings/ExtensionSection";
 import { IdentitySection } from "@/components/settings/IdentitySection";
-import { KeyboardShortcutsSection } from "@/components/settings/KeyboardShortcutsSection";
 import { NetworkSection } from "@/components/settings/NetworkSection";
 import { NotificationsSection } from "@/components/settings/NotificationsSection";
 import type { SaveState } from "@/components/settings/SettingsCard";
@@ -118,8 +117,6 @@ export default function SettingsPage() {
                 );
               }}
             />
-
-            <KeyboardShortcutsSection />
 
             <IdentitySection />
 
