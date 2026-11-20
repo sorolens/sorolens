@@ -105,7 +105,9 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod policy;
 pub mod types;
+pub mod webhooks;
 
 mod client;
 mod macros;
@@ -115,6 +117,10 @@ mod request;
 mod blocking;
 
 #[cfg(any(feature = "async", feature = "blocking"))]
+mod alerts;
+#[cfg(any(feature = "async", feature = "blocking"))]
+mod api_keys;
+#[cfg(any(feature = "async", feature = "blocking"))]
 mod contracts;
 #[cfg(any(feature = "async", feature = "blocking"))]
 mod events;
@@ -122,6 +128,12 @@ mod events;
 mod health;
 #[cfg(any(feature = "async", feature = "blocking"))]
 mod invocations;
+#[cfg(any(feature = "async", feature = "blocking"))]
+mod labels;
+#[cfg(any(feature = "async", feature = "blocking"))]
+mod reports;
+#[cfg(any(feature = "async", feature = "blocking"))]
+mod search;
 #[cfg(any(feature = "async", feature = "blocking"))]
 mod stats;
 #[cfg(any(feature = "async", feature = "blocking"))]
@@ -140,11 +152,25 @@ pub use client::{Client, ClientBuilder};
 pub use blocking::{BlockingClient, BlockingClientBuilder};
 
 #[cfg(any(feature = "async", feature = "blocking"))]
+pub use alerts::{AlertGroup, AlertGroupsPage, FlatAlertsPage, ListAlertsParams};
+#[cfg(any(feature = "async", feature = "blocking"))]
+pub use api_keys::{ApiKey, ApiKeyWithToken, ApiKeysPage, CreateApiKeyRequest};
+#[cfg(any(feature = "async", feature = "blocking"))]
 pub use contracts::ListContractsParams;
 #[cfg(any(feature = "async", feature = "blocking"))]
 pub use events::ListContractEventsParams;
 #[cfg(any(feature = "async", feature = "blocking"))]
 pub use invocations::ListContractInvocationsParams;
+#[cfg(any(feature = "async", feature = "blocking"))]
+#[cfg(any(feature = "async", feature = "blocking"))]
+pub use labels::{AccountLabel, CreateLabelRequest, CreateLabelScope, LabelsResponse};
+
+#[cfg(any(feature = "async", feature = "blocking"))]
+pub use reports::{
+    ContractReport, CreateReportSubscriptionRequest, MonthlySla, ReportDownloadFormat,
+    ReportFrequency, ReportHistory, ReportSubscription, ReportSubscriptions,
+};
+pub use search::{SearchContractsParams, SearchContractsResponse};
 #[cfg(any(feature = "async", feature = "blocking"))]
 pub use stats::{GetContractForecastParams, GetContractStatsParams};
 #[cfg(any(feature = "async", feature = "blocking"))]

@@ -94,19 +94,36 @@ func (s *postgresStore) UpsertContract(ctx context.Context, c Contract) error {
 // GetContract retrieves a contract by its ID. Returns ErrNotFound if no contract exists.
 func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Contract, error) {
 	row := s.readDB(ctx).QueryRow(ctx, `
-		SELECT id, network, label, wasm_hash, created_at_ledger,
-		       backfill_complete_at, status, added_at, tracking_preset
-		FROM contracts WHERE id = $1`, contractID)
+		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+		       c.backfill_complete_at, c.status, c.added_at, c.tracking_preset,
+		       b.oldest_ledger, b.newest_ledger, b.next_ledger,
+		       b.started_at, b.updated_at, b.completed_at
+		FROM contracts c
+		LEFT JOIN contract_backfills b ON b.contract_id = c.id
+		WHERE c.id = $1`, contractID)
 	var c Contract
+	var oldest, newest, next *int64
+	var startedAt, updatedAt, completedAt *time.Time
 	err := row.Scan(
 		&c.ID, &c.Network, &c.Label, &c.WasmHash, &c.CreatedAtLedger,
 		&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.TrackingPreset,
+		&oldest, &newest, &next, &startedAt, &updatedAt, &completedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Contract{}, ErrNotFound
 	}
 	if err != nil {
 		return c, err
+	}
+	if oldest != nil {
+		c.Backfill = &BackfillProgress{
+			OldestLedger: *oldest,
+			NewestLedger: *newest,
+			NextLedger:   *next,
+			StartedAt:    *startedAt,
+			UpdatedAt:    *updatedAt,
+			CompletedAt:  completedAt,
+		}
 	}
 	tags, err := s.ListContractTags(ctx, contractID)
 	if err != nil {
@@ -644,6 +661,25 @@ func (s *postgresStore) CreateNextMonthPartition(ctx context.Context) error {
 func (s *postgresStore) CreateMonthlyPartitionIfNotExists(ctx context.Context, year int, month int) error {
 	_, err := s.pool.Exec(ctx, `SELECT create_monthly_partition($1, $2)`, year, month)
 	return err
+}
+
+// MaintainPartitions ensures future partitions exist up to monthsAhead months ahead.
+func (s *postgresStore) MaintainPartitions(ctx context.Context, monthsAhead int) error {
+	if monthsAhead <= 0 {
+		monthsAhead = 6
+	}
+	_, err := s.pool.Exec(ctx, `SELECT maintain_events_partitions($1)`, monthsAhead)
+	return err
+}
+
+// ArchiveOldEvents archives events older than retentionDays into events_archive.
+func (s *postgresStore) ArchiveOldEvents(ctx context.Context, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, fmt.Errorf("retention days must be positive, got %d", retentionDays)
+	}
+	var moved int64
+	err := s.pool.QueryRow(ctx, `SELECT archive_old_events($1)`, retentionDays).Scan(&moved)
+	return moved, err
 }
 
 // GetPartitionStats returns information about all existing partitions of the events table.

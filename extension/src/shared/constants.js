@@ -56,9 +56,6 @@ export const SYNC_KEYS = {
   notifySeverities: "sorolens.notifySeverities",
 };
 
-/** Where the dashboard keeps the identity it sends as `X-User-ID`. */
-export const DASHBOARD_USER_ID_STORAGE_KEY = "sorolens_user_id";
-
 /** How long a cached tracking status stays fresh, and how many we keep. */
 export const STATUS_CACHE_TTL_MS = 60_000;
 export const STATUS_CACHE_MAX_ENTRIES = 200;
@@ -97,6 +94,6 @@ export const ALERTS = {
 };
 
 /** Dashboard origin opened by alert notifications. */
-export const DEFAULT_WEB_URL = "https://sorolens-web-iota.vercel.app";
+export const DEFAULT_WEB_URL = "https://sorolens.xyz";
 
 export const PRODUCT_NAME = "Sorolens";

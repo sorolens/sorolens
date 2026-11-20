@@ -15,8 +15,11 @@ import { openDb } from "./db.js";
 import { initGithub } from "./github.js";
 import { registerHandlers } from "./commands.js";
 import { registerAssignListener } from "./assign-discord.js";
+import { startCommunityScheduler } from "./community-discord.js";
 import { mountWebhookRoutes } from "./webhook.js";
 import { mountOauthRoutes } from "./oauth.js";
+import { SorolensApi } from "./api.js";
+import { startAlertPoller } from "./subscriptions.js";
 
 async function main() {
   openDb(config.dbPath);
@@ -49,6 +52,18 @@ async function main() {
   });
 
   await client.login(config.discordToken);
+  startCommunityScheduler(client, config);
+
+  if (config.alertPollIntervalSeconds > 0) {
+    const api = new SorolensApi({
+      baseUrl: config.sorolensApiBaseUrl,
+      apiKey: config.sorolensAdminApiKey,
+    });
+    startAlertPoller(client, api, config.alertPollIntervalSeconds * 1000);
+    console.log(
+      `Alert poller started (${config.alertPollIntervalSeconds}s interval)`
+    );
+  }
 
   const app = express();
   mountWebhookRoutes(app, { client, config, tiers });

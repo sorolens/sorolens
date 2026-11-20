@@ -65,7 +65,7 @@ func runTrack(cmd *cobra.Command, args []string) error {
 		_ = os.Setenv("NO_COLOR", "1")
 	}
 
-	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
+	c := newClient(globalConfig.Timeout)
 	contract, err := c.TrackContract(cmd.Context(), contractID, trackAlias, globalConfig.Network, trackPreset)
 	if err != nil {
 		if se, ok := err.(*client.SorolensError); ok {

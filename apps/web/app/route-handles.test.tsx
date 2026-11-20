@@ -34,15 +34,15 @@ describe("route handling", () => {
   });
 
   it("derives the crawler rules and sitemap from NEXT_PUBLIC_APP_URL", () => {
-    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://staging.sorolens.dev/");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://staging.sorolens.xyz/");
 
     expect(robots()).toEqual({
       rules: {
         userAgent: "*",
         allow: "/",
       },
-      sitemap: "https://staging.sorolens.dev/sitemap.xml",
-      host: "https://staging.sorolens.dev",
+      sitemap: "https://staging.sorolens.xyz/sitemap.xml",
+      host: "https://staging.sorolens.xyz",
     });
   });
 
@@ -54,8 +54,8 @@ describe("route handling", () => {
         userAgent: "*",
         allow: "/",
       },
-      sitemap: "https://sorolens.dev/sitemap.xml",
-      host: "https://sorolens.dev",
+      sitemap: "https://sorolens.xyz/sitemap.xml",
+      host: "https://sorolens.xyz",
     });
   });
 

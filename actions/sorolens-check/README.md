@@ -13,7 +13,7 @@ Assert Soroban smart contract storage TTL and health thresholds in CI/CD pipelin
   uses: sorolens/sorolens/.github/actions/sorolens-check@main
   with:
     contract-id: 'CAVRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5C3VRQGH5'
-    api-url: 'https://api.sorolens.com'
+    api-url: 'https://api.sorolens.xyz'
     api-key: ${{ secrets.SOROLENS_API_KEY }}
     min-ttl-ledgers: 50000
     min-health-score: 80
@@ -24,7 +24,7 @@ Assert Soroban smart contract storage TTL and health thresholds in CI/CD pipelin
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `contract-id` | **Yes** | - | Soroban contract address (`C...`) |
-| `api-url` | No | `https://api.sorolens.com` | Sorolens API endpoint |
+| `api-url` | No | `https://api.sorolens.xyz` | Sorolens API endpoint |
 | `api-key` | No | - | API key for authenticated API instances |
 | `min-ttl-ledgers` | No | `0` | Minimum ledgers remaining before storage expiry; fails if any entry is below |
 | `min-health-score` | No | `0` | Minimum 0-100 composite health score; fails if below |

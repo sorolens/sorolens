@@ -13,6 +13,9 @@ if TYPE_CHECKING:
     from ..models.compare_contract_entry_event_volume_item import (
         CompareContractEntryEventVolumeItem,
     )
+    from ..models.compare_contract_entry_health_components import (
+        CompareContractEntryHealthComponents,
+    )
 
 
 T = TypeVar("T", bound="CompareContractEntry")
@@ -35,6 +38,8 @@ class CompareContractEntry:
         last_synced_ledger (int):
         event_volume (list[CompareContractEntryEventVolumeItem]):
         health_score (int | None | Unset):
+        health_components (CompareContractEntryHealthComponents | Unset): Latest component scores. Omitted when health
+            has not yet been computed.
         error (str | Unset):
     """
 
@@ -51,6 +56,7 @@ class CompareContractEntry:
     last_synced_ledger: int
     event_volume: list[CompareContractEntryEventVolumeItem]
     health_score: int | None | Unset = UNSET
+    health_components: CompareContractEntryHealthComponents | Unset = UNSET
     error: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -88,6 +94,10 @@ class CompareContractEntry:
         else:
             health_score = self.health_score
 
+        health_components: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.health_components, Unset):
+            health_components = self.health_components.to_dict()
+
         error = self.error
 
         field_dict: dict[str, Any] = {}
@@ -110,6 +120,8 @@ class CompareContractEntry:
         )
         if health_score is not UNSET:
             field_dict["health_score"] = health_score
+        if health_components is not UNSET:
+            field_dict["health_components"] = health_components
         if error is not UNSET:
             field_dict["error"] = error
 
@@ -119,6 +131,9 @@ class CompareContractEntry:
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         from ..models.compare_contract_entry_event_volume_item import (
             CompareContractEntryEventVolumeItem,
+        )
+        from ..models.compare_contract_entry_health_components import (
+            CompareContractEntryHealthComponents,
         )
 
         d = dict(src_dict)
@@ -162,6 +177,15 @@ class CompareContractEntry:
 
         health_score = _parse_health_score(d.pop("health_score", UNSET))
 
+        _health_components = d.pop("health_components", UNSET)
+        health_components: CompareContractEntryHealthComponents | Unset
+        if isinstance(_health_components, Unset):
+            health_components = UNSET
+        else:
+            health_components = CompareContractEntryHealthComponents.from_dict(
+                _health_components
+            )
+
         error = d.pop("error", UNSET)
 
         compare_contract_entry = cls(
@@ -178,6 +202,7 @@ class CompareContractEntry:
             last_synced_ledger=last_synced_ledger,
             event_volume=event_volume,
             health_score=health_score,
+            health_components=health_components,
             error=error,
         )
 

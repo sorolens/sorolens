@@ -24,9 +24,18 @@ import {
   removeFromPool,
   updateAssignSettings,
 } from "./db.js";
-import { addAssignee, getIssue, listIssueComments } from "./github.js";
 import {
-  formatApplicationReply,
+  addAssignee,
+  getIssue,
+  listIssueComments,
+  listOpenUnassignedIssues,
+} from "./github.js";
+import {
+  countWaveApplicants,
+  formatAvailableSummary,
+  describeResponse,
+  formatHowToApply,
+  remainingIssues,
   formatIssueList,
   parseIssueList,
   processApplication,
@@ -42,7 +51,11 @@ export const ASSIGN_COMMANDS = new Set([
   "assign-toggle",
   "assign-status",
   "assign-release",
+  "assign-available",
 ]);
+
+/** Most issues whose comments `/assign-available applicants:true` reads. */
+const APPLICANT_CHECK_LIMIT = 60;
 
 function deps(config: Config): AssignDeps {
   return {
@@ -51,6 +64,11 @@ function deps(config: Config): AssignDeps {
     getLink: getByDiscord,
     isInPool,
     getGrant,
+    listPool,
+    removeFromPool,
+    setEnabled: (enabled: boolean) => {
+      updateAssignSettings({ enabled });
+    },
     listGrantsFor,
     claimIssue,
     releaseIssue,
@@ -89,15 +107,29 @@ export function registerAssignListener(client: Client, config: Config): void {
             channelId: message.channelId,
             memberRoles: new Set(member.roles.cache.keys()),
             content: message.content,
+            createdAt: message.createdTimestamp,
           },
           deps(config)
         )
       );
       if (result.kind === "ignore") return;
-      await message.reply({
-        content: formatApplicationReply(result),
-        allowedMentions: { repliedUser: true, parse: [] },
+      const response = describeResponse(result);
+      await message.react(response.reaction).catch((err) => {
+        console.warn("assign: could not react", err);
       });
+      if (response.reply) {
+        await message.reply({
+          content: response.reply,
+          allowedMentions: { repliedUser: true, parse: [] },
+        });
+      }
+      if (result.kind === "processed" && result.exhausted) {
+        await message.channel.send({
+          content:
+            "🎉 All released issues have been taken. Applications are now closed until the next release.",
+          allowedMentions: { parse: [] },
+        });
+      }
     } catch (err) {
       console.error("assign: failed to process message", err);
       try {
@@ -128,6 +160,8 @@ export async function handleAssignCommand(
       return handleStatus(interaction, config);
     case "assign-release":
       return handleRelease(interaction);
+    case "assign-available":
+      return handleAvailable(interaction, config);
   }
 }
 
@@ -214,13 +248,36 @@ async function handleToggle(interaction: ChatInputCommandInteraction) {
     });
     return;
   }
-  updateAssignSettings({ enabled: on });
-  const warn =
-    on && listPool().length === 0
-      ? "\nNote: no issues are open yet. Add some with `/assign-issues add`."
-      : "";
+  const settings = updateAssignSettings(
+    on ? { enabled: true, openedAt: Date.now() } : { enabled: false }
+  );
+  const left = remainingIssues({ listPool, getGrant });
+  let note = "";
+  if (on && left.length === 0) {
+    note = "\nNote: no issues are left to give out. Add some with `/assign-issues add`.";
+  } else if (on) {
+    note = `\n${left.length} issue(s) can be picked. Only messages sent from now on count, and applications close by themselves when all are taken.`;
+  }
+
+  // Announce in the apply channel so members know how to apply.
+  try {
+    const channel = await interaction.client.channels.fetch(settings.channelId!);
+    if (channel?.isSendable()) {
+      const posted = await channel.send({
+        content: on
+          ? formatHowToApply(settings, left)
+          : "🔒 Issue applications are closed for now.",
+        allowedMentions: { parse: [] },
+      });
+      if (on) await posted.pin().catch(() => undefined);
+    }
+  } catch (err) {
+    console.warn("assign: could not announce in channel", err);
+    note += "\n(I couldn't post in the channel: check my permissions there.)";
+  }
+
   await interaction.reply({
-    content: `Issue applications are now **${on ? "ON" : "OFF"}**.${warn}`,
+    content: `Issue applications are now **${on ? "ON" : "OFF"}**.${note}`,
     flags: EPHEMERAL,
   });
 }
@@ -253,5 +310,43 @@ async function handleRelease(interaction: ChatInputCommandInteraction) {
       ? `#${n} no longer counts toward anyone's max. It is still assigned on GitHub; unassign it there if needed.`
       : `#${n} wasn't given out by the bot.`,
     flags: EPHEMERAL,
+  });
+}
+
+async function handleAvailable(
+  interaction: ChatInputCommandInteraction,
+  config: Config
+) {
+  const from = interaction.options.getInteger("from") ?? 1;
+  const to = interaction.options.getInteger("to") ?? Number.MAX_SAFE_INTEGER;
+  const label = interaction.options.getString("label")?.trim() || undefined;
+  const checkApplicants = interaction.options.getBoolean("applicants") ?? false;
+  await interaction.deferReply({ flags: EPHEMERAL });
+
+  const open = (await listOpenUnassignedIssues(config.githubRepo, label))
+    .map((i) => i.number)
+    .filter((n) => n >= Math.min(from, to) && n <= Math.max(from, to))
+    .sort((a, b) => a - b);
+
+  let applicants: Map<number, number> | undefined;
+  let unchecked: number[] | undefined;
+  if (checkApplicants) {
+    applicants = new Map();
+    const toCheck = open.slice(0, APPLICANT_CHECK_LIMIT);
+    unchecked = open.slice(APPLICANT_CHECK_LIMIT);
+    for (const n of toCheck) {
+      const comments = await listIssueComments(config.githubRepo, n);
+      applicants.set(n, countWaveApplicants(comments));
+    }
+  }
+
+  await interaction.editReply({
+    content: formatAvailableSummary({
+      open,
+      pool: listPool(),
+      applicants,
+      unchecked,
+      label,
+    }),
   });
 }

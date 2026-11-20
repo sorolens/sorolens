@@ -64,9 +64,10 @@ func seedCompareContract(t *testing.T, ms *store.MockStore, id, network string, 
 	}
 	if score != nil {
 		if err := ms.UpsertContractHealthScore(nil, store.ContractHealthScore{
-			ContractID: id,
-			Score:      *score,
-			ComputedAt: now,
+			ContractID:      id,
+			Score:           *score,
+			ComponentUptime: 87,
+			ComputedAt:      now,
 		}); err != nil {
 			t.Fatalf("upsert health score: %v", err)
 		}
@@ -78,17 +79,18 @@ func seedCompareContract(t *testing.T, ms *store.MockStore, id, network string, 
 type compareResponse struct {
 	Window    string `json:"window"`
 	Contracts []struct {
-		ID              string  `json:"id"`
-		Network         string  `json:"network"`
-		Status          string  `json:"status"`
-		Tracked         bool    `json:"tracked"`
-		HasData         bool    `json:"has_data"`
-		EventCount      int64   `json:"event_count"`
-		InvocationCount int64   `json:"invocation_count"`
-		AvgCPU          float64 `json:"avg_cpu"`
-		AvgFee          float64 `json:"avg_fee"`
-		HealthScore     *int32  `json:"health_score"`
-		EventVolume     []struct {
+		ID               string           `json:"id"`
+		Network          string           `json:"network"`
+		Status           string           `json:"status"`
+		Tracked          bool             `json:"tracked"`
+		HasData          bool             `json:"has_data"`
+		EventCount       int64            `json:"event_count"`
+		InvocationCount  int64            `json:"invocation_count"`
+		AvgCPU           float64          `json:"avg_cpu"`
+		AvgFee           float64          `json:"avg_fee"`
+		HealthScore      *int32           `json:"health_score"`
+		HealthComponents map[string]int32 `json:"health_components"`
+		EventVolume      []struct {
 			Timestamp string `json:"timestamp"`
 			Count     int64  `json:"count"`
 		} `json:"event_volume"`
@@ -174,6 +176,9 @@ func TestCompareContracts_MixedNetworks(t *testing.T) {
 	}
 
 	sn := resp.Contracts[got[testnet]]
+	if got := sn.HealthComponents["uptime"]; got != 87 {
+		t.Errorf("testnet uptime component = %d, want 87", got)
+	}
 	if sn.Network != "testnet" || !sn.Tracked || !sn.HasData {
 		t.Errorf("testnet entry = %+v", sn)
 	}
@@ -185,6 +190,10 @@ func TestCompareContracts_MixedNetworks(t *testing.T) {
 	}
 	if sn.HealthScore == nil || *sn.HealthScore != 91 {
 		t.Errorf("testnet health_score = %v, want 91", sn.HealthScore)
+	}
+
+	if uptime := sn.HealthComponents["uptime"]; uptime != 87 {
+		t.Errorf("testnet uptime component = %d, want 87", uptime)
 	}
 	if len(sn.EventVolume) != 24*7 {
 		t.Errorf("testnet sparkline points = %d, want %d", len(sn.EventVolume), 24*7)

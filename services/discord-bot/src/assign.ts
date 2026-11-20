@@ -122,6 +122,8 @@ export interface ApplicationInput {
   channelId: string;
   memberRoles: ReadonlySet<string>;
   content: string;
+  /** When the message was sent (ms since epoch). */
+  createdAt: number;
 }
 
 export interface AssignDeps {
@@ -130,6 +132,9 @@ export interface AssignDeps {
   getLink(discordId: string): Link | null;
   isInPool(issue: number): boolean;
   getGrant(issue: number): AssignGrant | null;
+  listPool(): number[];
+  removeFromPool(issues: number[]): number;
+  setEnabled(enabled: boolean): void;
   listGrantsFor(discordId: string): AssignGrant[];
   claimIssue(issue: number, discordId: string, login: string): boolean;
   releaseIssue(issue: number): boolean;
@@ -148,7 +153,12 @@ export type ApplicationResult =
   /** The whole request was turned down; nothing was assigned. */
   | { kind: "declined"; reason: string }
   /** Per-issue results; some may have succeeded. */
-  | { kind: "processed"; outcomes: IssueOutcome[] };
+  | {
+      kind: "processed";
+      outcomes: IssueOutcome[];
+      /** Every released issue is now taken, so applications were switched off. */
+      exhausted: boolean;
+    };
 
 /**
  * Count the issues the bot gave this member that are still open and still
@@ -184,6 +194,10 @@ export async function processApplication(
   }
   const requested = parseIssueRefs(input.content);
   if (requested.length === 0) return { kind: "ignore" };
+  // Only messages sent after applications were switched on count.
+  if (settings.openedAt !== null && input.createdAt < settings.openedAt) {
+    return { kind: "ignore" };
+  }
 
   if (!settings.enabled) {
     return {
@@ -228,7 +242,16 @@ export async function processApplication(
   for (const n of requested) {
     outcomes.push(await assignOne(n, input.discordId, link.githubLogin, deps));
   }
-  return { kind: "processed", outcomes };
+  const exhausted = remainingIssues(deps).length === 0;
+  if (exhausted) deps.setEnabled(false);
+  return { kind: "processed", outcomes, exhausted };
+}
+
+/** Released issues that nobody has been given yet. */
+export function remainingIssues(
+  deps: Pick<AssignDeps, "listPool" | "getGrant">
+): number[] {
+  return deps.listPool().filter((n) => deps.getGrant(n) === null);
 }
 
 async function assignOne(
@@ -241,18 +264,26 @@ async function assignOne(
 
   if (!deps.isInPool(n)) return fail("isn't open for applications");
 
+  // Issues that can never be handed out leave the release list, so the
+  // bot can tell when everything has gone.
+  const drop = (reason: string): IssueOutcome => {
+    deps.removeFromPool([n]);
+    return fail(reason);
+  };
+
   const issue = await deps.getIssue(deps.repo, n);
-  if (!issue || issue.isPullRequest) return fail("isn't an issue in this repo");
-  if (issue.state !== "open") return fail("is closed");
+  if (!issue || issue.isPullRequest) return drop("isn't an issue in this repo");
+  if (issue.state !== "open") return drop("is closed");
 
   const mine = issue.assignees.some(
     (a) => a.toLowerCase() === login.toLowerCase()
   );
   if (mine) return fail("is already assigned to you");
-  if (issue.assignees.length > 0) return fail("is already taken");
 
   const grant = deps.getGrant(n);
   if (grant && grant.discordId !== discordId) return fail("is already taken");
+  // Assigned outside the bot: nobody can get it through here any more.
+  if (issue.assignees.length > 0) return drop("is already taken");
   // A stale grant for this same member (e.g. they were unassigned) is reused.
   if (grant) deps.releaseIssue(n);
 
@@ -278,16 +309,126 @@ async function assignOne(
   return { issue: n, ok: true, url: issue.url };
 }
 
-/** Render a result as a short Discord reply. */
-export function formatApplicationReply(
+export interface ApplicationResponse {
+  /** Reaction to put on the member's message. */
+  reaction: "✅" | "❌";
+  /** Reply text, or null when the reaction says it all. */
+  reply: string | null;
+}
+
+/**
+ * How the bot answers a message: ✅ when at least one issue was assigned,
+ * ❌ when nothing was. A reply is only sent to explain what was skipped
+ * or declined, so a clean assignment is just a ✅.
+ */
+export function describeResponse(
   result: Exclude<ApplicationResult, { kind: "ignore" }>
+): ApplicationResponse {
+  if (result.kind === "declined") {
+    return {
+      reaction: "❌",
+      reply: `❌ ${result.reason}\nSee the pinned "how to apply" message in this channel.`,
+    };
+  }
+  const ok = result.outcomes.filter((o) => o.ok);
+  const failed = result.outcomes.filter(
+    (o): o is Extract<IssueOutcome, { ok: false }> => !o.ok
+  );
+  const reply = failed.length
+    ? [
+        ...ok.map((o) => `✅ #${o.issue} is assigned to you.`),
+        ...failed.map((o) => `❌ #${o.issue} ${o.reason}.`),
+      ].join("\n")
+    : null;
+  return { reaction: ok.length ? "✅" : "❌", reply };
+}
+
+/** Count distinct Drips Wave applicants in an issue's comments. */
+export function countWaveApplicants(comments: readonly IssueComment[]): number {
+  return new Set(
+    comments
+      .filter((c) => c.body.includes(WAVE_MARKER))
+      .map((c) => c.author.toLowerCase())
+  ).size;
+}
+
+export interface AvailableSummaryInput {
+  /** Open, unassigned issue numbers in the repo (already range-filtered). */
+  open: number[];
+  /** The owner's current release list. */
+  pool: number[];
+  /** Applicant counts per issue, when they were checked. */
+  applicants?: Map<number, number>;
+  /** Issues whose applicants were not checked because of the cap. */
+  unchecked?: number[];
+  label?: string;
+}
+
+/** Render the `/assign-available` overview. Kept under Discord's 2000 chars. */
+export function formatAvailableSummary(input: AvailableSummaryInput): string {
+  const open = [...input.open].sort((a, b) => a - b);
+  const poolSet = new Set(input.pool);
+  const inList = open.filter((n) => poolSet.has(n));
+  const notInList = open.filter((n) => !poolSet.has(n));
+  const scope = input.label ? ` with label \`${input.label}\`` : "";
+  const lines = [
+    `**Open and unassigned${scope}: ${open.length}**`,
+    open.length ? `Lowest #${open[0]}, highest #${open[open.length - 1]}` : "",
+    `${formatIssueList(open)}`,
+    "",
+    `**Already in your list (${inList.length}):** ${formatIssueList(inList)}`,
+    `**Not in your list yet (${notInList.length}):** ${formatIssueList(notInList)}`,
+  ];
+  if (input.applicants) {
+    const withApps = open.filter((n) => (input.applicants!.get(n) ?? 0) > 0);
+    const without = open.filter(
+      (n) => input.applicants!.has(n) && (input.applicants!.get(n) ?? 0) === 0
+    );
+    lines.push(
+      "",
+      `**With Drips Wave applicants (${withApps.length}):** ` +
+        (withApps.length
+          ? withApps.map((n) => `#${n} (${input.applicants!.get(n)})`).join(", ")
+          : "(none)"),
+      `**No applicants yet (${without.length}):** ${formatIssueList(without)}`
+    );
+    if (input.unchecked?.length) {
+      lines.push(
+        `_Not checked for applicants (narrow from/to to check them): ${formatIssueList(input.unchecked)}_`
+      );
+    }
+  }
+  const text = lines.filter((l, i) => l !== "" || lines[i - 1] !== "").join("\n");
+  return text.length > 1950 ? `${text.slice(0, 1940)}\n…(cut)` : text;
+}
+
+/** The "how to apply" post the bot puts in the channel when applications open. */
+export function formatHowToApply(
+  settings: Pick<AssignSettings, "requiredRoles" | "anyOfRoles" | "maxPerUser">,
+  remaining: number[]
 ): string {
-  if (result.kind === "declined") return `❌ ${result.reason}`;
-  return result.outcomes
-    .map((o) =>
-      o.ok
-        ? `✅ #${o.issue} is now assigned to you: <${o.url}>`
-        : `❌ #${o.issue} ${o.reason}.`
-    )
+  const roles = (ids: string[]) => ids.map((id) => `<@&${id}>`).join(", ");
+  const roleRule = [
+    settings.requiredRoles.length ? `have ${roles(settings.requiredRoles)}` : "",
+    settings.anyOfRoles.length ? `have one of ${roles(settings.anyOfRoles)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  return [
+    `📢 **Issue applications are open!** ${remaining.length} issue(s) up for grabs: ${formatIssueList(remaining)}`,
+    "",
+    "**How to apply**",
+    "1. Link your GitHub with `/connect` (once).",
+    "2. Apply to the issue on **Drips Wave** first. The bot checks for your Wave application on GitHub.",
+    "3. Post the issue number(s) here, e.g. `#812` or `#812 #840`.",
+    "",
+    "**Rules**",
+    roleRule ? `• You must ${roleRule}.` : "",
+    `• Up to **${settings.maxPerUser}** issue(s) per person at a time. Asking for more than you have left declines the whole message.`,
+    "• First come, first served. Taken issues are skipped and you get the others you picked.",
+    "• ✅ on your message means you're assigned on GitHub. ❌ means nothing was assigned and the bot replies with why.",
+    "• Applications close automatically when every issue is taken.",
+  ]
+    .filter((l, i, a) => l !== "" || a[i - 1] !== "")
     .join("\n");
 }

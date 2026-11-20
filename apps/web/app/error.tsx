@@ -19,7 +19,11 @@ export default function Error({
   }, [error]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-6 py-16">
+    <main
+      id="main"
+      tabIndex={-1}
+      className="flex min-h-screen items-center justify-center px-6 py-16"
+    >
       <section
         className="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-8 text-center shadow-2xl"
         role="alert"

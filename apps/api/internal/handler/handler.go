@@ -114,6 +114,9 @@ type Handler struct {
 	// reports are emitted unsigned and every response says so.
 	ReportSigningKey string
 
+	// RequireAuth enforces authentication mode across all endpoints except health checks.
+	RequireAuth bool
+
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.
 	summaryCacheOnce sync.Once

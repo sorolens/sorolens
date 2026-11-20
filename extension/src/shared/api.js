@@ -12,8 +12,15 @@
 //   GET    /api/v1/watchlist                        list the user's watchlist
 //
 // Authentication:
-//   Authorization: Bearer <API key from #131>   (scoped key, optional on reads)
-//   X-User-ID: <identity>                       (required by /watchlist routes)
+//   Authorization: Bearer <API key>   the credential; a user-bound key acts as
+//                                      that user, which is what the /watchlist
+//                                      routes key on
+//   X-User-ID: <identity>            sent, but ignored unless a trusted proxy
+//                                      signed it (issue #518)
+//
+// A key is minted by the dashboard (Settings -> Browser extension) with the
+// read:contracts and write:contracts scopes. Reads work with no credential at
+// all on the public v0.1 surface; watchlist writes answer 401 without one.
 
 import { REQUEST_TIMEOUT_MS } from "./constants.js";
 

@@ -25,12 +25,16 @@ from .compare_contract_entry import CompareContractEntry
 from .compare_contract_entry_event_volume_item import (
     CompareContractEntryEventVolumeItem,
 )
+from .compare_contract_entry_health_components import (
+    CompareContractEntryHealthComponents,
+)
 from .compare_contracts_window import CompareContractsWindow
 from .compare_response import CompareResponse
 from .compare_response_window import CompareResponseWindow
 from .contract import Contract
 from .contract_alert import ContractAlert
 from .contract_alert_severity import ContractAlertSeverity
+from .contract_backfill import ContractBackfill
 from .contract_event_rate import ContractEventRate
 from .contract_graph import ContractGraph
 from .contract_graph_edges_type_0_item import ContractGraphEdgesType0Item
@@ -118,6 +122,7 @@ from .health_check import HealthCheck
 from .health_response_200 import HealthResponse200
 from .health_score import HealthScore
 from .health_score_components import HealthScoreComponents
+from .health_score_history_item import HealthScoreHistoryItem
 from .in_watchlist import InWatchlist
 from .integration import Integration
 from .integration_id import IntegrationId
@@ -139,6 +144,7 @@ from .list_all_invocations_status import ListAllInvocationsStatus
 from .list_api_keys_admin_response_200 import ListApiKeysAdminResponse200
 from .list_api_keys_response_200 import ListApiKeysResponse200
 from .list_audit_events_response_200 import ListAuditEventsResponse200
+from .list_audit_events_root_response_200 import ListAuditEventsRootResponse200
 from .list_contract_alerts_network import ListContractAlertsNetwork
 from .list_contract_alerts_response_200 import ListContractAlertsResponse200
 from .list_contract_alerts_severity import ListContractAlertsSeverity
@@ -180,6 +186,7 @@ from .list_watched_accounts_response_200 import ListWatchedAccountsResponse200
 from .live_activity_response_200 import LiveActivityResponse200
 from .monitored_contract import MonitoredContract
 from .monthly_sla import MonthlySLA
+from .percentile_values import PercentileValues
 from .post_api_v1_labels_body import PostApiV1LabelsBody
 from .post_api_v1_labels_body_scope import PostApiV1LabelsBodyScope
 from .preview_alert_rule_body import PreviewAlertRuleBody
@@ -197,6 +204,7 @@ from .remove_group_contract_body import RemoveGroupContractBody
 from .report_subscription import ReportSubscription
 from .report_subscription_frequency import ReportSubscriptionFrequency
 from .requeue_failed_event_response_200 import RequeueFailedEventResponse200
+from .resource_percentiles import ResourcePercentiles
 from .role_error import RoleError
 from .rotate_api_key_admin_response_200 import RotateApiKeyAdminResponse200
 from .rotate_api_key_response_200 import RotateApiKeyResponse200
@@ -321,12 +329,14 @@ __all__ = (
     "BuildInfo",
     "CompareContractEntry",
     "CompareContractEntryEventVolumeItem",
+    "CompareContractEntryHealthComponents",
     "CompareContractsWindow",
     "CompareResponse",
     "CompareResponseWindow",
     "Contract",
     "ContractAlert",
     "ContractAlertSeverity",
+    "ContractBackfill",
     "ContractEventRate",
     "ContractGraph",
     "ContractGraphEdgesType0Item",
@@ -408,6 +418,7 @@ __all__ = (
     "HealthResponse200",
     "HealthScore",
     "HealthScoreComponents",
+    "HealthScoreHistoryItem",
     "InWatchlist",
     "Integration",
     "IntegrationId",
@@ -429,6 +440,7 @@ __all__ = (
     "ListApiKeysAdminResponse200",
     "ListApiKeysResponse200",
     "ListAuditEventsResponse200",
+    "ListAuditEventsRootResponse200",
     "ListContractAlertsNetwork",
     "ListContractAlertsResponse200",
     "ListContractAlertsSeverity",
@@ -464,6 +476,7 @@ __all__ = (
     "LiveActivityResponse200",
     "MonitoredContract",
     "MonthlySLA",
+    "PercentileValues",
     "PostApiV1LabelsBody",
     "PostApiV1LabelsBodyScope",
     "PreviewAlertRuleBody",
@@ -479,6 +492,7 @@ __all__ = (
     "ReportSubscription",
     "ReportSubscriptionFrequency",
     "RequeueFailedEventResponse200",
+    "ResourcePercentiles",
     "RoleError",
     "RotateApiKeyAdminResponse200",
     "RotateApiKeyResponse200",

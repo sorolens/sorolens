@@ -210,6 +210,9 @@ type Config struct {
 	// GraphQLPersistedOnly restricts /graphql to the embedded persisted
 	// queries (GRAPHQL_PERSISTED_ONLY).
 	GraphQLPersistedOnly bool
+	// RequireAuth enforces authentication across all endpoints except health
+	// checks when set to true (API_REQUIRE_AUTH).
+	RequireAuth bool
 }
 
 // Load reads configuration from environment variables and returns an error
@@ -290,12 +293,20 @@ func Load() (*Config, error) {
 		}
 		cfg.GraphQLPersistedOnly = b
 	}
+	if v := os.Getenv("API_REQUIRE_AUTH"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, fmt.Errorf("API_REQUIRE_AUTH: invalid boolean %q: %w", v, err)
+		}
+		cfg.RequireAuth = b
+	}
 
 	cfg.VerifyBuildCommand = strings.Fields(getEnvDefault("VERIFY_BUILD_COMMAND", "stellar contract build"))
 	if len(cfg.VerifyBuildCommand) == 0 {
 		return nil, fmt.Errorf("VERIFY_BUILD_COMMAND: must contain at least one argument")
 	}
 
+	// VERIFY_TIMEOUT bounds a single contract verification build (Go duration).
 	verifyTimeoutStr := getEnvDefault("VERIFY_TIMEOUT", "10m")
 	verifyTimeout, err := time.ParseDuration(verifyTimeoutStr)
 	if err != nil {

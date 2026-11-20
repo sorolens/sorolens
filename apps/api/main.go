@@ -123,6 +123,7 @@ func main() {
 		TrustedProxySecret: cfg.TrustedIdentityProxySecret,
 		RequestTimeout:     cfg.RequestTimeout,
 		StreamTimeout:      cfg.StreamTimeout,
+		RequireAuth:        cfg.RequireAuth,
 		GraphQL: graph.Options{
 			ComplexityLimit: cfg.GraphQLComplexityLimit,
 			PersistedOnly:   cfg.GraphQLPersistedOnly,
