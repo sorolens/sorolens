@@ -6,6 +6,7 @@ Contributor bot for the [Sorolens Discord](https://discord.gg/D9jATUezYX). It:
 2. Watches merged PRs on `sorolens/sorolens` and grants **Contributor** or **Core Contributor** roles based on merge count.
 3. Lets members self-assign issues they applied for on **Drips Wave** by posting issue numbers in one channel ([Issue self-assign](#issue-self-assign-drips-wave)).
 4. Answers Sorolens contract queries (`/status`, `/alerts`, `/watch`, `/unwatch`), see [`docs/discord-bot.md`](../../docs/discord-bot.md).
+5. Routes real-time contract watchdog alerts to subscribed channels with severity filters ([Contract alert subscriptions](#contract-alert-subscriptions)).
 
 Runs as a single Node.js process with a SQLite database. Deploys to Render's free tier (Docker), with Litestream backing the database up to Cloudflare R2 and an UptimeRobot ping to prevent sleep. Any other container platform works too; only the deploy steps differ.
 
@@ -25,6 +26,14 @@ Runs as a single Node.js process with a SQLite database. Deploys to Render's fre
 | `/alerts <contract> [limit]` | Show the latest watchdog alerts for a contract.                         |
 | `/watch <contract>`          | Add a contract to your Sorolens watchlist.                              |
 | `/unwatch <contract>`        | Remove a contract from your watchlist.                                  |
+| `/subscriptions [channel]`   | List active contract alert subscriptions for a channel.                 |
+
+### Channel managers (Manage Channels permission)
+
+| Command                                           | What it does                                                                                   |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `/subscribe <contract> [severity] [channel]`      | Subscribe a channel to watchdog alerts for a contract (`all`, `critical`, `warning`, `info`). |
+| `/unsubscribe <contract> [channel]`               | Unsubscribe a channel from watchdog alerts for a contract.                                     |
 
 ### Admins
 
@@ -83,6 +92,44 @@ none. It only replies to explain what was skipped or declined.
 - **Merge congrats:** for every merged PR (bot accounts excluded) the bot posts in `congrats_channel` (e.g. #live-updates): a line that tags linked members, plus an embed with the PR, the author's running total and their avatar (Discord avatar if linked, GitHub avatar otherwise). Unlinked authors are named by GitHub username with a nudge to run `/connect`. This is separate from the "Issue Resolved" card the `discord-live-updates` workflow posts.
 - **Contributor of the week:** the week runs Sunday to Saturday (UTC). From Sunday 08:00 UTC the bot posts the winner and runners-up in `weekly_channel` (e.g. #activity) and moves `cotw_role` to the new winner. If the bot was asleep at 08:00 it posts when it wakes.
 - **Milestones:** after the built-in Contributor (1 PR) and Core Contributor (3 PRs) tiers, suggested milestones are 5 Rising Star, 10 Veteran, 20 Elite, 40 Legend, 80 Mythic. Create the roles yourself (the bot never creates roles), keep them below the bot's role, and map them with `/milestones add`. Roles are granted on the member's next merge, and the congrats post mentions a newly unlocked milestone.
+
+## Contract alert subscriptions
+
+Channels can subscribe to contract watchdog alerts with specific severity filters. Subscriptions are stored per channel in the bot's SQLite database (`alert_subscriptions`).
+
+### Managing subscriptions
+
+- `/subscribe contract:<id> [severity:all|critical|warning|info] [channel:#channel]`
+  Subscribes a channel to alerts for that contract. Requires the **Manage Channels** permission on the target channel.
+  - `all` (default): Info, Warning, and Critical alerts.
+  - `critical`: Only Critical alerts.
+  - `warning`: Warning and Critical alerts.
+  - `info`: Info, Warning, and Critical alerts.
+- `/unsubscribe contract:<id> [channel:#channel]`
+  Removes a subscription for that channel and contract. Requires the **Manage Channels** permission on the target channel.
+- `/subscriptions [channel:#channel]`
+  Lists all active contract alert subscriptions for the channel.
+
+### Alert delivery
+
+Alerts are posted as rich Discord embeds styled with severity colours:
+- **Critical:** Red (`#ef4444`)
+- **Warning:** Amber (`#f59e0b`)
+- **Info:** Blue (`#38bdf8`)
+
+Each embed includes direct links to the transaction explorer and the contract.
+
+### Alert ingestion
+
+1. **Webhook receiver (recommended):** The bot listens on `POST /webhook/alerts` (or `POST /alerts`). Webhook ingestion **fails closed**: it requires `ALERT_WEBHOOK_SECRET` to be configured. Every incoming request must carry valid `X-Sorolens-Signature` and `X-Sorolens-Timestamp` headers matching the HMAC-SHA256 scheme in [`docs/webhooks.md`](../../docs/webhooks.md); unsigned requests or requests received when the secret is blank are rejected (HTTP 503 / 401).
+2. **Polling (fallback):** Set `ALERT_POLL_INTERVAL_SECONDS` (e.g. `60`) to poll `GET /api/v1/watchdog/contracts/{id}/alerts` periodically for all contracts with active subscriptions. Polling remains fully operational when webhook delivery is disabled (`ALERT_WEBHOOK_SECRET` unset).
+
+### Channel rate limiting & failure handling
+
+- **Permission verification:** `/subscribe` and `/unsubscribe` check the caller's effective `Manage Channels` permission directly on the target channel (accounting for channel-specific overrides), enforce that the channel belongs to the current server, and deny the operation if permissions cannot be determined.
+- **Rate limiting:** Posts per channel are constrained by a sliding window (default: 5 alerts/min per channel via `ALERT_RATE_LIMIT_PER_MINUTE`) to protect channels from alert bursts.
+- **Deleted channels:** When Discord returns error `10003` (`Unknown Channel`), the bot catches the error and automatically purges the dead subscriptions from the database.
+- **Missing permissions:** When the bot lacks `Send Messages` or `Embed Links` in a channel (error `50013`), it logs a warning gracefully without crashing.
 
 ## Role tiers
 
@@ -210,6 +257,8 @@ The webhook receiver uses `@octokit/webhooks`, which validates the HMAC-SHA256 s
 | Command registration workflow fails with `Missing required env var` | The Actions secrets in step 5 are missing.                                                                                      |
 | Bot does not react to `#numbers`                                  | Check applications are on (`/assign-status`), the channel is right, Message Content Intent is on and the bot can react there.    |
 | GitHub silently refuses an assignment                             | The bot reports "couldn't be assigned" and frees the issue for someone else.                                                     |
+| Channel deleted while holding alert subscriptions                | The bot catches Discord 10003 and purges the channel's subscriptions from SQLite automatically.   |
+| Bot lacks Send Messages/Embed Links permissions in alert channel | The bot catches Discord 50013, logs the warning, and preserves the subscription for when permissions are restored. |
 
 ## Security notes
 

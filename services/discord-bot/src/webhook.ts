@@ -21,7 +21,13 @@ import { getByGithub } from "./db.js";
 import { syncOnMerge } from "./commands.js";
 import { onMerge } from "./community-discord.js";
 import { type Tiers } from "./roles.js";
-import type { Config } from "./config.js";
+import { type Config } from "./config.js";
+import type { ContractAlert } from "./api.js";
+import {
+  ChannelRateLimiter,
+  routeAlert,
+  verifyWebhookSignature,
+} from "./subscriptions.js";
 
 interface Deps {
   client: Client;
@@ -75,6 +81,94 @@ export function mountWebhookRoutes(app: Application, deps: Deps): void {
   });
 
   app.get("/healthz", (_req, res) => res.json({ ok: true }));
+
+  const alertLimiter = new ChannelRateLimiter(
+    deps.config.alertRateLimitPerMinute
+  );
+
+  const handleAlertWebhook = async (req: Request, res: Response) => {
+    const secret = deps.config.alertWebhookSecret?.trim();
+    if (!secret) {
+      res.status(503).json({
+        error:
+          "alert webhook delivery is disabled; ALERT_WEBHOOK_SECRET is not configured",
+      });
+      return;
+    }
+
+    const rawBody = req.body as Buffer;
+    if (!rawBody || !Buffer.isBuffer(rawBody) || rawBody.length === 0) {
+      res.status(400).json({ error: "missing request body" });
+      return;
+    }
+
+    const sigHeader = req.header("x-sorolens-signature");
+    const tsHeader = req.header("x-sorolens-timestamp");
+    if (!sigHeader || !tsHeader) {
+      res.status(401).json({ error: "missing signature or timestamp headers" });
+      return;
+    }
+
+    const valid = verifyWebhookSignature(
+      secret,
+      sigHeader,
+      tsHeader,
+      rawBody
+    );
+    if (!valid) {
+      res.status(401).json({ error: "invalid signature" });
+      return;
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(rawBody.toString("utf8"));
+    } catch {
+      res.status(400).json({ error: "invalid json body" });
+      return;
+    }
+
+    const contractId = parsed.contract_id || parsed.contractId;
+    if (!contractId || typeof contractId !== "string") {
+      res.status(400).json({ error: "missing contract_id" });
+      return;
+    }
+
+    const alert: ContractAlert & { explorerUrl?: string } = {
+      contractId: contractId.trim().toUpperCase(),
+      severity: parsed.severity || "Info",
+      message: parsed.message || "",
+      ledger: Number(parsed.ledger) || 0,
+      txHash: parsed.tx_hash || parsed.txHash || "",
+      timestamp: parsed.timestamp || new Date().toISOString(),
+      explorerUrl: parsed.explorer_url || parsed.explorerUrl,
+    };
+
+    try {
+      const dispatchResult = await routeAlert(deps.client, alert, {
+        rateLimiter: alertLimiter,
+      });
+      res.status(202).json({
+        ok: true,
+        delivered: dispatchResult.delivered.length,
+        rateLimited: dispatchResult.rateLimited.length,
+      });
+    } catch (err) {
+      console.error("webhook/alerts: dispatch failed", err);
+      res.status(500).json({ error: "failed to dispatch alert" });
+    }
+  };
+
+  app.post(
+    "/webhook/alerts",
+    express.raw({ type: "application/json" }),
+    handleAlertWebhook
+  );
+  app.post(
+    "/alerts",
+    express.raw({ type: "application/json" }),
+    handleAlertWebhook
+  );
 
   app.post(
     "/webhook",

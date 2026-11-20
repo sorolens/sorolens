@@ -21,6 +21,9 @@ const cfg: Config = {
   sorolensApiBaseUrl: "https://api.sorolens.dev",
   sorolensAdminApiKey: "",
   commandRateLimitPerMinute: 10,
+  alertRateLimitPerMinute: 5,
+  alertPollIntervalSeconds: 0,
+  alertWebhookSecret: "",
   port: 8080,
   dbPath: "/tmp/x.db",
 };
