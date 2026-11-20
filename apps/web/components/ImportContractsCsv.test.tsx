@@ -191,7 +191,10 @@ describe("ImportContractsCsv", () => {
   it("skips blank lines between records", async () => {
     const { container } = renderModal();
 
-    await upload(container, csvFile(`${ID},testnet\n\n${OTHER_ID},testnet\n\n`));
+    await upload(
+      container,
+      csvFile(`${ID},testnet\n\n${OTHER_ID},testnet\n\n`)
+    );
 
     await waitFor(() => expect(rowCount()).toBe(2));
     expect(screen.getByText("2 row(s)")).toBeVisible();
