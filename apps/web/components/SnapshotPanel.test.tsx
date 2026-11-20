@@ -131,9 +131,7 @@ describe("SnapshotPanel", () => {
     expect(mockGetContractSnapshot).toHaveBeenCalledWith(CONTRACT_ID, 1000);
     // Numbers are formatted for the reader, not printed raw.
     expect(screen.getByText(/First tracked ledger:/)).toHaveTextContent(
-      `First tracked ledger: ${
-        (512).toLocaleString()
-      }`
+      `First tracked ledger: ${(512).toLocaleString()}`
     );
   });
 
