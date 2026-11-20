@@ -141,17 +141,23 @@ with Client(api_key="sk_live_...") as client:
 
 | Resource             | Methods                                                                              |
 | -------------------- | ------------------------------------------------------------------------------------ |
-| `client.health`      | `health()`, `readyz()`                                                               |
-| `client.stats`       | `global_stats()`, `contract(contract_id, window=...)`                                |
-| `client.contracts`   | `list(...)`, `iter(...)`, `get(contract_id)`, `register(contract_id, network, ...)`   |
-| `client.events`      | `list(contract_id, ...)`, `iter(contract_id, ...)`, `stream(contract_id)`            |
-| `client.invocations` | `list(contract_id, ...)`, `iter(contract_id, ...)`                                   |
-| `client.storage`     | `list(contract_id, ...)`                                                             |
-| `client.forecast`    | `get(contract_id, horizon=...)`                                                      |
-| `client.snapshots`   | `get(contract_id, ledger=...)`                                                       |
-| `client.api_keys`    | `list()`, `create()`, `revoke()`, `list_admin()`, `create_admin()`, `revoke_admin()` |
-| `client.watchlist`   | `list(user_id)`, `add(...)`, `remove(...)`, `status(...)`                            |
-| `client.watchdog`    | `stats()`, `alerts(...)`, `contracts(...)`, `contract()`, `health()`, `alerts_for()` |
+| `client.health`        | `health()`, `readyz()`                                                               |
+| `client.stats`         | `global_stats()`, `contract(contract_id, window=...)`, `compare(ids, window=...)`    |
+| `client.contracts`     | `list(...)`, `iter(...)`, `get(...)`, `register(...)`, `upgrades()`, `graph()`, `health_score()`, `summary()` |
+| `client.events`        | `list(contract_id, ...)`, `iter(contract_id, ...)`, `stream(contract_id)`            |
+| `client.invocations`   | `list(contract_id, ...)`, `iter(contract_id, ...)`                                   |
+| `client.storage`       | `list(contract_id, ...)`                                                             |
+| `client.forecast`      | `get(contract_id, horizon=...)`                                                      |
+| `client.snapshots`     | `get(contract_id, ledger=...)`                                                       |
+| `client.api_keys`      | `list()`, `create()`, `revoke()`, `list_admin()`, `create_admin()`, `revoke_admin()` |
+| `client.watchlist`     | `list(user_id)`, `add(...)`, `remove(...)`, `status(...)`                            |
+| `client.watchdog`      | `stats()`, `alerts(...)`, `contracts(...)`, `contract()`, `health()`, `alerts_for()` |
+| `client.alerts`        | `list(flat=..., severity=..., network=..., cursor=..., limit=...)`                   |
+| `client.search`        | `contracts(q, limit=...)`                                                            |
+| `client.labels`        | `list(query=...)`, `create(label, value, scope=...)`, `resolve(query)`               |
+| `client.dlq`           | `list(cursor=..., limit=...)`, `requeue(event_id)`                                   |
+| `client.reports`       | `contract(...)`, `history(...)`, `badge(...)`, `create_subscription(...)`, `subscriptions(...)`, `delete_subscription(...)`, `unsubscribe(token)` |
+| `client.notifications` | `list()`, `create(contract_id, channel_type=..., ...)`, `delete(subscription_id)`    |
 
 `AsyncClient` exposes the same names as coroutines.
 
