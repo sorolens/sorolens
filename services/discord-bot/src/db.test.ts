@@ -11,6 +11,12 @@ import {
   setApiKey,
   getApiKey,
   clearApiKey,
+  upsertSubscription,
+  removeSubscription,
+  getSubscription,
+  listSubscriptionsForChannel,
+  listSubscriptionsForContract,
+  clearSubscriptionsForChannel,
 } from "./db.js";
 
 describe("db mapping store", () => {
@@ -92,5 +98,74 @@ describe("per-user api key store", () => {
     setApiKey("111", "sl_abc", "key_1");
     expect(clearApiKey("111")).toBe(true);
     expect(clearApiKey("111")).toBe(false);
+  });
+});
+
+describe("alert subscriptions store", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "sorolens-bot-"));
+    openDb(join(dir, "test.db"));
+  });
+
+  const CONTRACT_A = "C" + "A".repeat(55);
+  const CONTRACT_B = "C" + "B".repeat(55);
+
+  it("stores and reads back a subscription", () => {
+    const sub = upsertSubscription("chan_1", CONTRACT_A, "critical");
+    expect(sub.channelId).toBe("chan_1");
+    expect(sub.contractId).toBe(CONTRACT_A);
+    expect(sub.severity).toBe("critical");
+    expect(sub.createdAt).toBeTruthy();
+    expect(sub.updatedAt).toBeTruthy();
+
+    const read = getSubscription("chan_1", CONTRACT_A);
+    expect(read).toEqual(sub);
+  });
+
+  it("normalizes contract to uppercase and severity to lowercase", () => {
+    upsertSubscription("chan_1", CONTRACT_A.toLowerCase(), "WARNING");
+    const read = getSubscription("chan_1", CONTRACT_A);
+    expect(read?.contractId).toBe(CONTRACT_A);
+    expect(read?.severity).toBe("warning");
+  });
+
+  it("upsert replaces severity for the same channel and contract", () => {
+    upsertSubscription("chan_1", CONTRACT_A, "all");
+    expect(getSubscription("chan_1", CONTRACT_A)?.severity).toBe("all");
+
+    upsertSubscription("chan_1", CONTRACT_A, "critical");
+    expect(getSubscription("chan_1", CONTRACT_A)?.severity).toBe("critical");
+  });
+
+  it("removeSubscription removes the row and reports boolean", () => {
+    upsertSubscription("chan_1", CONTRACT_A, "all");
+    expect(removeSubscription("chan_1", CONTRACT_A)).toBe(true);
+    expect(getSubscription("chan_1", CONTRACT_A)).toBeNull();
+    expect(removeSubscription("chan_1", CONTRACT_A)).toBe(false);
+  });
+
+  it("lists subscriptions by channel and contract", () => {
+    upsertSubscription("chan_1", CONTRACT_A, "critical");
+    upsertSubscription("chan_1", CONTRACT_B, "all");
+    upsertSubscription("chan_2", CONTRACT_A, "warning");
+
+    const chan1Subs = listSubscriptionsForChannel("chan_1");
+    expect(chan1Subs).toHaveLength(2);
+    expect(chan1Subs.map((s) => s.contractId)).toEqual([CONTRACT_A, CONTRACT_B]);
+
+    const contractASubs = listSubscriptionsForContract(CONTRACT_A);
+    expect(contractASubs).toHaveLength(2);
+    expect(contractASubs.map((s) => s.channelId)).toEqual(["chan_1", "chan_2"]);
+  });
+
+  it("clearSubscriptionsForChannel removes all subscriptions for a channel", () => {
+    upsertSubscription("chan_1", CONTRACT_A, "critical");
+    upsertSubscription("chan_1", CONTRACT_B, "all");
+    upsertSubscription("chan_2", CONTRACT_A, "warning");
+
+    expect(clearSubscriptionsForChannel("chan_1")).toBe(2);
+    expect(listSubscriptionsForChannel("chan_1")).toEqual([]);
+    expect(listSubscriptionsForChannel("chan_2")).toHaveLength(1);
   });
 });
