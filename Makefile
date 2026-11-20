@@ -7,7 +7,7 @@ OAPI_CODEGEN_VERSION := v2.4.1
 # gzip output is not stable across Go releases. The generator must therefore be
 # built with the same toolchain the committed client was produced with, or CI's
 # "Go client up-to-date" job reports a spurious diff.
-OAPI_CODEGEN_GO := go1.26.0
+OAPI_CODEGEN_GO := go1.22
 OAPI_CODEGEN := $(CURDIR)/.bin/oapi-codegen
 OAPI_SPEC    := docs/openapi.yaml
 CLIENT_DIR   := packages/go-client
