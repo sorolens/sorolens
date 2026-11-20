@@ -49,6 +49,12 @@ exclude_docs: |
   DESIGN.md
   issue-closure-summary.md
   requirements.txt
+  README.md
+  cli/README.md
+  cli/reference/
+  cli/reference/**
+  cli/man/
+  cli/man/**
 
 plugins:
   - search
@@ -128,6 +134,7 @@ nav:
       - Backups and PITR: backups.md
       - Migrations: migrations.md
       - Discord bot: discord-bot.md
+      - Supply chain: supply-chain.md
   - Contributing:
       - Editing these docs: contributing/docs.md
       - Web localization: i18n.md

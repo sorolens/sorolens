@@ -7,7 +7,7 @@ advisories. Go, Rust, and Python fail on any vulnerability their scanners
 report. Investigate scanner errors as well as advisory findings.
 
 Gitleaks scans the checked-out Git history on the same schedule, on manual runs,
-and on pushes to main. The fixture exceptions in [.gitleaksignore](../.gitleaksignore)
+and on pushes to main. The fixture exceptions in [.gitleaksignore](https://github.com/sorolens/sorolens/blob/main/.gitleaksignore)
 are the only scan exceptions. Add narrow fixture exceptions with a reason.
 Dependency advisory exceptions are currently empty.
 
