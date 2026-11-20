@@ -26,6 +26,6 @@ jobs:
           go-version: "1.26"
           cache: false
 
-      - name: Run integration suite
+      - name: Run integration and fault injection suite
         working-directory: tests/integration
-        run: make integration-test
+        run: make integration-test && make fault-test

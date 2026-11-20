@@ -354,6 +354,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Post("/me/api-keys", h.CreateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
 
+		// Asynchronous export jobs (issue #785)
+		r.With(scope).Post("/exports", h.CreateExport)
+		get("/exports/{id}", h.GetExport)
+		r.With(scope).Delete("/exports/{id}", h.DeleteExport)
+		r.Get("/exports/{id}/download", h.DownloadExport)
+
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
 		r.With(scope, admin).Post("/api-keys", h.CreateAPIKey)
@@ -468,6 +474,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Get("/me/api-keys", h.ListMyAPIKeys)
 		r.With(scope, contributor).Post("/me/api-keys", h.CreateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
+
+		// Asynchronous export jobs (issue #785)
+		r.With(scope).Post("/exports", h.CreateExport)
+		get("/exports/{id}", h.GetExport)
+		r.With(scope).Delete("/exports/{id}", h.DeleteExport)
+		r.Get("/exports/{id}/download", h.DownloadExport)
 
 		// Stats
 		get("/stats/global", h.V2GlobalStats)
