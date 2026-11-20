@@ -228,7 +228,11 @@ test("/compare keeps a selected comparison shareable across loads", async ({
   await page.goto("/compare");
   await page.getByRole("button", { name: "Alpha", exact: true }).click();
   await page.getByRole("button", { name: "Beta", exact: true }).click();
-  await expect(page).toHaveURL(/ids=/);
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("ids"))
+    .toBe(`${CONTRACTS[0].id},${CONTRACTS[1].id}`);
+  await expect(page.getByRole("heading", { name: "Alpha" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Beta" })).toBeVisible();
 
   const sharedUrl = page.url();
 

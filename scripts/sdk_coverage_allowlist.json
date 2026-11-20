@@ -283,16 +283,9 @@
         ]
       },
       {
-        "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
+        "reason": "Event schema, contract spec, and uptime endpoints are not yet exposed by this SDK.",
         "operations": [
-          "createReportSubscription",
-          "deleteReportSubscription",
           "getContractEventSchemas",
-          "getContractGraph",
-          "getContractHealthScore",
-          "getContractReport",
-          "getContractReportHistory",
-          "getContractSLABadge",
           "getContractSpec",
           "getContractUptime"
         ]
