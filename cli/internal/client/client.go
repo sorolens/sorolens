@@ -205,7 +205,9 @@ func (c *Client) ListInvocations(ctx context.Context, contractID string, opts Li
 		q.Set("status", opts.Status)
 	}
 	if opts.Fn != "" {
-		q.Set("fn", opts.Fn)
+		// The per-contract endpoint filters on function_name (docs/openapi.yaml);
+		// only the global /api/v1/invocations list uses the short "fn".
+		q.Set("function_name", opts.Fn)
 	}
 	if opts.Limit > 0 {
 		q.Set("limit", strconv.Itoa(opts.Limit))
@@ -219,6 +221,21 @@ func (c *Client) ListInvocations(ctx context.Context, contractID string, opts Li
 	}
 	var out InvocationsResponse
 	err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return out, err
+}
+
+// GetInvocation fetches one invocation and its events by transaction hash.
+func (c *Client) GetInvocation(ctx context.Context, contractID, txHash string) (InvocationDetail, error) {
+	var out InvocationDetail
+	err := c.do(ctx, http.MethodGet, "/api/v1/contracts/"+url.PathEscape(contractID)+"/invocations/"+url.PathEscape(txHash), nil, &out)
+	return out, err
+}
+
+// GetInvocationTrace fetches the call-graph trace of a transaction. It is the
+// only endpoint that resolves a transaction hash without a contract ID.
+func (c *Client) GetInvocationTrace(ctx context.Context, txHash string) (InvocationTrace, error) {
+	var out InvocationTrace
+	err := c.do(ctx, http.MethodGet, "/api/v1/invocations/"+url.PathEscape(txHash)+"/trace", nil, &out)
 	return out, err
 }
 

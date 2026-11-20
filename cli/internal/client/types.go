@@ -72,6 +72,27 @@ type Invocation struct {
 	ApplicationOrder   int            `json:"application_order"`
 }
 
+// InvocationDetail mirrors GET /api/v1/contracts/{id}/invocations/{tx_hash}:
+// the invocation plus the events its transaction emitted.
+type InvocationDetail struct {
+	Invocation
+	Events []Event `json:"events"`
+}
+
+// InvocationTrace mirrors the parts of GET /api/v1/invocations/{tx_hash}/trace
+// the CLI needs. Root.ContractID is empty when the transaction has call edges
+// but no invocation row.
+type InvocationTrace struct {
+	TxHash  string `json:"tx_hash"`
+	Status  string `json:"status"`
+	Network string `json:"network"`
+	Ledger  uint32 `json:"ledger"`
+	Root    *struct {
+		ContractID   string `json:"contract_id"`
+		FunctionName string `json:"function_name"`
+	} `json:"root"`
+}
+
 // GlobalStats mirrors the API global stats response.
 type GlobalStats struct {
 	TrackedContracts    int64 `json:"tracked_contracts"`

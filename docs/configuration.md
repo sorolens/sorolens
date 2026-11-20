@@ -195,6 +195,9 @@ there, not here.
 
 | Name | Default | Required | Description |
 |---|---|---|---|
+| `ALERT_POLL_INTERVAL_SECONDS` | `0` | no | Optional polling interval in seconds for watchdog alerts. Set > 0 to enable periodic polling of the Sorolens API for active subscribed contracts. |
+| `ALERT_RATE_LIMIT_PER_MINUTE` | `5` | no | Rate limit for outgoing alert messages per channel per minute (default 5). |
+| `ALERT_WEBHOOK_SECRET` | — | yes | Required for webhook ingestion at /webhook/alerts and /alerts (fails closed). The bot requires this secret (whsec_...) to verify HMAC-SHA256 signatures before routing any alert. If left blank, webhook routes reject all alert requests (503). |
 | `COMMAND_RATE_LIMIT_PER_MINUTE` | `10` | no | Per-user slash command budget, sliding 60s window. Default 10. |
 | `CONTRIBUTOR_THRESHOLD` | `1` | no | Contributors need at least this many merged PRs against GITHUB_REPO. |
 | `CORE_CONTRIBUTOR_THRESHOLD` | `3` | no | Contributors need at least this many merged PRs against GITHUB_REPO. |

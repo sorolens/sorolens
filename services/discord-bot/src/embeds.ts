@@ -139,3 +139,59 @@ export function watchlistEmbed(
   });
   return embed;
 }
+
+export interface AlertNotificationOptions {
+  contractLabel?: string | null;
+  explorerUrl?: string | null;
+}
+
+/** Embed for a dispatched watchdog alert routed to a subscribed channel. */
+export function alertNotificationEmbed(
+  alert: ContractAlert & { explorerUrl?: string },
+  opts: AlertNotificationOptions = {}
+): EmbedBuilder {
+  const label = opts.contractLabel?.trim();
+  const titleName = label ? `${label} (${shortId(alert.contractId)})` : shortId(alert.contractId);
+  const color = colorForSeverity(alert.severity);
+
+  const txUrl =
+    alert.explorerUrl ||
+    opts.explorerUrl ||
+    (alert.txHash
+      ? `https://sorobanexplorer.com/transaction/${alert.txHash}`
+      : `https://sorobanexplorer.com/contract/${alert.contractId}`);
+
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(`${alert.severity} Alert: ${titleName}`)
+    .setURL(txUrl)
+    .setDescription(alert.message || "A contract watchdog alert was triggered.")
+    .addFields(
+      {
+        name: "Contract",
+        value: `\`${alert.contractId}\``,
+      },
+      {
+        name: "Severity",
+        value: `\`${alert.severity}\``,
+        inline: true,
+      },
+      {
+        name: "Ledger",
+        value: `\`${alert.ledger}\``,
+        inline: true,
+      }
+    )
+    .setFooter({ text: "Sorolens • Contract Watchdog Alert" })
+    .setTimestamp(alert.timestamp ? new Date(alert.timestamp) : new Date());
+
+  if (alert.txHash) {
+    embed.addFields({
+      name: "Transaction",
+      value: `[${shortId(alert.txHash)}](${txUrl})`,
+      inline: true,
+    });
+  }
+
+  return embed;
+}

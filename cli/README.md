@@ -80,6 +80,8 @@ sorolens --api-url https://api.sorolens.xyz --network testnet inspect CDLZ...
 | ------------------------------------ | --------------------------------------------- |
 | `sorolens track <contract-id>`       | Start tracking a contract                     |
 | `sorolens inspect <contract-id>`     | Contract metadata, stats and recent activity  |
+| `sorolens inspect --tx <hash>`       | One transaction: function, resources, events  |
+| `sorolens invocations <contract-id>` | Recent invocations (`--status`, `--fn`)       |
 | `sorolens events <contract-id>`      | List contract events                          |
 | `sorolens tail --contract <id>`      | Follow events as they stream in                |
 | `sorolens status <contract-id>`      | Watchdog status for a contract                 |
