@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import type { RuleCatalogResponse, RulePreview, RuleValidation } from "@/lib/types";
-import {
-  RULE_AGGREGATIONS,
-  RULE_METRICS,
-  RULE_UNITS,
-} from "@/lib/ruleSyntax";
+import type {
+  RuleCatalogResponse,
+  RulePreview,
+  RuleValidation,
+} from "@/lib/types";
+import { RULE_AGGREGATIONS, RULE_METRICS, RULE_UNITS } from "@/lib/ruleSyntax";
 import { SUPPORTED_OPERATORS, type VisualRuleTree } from "@/lib/ruleTree";
 
 interface VisualRuleBuilderProps {
@@ -61,7 +61,9 @@ export function VisualRuleBuilder({
               id="rule-aggregation"
               className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-indigo-500 focus:outline-hidden"
               value={value.aggregation || ""}
-              onChange={(e) => update({ aggregation: e.target.value || undefined })}
+              onChange={(e) =>
+                update({ aggregation: e.target.value || undefined })
+              }
             >
               <option value="">(None - Raw Metric)</option>
               {Array.from(RULE_AGGREGATIONS).map((agg) => (
@@ -131,7 +133,9 @@ export function VisualRuleBuilder({
                 step="any"
                 className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-indigo-500 focus:outline-hidden"
                 value={Number.isNaN(value.threshold) ? "" : value.threshold}
-                onChange={(e) => update({ threshold: parseFloat(e.target.value) || 0 })}
+                onChange={(e) =>
+                  update({ threshold: parseFloat(e.target.value) || 0 })
+                }
               />
               <select
                 aria-label="Unit"
@@ -165,7 +169,9 @@ export function VisualRuleBuilder({
               placeholder="e.g. 5m, 1h"
               className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-indigo-500 focus:outline-hidden"
               value={value.duration || ""}
-              onChange={(e) => update({ duration: e.target.value || undefined })}
+              onChange={(e) =>
+                update({ duration: e.target.value || undefined })
+              }
             />
           </div>
 
@@ -182,7 +188,9 @@ export function VisualRuleBuilder({
               placeholder="e.g. CDLZFC3..."
               className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-base)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-indigo-500 focus:outline-hidden"
               value={value.contractId || ""}
-              onChange={(e) => update({ contractId: e.target.value || undefined })}
+              onChange={(e) =>
+                update({ contractId: e.target.value || undefined })
+              }
             />
           </div>
 
@@ -210,7 +218,9 @@ export function VisualRuleBuilder({
         {/* Validation Feedback */}
         {validation?.errors && validation.errors.length > 0 && (
           <div className="mt-4 rounded-md border border-rose-500/30 bg-rose-500/10 p-3">
-            <h4 className="text-xs font-semibold text-rose-400">Validation Errors</h4>
+            <h4 className="text-xs font-semibold text-rose-400">
+              Validation Errors
+            </h4>
             <ul className="mt-1 space-y-1 text-xs text-rose-300">
               {validation.errors.map((d, i) => (
                 <li key={i}>{d.message}</li>
@@ -236,12 +246,19 @@ export function VisualRuleBuilder({
         {preview ? (
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${preview.fired ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"}`}>
-                {preview.fired ? "Triggered (Rule Fired)" : "Passing (Not Fired)"}
+              <span
+                className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${preview.fired ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"}`}
+              >
+                {preview.fired
+                  ? "Triggered (Rule Fired)"
+                  : "Passing (Not Fired)"}
               </span>
               {preview.value !== null && preview.value !== undefined && (
                 <span className="text-xs text-[var(--color-text-secondary)]">
-                  Current Value: <strong className="text-[var(--color-text-primary)]">{preview.value}</strong>
+                  Current Value:{" "}
+                  <strong className="text-[var(--color-text-primary)]">
+                    {preview.value}
+                  </strong>
                 </span>
               )}
               {preview.window && (
@@ -262,8 +279,15 @@ export function VisualRuleBuilder({
                       <span className="font-mono text-[var(--color-text-secondary)]">
                         {p.at}
                       </span>
-                      <span className={p.fired ? "text-rose-400 font-semibold" : "text-[var(--color-text-primary)]"}>
-                        {p.value !== null ? p.value : "null"} {p.fired ? "(fired)" : ""}
+                      <span
+                        className={
+                          p.fired
+                            ? "text-rose-400 font-semibold"
+                            : "text-[var(--color-text-primary)]"
+                        }
+                      >
+                        {p.value !== null ? p.value : "null"}{" "}
+                        {p.fired ? "(fired)" : ""}
                       </span>
                     </li>
                   ))}
@@ -277,7 +301,8 @@ export function VisualRuleBuilder({
           </div>
         ) : (
           <p className="text-xs text-[var(--color-text-secondary)] italic">
-            Enter a valid rule condition above to see live evaluation and matching points.
+            Enter a valid rule condition above to see live evaluation and
+            matching points.
           </p>
         )}
       </div>

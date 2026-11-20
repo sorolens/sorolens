@@ -37,7 +37,8 @@ describe("ruleTree round-tripping", () => {
   });
 
   it("handles on contract and on network clauses", () => {
-    const dsl = "invocations >= 100 for 1m on contract CDLZFC3 on network testnet";
+    const dsl =
+      "invocations >= 100 for 1m on contract CDLZFC3 on network testnet";
     const tree = parseDslToTree(dsl);
     expect(tree.metric).toBe("invocations");
     expect(tree.operator).toBe(">=");

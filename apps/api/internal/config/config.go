@@ -258,6 +258,7 @@ func Load() (*Config, error) {
 	}
 	cfg.IndexerPollInterval = poll
 
+	// DATABASE_REPLICA_LAG_THRESHOLD is the maximum replication lag permitted before queries fall back to the primary database.
 	replicaLagStr := getEnvDefault("DATABASE_REPLICA_LAG_THRESHOLD", "10s")
 	replicaLag, err := time.ParseDuration(replicaLagStr)
 	if err != nil || replicaLag <= 0 {

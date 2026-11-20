@@ -41,7 +41,9 @@ export default function RulesPage() {
   const userId = useSessionUserId();
   const [source, setSource] = useState(DEFAULT_RULE);
   const [mode, setMode] = useState<"visual" | "dsl">("visual");
-  const [ruleTree, setRuleTree] = useState<VisualRuleTree>(() => parseDslToTree(DEFAULT_RULE));
+  const [ruleTree, setRuleTree] = useState<VisualRuleTree>(() =>
+    parseDslToTree(DEFAULT_RULE)
+  );
   const [name, setName] = useState("Expensive invocation");
   const [severity, setSeverity] = useState<RuleSeverity>("Warning");
   const [contractId, setContractId] = useState("");

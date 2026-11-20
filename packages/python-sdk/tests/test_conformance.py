@@ -1,9 +1,12 @@
 import json
 import os
-import pytest
-import httpx
 
-FIXTURES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../tests/sdk-conformance/fixtures"))
+import httpx
+import pytest
+
+FIXTURES_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../../../tests/sdk-conformance/fixtures")
+)
 
 def load_fixtures():
     files = sorted([f for f in os.listdir(FIXTURES_DIR) if f.endswith(".json")])
@@ -37,5 +40,6 @@ def test_replays_conformance_fixture(fixture):
         assert data.get("error", {}).get("code") == expected["error_code"]
 
     if "count" in expected:
-        count = len(data.get("contracts", [])) if "contracts" in data else len(data.get("events", []))
+        has_contracts = "contracts" in data
+        count = len(data.get("contracts", [])) if has_contracts else len(data.get("events", []))
         assert count == expected["count"]

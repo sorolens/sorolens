@@ -62,7 +62,10 @@ export function parseDslToTree(dsl: string): VisualRuleTree {
   // Find operator (>=, <=, ==, !=, >, <)
   const opMatch = remainder.match(/(>=|<=|==|!=|>|<)/);
   if (!opMatch || opMatch.index === undefined) {
-    return { ...DEFAULT_RULE_TREE, metric: remainder.trim() || DEFAULT_RULE_TREE.metric };
+    return {
+      ...DEFAULT_RULE_TREE,
+      metric: remainder.trim() || DEFAULT_RULE_TREE.metric,
+    };
   }
 
   result.operator = opMatch[1];
@@ -84,7 +87,9 @@ export function parseDslToTree(dsl: string): VisualRuleTree {
   }
 
   // Parse right side: number, optional unit / percentage
-  const numMatch = right.match(/^([+-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\s*(%|[a-zA-Z]+)?/);
+  const numMatch = right.match(
+    /^([+-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\s*(%|[a-zA-Z]+)?/
+  );
   if (numMatch) {
     result.threshold = parseFloat(numMatch[1]);
     if (numMatch[2]) {
@@ -99,7 +104,9 @@ export function parseDslToTree(dsl: string): VisualRuleTree {
  * treeToDsl formats a VisualRuleTree into a valid Sorolens alert rule DSL string.
  */
 export function treeToDsl(tree: VisualRuleTree): string {
-  const left = tree.aggregation ? `${tree.aggregation}(${tree.metric})` : tree.metric;
+  const left = tree.aggregation
+    ? `${tree.aggregation}(${tree.metric})`
+    : tree.metric;
   let valStr = String(tree.threshold);
   if (tree.unit) {
     if (tree.unit === "%") {

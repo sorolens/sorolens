@@ -2934,6 +2934,34 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v2/contracts/{id}/event-schemas:
+    get:
+      tags: [API v2]
+      summary: Inferred and declared event schemas for a contract (v2)
+      operationId: v2ContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v2/watchlist:
     get:
       tags: [API v2]
