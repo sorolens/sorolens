@@ -19,6 +19,10 @@ type labelResponse struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
 	Scope string `json:"scope"`
+	AssetCode string `json:"asset_code,omitempty"`
+	Issuer string `json:"issuer,omitempty"`
+	Decimals *int `json:"decimals,omitempty"`
+	Source string `json:"source,omitempty"`
 }
 
 func labelFromStore(label store.Label) labelResponse {
@@ -26,7 +30,7 @@ func labelFromStore(label store.Label) labelResponse {
 	if label.Public {
 		scope = "public"
 	}
-	return labelResponse{Label: label.Label, Value: label.Value, Scope: scope}
+	return labelResponse{Label: label.Label, Value: label.Value, Scope: scope, Source: "manual"}
 }
 
 // CreateLabel handles POST /api/v1/labels. Workspace labels are owned by the

@@ -148,3 +148,25 @@ func TestPassphrase(t *testing.T) {
 		t.Error("unknown network must not resolve")
 	}
 }
+
+// TestIsStellarAssetContract verifies SAC detection from the executable type
+// of a contract. SAC instances use the stellar-asset executable, while
+// Wasm-backed contracts carry a wasm hash.
+func TestIsStellarAssetContract(t *testing.T) {
+	cases := []struct {
+		name   string
+		exec   ContractExecutable
+		wantSA bool
+	}{
+		{name: "sac_executable", exec: ContractExecutable{Type: ExecutableStellarAsset}, wantSA: true},
+		{name: "wasm_executable", exec: ContractExecutable{Type: ExecutableWasm, WasmHash: "abc"}, wantSA: false},
+		{name: "empty_executable", exec: ContractExecutable{}, wantSA: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsStellarAssetContract(tc.exec); got != tc.wantSA {
+				t.Fatalf("IsStellarAssetContract: want %v, got %v", tc.wantSA, got)
+			}
+		})
+	}
+}

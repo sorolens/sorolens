@@ -37,6 +37,19 @@ type contractResponse struct {
 	Backfill *contractBackfillResponse `json:"backfill,omitempty"`
 }
 
+// contractAssetResponse describes a Stellar Asset Contract (SAC) enrichment.
+// It is absent for contracts that are not SACs.
+type contractAssetResponse struct {
+	Code     string `json:"code"`
+	Issuer   string `json:"issuer,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Symbol   string `json:"symbol,omitempty"`
+	Decimals int    `json:"decimals"`
+	// Source is "manual" when a user-provided label set this metadata, or
+	// "sac" when it was detected by the indexer. Manual values always win.
+	Source string `json:"source"`
+}
+
 // contractBackfillResponse is the progress of a contract's backfill, which the
 // indexer scans from newest_ledger down to oldest_ledger.
 type contractBackfillResponse struct {

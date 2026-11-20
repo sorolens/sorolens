@@ -426,6 +426,19 @@ export function getContractStats(
   );
 }
 
+// ---- SAC metadata (Stellar Asset Contracts) --------------------------------
+
+/**
+ * Asset metadata enriched by the indexer for Stellar Asset Contracts (SACs):
+ * asset code, issuer, decimals, and the source of each value. Non-SAC
+ * contracts return a 404 ApiError, so callers should treat that as "not a SAC".
+ */
+export function getContractAssetMetadata(id: string): Promise<AssetMetadata> {
+  return fetchJson<AssetMetadata>(
+    `${API_URL}/api/v1/contracts/${encodeURIComponent(id)}/asset`
+  );
+}
+
 // ---- global stats ----------------------------------------------------------
 
 export function getGlobalStats(): Promise<GlobalStats> {

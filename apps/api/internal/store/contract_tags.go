@@ -96,3 +96,28 @@ func (s *postgresStore) contractTagsByContract(ctx context.Context, ids []string
 	}
 	return out, nil
 }
+
+// ContractTagSource marks where a tag came from. Manual tags always take
+// precedence over automatically derived ones such as SAC enrichment.
+const (
+	ContractTagSourceManual = "manual"
+	ContractTagSourceAuto   = "auto"
+)
+
+// HasManualContractTag reports whether a contract already carries the given
+// tag. Enrichment code calls this before writing an auto-derived tag so that
+// a manual label is never overwritten. The check is a single indexed lookup
+// on the (contract_id, tag) primary key.
+func (s *postgresStore) HasManualContractTag(ctx context.Context, contractID, tag string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM contract_tags
+			WHERE contract_id = $1 AND tag = $2
+		)`, contractID, tag,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check manual contract tag: %w", err)
+	}
+	return exists, nil
+}

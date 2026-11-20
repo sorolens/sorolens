@@ -23,6 +23,10 @@
 // The deployed contract ID is sha256(HashIDPreimage{ENVELOPE_TYPE_CONTRACT_ID,
 // sha256(networkPassphrase), contractIDPreimage}); the preimage bytes are
 // hashed exactly as they appear in the envelope.
+//
+// Stellar Asset Contracts (SACs) are deployed with a from-asset preimage. The
+// Asset is carried in that preimage, so the issuer and asset code of a SAC can
+// be recovered from the deployment envelope without any RPC call.
 package discovery
 
 import (
@@ -32,6 +36,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Network passphrases used to derive contract IDs.
@@ -104,6 +109,27 @@ type Deployment struct {
 	// Deployer is the address in a from-address preimage (G... or C...), or
 	// empty for a Stellar Asset Contract created from an asset.
 	Deployer string
+	// Asset is set for Stellar Asset Contract deployments (from-asset
+	// preimage) and is nil otherwise.
+	Asset *Asset
+}
+
+// Asset describes the classic asset a Stellar Asset Contract wraps.
+type Asset struct {
+	// Code is the asset code (e.g. USDC). Empty for the native asset.
+	Code string
+	// Issuer is the issuer account strkey (G...). Empty for the native asset.
+	Issuer string
+	// Native is true when the SAC wraps XLM.
+	Native bool
+}
+
+// Canonical returns the asset in Stellar's "CODE:ISSUER" form, or "native".
+func (a Asset) Canonical() string {
+	if a.Native {
+		return "native"
+	}
+	return a.Code + ":" + a.Issuer
 }
 
 var errMalformed = errors.New("discovery: malformed XDR")
@@ -152,7 +178,7 @@ func Deployments(envelopeXDR, passphrase string) ([]Deployment, error) {
 	}
 
 	start := d.off
-	deployer := d.contractIDPreimage()
+	deployer, asset := d.contractIDPreimage()
 	if d.err != nil {
 		return nil, d.err
 	}
@@ -162,6 +188,7 @@ func Deployments(envelopeXDR, passphrase string) ([]Deployment, error) {
 		ContractID: contractID(passphrase, preimage),
 		Source:     encodeStrkey(strkeyVersionAccount, source),
 		Deployer:   deployer,
+		Asset:      asset,
 	}}, nil
 }
 
@@ -257,6 +284,19 @@ func (d *decoder) varOpaque(max uint32) {
 	d.skip(int(n+3) &^ 3)
 }
 
+// varOpaqueBytes reads a variable-length opaque with the given max length and
+// returns its contents (without padding).
+func (d *decoder) varOpaqueBytes(max uint32) []byte {
+	n := d.u32()
+	if d.err == nil && n > max {
+		d.err = errMalformed
+		return nil
+	}
+	out := d.take(int(n))
+	d.skip(int(n+3) &^ 3)
+	return out
+}
+
 // muxedAccount reads a MuxedAccount and returns its ed25519 key.
 func (d *decoder) muxedAccount() []byte {
 	switch d.u32() {
@@ -343,21 +383,21 @@ func (d *decoder) memo() {
 }
 
 // contractIDPreimage reads a ContractIDPreimage and returns the deployer
-// address strkey for from-address preimages ("" for from-asset).
-func (d *decoder) contractIDPreimage() string {
+// address strkey for from-address preimages, or the wrapped asset for
+// from-asset preimages (Stellar Asset Contracts).
+func (d *decoder) contractIDPreimage() (string, *Asset) {
 	switch d.u32() {
 	case preimageFromAddress:
 		addr := d.scAddress()
 		d.skip(32) // salt
-		return addr
+		return addr, nil
 	case preimageFromAsset:
-		d.asset()
-		return ""
+		return "", d.asset()
 	}
 	if d.err == nil {
 		d.err = errMalformed
 	}
-	return ""
+	return "", nil
 }
 
 func (d *decoder) scAddress() string {
@@ -383,18 +423,36 @@ func (d *decoder) scAddress() string {
 	return ""
 }
 
-func (d *decoder) asset() {
+// asset reads an Asset union and returns its code and issuer. Alphanum codes
+// are padded with NUL bytes in XDR; they are trimmed here.
+func (d *decoder) asset() *Asset {
 	switch d.u32() {
 	case assetNative:
+		return &Asset{Native: true}
 	case assetCreditAlphanum4:
-		d.skip(4)
-		d.accountID()
+		code := d.take(4)
+		issuer := d.accountID()
+		if d.err != nil || code == nil || issuer == nil {
+			return nil
+		}
+		return &Asset{
+			Code:   strings.TrimRight(string(code), "\x00"),
+			Issuer: encodeStrkey(strkeyVersionAccount, issuer),
+		}
 	case assetCreditAlphanum12:
-		d.skip(12)
-		d.accountID()
+		code := d.take(12)
+		issuer := d.accountID()
+		if d.err != nil || code == nil || issuer == nil {
+			return nil
+		}
+		return &Asset{
+			Code:   strings.TrimRight(string(code), "\x00"),
+			Issuer: encodeStrkey(strkeyVersionAccount, issuer),
+		}
 	default:
 		if d.err == nil {
 			d.err = errMalformed
 		}
 	}
+	return nil
 }
