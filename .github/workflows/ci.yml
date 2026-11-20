@@ -229,6 +229,9 @@ jobs:
       # Issue #216: `pnpm prettier --check` must pass in CI.
       - name: prettier --check
         run: pnpm exec prettier --check apps/web package.json eslint.config.mjs
+      # Issue #569: Ensure only canonical domains (sorolens.xyz) are used across docs, config, and code.
+      - name: Verify canonical domain consistency
+        run: pnpm check:domains
       - name: Lint shared packages
         run: pnpm --filter "./packages/**" lint
       - name: Verify web OpenAPI playground catalog

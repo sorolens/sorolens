@@ -182,7 +182,7 @@ The dashboard is built on Next.js 15 and deploys to Vercel with zero extra infra
    - **Output Directory**: `.next`
 4. Configure Environment Variables in Vercel:
    - `NEXT_PUBLIC_API_URL`: The public URL of your deployed SoroLens API (e.g. `https://api.sorolens.example.com` or your Docker/Railway URL).
-   - `NEXT_PUBLIC_APP_URL`: The public origin of the dashboard (e.g. `https://sorolens.example.com`). It is the single source for `metadataBase`, `robots.txt` and `sitemap.xml`; unset, those fall back to `https://sorolens.dev` (issue #761).
+   - `NEXT_PUBLIC_APP_URL`: The public origin of the dashboard (e.g. `https://sorolens.example.com`). It is the single source for `metadataBase`, `robots.txt` and `sitemap.xml`; unset, those fall back to `https://sorolens.xyz` (issue #761).
    - `NEXT_PUBLIC_PWA_ENABLED`: Set to `true` if Progressive Web App service workers are desired.
 5. Click **Deploy**.
 
@@ -488,14 +488,14 @@ connection attacks.
 | Variable | Component | Required? | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `NEXT_PUBLIC_API_URL` | Web | Optional | `http://localhost:8080` | Browser URL pointing to the SoroLens REST API. |
-| `NEXT_PUBLIC_APP_URL` | Web | Optional | `https://sorolens.dev` | Canonical public origin: metadataBase, `robots.txt` and `sitemap.xml`. |
+| `NEXT_PUBLIC_APP_URL` | Web | Optional | `https://sorolens.xyz` | Canonical public origin: metadataBase, `robots.txt` and `sitemap.xml`. |
 | `NEXT_PUBLIC_PWA_ENABLED` | Web | Optional | `false` | Enable service workers for mobile Progressive Web App. |
 | `NEXT_PUBLIC_SENTRY_DSN` | Web | Optional | — | Sentry DSN for frontend exception tracking. |
 | `NEXT_PUBLIC_PLAUSIBLE_DOMAIN`| Web | Optional | — | Domain name for privacy-preserving Plausible Analytics. |
 | `INDEXER_METRICS_URL` | Web | Optional | — | Backend URL for `/status` page to scrape indexer metrics. |
 | `VAPID_PUBLIC_KEY` | Web | Optional | — | Web Push public key for browser push notifications. |
 | `VAPID_PRIVATE_KEY` | Web | Optional | — | Web Push private key (server-side only). |
-| `VAPID_SUBJECT` | Web | Optional | `mailto:admin@sorolens.dev` | Subject mailto/URI for VAPID JWT tokens. |
+| `VAPID_SUBJECT` | Web | Optional | `mailto:admin@sorolens.xyz` | Subject mailto/URI for VAPID JWT tokens. |
 | `PUSH_INTERNAL_SECRET` | Web | Optional | — | Secret token guarding internal push subscription API. |
 
 ---

@@ -3,7 +3,7 @@ import { createRateLimiter, parseCspReports } from "./cspReport";
 
 const legacy = (overrides: Record<string, unknown> = {}) => ({
   "csp-report": {
-    "document-uri": "https://sorolens.dev/contracts/C1?token=secret#frag",
+    "document-uri": "https://sorolens.xyz/contracts/C1?token=secret#frag",
     "effective-directive": "script-src-elem",
     "blocked-uri": "https://evil.example/steal.js?user=alice",
     disposition: "enforce",
@@ -15,7 +15,7 @@ const batch = (body: Record<string, unknown> = {}) => [
   {
     type: "csp-violation",
     body: {
-      documentURL: "https://sorolens.dev/settings?email=a@b.c",
+      documentURL: "https://sorolens.xyz/settings?email=a@b.c",
       effectiveDirective: "connect-src",
       blockedURL: "wss://evil.example/socket",
       disposition: "report",

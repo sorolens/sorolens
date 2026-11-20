@@ -1,16 +1,16 @@
 /**
  * Single source of truth for every absolute site URL (issue #761).
  *
- * `NEXT_PUBLIC_APP_URL` is the only variable read, and `https://sorolens.dev`
+ * `NEXT_PUBLIC_APP_URL` is the only variable read, and `https://sorolens.xyz`
  * the only fallback, so `metadataBase`, `robots.txt` and `sitemap.xml` can no
  * longer disagree about the canonical origin of the same deployment. The
  * fallback is a production origin, never localhost: an unset variable should
  * still publish valid URLs.
  */
 
-const SITE_URL_FALLBACK = "https://sorolens.dev";
+const SITE_URL_FALLBACK = "https://sorolens.xyz";
 
-/** The configured origin with any trailing slash removed, e.g. `https://sorolens.dev`. */
+/** The configured origin with any trailing slash removed, e.g. `https://sorolens.xyz`. */
 export function siteOrigin(): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
   const origin =

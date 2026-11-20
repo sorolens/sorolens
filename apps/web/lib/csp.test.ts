@@ -4,7 +4,7 @@ import { buildCsp, cspHeaderName, generateNonce } from "./csp";
 const base = {
   nonce: "abc123",
   isDev: false,
-  apiUrl: "https://api.sorolens.dev/base",
+  apiUrl: "https://api.sorolens.xyz/base",
 };
 
 function directive(policy: string, name: string): string[] {
@@ -32,7 +32,7 @@ describe("buildCsp", () => {
     const policy = buildCsp({
       ...base,
       sentryDsn: "https://key@o0.ingest.sentry.io/1",
-      plausibleDomain: "sorolens.dev",
+      plausibleDomain: "sorolens.xyz",
     });
     expect(directive(policy, "script-src")).not.toContain("'unsafe-inline'");
     expect(policy).not.toContain("'unsafe-eval'");
@@ -62,9 +62,9 @@ describe("buildCsp", () => {
   it("permits the API origin for REST, sockets and badges", () => {
     const policy = buildCsp(base);
     const connect = directive(policy, "connect-src");
-    expect(connect).toContain("https://api.sorolens.dev");
-    expect(connect).toContain("wss://api.sorolens.dev");
-    expect(directive(policy, "img-src")).toContain("https://api.sorolens.dev");
+    expect(connect).toContain("https://api.sorolens.xyz");
+    expect(connect).toContain("wss://api.sorolens.xyz");
+    expect(directive(policy, "img-src")).toContain("https://api.sorolens.xyz");
   });
 
   it("only opens analytics and error reporting when configured", () => {
@@ -75,7 +75,7 @@ describe("buildCsp", () => {
       buildCsp({
         ...base,
         sentryDsn: "https://key@o0.ingest.sentry.io/1",
-        plausibleDomain: "sorolens.dev",
+        plausibleDomain: "sorolens.xyz",
       }),
       "connect-src"
     );
