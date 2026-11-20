@@ -12,14 +12,15 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
+	"github.com/sorolens/sorolens/services/indexer/internal/callgraph"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
 	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -30,9 +31,11 @@ const (
 	// lockKeyPrefix is the Redis key prefix for per-contract indexer locks.
 	lockKeyPrefix = "sorolens:lock:indexer:"
 
-	// newContractBackfillWindow is how many ledgers back to start a backfill
-	// for a contract with no prior sync state. At ~5s per ledger this is
-	// approximately 6 days, safely within the 7-day RPC retention window.
+	// newContractBackfillWindow is how far behind the chain head a new
+	// contract's backfill reaches. At ~5s per ledger this is approximately 6
+	// days, inside the 7-day (120,960 ledger) history retention that Soroban
+	// RPC defaults to. A node configured to keep less is detected at runtime
+	// and the backfill is shortened to what it retains (see runBackfill).
 	newContractBackfillWindow uint32 = 100_000
 )
 
@@ -41,9 +44,15 @@ type Config struct {
 	// Workers is the maximum number of contracts processed concurrently. Values
 	// less than one default to GOMAXPROCS.
 	Workers int
+	// Concurrency sets the bounded worker pool limit (INDEXER_CONCURRENCY).
+	// If set to > 0, it takes precedence over Workers.
+	Concurrency int
 	// LedgerWindow is the maximum number of ledgers to request per getEvents
 	// call. Matches INDEXER_LEDGER_WINDOW from the API config.
 	LedgerWindow uint32
+	// BackfillWindow is how many ledgers one backfill step scans. Zero means
+	// DefaultBackfillWindow. It never exceeds LedgerWindow.
+	BackfillWindow uint32
 	// PollInterval is the sleep duration between full passes in continuous mode.
 	PollInterval time.Duration
 	// MaxDuration is the wall-clock budget for a single once-mode pass.
@@ -59,6 +68,12 @@ type Config struct {
 	AnomalySigma float64
 	// AnomalyMinHistory is the minimum samples before detection starts.
 	AnomalyMinHistory int
+
+	// DisableFnCallFallback turns off deriving an invocation's function name
+	// from fn_call topics in the window's contract events when the node
+	// returns no diagnostic events (issue #504). The fallback is on by
+	// default; INDEXER_FN_CALL_FALLBACK=false disables it.
+	DisableFnCallFallback bool
 }
 
 // Poller fetches and persists events and invocations for all tracked contracts.
@@ -188,52 +203,31 @@ func (p *Poller) processAll(ctx context.Context) error {
 	if err := partition.EnsureNextMonthPartition(ctx, p.store); err != nil {
 		p.log.Warn("failed to ensure next month partition", "err", err)
 	}
-	workerCount := p.cfg.Workers
-	if workerCount < 1 {
-		workerCount = runtime.GOMAXPROCS(0)
+	limit := p.cfg.Concurrency
+	if limit < 1 {
+		limit = p.cfg.Workers
 	}
-	jobs := make(chan Contract, workerCount)
-	var workers sync.WaitGroup
-	workers.Add(workerCount)
-	for i := 0; i < workerCount; i++ {
-		go func() {
-			defer workers.Done()
-			for contract := range jobs {
-				// Preserve graceful shutdown semantics: contracts already being
-				// processed finish, but queued contracts do not start after cancel.
-				if ctx.Err() != nil {
-					continue
-				}
-				if err := p.processContract(context.WithoutCancel(ctx), contract); err != nil {
-					// One failing contract must not block the rest of the pass.
-					p.log.Error("failed to index contract",
-						"contract_id", contract.ID,
-						"err", err,
-					)
-				}
-			}
-		}()
-	}
-	stopWorkers := func() {
-		close(jobs)
-		workers.Wait()
+	if limit < 1 {
+		limit = runtime.GOMAXPROCS(0)
 	}
 
 	// Track contracts deployed by watched accounts first so they are
 	// indexed in this same pass (issue #123).
 	p.runDiscovery(ctx)
 
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(limit)
+
 	var cursor string
 	for {
 		// Check for shutdown between contract batches.
 		if ctx.Err() != nil {
-			stopWorkers()
-			return nil
+			break
 		}
 
 		contracts, next, err := p.store.ListContracts(ctx, cursor, 50)
 		if err != nil {
-			stopWorkers()
+			_ = g.Wait()
 			return fmt.Errorf("list contracts: %w", err)
 		}
 
@@ -242,14 +236,23 @@ func (p *Poller) processAll(ctx context.Context) error {
 			if ctx.Err() != nil {
 				break contractBatch
 			}
-			if c.Status != "active" && c.Status != "backfilling" {
+			if c.Status != "active" && c.Status != "backfilling" && c.Status != "pending" {
 				continue
 			}
-			select {
-			case <-ctx.Done():
-				break contractBatch
-			case jobs <- c:
-			}
+			contract := c
+			g.Go(func() error {
+				if gctx.Err() != nil {
+					return nil
+				}
+				if err := p.indexContract(context.WithoutCancel(gctx), gctx, contract); err != nil {
+					// One failing contract must not block the rest of the pass.
+					p.log.Error("failed to index contract",
+						"contract_id", contract.ID,
+						"err", err,
+					)
+				}
+				return nil
+			})
 		}
 		if ctx.Err() != nil {
 			break
@@ -260,7 +263,9 @@ func (p *Poller) processAll(ctx context.Context) error {
 		}
 		cursor = next
 	}
-	stopWorkers()
+	if err := g.Wait(); err != nil {
+		return err
+	}
 
 	if p.cfg.AnomalyEnabled {
 		p.runAnomalyDetection(ctx)
@@ -496,6 +501,13 @@ func healthInputsToScoreInputs(in HealthInputs) healthscore.Inputs {
 // contract's on-chain Wasm hash for upgrades before scanning events so a code
 // upgrade with no indexable events still gets recorded.
 func (p *Poller) processContract(ctx context.Context, contract Contract) error {
+	return p.indexContract(ctx, ctx, contract)
+}
+
+// indexContract is processContract with a separate shutdown signal. ctx keeps
+// in-flight RPC and store calls alive so the current window always commits;
+// stop only ends a backfill between windows.
+func (p *Poller) indexContract(ctx, stop context.Context, contract Contract) error {
 	contractID := contract.ID
 	network := contract.Network
 	rpc, ok := p.selectRPCClient(network)
@@ -545,24 +557,32 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return fmt.Errorf("get sync state: %w", err)
 	}
 
-	var startLedger uint32
-	if syncState.LastLedger == 0 {
-		// New contract: best-effort backfill from within the retention window.
-		if latest.Sequence > newContractBackfillWindow {
-			startLedger = latest.Sequence - newContractBackfillWindow
-		} else {
-			startLedger = 1
-		}
-		p.log.Warn("new contract, starting partial backfill; events before this ledger are unavailable",
-			"contract_id", contractID,
-			"start_ledger", startLedger,
-			"retention_window_ledgers", newContractBackfillWindow,
-		)
-	} else {
-		startLedger = syncState.LastLedger + 1
+	if !needsBackfill(contract, syncState) {
+		return p.indexForward(ctx, rpc, contract, latest.Sequence, syncState)
 	}
 
-	if startLedger > latest.Sequence {
+	// New contract: tail the chain head from the start of the backfill while
+	// older ledgers are walked in bounded windows behind it.
+	progress, err := p.beginBackfill(ctx, contract, latest.Sequence, syncState)
+	if err != nil {
+		return err
+	}
+	if syncState.LastLedger == 0 {
+		syncState.LastLedger = progress.NewestLedger
+	}
+	if err := p.indexForward(ctx, rpc, contract, latest.Sequence, syncState); err != nil {
+		return err
+	}
+	return p.runBackfill(ctx, stop, rpc, contract, progress)
+}
+
+// indexForward indexes the next window of ledgers after the contract's cursor.
+func (p *Poller) indexForward(ctx context.Context, rpc RPCClient, contract Contract, latest uint32, syncState SyncState) error {
+	contractID := contract.ID
+	network := contract.Network
+
+	startLedger := syncState.LastLedger + 1
+	if startLedger > latest {
 		p.log.Info("contract is up to date",
 			"contract_id", contractID,
 			"last_ledger", syncState.LastLedger,
@@ -571,7 +591,7 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 	}
 
 	// Fetch events in windows to respect RPC page limits.
-	endLedger := min32(startLedger+p.cfg.LedgerWindow-1, latest.Sequence)
+	endLedger := min32(startLedger+p.cfg.LedgerWindow-1, latest)
 
 	log := p.log.With(
 		"contract_id", contractID,
@@ -609,7 +629,7 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 	// uses the batch's final ledger as the committed cursor, which is clamped
 	// at zero against the observed head.
 	p.metrics.AddEventsProcessed(network, len(events))
-	p.metrics.ObserveNetwork(network, latest.Sequence, endLedger)
+	p.metrics.ObserveNetwork(network, latest, endLedger)
 
 	log.Info("contract indexed",
 		"events", len(events),
@@ -785,6 +805,10 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 
 	var events []Event
 	seenTx := make(map[string]struct{})
+	// fnCallTopics keeps, per transaction, the topics of any fn_call event
+	// the node surfaced with the contract events. It feeds the function-name
+	// fallback for nodes that do not return diagnostic events.
+	fnCallTopics := make(map[string][][]string)
 
 	for _, re := range result.Events {
 		closedAt, _ := time.Parse(time.RFC3339, re.LedgerClosedAt)
@@ -801,6 +825,9 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 			InSuccessfulCall: re.InSuccessfulContractCall,
 		})
 		seenTx[re.TxHash] = struct{}{}
+		if !p.cfg.DisableFnCallFallback && len(re.Topic) >= 2 {
+			fnCallTopics[re.TxHash] = append(fnCallTopics[re.TxHash], re.Topic)
+		}
 	}
 
 	// Fetch one transaction record per unique tx hash.
@@ -814,7 +841,7 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 			)
 			continue
 		}
-		invocations = append(invocations, Invocation{
+		inv := Invocation{
 			TxHash:           txHash,
 			ContractID:       contractID,
 			Network:          network,
@@ -823,10 +850,45 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 			Status:           tx.Status,
 			ResultXDR:        tx.ResultXDR,
 			ApplicationOrder: tx.ApplicationOrder,
-		})
+		}
+		p.applyDiagnostics(&inv, tx.DiagnosticEventsXDR, fnCallTopics[txHash])
+		invocations = append(invocations, inv)
 	}
 
 	return events, invocations, nil
+}
+
+// applyDiagnostics fills the invocation's function name and resource counters
+// from the transaction's diagnostic events (issue #504).
+//
+// When the node returns no diagnostic events, or they carry no function name,
+// the name falls back to the first fn_call topic set seen for the transaction
+// among the window's contract events, unless the fallback is disabled. Missing
+// data never fails the pass: fields the node did not report stay empty and are
+// stored as NULL.
+func (p *Poller) applyDiagnostics(inv *Invocation, diagnosticEventsXDR []string, fnCallTopics [][]string) {
+	sum := callgraph.Summarize(diagnosticEventsXDR)
+	inv.FunctionName = sum.FunctionName
+	inv.CPUInsn = sum.CPUInsn
+	inv.MemByte = sum.MemByte
+	inv.LedgerReadByte = sum.LedgerReadByte
+	inv.LedgerWriteByte = sum.LedgerWriteByte
+
+	if inv.FunctionName == "" && !p.cfg.DisableFnCallFallback {
+		for _, topics := range fnCallTopics {
+			if fn, ok := callgraph.FunctionNameFromTopics(topics, inv.ContractID); ok {
+				inv.FunctionName = fn
+				break
+			}
+		}
+	}
+
+	if len(diagnosticEventsXDR) > 0 && sum.Empty() {
+		p.log.Debug("diagnostic events present but undecodable; leaving function and metrics empty",
+			"tx_hash", inv.TxHash,
+			"events", len(diagnosticEventsXDR),
+		)
+	}
 }
 
 func (p *Poller) selectRPCClient(network string) (RPCClient, bool) {

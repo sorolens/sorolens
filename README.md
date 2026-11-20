@@ -15,7 +15,7 @@ Real-time monitoring, alerting, and on-chain health checks for Soroban smart con
 
 ## The problem
 
-Soroban's public RPC retains events for 24 hours and transaction data for up to 7 days. There is no persistent index of what your contract did, what it cost, or which storage entries are close to expiring. The Stellar Lab contract explorer is excellent for point-in-time inspection but has no history, no API, and no way to know when a contract you depend on is unhealthy. Sorolens fills that gap.
+Soroban RPC nodes retain events and transaction data for a limited window, 7 days by default. There is no persistent index of what your contract did, what it cost, or which storage entries are close to expiring. The Stellar Lab contract explorer is excellent for point-in-time inspection but has no history, no API, and no way to know when a contract you depend on is unhealthy. Sorolens fills that gap.
 ---
 
 ## What it does
@@ -226,7 +226,9 @@ deploy.
 
 ### Full Deployment Guide
 
-For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md).
+For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md). Every configuration option of each component is listed in the generated [configuration reference](docs/configuration.md).
+
+To run Sorolens on a Kubernetes cluster you already have, use the Helm chart: see [Self-hosting on Kubernetes](docs/self-hosting/kubernetes.md). Release images and CLI binaries are signed with cosign and carry SLSA provenance; [Verifying releases](docs/verifying-releases.md) has the commands to check them.
 
 ---
 
@@ -239,7 +241,7 @@ For step-by-step incident response, troubleshooting, and maintenance procedures,
 - **[Backup Restore](docs/runbook.md#3-backup-and-disaster-recovery-restore)**: Point-In-Time-Recovery (PITR) via WAL replay and logical restores (`scripts/restore.sh`, `scripts/backup.sh`).
 - **[Key Rotation](docs/runbook.md#4-key-and-secret-rotation)**: Zero-downtime rotation of API keys, webhook signing secrets, and server environment secrets.
 
-See also [`docs/metrics.md`](docs/metrics.md) for Prometheus metrics and alerting rules, [`docs/backups.md`](docs/backups.md) for backup configurations, and [`docs/indexer.md`](docs/indexer.md) for indexer options.
+See also [`docs/metrics.md`](docs/metrics.md) for Prometheus metrics and alerting rules, [`docs/backups.md`](docs/backups.md) for backup configurations, [`docs/indexer.md`](docs/indexer.md) for indexer options, and [`docs/hubble-import.md`](docs/hubble-import.md) for importing history older than the RPC window.
 
 ---
 
@@ -283,6 +285,7 @@ sorolens/
   deploy/
     terraform/    Self-hosting Terraform modules (AWS; see docs/self-hosting/aws.md)
     pulumi/       Self-hosting Pulumi (TypeScript) components, mirroring terraform/
+    helm/         Helm chart for Kubernetes (see docs/self-hosting/kubernetes.md)
   docs/
     authentication.md Authentication & API keys guide (scopes, roles, sessions, curl examples)
     deployment.md Deployment guide (Neon, Upstash, Vercel, Docker, Mainnet)

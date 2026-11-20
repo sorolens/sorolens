@@ -31,11 +31,14 @@ func NewSMTPMailerFromEnv() (*SMTPMailer, bool) {
 		return nil, false
 	}
 	m := &SMTPMailer{Addr: addr, From: from}
+	// SMTP_USER and SMTP_PASS enable PLAIN auth against SMTP_ADDR. Empty SMTP_USER
+	// sends without authentication.
 	if user := os.Getenv("SMTP_USER"); user != "" {
 		host := addr
 		if i := strings.LastIndex(addr, ":"); i >= 0 {
 			host = addr[:i]
 		}
+		// SMTP_PASS is the password for SMTP_USER.
 		m.Auth = smtp.PlainAuth("", user, os.Getenv("SMTP_PASS"), host)
 	}
 	return m, true

@@ -38,17 +38,26 @@ function tile(label: string): HTMLElement {
   return screen.getByText(label).parentElement as HTMLElement;
 }
 
+/** The age stamped on one tile, e.g. "5m ago". Only present when stale. */
+function ageOf(label: string): HTMLElement {
+  return screen.getByTestId(`live-stats-age-${label}`);
+}
+
 async function renderStats(
   initialData: { global: unknown; watchdog: unknown } = {
     global: GLOBAL,
     watchdog: WATCHDOG,
-  }
+  },
+  generatedAt?: number
 ) {
   const { LiveStatsClient } = await import("@/components/LiveStatsClient");
   return render(
     <LiveStatsClient
       initialData={
-        initialData as Parameters<typeof LiveStatsClient>[0]["initialData"]
+        {
+          ...initialData,
+          ...(generatedAt === undefined ? {} : { generatedAt }),
+        } as Parameters<typeof LiveStatsClient>[0]["initialData"]
       }
     />
   );
@@ -77,7 +86,27 @@ describe("LiveStatsClient", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("renders a real zero as 0, not as an error", async () => {
+  it("shows a loading state, never a placeholder zero, while the first figures are in flight", async () => {
+    mockGetGlobalStats.mockReturnValue(new Promise(() => {}));
+    mockGetWatchdogStats.mockReturnValue(new Promise(() => {}));
+    await renderStats({ global: null, watchdog: null });
+
+    const grid = screen.getByRole("status", { name: "Loading live stats" });
+    expect(grid.getAttribute("aria-busy")).toBe("true");
+    for (const label of [
+      "Contracts indexed",
+      "Events tracked",
+      "Invocations traced",
+      "Contracts monitored",
+    ]) {
+      expect(within(grid).getByText(`Loading ${label}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("—")).toBeNull();
+    expect(screen.queryByText("0")).toBeNull();
+    expect(screen.queryByText("Couldn't load live stats.")).toBeNull();
+  });
+
+  it("shows a figure the API returned as zero, not an error", async () => {
     mockGetGlobalStats.mockResolvedValue({ ...GLOBAL, total_events: 0 });
     await renderStats({
       global: { ...GLOBAL, total_events: 0 },
@@ -106,17 +135,55 @@ describe("LiveStatsClient", () => {
     }
   });
 
-  it("keeps the server-rendered figures but still reports a failed refresh", async () => {
+  it("keeps the last known figures and labels the stale tile with its age", async () => {
     mockGetWatchdogStats.mockRejectedValue(new Error("watchdog down"));
-    await renderStats();
+    await renderStats(
+      { global: GLOBAL, watchdog: WATCHDOG },
+      Date.now() - 5 * 60_000
+    );
 
-    await screen.findByText("Couldn't load live stats.");
+    await screen.findByText("Some figures are out of date.");
     expect(within(tile("Contracts indexed")).getByText("12")).toBeVisible();
+    expect(within(tile("Contracts monitored")).getByText("7")).toBeVisible();
+    // Only the source whose refresh failed is marked, and it says how old it is.
+    expect(ageOf("Contracts monitored").textContent).toBe("5m ago");
+    expect(within(tile("Contracts indexed")).queryByText("5m ago")).toBeNull();
+    // A failed refresh is still an error state: no red banner claiming the
+    // numbers are current, and a way to try again.
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+  });
+
+  it("labels a cached figure as stale once it is past the freshness window", async () => {
+    // Nothing new has arrived yet, so what is on screen is the cached read.
+    mockGetGlobalStats.mockReturnValue(new Promise(() => {}));
+    mockGetWatchdogStats.mockReturnValue(new Promise(() => {}));
+    await renderStats(
+      { global: GLOBAL, watchdog: WATCHDOG },
+      Date.now() - 10 * 60_000
+    );
+
+    await screen.findByText("Some figures are out of date.");
+    expect(ageOf("Contracts indexed").textContent).toBe("10m ago");
+    expect(ageOf("Contracts monitored").textContent).toBe("10m ago");
+    expect(screen.queryByText("Couldn't load live stats.")).toBeNull();
+  });
+
+  it("clears the stale labels when a retry succeeds", async () => {
+    mockGetWatchdogStats.mockRejectedValueOnce(new Error("down"));
+    await renderStats({ global: GLOBAL, watchdog: WATCHDOG });
+
+    await screen.findByText("Some figures are out of date.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText("Some figures are out of date.")).toBeNull()
+    );
     expect(within(tile("Contracts monitored")).getByText("7")).toBeVisible();
   });
 
   it("retries both requests and clears the error on recovery", async () => {
     mockGetGlobalStats.mockRejectedValueOnce(new Error("down"));
+    mockGetWatchdogStats.mockRejectedValueOnce(new Error("down"));
     await renderStats({ global: null, watchdog: null });
 
     await screen.findByText("Couldn't load live stats.");

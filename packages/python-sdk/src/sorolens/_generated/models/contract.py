@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
 from ..models.contract_status import ContractStatus
+from ..types import UNSET, Unset
+
+if TYPE_CHECKING:
+    from ..models.contract_backfill import ContractBackfill
+
 
 T = TypeVar("T", bound="Contract")
 
@@ -26,6 +31,9 @@ class Contract:
         status (ContractStatus):
         added_at (datetime.datetime):
         tags (list[str]): User-defined tags, sorted ascending. Always present; empty when the contract has no tags.
+        backfill (ContractBackfill | Unset): Progress of the new-contract backfill, returned by the contract detail
+            endpoint once the indexer has started it. Ledgers are scanned from newest_ledger down to oldest_ledger, and a
+            restarted indexer resumes at next_ledger.
     """
 
     id: str
@@ -37,6 +45,7 @@ class Contract:
     status: ContractStatus
     added_at: datetime.datetime
     tags: list[str]
+    backfill: ContractBackfill | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -62,6 +71,10 @@ class Contract:
 
         tags = self.tags
 
+        backfill: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.backfill, Unset):
+            backfill = self.backfill.to_dict()
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -77,11 +90,15 @@ class Contract:
                 "tags": tags,
             }
         )
+        if backfill is not UNSET:
+            field_dict["backfill"] = backfill
 
         return field_dict
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+        from ..models.contract_backfill import ContractBackfill
+
         d = dict(src_dict)
         id = d.pop("id")
 
@@ -116,6 +133,13 @@ class Contract:
 
         tags = cast(list[str], d.pop("tags"))
 
+        _backfill = d.pop("backfill", UNSET)
+        backfill: ContractBackfill | Unset
+        if isinstance(_backfill, Unset):
+            backfill = UNSET
+        else:
+            backfill = ContractBackfill.from_dict(_backfill)
+
         contract = cls(
             id=id,
             network=network,
@@ -126,6 +150,7 @@ class Contract:
             status=status,
             added_at=added_at,
             tags=tags,
+            backfill=backfill,
         )
 
         contract.additional_properties = d

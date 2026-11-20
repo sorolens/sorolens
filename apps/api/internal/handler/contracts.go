@@ -32,6 +32,40 @@ type contractResponse struct {
 	// TrackingPreset is the preset type applied when the contract was tracked
 	// (e.g. "dex", "lending", "stablecoin"). Empty when no preset was selected.
 	TrackingPreset string `json:"tracking_preset,omitempty"`
+	// Backfill reports new-contract backfill progress on the detail endpoint.
+	// It is absent until the indexer has started the backfill.
+	Backfill *contractBackfillResponse `json:"backfill,omitempty"`
+}
+
+// contractBackfillResponse is the progress of a contract's backfill, which the
+// indexer scans from newest_ledger down to oldest_ledger.
+type contractBackfillResponse struct {
+	OldestLedger int64      `json:"oldest_ledger"`
+	NewestLedger int64      `json:"newest_ledger"`
+	NextLedger   int64      `json:"next_ledger"`
+	LedgersTotal int64      `json:"ledgers_total"`
+	LedgersDone  int64      `json:"ledgers_done"`
+	Percent      float64    `json:"percent"`
+	StartedAt    time.Time  `json:"started_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	CompletedAt  *time.Time `json:"completed_at"`
+}
+
+func contractBackfillFromStore(b *store.BackfillProgress) *contractBackfillResponse {
+	if b == nil {
+		return nil
+	}
+	return &contractBackfillResponse{
+		OldestLedger: b.OldestLedger,
+		NewestLedger: b.NewestLedger,
+		NextLedger:   b.NextLedger,
+		LedgersTotal: b.LedgersTotal(),
+		LedgersDone:  b.LedgersDone(),
+		Percent:      b.Percent(),
+		StartedAt:    b.StartedAt,
+		UpdatedAt:    b.UpdatedAt,
+		CompletedAt:  b.CompletedAt,
+	}
 }
 
 type contractTagsResponse struct {
@@ -200,6 +234,7 @@ func contractFromStore(c store.Contract) contractResponse {
 		AddedAt:            c.AddedAt,
 		Tags:               tags,
 		TrackingPreset:     c.TrackingPreset,
+		Backfill:           contractBackfillFromStore(c.Backfill),
 	}
 }
 
@@ -800,14 +835,23 @@ func (h *Handler) ContractStats(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch stats")
 		return
 	}
-	writeJSON(w, http.StatusOK, contractStatsResponse{
-		EventCount:            cs.EventCount,
-		InvocationCount:       cs.InvocationCount,
-		StorageCount:          cs.StorageCount,
-		LastSyncedLedger:      cs.LastSyncedLedger,
-		WindowEventCount:      cs.WindowEventCount,
-		WindowInvocationCount: cs.WindowInvocationCount,
-		WindowDuration:        cs.WindowDuration,
+	percentiles, err := h.Store.GetContractResourcePercentiles(r.Context(), contractID, window)
+	if err != nil {
+		h.Logger.Error("get contract resource percentiles", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch stats")
+		return
+	}
+	writeJSON(w, http.StatusOK, contractStatsDetailResponse{
+		contractStatsResponse: contractStatsResponse{
+			EventCount:            cs.EventCount,
+			InvocationCount:       cs.InvocationCount,
+			StorageCount:          cs.StorageCount,
+			LastSyncedLedger:      cs.LastSyncedLedger,
+			WindowEventCount:      cs.WindowEventCount,
+			WindowInvocationCount: cs.WindowInvocationCount,
+			WindowDuration:        cs.WindowDuration,
+		},
+		ResourcePercentiles: resourcePercentilesFromStore(percentiles),
 	})
 }
 

@@ -1,0 +1,278 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Sorolens chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "pullPolicy"],
+      "properties": {
+        "repository": { "type": "string" },
+        "tag": {
+          "type": "string",
+          "description": "Empty means the chart's appVersion. latest is refused: pin a version or digest.",
+          "not": { "const": "latest" }
+        },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": { "type": "object" },
+        "limits": { "type": "object" }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "envList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "port"],
+      "properties": {
+        "type": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "$ref": "#/definitions/port" }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minReplicas": { "type": "integer", "minimum": 1 },
+        "maxReplicas": { "type": "integer", "minimum": 1 },
+        "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    }
+  },
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "imagePullSecrets": { "type": "array" },
+    "commonLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+    "global": { "type": "object" },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object" }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stellarNetwork", "logLevel"],
+      "properties": {
+        "stellarNetwork": { "enum": ["testnet", "futurenet", "mainnet"] },
+        "sorobanRpcUrls": {
+          "type": "object",
+          "propertyNames": { "enum": ["testnet", "futurenet", "mainnet"] },
+          "additionalProperties": { "type": "string", "pattern": "^https?://" }
+        },
+        "logLevel": { "enum": ["debug", "info", "warn", "error"] },
+        "allowedOrigins": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^https?://" }
+        },
+        "watchdogContractId": {
+          "type": "string",
+          "pattern": "^(C[A-Z2-7]{55})?$"
+        }
+      },
+      "if": { "properties": { "stellarNetwork": { "const": "mainnet" } } },
+      "then": {
+        "required": ["sorobanRpcUrls"],
+        "properties": { "sorobanRpcUrls": { "required": ["mainnet"] } }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "existingSecret": { "type": "string" },
+        "secretKeys": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["databaseUrl", "redisUrl", "directDatabaseUrl"],
+          "properties": {
+            "databaseUrl": { "type": "string", "minLength": 1 },
+            "redisUrl": { "type": "string", "minLength": 1 },
+            "directDatabaseUrl": { "type": "string", "minLength": 1 }
+          }
+        },
+        "url": { "type": "string", "pattern": "^(postgres(ql)?://.+)?$" },
+        "directUrl": { "type": "string", "pattern": "^(postgres(ql)?://.+)?$" },
+        "redisUrl": { "type": "string", "pattern": "^(rediss?://.+)?$" }
+      }
+    },
+    "podSecurityContext": { "type": "object" },
+    "securityContext": { "type": "object" },
+    "api": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "port", "service"],
+      "properties": {
+        "image": { "$ref": "#/definitions/image" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "port": { "$ref": "#/definitions/port" },
+        "service": { "$ref": "#/definitions/service" },
+        "resources": { "$ref": "#/definitions/resources" },
+        "extraEnv": { "$ref": "#/definitions/envList" },
+        "autoscaling": { "$ref": "#/definitions/autoscaling" },
+        "podDisruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "minAvailable": { "type": ["integer", "string"] }
+          }
+        },
+        "livenessProbe": { "$ref": "#/definitions/probe" },
+        "readinessProbe": { "$ref": "#/definitions/probe" },
+        "podAnnotations": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" }
+      }
+    },
+    "indexer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "mode", "metricsPort"],
+      "properties": {
+        "image": { "$ref": "#/definitions/image" },
+        "mode": {
+          "enum": ["single", "sharded"],
+          "description": "single: one process owning every shard. sharded: a coordinator plus workers sharing a Postgres shard store."
+        },
+        "pollInterval": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" },
+        "metricsPort": { "$ref": "#/definitions/port" },
+        "sharding": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "shardCount": { "type": "integer", "minimum": 1 },
+            "workers": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "replicas": { "type": "integer", "minimum": 1 } }
+            }
+          }
+        },
+        "resources": { "$ref": "#/definitions/resources" },
+        "extraEnv": { "$ref": "#/definitions/envList" },
+        "podDisruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "maxUnavailable": { "type": ["integer", "string"] }
+          }
+        },
+        "livenessProbe": { "$ref": "#/definitions/probe" },
+        "readinessProbe": { "$ref": "#/definitions/probe" },
+        "podAnnotations": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" }
+      }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "$ref": "#/definitions/image" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "port": { "$ref": "#/definitions/port" },
+        "writablePaths": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^/" }
+        },
+        "service": { "$ref": "#/definitions/service" },
+        "resources": { "$ref": "#/definitions/resources" },
+        "extraEnv": { "$ref": "#/definitions/envList" },
+        "autoscaling": { "$ref": "#/definitions/autoscaling" },
+        "podDisruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "minAvailable": { "type": ["integer", "string"] }
+          }
+        },
+        "livenessProbe": { "$ref": "#/definitions/probe" },
+        "readinessProbe": { "$ref": "#/definitions/probe" },
+        "podAnnotations": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": {
+        "properties": {
+          "image": {
+            "properties": { "repository": { "minLength": 1 } }
+          }
+        }
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "$ref": "#/definitions/image" },
+        "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "backoffLimit": { "type": "integer", "minimum": 0 },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+        "resources": { "$ref": "#/definitions/resources" }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": {
+        "properties": {
+          "image": {
+            "properties": { "repository": { "minLength": 1 } }
+          }
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "type": "object" },
+        "host": { "type": "string", "minLength": 1 },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

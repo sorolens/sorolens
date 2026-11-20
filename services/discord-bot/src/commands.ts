@@ -23,6 +23,7 @@ import {
   apiKeyStore,
   getApiKey,
   getByDiscord,
+  getByGithub,
   listLinks,
   unlink,
   upsertLink,
@@ -43,6 +44,7 @@ import { describeRetry, SlidingWindowRateLimiter } from "./ratelimit.js";
 import { ensureUserApiKey, revokeUserApiKey } from "./apikey.js";
 import type { Config } from "./config.js";
 import { ASSIGN_COMMANDS, handleAssignCommand } from "./assign-discord.js";
+import { COMMUNITY_COMMANDS, handleCommunityCommand } from "./community-discord.js";
 
 // Re-exported from command-definitions.ts so callers that only import
 // commands.ts still get the definitions; the split lets the register
@@ -231,11 +233,16 @@ async function handle(
   if (ASSIGN_COMMANDS.has(interaction.commandName)) {
     return handleAssignCommand(interaction, ctx.config);
   }
+  if (COMMUNITY_COMMANDS.has(interaction.commandName)) {
+    return handleCommunityCommand(interaction, ctx.config);
+  }
   switch (interaction.commandName) {
     case "connect":
       return handleConnect(interaction, ctx);
     case "link":
       return handleLink(interaction, ctx, api);
+    case "admin-unlink":
+      return handleAdminUnlink(interaction, api);
     case "unlink":
       return handleUnlink(interaction, api);
     case "whoami":
@@ -321,6 +328,61 @@ async function handleLink(
       (syncMsg
         ? syncMsg
         : "Once your PRs get merged into sorolens/sorolens the bot will grant your role automatically."),
+  });
+}
+
+/**
+ * Resolve which link `/admin-unlink` targets: exactly one of a Discord user
+ * or a GitHub login. Returns an error message instead when that fails.
+ */
+export function resolveUnlinkTarget(
+  userId: string | null,
+  github: string | null,
+  lookup: {
+    byDiscord: (id: string) => Link | null;
+    byGithub: (login: string) => Link | null;
+  }
+): { link: Link } | { error: string } {
+  const login = github?.trim() || null;
+  if ((userId && login) || (!userId && !login)) {
+    return { error: "Provide exactly one of `user` or `github`." };
+  }
+  const link = userId ? lookup.byDiscord(userId) : lookup.byGithub(login!);
+  if (!link) {
+    return {
+      error: userId
+        ? "That member has no GitHub link."
+        : `No member is linked to GitHub \`${login}\`.`,
+    };
+  }
+  return { link };
+}
+
+async function handleAdminUnlink(
+  interaction: ChatInputCommandInteraction,
+  api: SorolensApi
+) {
+  const target = resolveUnlinkTarget(
+    interaction.options.getUser("user")?.id ?? null,
+    interaction.options.getString("github"),
+    { byDiscord: getByDiscord, byGithub: getByGithub }
+  );
+  if ("error" in target) {
+    await interaction.reply({ content: target.error, flags: 64 });
+    return;
+  }
+  const { discordId, githubLogin } = target.link;
+  await revokeUserApiKey(apiKeyStore, api, discordId);
+  unlink(discordId);
+  console.log(
+    `admin-unlink: ${interaction.user.id} removed link ${discordId} -> ${githubLogin}`
+  );
+  await interaction.reply({
+    content:
+      `Removed the link <@${discordId}> → GitHub \`${githubLogin}\`. ` +
+      "Their roles and any assigned issues were left as they are. They can link again with `/connect`.",
+    flags: 64,
+    allowedMentions: { parse: [] },
   });
 }
 

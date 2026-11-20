@@ -122,7 +122,7 @@ describe("LiveStats", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the last known figures and shows an error when a refresh fails", async () => {
+  it("keeps the last known figures and marks the failed half stale", async () => {
     getLandingStats.mockResolvedValue({
       global: INITIAL_GLOBAL,
       watchdog: INITIAL_WATCHDOG,
@@ -135,11 +135,16 @@ describe("LiveStats", () => {
 
     render(await LiveStats({}));
 
-    expect(await screen.findByText("Couldn't load live stats.")).toBeVisible();
-    // The failed half keeps its stale value; the succeeded half updates.
+    expect(
+      await screen.findByText("Some figures are out of date.")
+    ).toBeVisible();
+    // The failed half keeps its last known value; the succeeded half updates.
     expect(screen.getByText("42")).toBeVisible();
     expect(screen.getByText("7")).toBeVisible();
     expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+    expect(
+      screen.queryByText("Couldn't load live stats.")
+    ).not.toBeInTheDocument();
   });
 
   it("recovers through the retry button", async () => {
@@ -154,16 +159,42 @@ describe("LiveStats", () => {
     getWatchdogStats.mockResolvedValue(INITIAL_WATCHDOG);
 
     render(await LiveStats({}));
-    expect(await screen.findByText("Couldn't load live stats.")).toBeVisible();
+    expect(
+      await screen.findByText("Some figures are out of date.")
+    ).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
     await waitFor(() =>
-      expect(
-        screen.queryByText("Couldn't load live stats.")
-      ).not.toBeInTheDocument()
+      expect(screen.queryByText("Some figures are out of date.")).toBeNull()
     );
     expect(screen.getByText("99")).toBeVisible();
+  });
+
+  it("ages the server-rendered figures from the read time it passes down", async () => {
+    getLandingStats.mockResolvedValue({
+      global: INITIAL_GLOBAL,
+      watchdog: INITIAL_WATCHDOG,
+    });
+    const readAt = Date.parse("2026-01-01T00:00:00Z");
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValue(readAt);
+    const element = await LiveStats({});
+    // The visitor opens the cached page ten minutes later, and the refresh is
+    // still in flight, so what is on screen is ten-minute-old data.
+    nowSpy.mockReturnValue(readAt + 10 * 60_000);
+    getGlobalStats.mockReturnValue(new Promise(() => {}));
+    getWatchdogStats.mockReturnValue(new Promise(() => {}));
+
+    render(element);
+
+    await screen.findByText("Some figures are out of date.");
+    expect(
+      screen.getByTestId("live-stats-age-Contracts indexed").textContent
+    ).toBe("10m ago");
+    expect(
+      screen.getByTestId("live-stats-age-Contracts monitored").textContent
+    ).toBe("10m ago");
   });
 
   it("shows placeholders for every counter when there is no data at all", async () => {

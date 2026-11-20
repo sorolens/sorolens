@@ -45,8 +45,10 @@ matches.
 
 Pin your implementation against this vector before rolling it out. It is
 reproduced by `services/indexer/internal/webhooksig` in
-`TestSign_PublishedVector`, so the published algorithm and the reference
-implementation cannot drift apart.
+`TestSign_PublishedVector` and by the verification helpers in all three SDKs
+(`packages/go-client/webhook`, `packages/python-sdk` and
+`packages/rust-sdk/src/webhooks.rs`), so the published algorithm, the sender
+and the SDKs cannot drift apart.
 
 | Input | Value |
 |---|---|
@@ -97,48 +99,97 @@ Rules a correct receiver must follow:
   clock. Store recent delivery ids if you need strict one-time semantics.
 - Return `401`/`403` and discard the payload when verification fails.
 
-## Example implementations
+## Verification helpers
 
-**Python**
+All three official SDKs ship a helper that implements the rules above,
+including the five-minute replay window and constant-time comparison. Prefer
+them over reimplementing the algorithm.
 
-```python
-import hashlib, hmac, time
-
-def verify(secret: str, signature_header: str, timestamp_header: str, body: bytes) -> bool:
-    parts = dict(p.split("=", 1) for p in signature_header.split(","))
-    ts = parts["t"]
-    if ts != timestamp_header or abs(int(time.time()) - int(ts)) > 300:
-        return False
-    signed = f"{ts}.".encode() + body
-    expected = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
-    return any(hmac.compare_digest(sig, expected)
-               for key, sig in (p.split("=", 1) for p in signature_header.split(","))
-               if key == "v1")
-```
-
-**Go**
+**Go** — `github.com/sorolens/go-client/webhook`
 
 ```go
-func verify(secret string, sig, tsHeader string, body []byte) bool {
-    ts, sigs, err := webhooksig.ParseSignatureHeader(sig)
-    if err != nil || tsHeader != strconv.FormatInt(ts, 10) {
-        return false
-    }
-    if d := time.Since(time.Unix(ts, 0)); d > 5*time.Minute || d < -5*time.Minute {
-        return false
-    }
-    expected := webhooksig.Sign(secret, ts, body)
-    for _, s := range sigs {
-        if hmac.Equal([]byte(s), []byte(expected)) {
-            return true
+import (
+    "io"
+    "net/http"
+    "time"
+
+    "github.com/sorolens/go-client/webhook"
+)
+
+func handler(secret string) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        // Verify the raw bytes exactly as received.
+        body, err := io.ReadAll(r.Body)
+        if err != nil {
+            http.Error(w, "cannot read body", http.StatusBadRequest)
+            return
         }
+
+        // A zero tolerance selects the documented five-minute window.
+        if err := webhook.Verify(secret, r.Header, body, time.Now(), 0); err != nil {
+            http.Error(w, "invalid signature", http.StatusUnauthorized)
+            return
+        }
+
+        // Safe to process body.
+        _ = body
     }
-    return false
 }
 ```
 
-`services/indexer/internal/webhooksig` is the executable reference for this
-algorithm (used by both the sender and the tests).
+`webhook.Verify` reads `X-Sorolens-Signature` and `X-Sorolens-Timestamp` from
+the header map. Use `webhook.VerifyHeaders` if your framework exposes the two
+header values separately, and `webhook.Sign` to produce a delivery in tests.
+
+**Python** — `sorolens.webhooks`
+
+```python
+from sorolens.webhooks import WebhookVerificationError, verify_request
+
+SECRET = "whsec_your_signing_secret"
+
+def handler(request):
+    try:
+        # Pass the exact raw body and the request headers (case-insensitive);
+        # the default tolerance is the documented five minutes.
+        verify_request(SECRET, request.headers, request.body)
+    except WebhookVerificationError:
+        return Response(status=401)
+
+    # Safe to process request.body.
+```
+
+Use `verify(secret, signature_header, timestamp_header, body)` when you have
+the two header values directly, and `sign(secret, timestamp, body)` to produce
+a delivery in tests.
+
+**Rust** — `sorolens_sdk::webhooks`
+
+```rust
+use sorolens_sdk::webhooks::{verify, SIGNATURE_HEADER, TIMESTAMP_HEADER};
+
+fn handle(secret: &str, headers: &http::HeaderMap, body: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    let signature = headers[SIGNATURE_HEADER].to_str()?;
+    let timestamp = headers[TIMESTAMP_HEADER].to_str()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs() as i64;
+
+    // `0` selects the documented five-minute replay window.
+    verify(secret, signature, timestamp, body, now, 0)?;
+
+    // Safe to process body.
+    Ok(())
+}
+```
+
+`verify` returns `Err(WebhookError::TimestampOutsideWindow)` for a stale or
+future delivery and `Err(WebhookError::SignatureMismatch)` for a forged one.
+`sign` and `signature_header` produce a delivery in tests.
+
+`services/indexer/internal/webhooksig` is the executable reference the sender
+uses; the SDK helpers implement the same published algorithm and share its
+test vector.
 
 ## Secret lifecycle
 

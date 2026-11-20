@@ -118,6 +118,33 @@ describe("CompareView", () => {
   });
 
   afterEach(cleanup);
+  it("shows a zero contribution and explains missing component data", async () => {
+    mockGetCompare.mockResolvedValue({
+      window: "7d",
+      contracts: [
+        entry({
+          health_components: {
+            uptime: 0,
+            error_rate: 80,
+            performance: 90,
+            storage_ttl: 100,
+          },
+        }),
+        entry({
+          id: ID_B,
+          label: "Beta",
+          health_score: null,
+        }),
+      ],
+    });
+
+    render(<CompareView initialIds={[ID_A, ID_B]} initialWindow="7d" />);
+
+    expect(await screen.findByText("0 of 40 points")).toBeVisible();
+    expect(
+      screen.getByText("Health score components unavailable.")
+    ).toBeVisible();
+  });
 
   it("fetches the comparison in one round-trip and renders both columns", async () => {
     render(<CompareView initialIds={[ID_A, ID_B]} initialWindow="7d" />);

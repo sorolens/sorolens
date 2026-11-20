@@ -73,6 +73,10 @@ func (f *fakeStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, 
 	return nil
 }
 
+func (f *fakeStore) MaintainPartitions(_ context.Context, _ int) error { return nil }
+
+func (f *fakeStore) ArchiveOldEvents(_ context.Context, _ int) (int64, error) { return 0, nil }
+
 func (f *fakeStore) GetIndexerCursor(_ context.Context, _ string) (uint32, error) {
 	return 0, nil
 }

@@ -167,6 +167,7 @@ type QueryStore interface {
 	ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error)
 	GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error)
 	GetContractInvocationStats(ctx context.Context, contractID string) (ContractInvocationStats, error)
+	GetContractResourcePercentiles(ctx context.Context, contractID, window string) (ResourcePercentiles, error)
 	RecentEvents(ctx context.Context, contractID string, limit int) ([]Event, error)
 	// RecentInvocations returns the most recent invocations for a contract,
 	// newest first, capped at limit. Like RecentEvents it backs single-call

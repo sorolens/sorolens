@@ -75,7 +75,7 @@ func RateLimit(rc RedisClient, lookup APIKeyLookup) func(http.Handler) http.Hand
 				limit = 1000
 			} else if token != "" {
 				key, err := lookup.GetAPIKeyByHash(r.Context(), store.HashKey(token))
-				if err == nil && !key.Revoked() {
+				if err == nil && !key.Revoked() && !key.Expired(time.Now()) {
 					limit = 1000
 				}
 			}

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -134,6 +135,8 @@ type fakeStore struct {
 	// wasmBinaries is the content-addressed Wasm cache (issue #162):
 	// wasm hash -> raw bytes.
 	wasmBinaries map[string][]byte
+	// backfills is the saved backfill position per contract (issue #509).
+	backfills map[string]BackfillProgress
 }
 
 func newFakeStore(contracts []Contract) *fakeStore {
@@ -546,7 +549,7 @@ func TestPoller_RunOnce_indexesActiveContract(t *testing.T) {
 	}
 }
 
-func TestPoller_SkipsPendingContract(t *testing.T) {
+func TestPoller_PicksUpPendingContract(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeStore([]Contract{{ID: "CTEST", Status: "pending"}})
@@ -556,8 +559,23 @@ func TestPoller_SkipsPendingContract(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	if len(rpc.eventsCalls) == 0 {
+		t.Error("expected a pending contract to start backfilling")
+	}
+}
+
+func TestPoller_SkipsPausedAndErroredContracts(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeStore([]Contract{{ID: "CPAUSED", Status: "paused"}, {ID: "CERROR", Status: "error"}})
+	rpc := &fakeRPC{}
+	p := New(rpc, store, newFakeRedis(), testConfig(), testLogger())
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
 	if len(rpc.eventsCalls) != 0 {
-		t.Errorf("expected no RPC calls for pending contract, got %d", len(rpc.eventsCalls))
+		t.Errorf("expected no RPC calls for paused or errored contracts, got %d", len(rpc.eventsCalls))
 	}
 }
 
@@ -576,13 +594,17 @@ func TestPoller_NewContractStartsFromBackfillWindow(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Expected start: 200000 - 100000 = 100000.
+	// The backfill walks down from the head and stops at 200000 - 100000.
 	if len(rpc.eventsCalls) == 0 {
 		t.Fatal("expected at least one GetEvents call")
 	}
-	wantStart := uint32(200000 - newContractBackfillWindow)
-	if rpc.eventsCalls[0].StartLedger != wantStart {
-		t.Errorf("start ledger: want %d, got %d", wantStart, rpc.eventsCalls[0].StartLedger)
+	wantOldest := uint32(200000 - newContractBackfillWindow)
+	last := rpc.eventsCalls[len(rpc.eventsCalls)-1]
+	if last.StartLedger != wantOldest {
+		t.Errorf("oldest ledger: want %d, got %d", wantOldest, last.StartLedger)
+	}
+	if first := rpc.eventsCalls[0]; first.EndLedger != 200001 {
+		t.Errorf("first window should end at the head: got end %d", first.EndLedger)
 	}
 }
 
@@ -1114,5 +1136,68 @@ func TestBatchInsertWithCursor_RetryThenSuccess(t *testing.T) {
 	}
 	if st.syncStates["C1"].LastLedger != 10 || st.indexerCursors["testnet"] != 10 {
 		t.Fatalf("cursors = %+v / %+v, want both at 10", st.syncStates["C1"], st.indexerCursors["testnet"])
+	}
+}
+
+func TestBoundedConcurrencyAndFailureIsolation(t *testing.T) {
+	t.Parallel()
+
+	const totalContracts = 8
+	const concurrencyLimit = 3
+
+	var contracts []Contract
+	for i := 0; i < totalContracts; i++ {
+		cID := fmt.Sprintf("contract_%d", i)
+		contracts = append(contracts, Contract{
+			ID:      cID,
+			Status:  "active",
+			Network: "testnet",
+		})
+	}
+
+	st := newFakeStore(contracts)
+	for _, c := range contracts {
+		st.syncStates[c.ID] = SyncState{ContractID: c.ID, LastLedger: 500}
+	}
+
+	var active int64
+	var maxActive int64
+
+	rpc := &fakeRPC{
+		latestLedger: &LatestLedger{Sequence: 1000},
+		events:       make(map[string]*GetEventsResult),
+		onGetEvents: func() {
+			cur := atomic.AddInt64(&active, 1)
+			defer atomic.AddInt64(&active, -1)
+			for {
+				max := atomic.LoadInt64(&maxActive)
+				if cur <= max || atomic.CompareAndSwapInt64(&maxActive, max, cur) {
+					break
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
+		},
+	}
+	// Contract 2 simulated error in fakeStore
+	st.eventInsertErrs = map[string]error{
+		"contract_2": errors.New("isolated contract error"),
+	}
+
+	cfg := Config{
+		Concurrency:  concurrencyLimit,
+		LedgerWindow: 100,
+	}
+
+	p := NewWithRPCClients(map[string]RPCClient{"testnet": rpc}, st, newFakeRedis(), cfg, slog.Default())
+	if err := p.processAll(context.Background()); err != nil {
+		t.Fatalf("processAll failed: %v", err)
+	}
+
+	observed := atomic.LoadInt64(&maxActive)
+	if observed > concurrencyLimit {
+		t.Errorf("max active concurrent contracts %d exceeded concurrency limit %d", observed, concurrencyLimit)
+	}
+	if observed < 2 {
+		t.Errorf("expected concurrent processing, max active was %d", observed)
 	}
 }

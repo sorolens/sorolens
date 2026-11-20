@@ -226,10 +226,10 @@ func TestDispatchDeliversEachChannel(t *testing.T) {
 	defer srv.Close()
 
 	subs := fakeSubStore{subs: []AlertSubscription{
-		{ID: "w", ChannelType: ChannelWebhook, WebhookURL: srv.URL + "/webhook", SeverityFilter: "Critical"},
-		{ID: "s", ChannelType: ChannelSlack, WebhookURL: srv.URL + "/slack", SeverityFilter: "Critical"},
-		{ID: "d", ChannelType: ChannelDiscord, WebhookURL: srv.URL + "/discord", SeverityFilter: "Critical"},
-		{ID: "p", ChannelType: ChannelPagerDuty, WebhookURL: srv.URL + "/pagerduty", RoutingKey: "k", SeverityFilter: "Critical"},
+		{ID: "w", ChannelType: ChannelWebhook, WebhookURL: srv.URL + "/webhook", SeverityFilter: "Critical", SigningSecret: "whsec_test_w"},
+		{ID: "s", ChannelType: ChannelSlack, WebhookURL: srv.URL + "/slack", SeverityFilter: "Critical", SigningSecret: "whsec_test_s"},
+		{ID: "d", ChannelType: ChannelDiscord, WebhookURL: srv.URL + "/discord", SeverityFilter: "Critical", SigningSecret: "whsec_test_d"},
+		{ID: "p", ChannelType: ChannelPagerDuty, WebhookURL: srv.URL + "/pagerduty", RoutingKey: "k", SeverityFilter: "Critical", SigningSecret: "whsec_test_p"},
 	}}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError + 4}))
 	DispatchAlerts(context.Background(), criticalAlert(), subs, logger)
@@ -275,7 +275,7 @@ func TestDispatchSkipsNonCritical(t *testing.T) {
 	defer srv.Close()
 	a := criticalAlert()
 	a.Severity = "Warning"
-	DispatchAlerts(context.Background(), a, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Warning"}}},
+	DispatchAlerts(context.Background(), a, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Warning", SigningSecret: "whsec_test_w"}}},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	time.Sleep(50 * time.Millisecond)
 	if called {

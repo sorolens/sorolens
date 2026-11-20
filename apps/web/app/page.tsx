@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { ExtensionCallout } from "@/components/ExtensionCallout";
 import { LiveStats } from "@/components/LiveStats";
 
 export const revalidate = 60;
@@ -116,6 +117,9 @@ export default function HomePage() {
 
         {/* Live stats */}
         <LiveStats className="mx-auto mt-16 max-w-4xl" />
+
+        {/* Browser extension */}
+        <ExtensionCallout />
       </section>
 
       {/* Features */}
