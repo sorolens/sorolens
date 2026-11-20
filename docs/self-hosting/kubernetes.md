@@ -1,6 +1,6 @@
 # Self-hosting Sorolens on Kubernetes (Helm)
 
-The chart in [`deploy/helm/sorolens`](../../deploy/helm/sorolens) runs the
+The chart in [`deploy/helm/sorolens`](https://github.com/sorolens/sorolens/tree/main/deploy/helm/sorolens) runs the
 Sorolens API, indexer and web dashboard in a cluster you already have. It
 does not run PostgreSQL or Redis: point it at a managed database and cache, or
 at ones your platform team runs.
@@ -121,11 +121,11 @@ ingress:
 ```
 
 Every value is checked against
-[`values.schema.json`](../../deploy/helm/sorolens/values.schema.json):
+[`values.schema.json`](https://github.com/sorolens/sorolens/blob/main/deploy/helm/sorolens/values.schema.json):
 a typo in a key, an unknown network, `latest` as an image tag or a missing
 dashboard image fails `helm install` before anything is created. The full
 list of values with their defaults is in
-[`values.yaml`](../../deploy/helm/sorolens/values.yaml).
+[`values.yaml`](https://github.com/sorolens/sorolens/blob/main/deploy/helm/sorolens/values.yaml).
 
 ## 4. Install
 

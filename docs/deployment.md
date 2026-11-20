@@ -1,6 +1,6 @@
 # SoroLens Deployment Guide
 
-This guide covers production deployment strategies for SoroLens across managed cloud providers (**Neon**, **Upstash**, **Vercel**) and **self-hosted Docker** environments, including full configuration for **Stellar Mainnet** as outlined in [`ROADMAP.md`](../ROADMAP.md).
+This guide covers production deployment strategies for SoroLens across managed cloud providers (**Neon**, **Upstash**, **Vercel**) and **self-hosted Docker** environments, including full configuration for **Stellar Mainnet** as outlined in [`ROADMAP.md`](https://github.com/sorolens/sorolens/blob/main/ROADMAP.md).
 
 ---
 
@@ -220,11 +220,11 @@ For complete control without serverless execution timeouts or cold starts, self-
 
 ### Production Stack Topology
 
-The repository provides [`docker-compose.prod.yml`](../docker-compose.prod.yml), which orchestrates:
+The repository provides [`docker-compose.prod.yml`](https://github.com/sorolens/sorolens/blob/main/docker-compose.prod.yml), which orchestrates:
 1. `postgres`: PostgreSQL 16 on port 5432 with persistent volume `sorolens_postgres_data`.
 2. `redis`: Redis 7 on port 6379 with persistent volume `sorolens_redis_data` and AOF persistence enabled.
 3. `migrate`: One-shot migration container that applies all `apps/api/internal/db/migrations/*.up.sql` scripts and exits before the API boots.
-4. `api`: Production-optimized Go binary built using [`apps/api/Dockerfile`](../apps/api/Dockerfile) (~20MB distroless non-root image).
+4. `api`: Production-optimized Go binary built using [`apps/api/Dockerfile`](https://github.com/sorolens/sorolens/blob/main/apps/api/Dockerfile) (~20MB distroless non-root image).
 
 ```
                       docker-compose.prod.yml
@@ -249,7 +249,7 @@ The repository provides [`docker-compose.prod.yml`](../docker-compose.prod.yml),
 
 #### Step 1: Create a Production Environment File
 
-Create `.env.prod` based on [`.env.example`](../.env.example):
+Create `.env.prod` based on [`.env.example`](https://github.com/sorolens/sorolens/blob/main/.env.example):
 
 ```bash
 # --- Infrastructure ---
@@ -277,7 +277,7 @@ INITIAL_ADMIN_GITHUB_ID=your_github_numeric_id
 
 #### Step 2: Build Images from Monorepo Root
 
-Build the production API image using the multi-stage [`apps/api/Dockerfile`](../apps/api/Dockerfile):
+Build the production API image using the multi-stage [`apps/api/Dockerfile`](https://github.com/sorolens/sorolens/blob/main/apps/api/Dockerfile):
 
 ```bash
 docker build \
@@ -289,7 +289,7 @@ docker build \
   .
 ```
 
-Build the Indexer worker image using [`services/indexer/Dockerfile`](../services/indexer/Dockerfile):
+Build the Indexer worker image using [`services/indexer/Dockerfile`](https://github.com/sorolens/sorolens/blob/main/services/indexer/Dockerfile):
 
 ```bash
 docker build \
@@ -389,7 +389,7 @@ The Stellar mainnet operates with distinct network identifiers, RPC requirements
 
 - **Watchdog Contract**:
   - Testnet Watchdog: `CACXRL67WL5KRD6HKWGYADHEUF6RQOCODUN26UQE7MGFZEMIR7PAX6R7`
-  - Mainnet Watchdog: Marked *TBA — not deployed yet* in [`README.md`](../README.md#mainnet). Leave `WATCHDOG_CONTRACT_ID=` empty when operating exclusively on Mainnet until the official on-chain contract address is published.
+  - Mainnet Watchdog: Marked *TBA — not deployed yet* in [`README.md`](https://github.com/sorolens/sorolens/blob/main/README.md#mainnet). Leave `WATCHDOG_CONTRACT_ID=` empty when operating exclusively on Mainnet until the official on-chain contract address is published.
 - **Contract Registration**:
   Use the CLI to track a mainnet contract once deployed:
   ```bash

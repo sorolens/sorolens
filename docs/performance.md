@@ -3,7 +3,7 @@
 The dashboard has a performance budget enforced in CI (issue #614): every
 pull request builds the production bundle and fails the **Web** check when
 any route's first-load JavaScript, or the total shipped client JS, exceeds
-the budget recorded in [`apps/web/performance-budget.json`](../apps/web/performance-budget.json).
+the budget recorded in [`apps/web/performance-budget.json`](https://github.com/sorolens/sorolens/blob/main/apps/web/performance-budget.json).
 
 ## What is measured
 

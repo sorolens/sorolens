@@ -361,6 +361,9 @@ jobs:
   # ------------------------------------------------------------
   # SDKs and contracts: Python SDK, Rust SDK and the contracts. Each part runs
   # only when its paths changed.
+  # The docs site (mkdocs.yml) is built here too, strictly, which fails on
+  # broken internal links and anchors. External links are checked weekly in
+  # docs-links.yml.
   # ------------------------------------------------------------
   sdks:
     name: SDKs and contracts
@@ -382,6 +385,7 @@ jobs:
           jvm=true
           ts=true
           contracts=true
+          docs=true
           if [ "$EVENT" = "pull_request" ]; then
             files=$(git diff --name-only "$BASE_SHA"...HEAD)
             python=false
@@ -389,22 +393,25 @@ jobs:
             jvm=false
             ts=false
             contracts=false
+            docs=false
             echo "$files" | grep -qE '^(packages/python-sdk/|docs/openapi\.yaml|\.github/workflows/ci\.yml)' && python=true
             echo "$files" | grep -qE '^(packages/rust-sdk/|\.github/workflows/ci\.yml)' && rustsdk=true
             echo "$files" | grep -qE '^(packages/jvm-sdk/|docs/openapi\.yaml|\.github/workflows/ci\.yml)' && jvm=true
             echo "$files" | grep -qE '^(packages/typescript-sdk/|\.github/workflows/ci\.yml)' && ts=true
             echo "$files" | grep -qE '^(contracts/|\.github/workflows/ci\.yml)' && contracts=true
+            echo "$files" | grep -qE '^(docs/|mkdocs\.yml|\.readthedocs\.yaml|packages/python-sdk/(docs/|mkdocs\.yml|src/)|\.github/workflows/ci\.yml)' && docs=true
           fi
           echo "python=$python" >> "$GITHUB_OUTPUT"
           echo "rustsdk=$rustsdk" >> "$GITHUB_OUTPUT"
           echo "jvm=$jvm" >> "$GITHUB_OUTPUT"
           echo "ts=$ts" >> "$GITHUB_OUTPUT"
           echo "contracts=$contracts" >> "$GITHUB_OUTPUT"
-          echo "python=$python rustsdk=$rustsdk jvm=$jvm ts=$ts contracts=$contracts"
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+          echo "python=$python rustsdk=$rustsdk jvm=$jvm ts=$ts contracts=$contracts docs=$docs"
       # Python SDK. The full 3.11 to 3.13 matrix runs in python-sdk.yml after
       # merge; pull requests test the middle version.
       - name: Set up Python 3.12
-        if: steps.changes.outputs.python == 'true'
+        if: steps.changes.outputs.python == 'true' || steps.changes.outputs.docs == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -434,6 +441,13 @@ jobs:
       - name: Verify Python client has no diff
         if: steps.changes.outputs.python == 'true'
         run: git diff --exit-code -- packages/python-sdk/src/sorolens/_generated
+      # Documentation site: the same strict build Read the Docs runs. Fails on
+      # broken internal links, missing anchors and pages left out of nav.
+      - name: Docs - build site (strict, checks internal links)
+        if: steps.changes.outputs.docs == 'true'
+        run: |
+          python -m pip install -r docs/requirements.txt -e packages/python-sdk
+          NO_MKDOCS_2_WARNING=1 mkdocs build --strict --site-dir "$RUNNER_TEMP/docs-site"
       # Rust toolchain for the Rust SDK and the contracts.
       - name: Install Rust stable
         if: steps.changes.outputs.rustsdk == 'true' || steps.changes.outputs.contracts == 'true'
