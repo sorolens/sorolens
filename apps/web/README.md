@@ -107,6 +107,7 @@ cp .env.example .env.local
 | `PUSH_INTERNAL_SECRET`            | Server-only     | Secret*   | —                               | Shared secret token guarding `PUT /api/push/subscribe` (`x-push-secret` header).                                                  |
 | `NEXT_PUBLIC_SENTRY_DSN`          | Client & Server | Optional  | —                               | Client-side Sentry DSN for frontend exception tracking. Leave empty to disable.                                                   |
 | `NEXT_PUBLIC_PLAUSIBLE_DOMAIN`    | Client & Server | Optional  | —                               | Domain for Plausible Analytics. Only injected into production builds.                                                             |
+| `CSP_REPORT_ONLY`                 | Server-only     | Optional  | `false`                         | Set to `"true"` to report Content-Security-Policy violations without blocking them.                                               |
 | `INDEXER_METRICS_URL`             | Server-only     | Optional  | `http://localhost:9100/metrics` | Prometheus metrics URL of the indexer service scraped by `/api/status/indexer`.                                                   |
 | `NEXT_PUBLIC_INDEXER_METRICS_URL` | Client & Server | Optional  | `http://localhost:9100/metrics` | Public fallback alias for `INDEXER_METRICS_URL`.                                                                                  |
 | `API_PORT`                        | Server-only     | Optional  | `8080`                          | Target backend port used by Playwright during E2E test runs.                                                                      |
@@ -207,6 +208,39 @@ pnpm exec playwright test tests/e2e/contracts.spec.ts
 # Run in debug mode (step-through execution)
 pnpm exec playwright test --debug
 ```
+
+### Visual Regression Tests
+
+[`tests/e2e/visual.spec.ts`](tests/e2e/visual.spec.ts) compares the main pages and key components against PNG baselines in `tests/e2e/visual.spec.ts-snapshots/`, once in the light theme and once in the dark theme. They run with the rest of the Playwright suite in the End-to-end CI job.
+
+Each test is made repeatable by a fixed 1280x720 viewport and UTC clock, mocked API data, disabled animations, and a font loaded from the `next` package so system fonts cannot change the result. Timestamps and charts are masked through `VISUAL_MASKS` in the spec, and the tests wait on rendered content rather than sleeping. Each baseline must stay under 150 KB, which the suite enforces.
+
+Baselines are specific to the browser build and platform, so generate them in the Linux container CI matches:
+
+```bash
+# From the repository root
+docker run --rm -v "$PWD":/work -w /work/apps/web mcr.microsoft.com/playwright:v1.63.0-noble \
+  sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm exec playwright test tests/e2e/visual.spec.ts --update-snapshots"
+```
+
+To review a change, run the spec, open the expected, actual and diff images with `pnpm exec playwright show-report`, and confirm every difference is intended. Commit updated baselines in the same pull request as the UI change that caused them, and mention them in the description so reviewers can check the images.
+
+---
+
+## Content-Security-Policy
+
+[`middleware.ts`](middleware.ts) sends a strict policy, built by [`lib/csp.ts`](lib/csp.ts), with a new nonce on every document request:
+
+- **Scripts** run only with the request's nonce (`'strict-dynamic'` lets them load their own chunks). `'unsafe-inline'` and `'unsafe-eval'` are never allowed in production; `next dev` alone gets `'unsafe-eval'` for hot reloading.
+- **Styles** in production need the nonce on `<style>` elements. `next dev` injects its CSS as un-nonced `<style>` elements, so development allows inline styles instead.
+- **Styles**: `<style>` elements need the nonce. `style-src-attr 'unsafe-inline'` remains for `style` attributes, which React and Recharts server-render and which cannot execute code.
+- **Connections and images** are limited to the app, the API origin, and Sentry or Plausible when configured.
+
+**Rollout:** set `CSP_REPORT_ONLY=true` to send `Content-Security-Policy-Report-Only`, watch the logs for violations, then remove it to enforce.
+
+**Reports:** browsers post violations to `/api/csp-report`, which validates the payload, limits each client to 30 reports a minute per server instance, and logs a `csp-violation` line holding only the directive, the blocked origin, the page path and the disposition.
+
+**Extending the policy:** add the source to the matching directive in `buildCsp`, cover it in `lib/csp.test.ts`, and render any new inline `<script>` with the nonce from `headers().get("x-nonce")`. `tests/e2e/csp.spec.ts` fails if a page raises a violation.
 
 ---
 
