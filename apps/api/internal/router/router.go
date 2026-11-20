@@ -151,18 +151,8 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	reg.MustRegister(middleware.RateLimitCollectors()...)
 	reg.MustRegister(metrics.HTTPRequestsInFlight, metrics.HTTPRequestsTotal, metrics.HTTPRequestDuration)
 	reg.MustRegister(metrics.PoolCollector())
-	r.Get("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP)
-	pprofAdmin := middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)
-	r.With(pprofAdmin).Get("/debug/pprof", pprof.Index)
-	r.With(pprofAdmin).Get("/debug/pprof/", pprof.Index)
-	r.With(pprofAdmin).Get("/debug/pprof/cmdline", pprof.Cmdline)
-	r.With(pprofAdmin).Get("/debug/pprof/profile", pprof.Profile)
-	r.With(pprofAdmin).Get("/debug/pprof/symbol", pprof.Symbol)
-	r.With(pprofAdmin).Post("/debug/pprof/symbol", pprof.Symbol)
-	r.With(pprofAdmin).Get("/debug/pprof/trace", pprof.Trace)
-	for _, profile := range []string{"allocs", "block", "goroutine", "heap", "mutex", "threadcreate"} {
-		r.With(pprofAdmin).Get("/debug/pprof/"+profile, pprof.Handler(profile).ServeHTTP)
-	}
+	metricsHandler := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
+	r.With(middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)).Get("/metrics", metricsHandler.ServeHTTP)
 
 	// Slack slash commands (issue #127). Outside /api/v1 because Slack posts
 	// form-encoded bodies, which the JSON content-type guard would reject;
@@ -172,12 +162,18 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// pprof (issue #157). Gated behind admin role so probing always gets 403
 	// rather than 401, avoiding path enumeration by unauthenticated callers.
 	adminOnly := middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)
-	r.With(adminOnly).HandleFunc("/debug/pprof", pprof.Index)
-	r.With(adminOnly).HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	r.With(adminOnly).HandleFunc("/debug/pprof/profile", pprof.Profile)
-	r.With(adminOnly).HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	r.With(adminOnly).HandleFunc("/debug/pprof/trace", pprof.Trace)
-	r.With(adminOnly).HandleFunc("/debug/pprof/{name}", pprof.Index)
+	r.Route("/debug/pprof", func(r chi.Router) {
+		r.Use(adminOnly)
+		r.Get("/", pprof.Index)
+		r.Get("/cmdline", pprof.Cmdline)
+		r.Get("/profile", pprof.Profile)
+		r.Get("/symbol", pprof.Symbol)
+		r.Post("/symbol", pprof.Symbol)
+		r.Get("/trace", pprof.Trace)
+		for _, profile := range []string{"allocs", "block", "goroutine", "heap", "mutex", "threadcreate"} {
+			r.Get("/"+profile, pprof.Handler(profile).ServeHTTP)
+		}
+	})
 
 	// GraphQL (issue #125): read-only, POST only. Same credential rules as
 	// the REST read routes: anonymous is allowed, an API key needs

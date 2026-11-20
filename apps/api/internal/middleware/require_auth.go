@@ -1,10 +1,11 @@
 package middleware
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/sorolens/sorolens/apps/api/internal/handler"
 )
 
 // isHealthEndpoint reports whether the path is a health check endpoint
@@ -33,21 +34,13 @@ func RequireAuthMode(enabled bool, logger *slog.Logger) func(http.Handler) http.
 					if logger != nil {
 						logger.Debug("require-auth mode: invalid credential", "path", r.URL.Path)
 					}
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-					_ = json.NewEncoder(w).Encode(map[string]string{
-						"error": "invalid API key",
-					})
+					writeError(w, r, http.StatusUnauthorized, "", "invalid API key")
 					return
 				}
 				if logger != nil {
 					logger.Debug("require-auth mode: unauthenticated request rejected", "path", r.URL.Path)
 				}
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"error": "authentication required",
-				})
+				writeError(w, r, http.StatusUnauthorized, "", "authentication required")
 				return
 			}
 			next.ServeHTTP(w, r)
