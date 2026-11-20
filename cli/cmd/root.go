@@ -34,7 +34,62 @@ on the Stellar network.`,
 	PersistentPreRunE: applyConfig,
 }
 
+var completionCmd = &cobra.Command{
+	Use:   "completion [bash|zsh|fish|powershell]",
+	Short: "Generate shell completion scripts",
+	Long: `Generate shell completion scripts for sorolens.
+
+To load completions:
+
+Bash:
+  $ source <(sorolens completion bash)
+
+  # To load completions for each session, execute once:
+  # Linux:
+  $ sorolens completion bash > /etc/bash_completion.d/sorolens
+  # macOS:
+  $ sorolens completion bash > $(brew --prefix)/etc/bash_completion.d/sorolens
+
+Zsh:
+  $ echo "autoload -U compinit; compinit" >> ~/.zshrc
+  $ sorolens completion zsh > "${fpath[1]}/_sorolens"
+
+Fish:
+  $ sorolens completion fish | source
+
+  # To load completions for each session, execute once:
+  $ sorolens completion fish > ~/.config/fish/completions/sorolens.fish
+
+PowerShell:
+  PS> sorolens completion powershell | Out-String | Invoke-Expression
+
+  # To load completions for every new session, add the output to your profile:
+  PS> sorolens completion powershell > sorolens.ps1
+  # and source this file from your PowerShell profile.`,
+	DisableFlagsInUseLine: true,
+	ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
+	Args:                  cobra.ExactValidArgs(1),
+	SilenceUsage:          true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		out := cmd.OutOrStdout()
+		switch args[0] {
+		case "bash":
+			return rootCmd.GenBashCompletionV2(out, true)
+		case "zsh":
+			return rootCmd.GenZshCompletion(out)
+		case "fish":
+			return rootCmd.GenFishCompletion(out, true)
+		case "powershell":
+			return rootCmd.GenPowerShellCompletionWithDesc(out)
+		default:
+			return fmt.Errorf("unsupported shell: %q", args[0])
+		}
+	},
+}
+
 func init() {
+	rootCmd.AddCommand(completionCmd)
+
 	rootCmd.PersistentFlags().StringVar(
 		&globalConfig.APIURL, "api-url",
 		"",
