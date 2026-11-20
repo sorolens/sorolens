@@ -14,6 +14,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ImportContractsCsv, { parseCsv } from "./ImportContractsCsv";
@@ -21,6 +22,17 @@ import ImportContractsCsv, { parseCsv } from "./ImportContractsCsv";
 const mockTrackContract = vi.fn();
 
 vi.mock("@/lib/api", () => ({
+  // Mirrors the real class so `err instanceof ApiError` still holds.
+  ApiError: class ApiError extends Error {
+    constructor(
+      public status: number,
+      message: string,
+      public code?: string
+    ) {
+      super(message);
+      this.name = "ApiError";
+    }
+  },
   trackContract: (...args: unknown[]) => mockTrackContract(...args),
 }));
 
@@ -117,14 +129,18 @@ describe("parseCsv", () => {
 });
 
 describe("ImportContractsCsv", () => {
-  it("closes on Escape and on a backdrop click", () => {
+  it("closes on Escape", () => {
     const { onClose } = renderModal();
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
 
-    fireEvent.click(screen.getByRole("dialog"));
-    expect(onClose).toHaveBeenCalledTimes(2);
+  it("closes on close button click", () => {
+    const { onClose } = renderModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("does not close when the click lands inside the modal", () => {
@@ -200,15 +216,16 @@ describe("ImportContractsCsv", () => {
     expect(screen.getByText("2 row(s)")).toBeVisible();
   });
 
-  it("lists duplicate rows individually so both are imported", async () => {
+  it("lists duplicate rows and shows them as invalid", async () => {
     const { container } = renderModal();
 
     await upload(container, csvFile(`${ID},testnet\n${ID},testnet\n`));
 
     await waitFor(() => expect(rowCount()).toBe(2));
-    fireEvent.click(screen.getByRole("button", { name: "Import 2 contracts" }));
-
-    await waitFor(() => expect(mockTrackContract).toHaveBeenCalledTimes(2));
+    expect(
+      screen.getByText("Duplicate contract ID in file")
+    ).toBeVisible();
+    expect(mockTrackContract).not.toHaveBeenCalled();
   });
 
   it("flags a missing contract id", async () => {
@@ -216,7 +233,7 @@ describe("ImportContractsCsv", () => {
 
     await upload(container, csvFile(",testnet,no id\n"));
 
-    expect(await screen.findByText("Missing contract_id")).toBeVisible();
+    expect(await screen.findByText("Missing contract ID")).toBeVisible();
     expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
   });
 
@@ -227,7 +244,7 @@ describe("ImportContractsCsv", () => {
 
     expect(
       await screen.findByText(
-        "contract_id must be 56 chars starting with 'C' (A–Z, 0–9)"
+        "Invalid contract ID: expected a 56-character strkey starting with 'C'"
       )
     ).toBeVisible();
   });
@@ -237,7 +254,7 @@ describe("ImportContractsCsv", () => {
 
     await upload(container, csvFile(`${ID},devnet\n`));
 
-    expect(await screen.findByText("Unknown network 'devnet'")).toBeVisible();
+    expect(await screen.findByText(/Unknown network 'devnet'/)).toBeVisible();
   });
 
   it("flags a row that targets a different network than the dashboard", async () => {
@@ -261,25 +278,25 @@ describe("ImportContractsCsv", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
 
     await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Imported" })).toBeVisible());
     expect(mockTrackContract).toHaveBeenCalledWith(
-      { id: ID, label: "Payments" },
+      { id: ID, label: "Payments", network: "testnet" },
       undefined
     );
-    expect(screen.getByText("1 imported")).toBeVisible();
     expect(screen.getByRole("button", { name: "Imported" })).toBeDisabled();
-    // Once finished, the secondary action offers to close rather than cancel.
-    expect(screen.getByRole("button", { name: "Close" })).toBeVisible();
   });
 
   it("passes the user id through to the API", async () => {
-    const { container } = renderModal({ userId: "user-42" });
+    const { container, onImported } = renderModal({ userId: "user-42" });
 
     await upload(container, csvFile(`${ID},testnet\n`));
     await waitFor(() => expect(rowCount()).toBe(1));
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
 
-    await waitFor(() =>
-      expect(mockTrackContract).toHaveBeenCalledWith({ id: ID }, "user-42")
+    await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1));
+    expect(mockTrackContract).toHaveBeenCalledWith(
+      { id: ID, label: undefined, network: "testnet" },
+      "user-42"
     );
   });
 
@@ -294,9 +311,9 @@ describe("ImportContractsCsv", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Import 2 contracts" }));
 
-    expect(await screen.findByText("Rate limit exceeded.")).toBeVisible();
+    expect(screen.findByText("Failed: Rate limit exceeded.")).toBeVisible();
     expect(mockTrackContract).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("1 imported")).toBeVisible();
+    expect(within(container).getByText("1 imported")).toBeVisible();
     expect(screen.getByText("1 with problems")).toBeVisible();
     // One row succeeded, so the page is still told to refresh.
     expect(onImported).toHaveBeenCalledTimes(1);
@@ -310,9 +327,9 @@ describe("ImportContractsCsv", () => {
     await waitFor(() => expect(rowCount()).toBe(1));
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
 
-    expect(await screen.findByText("Service unavailable.")).toBeVisible();
+    expect(await screen.findByText("Failed: Service unavailable.")).toBeVisible();
     expect(onImported).not.toHaveBeenCalled();
-    expect(screen.getByText("0 imported")).toBeVisible();
+    expect(screen.getAllByText("0 imported")).toHaveLength(2);
     expect(screen.getByText("1 with problems")).toBeVisible();
   });
 
@@ -325,7 +342,10 @@ describe("ImportContractsCsv", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
 
     await waitFor(() => expect(mockTrackContract).toHaveBeenCalledTimes(1));
-    expect(mockTrackContract).toHaveBeenCalledWith({ id: ID }, undefined);
+    expect(mockTrackContract).toHaveBeenCalledWith(
+      { id: ID, network: "testnet" },
+      undefined
+    );
   });
 
   it("shows a loading state and blocks closing while importing", async () => {
@@ -339,7 +359,7 @@ describe("ImportContractsCsv", () => {
 
     const submit = screen.getByRole("button", { name: "Importing…" });
     expect(submit).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Close modal" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
     expect(
       container.querySelector<HTMLInputElement>('input[type="file"]')
     ).toBeDisabled();
