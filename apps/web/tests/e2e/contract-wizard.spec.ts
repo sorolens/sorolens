@@ -148,6 +148,18 @@ test("a failed creation keeps the user on step 3 and shows the API error", async
   page,
 }) => {
   await mockApi(page, {
+    // The pre-flight check must still succeed; only the create call fails.
+    "contracts/validate": () => ({
+      status: 200,
+      body: {
+        valid: true,
+        contract_id: CONTRACT_ID,
+        network: "testnet",
+        already_tracked: false,
+        label: null,
+        reason: null,
+      },
+    }),
     contracts: (route) =>
       route.request().method() === "POST"
         ? { status: 409, body: { error: "contract already being tracked" } }

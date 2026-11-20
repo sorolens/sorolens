@@ -231,9 +231,15 @@ export async function mockApi(
   overrides: Record<string, Handler> = {}
 ): Promise<void> {
   const handlers = { ...defaultHandlers(), ...overrides };
+  // A test's own handlers win over the defaults, even when a broader default
+  // key (such as "contracts/") also matches the path.
+  const keys = [
+    ...Object.keys(overrides),
+    ...Object.keys(handlers).filter((k) => !(k in overrides)),
+  ];
   await page.route("**/api/v1/**", (route) => {
     const path = new URL(route.request().url()).pathname;
-    const key = Object.keys(handlers).find((k) => path.includes(k));
+    const key = keys.find((k) => path.includes(k));
     if (!key) {
       return route.fulfill({
         status: 404,

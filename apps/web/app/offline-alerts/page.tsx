@@ -16,7 +16,11 @@ export default function OfflineAlertsPage() {
   const { pending, dismiss, dismissAll } = useOfflineAlertQueue();
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
+    <main
+      id="main"
+      tabIndex={-1}
+      className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8"
+    >
       <div className="mb-6 flex items-center gap-4">
         <Link
           href="/"
@@ -55,6 +59,6 @@ export default function OfflineAlertsPage() {
         onDismiss={dismiss}
         onDismissAll={dismissAll}
       />
-    </div>
+    </main>
   );
 }
