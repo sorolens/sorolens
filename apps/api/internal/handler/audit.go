@@ -1,12 +1,13 @@
 package handler
 
 import (
-	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
+	"github.com/sorolens/sorolens/apps/api/internal/timerange"
 )
 
 type auditEventResponse struct {
@@ -39,17 +40,14 @@ func auditEventFromStore(e store.AuditEvent) auditEventResponse {
 
 // ListAuditEvents handles GET /api/v1/admin/audit (admin only).
 //
-// Query params: since (RFC 3339, inclusive), limit (default 100, max 500),
-// cursor (opaque, from next_cursor). Results are newest first.
+// Query params: from and to (RFC 3339, inclusive), limit (default 100, max 500),
+// cursor (opaque, from next_cursor). The deprecated since parameter remains
+// supported as an alias for from. Results are newest first.
 func (h *Handler) ListAuditEvents(w http.ResponseWriter, r *http.Request) {
-	var since time.Time
-	if v := r.URL.Query().Get("since"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "since must be an RFC 3339 timestamp")
-			return
-		}
-		since = t
+	tr, err := timerange.ParseRequest(r, timerange.DefaultOptions())
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
 	}
 
 	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
@@ -67,7 +65,7 @@ func (h *Handler) ListAuditEvents(w http.ResponseWriter, r *http.Request) {
 		auditCursor = n
 	}
 
-	events, next, err := h.Store.ListAuditEvents(r.Context(), since, auditCursor, intQuery(r, "limit", 100))
+	events, next, err := h.Store.ListAuditEvents(r.Context(), tr.From, tr.To, auditCursor, intQuery(r, "limit", 100))
 	if err != nil {
 		h.Logger.Error("list audit events", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list audit events")

@@ -123,23 +123,23 @@ func TestAuditEventsPostgres(t *testing.T) {
 		}
 	}
 
-	page1, next, err := s.ListAuditEvents(ctx, time.Time{}, 0, 2)
+	page1, next, err := s.ListAuditEvents(ctx, time.Time{}, time.Time{}, 0, 2)
 	if err != nil || len(page1) != 2 || next == 0 {
 		t.Fatalf("page 1: %d rows next=%d err=%v", len(page1), next, err)
 	}
 	if !page1[0].At.After(page1[1].At) || page1[0].Actor != "alice" || page1[0].Status != 201 {
 		t.Fatalf("page 1 must be newest first: %+v", page1)
 	}
-	page2, next2, err := s.ListAuditEvents(ctx, time.Time{}, next, 2)
+	page2, next2, err := s.ListAuditEvents(ctx, time.Time{}, time.Time{}, next, 2)
 	if err != nil || len(page2) != 2 || page2[0].ID >= page1[1].ID {
 		t.Fatalf("page 2: %+v next=%d err=%v", page2, next2, err)
 	}
-	page3, next3, err := s.ListAuditEvents(ctx, time.Time{}, next2, 2)
+	page3, next3, err := s.ListAuditEvents(ctx, time.Time{}, time.Time{}, next2, 2)
 	if err != nil || len(page3) != 1 || next3 != 0 {
 		t.Fatalf("page 3: %+v next=%d err=%v", page3, next3, err)
 	}
 
-	since, _, err := s.ListAuditEvents(ctx, base.Add(3*time.Hour), 0, 10)
+	since, _, err := s.ListAuditEvents(ctx, base.Add(3*time.Hour), time.Time{}, 0, 10)
 	if err != nil || len(since) != 2 {
 		t.Fatalf("since: want 2 rows, got %d err=%v", len(since), err)
 	}
