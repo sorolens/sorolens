@@ -28,6 +28,7 @@ on the Stellar network.
 
 * [sorolens alerts](sorolens_alerts.md)	 - View and manage watchdog alerts
 * [sorolens compare](sorolens_compare.md)	 - Compare 2 to 5 contracts side by side
+* [sorolens completion](sorolens_completion.md)	 - Generate shell completion scripts
 * [sorolens config](sorolens_config.md)	 - Show and manage CLI configuration and profiles
 * [sorolens contracts](sorolens_contracts.md)	 - List and inspect tracked contracts
 * [sorolens doctor](sorolens_doctor.md)	 - Diagnose configuration, connectivity, authentication, version and clock problems
