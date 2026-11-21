@@ -16,6 +16,7 @@ import (
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
 	"github.com/sorolens/sorolens/services/indexer/internal/callgraph"
+	"github.com/sorolens/sorolens/services/indexer/internal/failure"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
 	"github.com/sorolens/sorolens/services/indexer/internal/lock"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
@@ -911,6 +912,7 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 			ApplicationOrder: tx.ApplicationOrder,
 		}
 		p.applyDiagnostics(&inv, tx.DiagnosticEventsXDR, fnCallTopics[txHash])
+		applyFailure(&inv, tx.DiagnosticEventsXDR)
 		invocations = append(invocations, inv)
 	}
 
@@ -948,6 +950,19 @@ func (p *Poller) applyDiagnostics(inv *Invocation, diagnosticEventsXDR []string,
 			"events", len(diagnosticEventsXDR),
 		)
 	}
+}
+
+// applyFailure classifies a FAILED invocation from its transaction result and
+// diagnostic events (issue #806). Classification never fails: an error it
+// cannot decode is stored as category "other" with the raw code kept.
+// Invocations with any other status keep both fields empty.
+func applyFailure(inv *Invocation, diagnosticEventsXDR []string) {
+	if inv.Status != "FAILED" {
+		return
+	}
+	res := failure.Classify(inv.ResultXDR, diagnosticEventsXDR)
+	inv.FailureCategory = string(res.Category)
+	inv.FailureCode = res.Code
 }
 
 func (p *Poller) selectRPCClient(network string) (RPCClient, bool) {

@@ -594,6 +594,9 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 		if f.FunctionName != "" && inv.FunctionName != f.FunctionName {
 			continue
 		}
+		if f.FailureCategory != "" && inv.FailureCategory != f.FailureCategory {
+			continue
+		}
 		out = append(out, inv)
 		if len(out) > limit {
 			break
@@ -707,6 +710,9 @@ func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, c
 		if f.Until != nil && inv.LedgerClosedAt.After(*f.Until) {
 			continue
 		}
+		if f.FailureCategory != "" && inv.FailureCategory != f.FailureCategory {
+			continue
+		}
 		out = append(out, inv)
 	}
 
@@ -798,12 +804,18 @@ func (m *MockStore) GetContractInvocationStats(_ context.Context, contractID str
 }
 
 func invocationWindowStats(invocations []Invocation) InvocationWindowStats {
-	stats := InvocationWindowStats{InvocationCount: int64(len(invocations))}
+	stats := InvocationWindowStats{
+		InvocationCount:    int64(len(invocations)),
+		FailuresByCategory: NewFailureCounts(),
+	}
 	fees := make([]float64, 0, len(invocations))
 	cpus := make([]float64, 0, len(invocations))
 	for _, inv := range invocations {
 		if inv.Status != "SUCCESS" {
 			stats.FailedInvocations++
+		}
+		if inv.FailureCategory != "" {
+			AddFailureCount(stats.FailuresByCategory, inv.FailureCategory, 1)
 		}
 		fees = append(fees, float64(inv.ResourceFeeCharged))
 		cpus = append(cpus, float64(inv.CPUInsn))

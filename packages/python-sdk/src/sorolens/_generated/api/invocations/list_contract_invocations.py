@@ -7,6 +7,7 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error import Error
+from ...models.failure_category import FailureCategory
 from ...models.list_contract_invocations_network import ListContractInvocationsNetwork
 from ...models.list_contract_invocations_response_200 import (
     ListContractInvocationsResponse200,
@@ -25,6 +26,7 @@ def _get_kwargs(
     function_name: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+    failure_category: FailureCategory | Unset = UNSET,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
@@ -50,6 +52,12 @@ def _get_kwargs(
     params["from"] = from_
 
     params["to"] = to
+
+    json_failure_category: str | Unset = UNSET
+    if not isinstance(failure_category, Unset):
+        json_failure_category = failure_category.value
+
+    params["failure_category"] = json_failure_category
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -110,6 +118,7 @@ def sync_detailed(
     function_name: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+    failure_category: FailureCategory | Unset = UNSET,
 ) -> Response[Error | ListContractInvocationsResponse200]:
     """List contract invocations
 
@@ -122,6 +131,16 @@ def sync_detailed(
         function_name (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
+        failure_category (FailureCategory | Unset): Why a failed invocation failed, derived from
+            the Soroban host error and the InvokeHostFunction result code (see docs/failure-
+            categories.md). Set only on FAILED invocations; omitted for every other status and for
+            invocations indexed before classification existed. budget_exceeded: the invocation ran out
+            of declared resources (host error type Budget, or result RESOURCE_LIMIT_EXCEEDED /
+            INSUFFICIENT_REFUNDABLE_FEE). contract_error: the contract returned its own error code
+            (type Contract). auth_failure: authorization failed (type Auth). storage: a ledger entry
+            was missing or archived (type Storage, or result ENTRY_ARCHIVED). wasm_trap: the
+            contract's Wasm trapped (type WasmVm). other: anything else, including unknown or
+            undecodable errors; failure_code keeps the raw value.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -140,6 +159,7 @@ def sync_detailed(
         function_name=function_name,
         from_=from_,
         to=to,
+        failure_category=failure_category,
     )
 
     response = client.get_httpx_client().request(
@@ -160,6 +180,7 @@ def sync(
     function_name: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+    failure_category: FailureCategory | Unset = UNSET,
 ) -> Error | ListContractInvocationsResponse200 | None:
     """List contract invocations
 
@@ -172,6 +193,16 @@ def sync(
         function_name (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
+        failure_category (FailureCategory | Unset): Why a failed invocation failed, derived from
+            the Soroban host error and the InvokeHostFunction result code (see docs/failure-
+            categories.md). Set only on FAILED invocations; omitted for every other status and for
+            invocations indexed before classification existed. budget_exceeded: the invocation ran out
+            of declared resources (host error type Budget, or result RESOURCE_LIMIT_EXCEEDED /
+            INSUFFICIENT_REFUNDABLE_FEE). contract_error: the contract returned its own error code
+            (type Contract). auth_failure: authorization failed (type Auth). storage: a ledger entry
+            was missing or archived (type Storage, or result ENTRY_ARCHIVED). wasm_trap: the
+            contract's Wasm trapped (type WasmVm). other: anything else, including unknown or
+            undecodable errors; failure_code keeps the raw value.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -191,6 +222,7 @@ def sync(
         function_name=function_name,
         from_=from_,
         to=to,
+        failure_category=failure_category,
     ).parsed
 
 
@@ -205,6 +237,7 @@ async def asyncio_detailed(
     function_name: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+    failure_category: FailureCategory | Unset = UNSET,
 ) -> Response[Error | ListContractInvocationsResponse200]:
     """List contract invocations
 
@@ -217,6 +250,16 @@ async def asyncio_detailed(
         function_name (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
+        failure_category (FailureCategory | Unset): Why a failed invocation failed, derived from
+            the Soroban host error and the InvokeHostFunction result code (see docs/failure-
+            categories.md). Set only on FAILED invocations; omitted for every other status and for
+            invocations indexed before classification existed. budget_exceeded: the invocation ran out
+            of declared resources (host error type Budget, or result RESOURCE_LIMIT_EXCEEDED /
+            INSUFFICIENT_REFUNDABLE_FEE). contract_error: the contract returned its own error code
+            (type Contract). auth_failure: authorization failed (type Auth). storage: a ledger entry
+            was missing or archived (type Storage, or result ENTRY_ARCHIVED). wasm_trap: the
+            contract's Wasm trapped (type WasmVm). other: anything else, including unknown or
+            undecodable errors; failure_code keeps the raw value.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -235,6 +278,7 @@ async def asyncio_detailed(
         function_name=function_name,
         from_=from_,
         to=to,
+        failure_category=failure_category,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -253,6 +297,7 @@ async def asyncio(
     function_name: str | Unset = UNSET,
     from_: int | Unset = UNSET,
     to: int | Unset = UNSET,
+    failure_category: FailureCategory | Unset = UNSET,
 ) -> Error | ListContractInvocationsResponse200 | None:
     """List contract invocations
 
@@ -265,6 +310,16 @@ async def asyncio(
         function_name (str | Unset):
         from_ (int | Unset):
         to (int | Unset):
+        failure_category (FailureCategory | Unset): Why a failed invocation failed, derived from
+            the Soroban host error and the InvokeHostFunction result code (see docs/failure-
+            categories.md). Set only on FAILED invocations; omitted for every other status and for
+            invocations indexed before classification existed. budget_exceeded: the invocation ran out
+            of declared resources (host error type Budget, or result RESOURCE_LIMIT_EXCEEDED /
+            INSUFFICIENT_REFUNDABLE_FEE). contract_error: the contract returned its own error code
+            (type Contract). auth_failure: authorization failed (type Auth). storage: a ledger entry
+            was missing or archived (type Storage, or result ENTRY_ARCHIVED). wasm_trap: the
+            contract's Wasm trapped (type WasmVm). other: anything else, including unknown or
+            undecodable errors; failure_code keeps the raw value.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -285,5 +340,6 @@ async def asyncio(
             function_name=function_name,
             from_=from_,
             to=to,
+            failure_category=failure_category,
         )
     ).parsed

@@ -110,6 +110,8 @@ from .event import Event
 from .export_contract_events_csv_network import ExportContractEventsCsvNetwork
 from .failed_event import FailedEvent
 from .failed_event_event import FailedEventEvent
+from .failure_category import FailureCategory
+from .failure_counts_by_category import FailureCountsByCategory
 from .forecast_point import ForecastPoint
 from .forecast_series import ForecastSeries
 from .forecast_series_metric import ForecastSeriesMetric
@@ -442,6 +444,8 @@ __all__ = (
     "ExportContractEventsCsvNetwork",
     "FailedEvent",
     "FailedEventEvent",
+    "FailureCategory",
+    "FailureCountsByCategory",
     "ForecastPoint",
     "ForecastSeries",
     "ForecastSeriesMetric",

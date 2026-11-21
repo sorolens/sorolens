@@ -1154,6 +1154,7 @@ paths:
             format: int32
             minimum: 1
           description: Upper ledger bound (inclusive).
+        - $ref: "#/components/parameters/FailureCategoryParam"
       responses:
         "200":
           description: Page of invocations
@@ -4350,6 +4351,7 @@ paths:
             type: string
             format: date-time
           description: Inclusive upper bound on ledger_closed_at (RFC 3339).
+        - $ref: "#/components/parameters/FailureCategoryParam"
       responses:
         "200":
           description: Page of invocations
@@ -5951,6 +5953,16 @@ components:
         type: string
         enum: [testnet, mainnet, futurenet, standalone]
       description: Network filter; empty means all networks.
+    FailureCategoryParam:
+      name: failure_category
+      in: query
+      required: false
+      schema:
+        $ref: "#/components/schemas/FailureCategory"
+      description: >-
+        Show only failed invocations of this category (case-insensitive).
+        Invocations indexed before failure classification existed have no
+        category and never match. An unknown value returns 422.
     TagParam:
       name: tag
       in: query
@@ -6523,6 +6535,60 @@ components:
           format: int64
         application_order:
           type: integer
+        failure_category:
+          $ref: "#/components/schemas/FailureCategory"
+        failure_code:
+          type: string
+          description: >-
+            Raw error behind failure_category, kept for every failed
+            invocation: the host error as "Error(<Type>, <Code>)" (for example
+            "Error(Contract, #4)" or "Error(Budget, ExceededLimit)"), else the
+            operation result code ("INVOKE_HOST_FUNCTION_TRAPPED") or
+            transaction result code ("txSOROBAN_INVALID"), or "UNKNOWN" when
+            nothing could be decoded. Unknown enum values are kept as numbers,
+            for example "Error(#12, #3)". Omitted with failure_category.
+          example: "Error(Contract, #4)"
+
+    FailureCategory:
+      type: string
+      description: >-
+        Why a failed invocation failed, derived from the Soroban host error
+        and the InvokeHostFunction result code (see docs/failure-categories.md).
+        Set only on FAILED invocations; omitted for every other status and
+        for invocations indexed before classification existed.
+        budget_exceeded: the invocation ran out of declared resources (host
+        error type Budget, or result RESOURCE_LIMIT_EXCEEDED /
+        INSUFFICIENT_REFUNDABLE_FEE). contract_error: the contract returned
+        its own error code (type Contract). auth_failure: authorization
+        failed (type Auth). storage: a ledger entry was missing or archived
+        (type Storage, or result ENTRY_ARCHIVED). wasm_trap: the contract's
+        Wasm trapped (type WasmVm). other: anything else, including unknown
+        or undecodable errors; failure_code keeps the raw value.
+      enum: [budget_exceeded, contract_error, auth_failure, storage, wasm_trap, other]
+
+    FailureCountsByCategory:
+      type: object
+      description: Classified failures per FailureCategory. Every category is present, with 0 when it has none.
+      required: [budget_exceeded, contract_error, auth_failure, storage, wasm_trap, other]
+      properties:
+        budget_exceeded:
+          type: integer
+          format: int64
+        contract_error:
+          type: integer
+          format: int64
+        auth_failure:
+          type: integer
+          format: int64
+        storage:
+          type: integer
+          format: int64
+        wasm_trap:
+          type: integer
+          format: int64
+        other:
+          type: integer
+          format: int64
 
     InvocationDetail:
       allOf:
@@ -6643,8 +6709,12 @@ components:
 
     InvocationWindowStats:
       type: object
-      description: Fees are measured in stroops, CPU in instructions, and failure_rate is a ratio from 0 to 1.
-      required: [invocation_count, failed_invocations, failure_rate, avg_fee, p95_fee, avg_cpu, p95_cpu]
+      description: >-
+        Fees are measured in stroops, CPU in instructions, and failure_rate is
+        a ratio from 0 to 1. failures_by_category counts classified failures;
+        failed invocations indexed before classification existed count toward
+        failed_invocations only, so the categories can sum to less.
+      required: [invocation_count, failed_invocations, failure_rate, avg_fee, p95_fee, avg_cpu, p95_cpu, failures_by_category]
       properties:
         invocation_count:
           type: integer
@@ -6669,6 +6739,8 @@ components:
         p95_cpu:
           type: number
           format: double
+        failures_by_category:
+          $ref: "#/components/schemas/FailureCountsByCategory"
 
     ForecastPoint:
       type: object
