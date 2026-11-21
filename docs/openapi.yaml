@@ -373,12 +373,30 @@ paths:
       security:
         - RoleAuth: [admin]
       parameters:
-        - name: since
+        - name: from
           in: query
+          required: false
           schema:
             type: string
             format: date-time
-          description: Only events at or after this RFC 3339 timestamp.
+          description: Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).
+          example: '2026-09-02T00:00:00Z'
+        - name: since
+          in: query
+          deprecated: true
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.
         - $ref: "#/components/parameters/Limit"
         - name: cursor
           in: query
@@ -421,12 +439,30 @@ paths:
       security:
         - RoleAuth: [admin]
       parameters:
-        - name: since
+        - name: from
           in: query
+          required: false
           schema:
             type: string
             format: date-time
-          description: Only events at or after this RFC 3339 timestamp.
+          description: Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).
+          example: '2026-09-02T00:00:00Z'
+        - name: since
+          in: query
+          deprecated: true
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.
         - $ref: "#/components/parameters/Limit"
         - name: cursor
           in: query
@@ -4184,20 +4220,38 @@ paths:
             type: string
             enum: [contract, system, diagnostic]
         - $ref: "#/components/parameters/NetworkParam"
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `until` if both are sent.
+          example: '2026-09-02T00:00:00Z'
         - name: since
           in: query
+          deprecated: true
           required: false
           schema:
             type: string
             format: date-time
-          description: Inclusive lower bound on ledger_closed_at (RFC 3339).
+          description: Deprecated alias for `from`. Inclusive lower bound on ledger_closed_at (RFC 3339).
         - name: until
           in: query
+          deprecated: true
           required: false
           schema:
             type: string
             format: date-time
-          description: Inclusive upper bound on ledger_closed_at (RFC 3339).
+          description: Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).
       responses:
         "200":
           description: Page of events
