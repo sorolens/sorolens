@@ -100,31 +100,31 @@ jobs:
             go run "./examples/$example"
           done
       - name: golangci-lint (apps/api)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         continue-on-error: true
         with:
-          version: latest
+          version: v2.15.0
           working-directory: apps/api
           args: --timeout=10m
       - name: golangci-lint (services/indexer)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         continue-on-error: true
         with:
-          version: latest
+          version: v2.15.0
           working-directory: services/indexer
           args: --timeout=10m
       - name: golangci-lint (cli)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         continue-on-error: true
         with:
-          version: latest
+          version: v2.15.0
           working-directory: cli
           args: --timeout=10m
       - name: golangci-lint (packages/go-client)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         continue-on-error: true
         with:
-          version: latest
+          version: v2.15.0
           working-directory: packages/go-client
           args: --timeout=10m
       - name: Upload coverage to Codecov

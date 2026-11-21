@@ -4,6 +4,7 @@ import withPWA from "@ducanh2912/next-pwa";
 import withBundleAnalyzer from "@next/bundle-analyzer";
 
 const baseConfig: NextConfig = {
+  ...(process.env.SOROLENS_STANDALONE === "1" ? { output: "standalone" } : {}),
   outputFileTracingRoot: path.resolve(process.cwd(), "../.."),
   transpilePackages: ["@sorolens/ui", "@sorolens/xdr"],
 };

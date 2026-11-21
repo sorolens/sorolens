@@ -136,6 +136,7 @@ nav:
       - Backups and PITR: backups.md
       - Migrations: migrations.md
       - Discord bot: discord-bot.md
+      - Supply chain: supply-chain.md
   - Contributing:
       - Editing these docs: contributing/docs.md
       - Web localization: i18n.md

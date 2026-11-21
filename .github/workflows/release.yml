@@ -27,11 +27,9 @@ jobs:
           - image-name: sorolens-api
             dockerfile: apps/api/Dockerfile
             context: .
-            build-args: true
           - image-name: sorolens-indexer
             dockerfile: services/indexer/Dockerfile
             context: .
-            build-args: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -60,6 +58,10 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest
 
+      - name: Set reproducible build time
+        id: build-time
+        run: echo "timestamp=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push image
         id: build-push
         uses: docker/build-push-action@v6
@@ -72,10 +74,26 @@ jobs:
           build-args: |
             VERSION=${{ github.ref_name }}
             GIT_SHA=${{ github.sha }}
+            BUILT_AT=${{ steps.build-time.outputs.timestamp }}
           # BuildKit attaches an SPDX SBOM and SLSA provenance to the image
           # index, next to the image itself.
           sbom: true
           provenance: mode=max
+
+      - name: Export the image's SPDX SBOM
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image-name }}
+          DIGEST: ${{ steps.build-push.outputs.digest }}
+          SBOM: ${{ matrix.image-name }}.spdx.json
+        run: |
+          docker buildx imagetools inspect "${IMAGE}@${DIGEST}" \
+            --format '{{ json .SBOM.SPDX }}' > "$SBOM"
+          jq -e '.spdxVersion | startswith("SPDX-")' "$SBOM"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.image-name }}
+          path: ${{ matrix.image-name }}.spdx.json
+          if-no-files-found: error
 
       # Keyless: the signature is bound to this workflow's OIDC identity and
       # recorded in the Rekor transparency log, so no signing key is stored.
@@ -101,6 +119,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sbom-*
+          path: artifacts
+          merge-multiple: true
+
       - name: Generate Checksums
         id: checksums
         run: |
@@ -115,7 +139,7 @@ jobs:
           echo "## Source Archive Checksums" >> artifacts/checksums.txt
           git archive --format=tar.gz --prefix=sorolens-${{ github.ref_name }}/ -o "artifacts/sorolens-${{ github.ref_name }}.tar.gz" HEAD
           git archive --format=zip --prefix=sorolens-${{ github.ref_name }}/ -o "artifacts/sorolens-${{ github.ref_name }}.zip" HEAD
-          (cd artifacts && sha256sum sorolens-${{ github.ref_name }}.tar.gz sorolens-${{ github.ref_name }}.zip >> checksums.txt)
+          (cd artifacts && sha256sum sorolens-${{ github.ref_name }}.tar.gz sorolens-${{ github.ref_name }}.zip *.spdx.json >> checksums.txt)
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -127,6 +151,7 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/checksums.txt
+            artifacts/*.spdx.json
             artifacts/sorolens-${{ github.ref_name }}.tar.gz
             artifacts/sorolens-${{ github.ref_name }}.zip
         env:

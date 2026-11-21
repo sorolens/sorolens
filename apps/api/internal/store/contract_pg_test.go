@@ -288,12 +288,12 @@ func subscriptionContractScenario() contractScenario {
 }
 
 func watchdogContractScenario() contractScenario {
+	now := time.Now().UTC().Truncate(time.Second)
 	return contractScenario{
 		name:   "watchdog",
 		tables: []string{"monitored_contracts"},
 		run: func(ctx context.Context, s store.FullStore) []string {
 			var obs []string
-			now := time.Now().UTC().Truncate(time.Second)
 			base := now.Add(-48 * time.Hour)
 			lastCheck := base.Add(6 * time.Hour)
 			contracts := []store.MonitoredContract{
