@@ -44,16 +44,30 @@ func (m *MockStore) DeleteWatchedAccount(_ context.Context, accountID string) er
 
 func (m *MockStore) RecordDiscoveredContract(_ context.Context, d DiscoveredContract) (bool, error) {
 	if _, ok := m.contracts[d.ContractID]; ok {
+		if d.IsSAC && d.SAC != nil {
+			if _, hasTok := m.contractTokens[d.ContractID]; !hasTok {
+				m.contractTokens[d.ContractID] = *d.SAC
+			}
+		}
 		return false, nil
 	}
-	m.contracts[d.ContractID] = Contract{
+	label := DiscoveredByLabel(d.AccountID)
+	if d.IsSAC && d.SAC != nil && d.SAC.AssetCode != "" {
+		label = d.SAC.AssetCode
+	}
+	c := Contract{
 		ID:              d.ContractID,
 		Network:         networkOrDefault(d.Network),
-		Label:           DiscoveredByLabel(d.AccountID),
+		Label:           label,
 		CreatedAtLedger: d.Ledger,
 		Status:          "active",
 		AddedAt:         time.Now().UTC(),
 	}
+	if d.IsSAC && d.SAC != nil {
+		c.Token = d.SAC
+		m.contractTokens[d.ContractID] = *d.SAC
+	}
+	m.contracts[d.ContractID] = c
 	if d.Ledger > 1 {
 		m.syncStates[d.ContractID] = SyncState{ContractID: d.ContractID, LastLedger: uint32(d.Ledger - 1)}
 	}

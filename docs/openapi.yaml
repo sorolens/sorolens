@@ -5959,6 +5959,30 @@ components:
           description: User-defined tags, sorted ascending. Always present; empty when the contract has no tags.
         backfill:
           $ref: "#/components/schemas/ContractBackfill"
+        token:
+          $ref: "#/components/schemas/TokenMetadata"
+
+    TokenMetadata:
+      type: object
+      description: Enriched metadata for Stellar Asset Contracts (SAC) or tokens.
+      required: [asset_code, issuer, decimals, symbol, name]
+      properties:
+        asset_code:
+          type: string
+          description: Stellar asset code (e.g. USDC or native).
+        issuer:
+          type: string
+          description: Stellar asset issuer account ID (or empty for native).
+        decimals:
+          type: integer
+          format: int32
+          description: Number of decimal places (SAC deterministically uses 7).
+        symbol:
+          type: string
+          description: Token symbol.
+        name:
+          type: string
+          description: Token name or asset identifier.
 
     ContractBackfill:
       type: object
@@ -6760,6 +6784,8 @@ components:
           format: date-time
         backfill:
           $ref: "#/components/schemas/ContractBackfill"
+        token:
+          $ref: "#/components/schemas/TokenMetadata"
 
     V2Event:
       type: object
