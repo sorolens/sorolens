@@ -45,6 +45,8 @@ there, not here.
 | `METRICS_PORT` | — | no | MetricsPort, when non-empty, starts a second HTTP listener that serves only GET /metrics. It lets operators scrape metrics on a private interface instead of exposing the endpoint on the public API port. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | no | OTEL_EXPORTER_OTLP_ENDPOINT is the OTLP/gRPC collector (host:port) that receives traces. Empty disables trace export. |
 | `PORT` | `8080` | no | Port is the HTTP port the API listens on. |
+| `RATE_LIMIT_PER_MINUTE` | `60` | no | RateLimitPerMinute is the default anonymous request budget. |
+| `RATE_LIMIT_WINDOW` | `time.Minute` | no | RateLimitWindow is the sliding window used by the rate limiter. |
 | `REDIS_URL` | — | yes | RedisURL is the Redis connection string used for caching and advisory locks. |
 | `REPORT_SIGNING_KEY` | — | no | ReportSigningKey signs exported SLA reports (issue #266). When empty the reporting handlers fall back to REPORT_SIGNING_KEY; with neither set the reports are emitted unsigned and every response says so. |
 | `REQUEST_MAX_BODY_BYTES` | `strconv.FormatInt(DefaultRequestMaxBodyBytes, 10)` | no | MaxBodyBytesFromEnv resolves the request body size limit from REQUEST_MAX_BODY_BYTES, falling back to DefaultRequestMaxBodyBytes when the variable is unset. The value must be a positive integer: a non-numeric or non-positive value is rejected so a bad deployment fails fast instead of silently disabling the guard. |
@@ -61,6 +63,7 @@ there, not here.
 | `TELEGRAM_BOT_TOKEN` | — | no | Telegram bot token from @BotFather, used to send test messages and watchdog alerts. |
 | `TELEGRAM_CHAT_ID` | — | no | Telegram chat id the bot posts test messages and watchdog alerts to. |
 | `TRUSTED_IDENTITY_PROXY_SECRET` | — | no | TrustedProxySecret enables identity headers signed by a reverse proxy. Empty disables that identity source. |
+| `TRUSTED_PROXIES` | — | no | TrustedProxies lists proxy peers allowed to supply X-Forwarded-For. |
 | `VERIFY_BUILD_COMMAND` | `stellar contract build` | no | VerifyBuildCommand is the deterministic build invocation used for contract source verification (issue #263), parsed from a space-separated string. It is executed directly, never through a shell. |
 | `VERIFY_TIMEOUT` | `10m` | no | VERIFY_TIMEOUT bounds a single contract verification build (Go duration). |
 | `VERIFY_WORKSPACE_DIR` | — | no | VerifyWorkspaceDir is the parent directory for verification workspaces. Empty means the OS temporary directory. |
