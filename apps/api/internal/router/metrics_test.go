@@ -26,6 +26,10 @@ func (metricsRedisClient) Expire(context.Context, string, time.Duration) (bool, 
 	return true, nil
 }
 
+func (metricsRedisClient) Eval(context.Context, string, []string, ...interface{}) (interface{}, error) {
+	return []interface{}{int64(1), int64(time.Minute.Milliseconds()), int64(1)}, nil
+}
+
 func newMetricsTestRouter() http.Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 	h := &handler.Handler{
