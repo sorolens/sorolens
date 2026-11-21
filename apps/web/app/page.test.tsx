@@ -89,6 +89,40 @@ describe("Landing page landmarks", () => {
   });
 });
 
+/**
+ * Invocations, Compare, Watchlist and Reports were reachable only by typing
+ * the URL (issue #647), so the landing page links each of them.
+ */
+describe("Landing page dashboard links", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("links every dashboard page that has no feature card", async () => {
+    const { default: Home } = await import("@/app/page");
+    render(<Home />);
+
+    const explore = within(
+      screen.getByRole("navigation", { name: "Explore the dashboard" })
+    );
+    expect(explore.getByRole("link", { name: "Invocations" })).toHaveAttribute(
+      "href",
+      "/invocations"
+    );
+    expect(
+      explore.getByRole("link", { name: "Compare contracts" })
+    ).toHaveAttribute("href", "/compare");
+    expect(explore.getByRole("link", { name: "Watchlist" })).toHaveAttribute(
+      "href",
+      "/watchlist"
+    );
+    expect(explore.getByRole("link", { name: "Reports" })).toHaveAttribute(
+      "href",
+      "/watchdog/reports"
+    );
+  });
+});
+
 describe("Landing page extension callout", () => {
   afterEach(() => {
     cleanup();
