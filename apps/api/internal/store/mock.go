@@ -50,6 +50,7 @@ type MockStore struct {
 	watchedAccounts       map[string]WatchedAccount
 	maintenanceWindows    map[int64]MaintenanceWindow
 	maintenanceWindowSeq  int64
+	contractTokens        map[string]TokenMetadata
 	*MockExportJobStore
 
 	// auditMu guards auditEvents: the audit middleware writes asynchronously.
@@ -173,6 +174,7 @@ func NewMockStore() *MockStore {
 		failedEvents:          make(map[int64]FailedEvent),
 		labels:                make([]Label, 0),
 		watchedAccounts:       make(map[string]WatchedAccount),
+		contractTokens:        make(map[string]TokenMetadata),
 		MockExportJobStore:    NewMockExportJobStore(),
 	}
 }
@@ -187,6 +189,9 @@ func (m *MockStore) UpsertContract(_ context.Context, c Contract) error {
 		c.AddedAt = time.Now()
 	}
 	m.contracts[c.ID] = c
+	if c.Token != nil {
+		m.contractTokens[c.ID] = *c.Token
+	}
 	return nil
 }
 
@@ -199,6 +204,9 @@ func (m *MockStore) GetContract(_ context.Context, contractID string) (Contract,
 		return Contract{}, ErrNotFound
 	}
 	c.Tags = m.tagsFor(contractID)
+	if t, ok := m.contractTokens[contractID]; ok {
+		c.Token = &t
+	}
 	return c, nil
 }
 
@@ -239,6 +247,9 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 			continue
 		}
 		c.Tags = m.tagsFor(c.ID)
+		if t, ok := m.contractTokens[c.ID]; ok {
+			c.Token = &t
+		}
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -1472,7 +1483,15 @@ func (m *MockStore) SearchContracts(_ context.Context, query string, limit int) 
 	searchPattern := strings.ToLower(query)
 
 	for _, c := range m.contracts {
-		if strings.Contains(strings.ToLower(c.ID), searchPattern) || strings.Contains(strings.ToLower(c.Label), searchPattern) {
+		c.Tags = m.tagsFor(c.ID)
+		if t, ok := m.contractTokens[c.ID]; ok {
+			c.Token = &t
+		}
+		match := strings.Contains(strings.ToLower(c.ID), searchPattern) || strings.Contains(strings.ToLower(c.Label), searchPattern)
+		if !match && c.Token != nil {
+			match = strings.Contains(strings.ToLower(c.Token.AssetCode), searchPattern) || strings.Contains(strings.ToLower(c.Token.Symbol), searchPattern)
+		}
+		if match {
 			results = append(results, c)
 		}
 	}
@@ -1557,3 +1576,26 @@ func (m *MockStore) SearchFunctions(_ context.Context, query string, limit int) 
 	}
 	return matched, nil
 }
+
+// ---- ContractTokenStore -----------------------------------------------------
+
+func (m *MockStore) UpsertContractToken(_ context.Context, contractID string, tok TokenMetadata) error {
+	if contractID == "" {
+		return errors.New("contract_id is required")
+	}
+	m.contractTokens[contractID] = tok
+	if c, ok := m.contracts[contractID]; ok {
+		c.Token = &tok
+		m.contracts[contractID] = c
+	}
+	return nil
+}
+
+func (m *MockStore) GetContractToken(_ context.Context, contractID string) (TokenMetadata, error) {
+	tok, ok := m.contractTokens[contractID]
+	if !ok {
+		return TokenMetadata{}, ErrNotFound
+	}
+	return tok, nil
+}
+

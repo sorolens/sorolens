@@ -303,12 +303,23 @@ type WatchedAccount struct {
 	AccountID string
 }
 
+// TokenMetadata mirrors store.TokenMetadata (token/SAC metadata).
+type TokenMetadata struct {
+	AssetCode string
+	Issuer    string
+	Decimals  uint32
+	Symbol    string
+	Name      string
+}
+
 // DiscoveredContract mirrors store.DiscoveredContract.
 type DiscoveredContract struct {
 	ContractID string
 	Network    string
 	AccountID  string
 	Ledger     int64
+	IsSAC      bool
+	SAC        *TokenMetadata
 }
 
 // ContractHealthScore mirrors store.ContractHealthScore.
