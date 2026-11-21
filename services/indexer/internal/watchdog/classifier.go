@@ -94,12 +94,15 @@ type Health struct {
 
 // Alert is the projection of a ContractAlert.
 type Alert struct {
-	ContractID string
-	Severity   string
-	Message    string
-	Ledger     int64
-	TxHash     string
-	Timestamp  time.Time
+	ContractID          string
+	Severity            string
+	Message             string
+	Ledger              int64
+	TxHash              string
+	Timestamp           time.Time
+	State               string
+	SnoozedUntil        *time.Time
+	MaintenanceWindowID *int64
 }
 
 // ErrWrongKind is returned when an event's topic does not match the

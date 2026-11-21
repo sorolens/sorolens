@@ -22,8 +22,9 @@ BUILT_AT  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 API_BUILDINFO := github.com/sorolens/sorolens/apps/api/internal/buildinfo
 API_LDFLAGS   := -ldflags "-X $(API_BUILDINFO).Version=$(VERSION) -X $(API_BUILDINFO).GitSHA=$(GIT_SHA) -X $(API_BUILDINFO).BuiltAt=$(BUILT_AT)"
 
-.PHONY: up down logs psql migrate-up migrate-down migrate-version migrate-force migrate-new migrate-check config-docs test lint dev api build client-go openapi lint-openapi
+.PHONY: up down logs psql migrate-up migrate-down migrate-version migrate-force migrate-new migrate-check config-docs docs-cli test lint dev api build client-go openapi lint-openapi
 .PHONY: observability-up observability-down observability-check observability-smoke
+.PHONY: docs-install docs-serve docs-build
 
 ## up: start all Docker services in the background
 up:
@@ -119,6 +120,10 @@ migrate-check:
 config-docs:
 	cd apps/api && go run ./cmd/configdoc -o ../../docs/configuration.md
 
+## docs-cli: regenerate CLI Markdown reference and man pages from the Cobra command tree
+docs-cli:
+	cd cli && go run ./cmd/docgen
+
 ## test: run all Go and TypeScript tests
 test:
 	cd apps/api && go test -race ./...
@@ -202,3 +207,16 @@ build:
 	cd cli && go build ./...
 	cd $(CLIENT_DIR) && go build ./...
 	pnpm build
+
+# ── Documentation site (mkdocs.yml, see docs/contributing/docs.md) ───────────
+DOCS_VENV ?= .venv-docs
+
+docs-install:
+	python3 -m venv $(DOCS_VENV)
+	$(DOCS_VENV)/bin/pip install -r docs/requirements.txt -e packages/python-sdk
+
+docs-serve:
+	$(DOCS_VENV)/bin/mkdocs serve
+
+docs-build:
+	$(DOCS_VENV)/bin/mkdocs build --strict

@@ -116,6 +116,11 @@ func PoolSettingsFromEnv() (PoolSettings, error) {
 type Config struct {
 	// DatabaseURL is the pooled Postgres connection string used by the API.
 	DatabaseURL string
+	// DatabaseReadURL is the optional Postgres replica connection string.
+	DatabaseReadURL string
+	// ReplicaLagThreshold is the maximum tolerable replication lag before
+	// falling back to the primary database. Defaults to 10s.
+	ReplicaLagThreshold time.Duration
 	// DatabasePool contains the API's pgx pool limits and recycling settings.
 	DatabasePool PoolSettings
 	// DirectDatabaseURL is the non-pooled connection string used for migrations.
@@ -208,6 +213,12 @@ type Config struct {
 	// RequireAuth enforces authentication across all endpoints except health
 	// checks when set to true (API_REQUIRE_AUTH).
 	RequireAuth bool
+	// TrustedProxies lists proxy peers allowed to supply X-Forwarded-For.
+	TrustedProxies []string
+	// RateLimitPerMinute is the default anonymous request budget.
+	RateLimitPerMinute int
+	// RateLimitWindow is the sliding window used by the rate limiter.
+	RateLimitWindow time.Duration
 }
 
 // Load reads configuration from environment variables and returns an error
@@ -221,6 +232,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		DatabaseReadURL:      os.Getenv("DATABASE_READ_URL"),
 		DatabasePool:         databasePool,
 		DirectDatabaseURL:    os.Getenv("DIRECT_DATABASE_URL"),
 		RedisURL:             os.Getenv("REDIS_URL"),
@@ -237,6 +249,7 @@ func Load() (*Config, error) {
 		SentryEnvironment:          getEnvDefault("SENTRY_ENVIRONMENT", "production"),
 		SlackSigningSecret:         os.Getenv("SLACK_SIGNING_SECRET"),
 	}
+	cfg.TrustedProxies = splitCommaSeparated(os.Getenv("TRUSTED_PROXIES"))
 
 	sessionTTLStr := getEnvDefault("IDENTITY_SESSION_TTL", "720h")
 	sessionTTL, err := time.ParseDuration(sessionTTLStr)
@@ -251,6 +264,14 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("INDEXER_POLL_INTERVAL: invalid duration %q: %w", pollStr, err)
 	}
 	cfg.IndexerPollInterval = poll
+
+	// DATABASE_REPLICA_LAG_THRESHOLD is the maximum replication lag permitted before queries fall back to the primary database.
+	replicaLagStr := getEnvDefault("DATABASE_REPLICA_LAG_THRESHOLD", "10s")
+	replicaLag, err := time.ParseDuration(replicaLagStr)
+	if err != nil || replicaLag <= 0 {
+		return nil, fmt.Errorf("DATABASE_REPLICA_LAG_THRESHOLD: invalid duration %q (must be > 0)", replicaLagStr)
+	}
+	cfg.ReplicaLagThreshold = replicaLag
 
 	windowStr := getEnvDefault("INDEXER_LEDGER_WINDOW", "120960")
 	window, err := strconv.Atoi(windowStr)
@@ -338,6 +359,16 @@ func Load() (*Config, error) {
 	}
 	cfg.StreamTimeout = streamTimeout
 
+	rateLimitRaw := getEnvDefault("RATE_LIMIT_PER_MINUTE", "60")
+	cfg.RateLimitPerMinute, err = strconv.Atoi(rateLimitRaw)
+	if err != nil || cfg.RateLimitPerMinute < 1 {
+		return nil, fmt.Errorf("RATE_LIMIT_PER_MINUTE: invalid positive integer %q", rateLimitRaw)
+	}
+	cfg.RateLimitWindow, err = durationEnv("RATE_LIMIT_WINDOW", time.Minute)
+	if err != nil || cfg.RateLimitWindow <= 0 {
+		return nil, fmt.Errorf("RATE_LIMIT_WINDOW: invalid positive duration")
+	}
+
 	var missing []string
 	if cfg.DatabaseURL == "" {
 		missing = append(missing, "DATABASE_URL")
@@ -350,6 +381,16 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func splitCommaSeparated(value string) []string {
+	var values []string
+	for _, part := range strings.Split(value, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			values = append(values, part)
+		}
+	}
+	return values
 }
 
 // MaxBodyBytesFromEnv resolves the request body size limit from

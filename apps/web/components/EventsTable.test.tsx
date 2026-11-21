@@ -123,4 +123,27 @@ describe("EventsTable copy JSON button", () => {
     fireEvent.click(screen.getByText(String(EVENT.ledger)));
     expect(screen.getByText("Decoded Topics")).toBeVisible();
   });
+
+  it("opens the Event Inspector drawer when the Inspect button in the row is clicked", () => {
+    renderEventsTable([EVENT]);
+
+    const inspectBtn = screen.getByTestId(`inspect-event-${EVENT.id}`);
+    fireEvent.click(inspectBtn);
+
+    expect(screen.getByTestId("event-inspector-drawer")).toBeInTheDocument();
+    expect(screen.getByText("Event Inspector")).toBeInTheDocument();
+  });
+
+  it("opens the Event Inspector drawer from the expanded row inspect button", () => {
+    renderEventsTable([EVENT]);
+
+    // Expand row first
+    fireEvent.click(screen.getAllByText(String(EVENT.ledger))[0]);
+    expect(
+      screen.getByText("Inspect ScVal Tree & Raw XDR")
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Inspect ScVal Tree & Raw XDR"));
+    expect(screen.getByTestId("event-inspector-drawer")).toBeInTheDocument();
+  });
 });

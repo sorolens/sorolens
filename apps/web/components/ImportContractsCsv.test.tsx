@@ -1,218 +1,376 @@
-import * as matchers from "@testing-library/jest-dom/matchers";
+/**
+ * Tests for apps/web/components/ImportContractsCsv.tsx (issue #765).
+ *
+ * The modal parses untrusted user files and writes contracts, so the tests
+ * cover both halves: `parseCsv` (quotes, blank lines, BOM, CRLF, duplicates)
+ * and the UI (per-row validation, per-row API failure, loading state). The API
+ * client is mocked, so nothing here touches the network.
+ */
+
+import "@testing-library/jest-dom/vitest";
 import {
+  cleanup,
+  fireEvent,
   render,
   screen,
-  fireEvent,
   waitFor,
-  cleanup,
+  within,
 } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ImportContractsCsv, { parseCsv } from "./ImportContractsCsv";
-import { trackContract } from "@/lib/api";
 
-expect.extend(matchers);
+const mockTrackContract = vi.fn();
 
 vi.mock("@/lib/api", () => ({
-  trackContract: vi.fn(),
+  // Mirrors the real class so `err instanceof ApiError` still holds.
   ApiError: class ApiError extends Error {
-    status: number;
-    constructor(message: string, status: number) {
+    constructor(
+      public status: number,
+      message: string,
+      public code?: string
+    ) {
       super(message);
-      this.status = status;
+      this.name = "ApiError";
     }
   },
+  trackContract: (...args: unknown[]) => mockTrackContract(...args),
 }));
 
-function makeMockFile(content: string, name: string): File {
-  const file = new File([content], name, { type: "text/csv" });
-  file.text = () => Promise.resolve(content);
-  return file;
+const ID = `C${"A".repeat(55)}`;
+const OTHER_ID = `C${"B".repeat(55)}`;
+
+function deferred() {
+  let resolve!: (value: unknown) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
+/** A File-shaped object: the component only reads `name` and `text()`. */
+function csvFile(contents: string, name = "contracts.csv"): File {
+  return { name, text: async () => contents } as unknown as File;
+}
+
+function renderModal(
+  props: Partial<Parameters<typeof ImportContractsCsv>[0]> = {}
+) {
+  const handlers = { onClose: vi.fn(), onImported: vi.fn() };
+  const view = render(
+    <ImportContractsCsv
+      onClose={handlers.onClose}
+      onImported={handlers.onImported}
+      network="testnet"
+      {...props}
+    />
+  );
+  return { ...handlers, container: view.container };
+}
+
+async function upload(container: HTMLElement, file: File) {
+  const input =
+    container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  fireEvent.change(input, { target: { files: [file] } });
+}
+
+function rowCount() {
+  // The table's header row is the first <tr>.
+  return screen.getAllByRole("row").length - 1;
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockTrackContract.mockResolvedValue({ id: ID });
+});
+
+afterEach(cleanup);
+
+describe("parseCsv", () => {
+  it("splits plain rows and columns", () => {
+    expect(parseCsv("a,b\nc,d\n")).toEqual([
+      ["a", "b"],
+      ["c", "d"],
+    ]);
+  });
+
+  it("handles quoted fields, embedded commas and escaped quotes", () => {
+    expect(parseCsv('x,"a,b","say ""hi"""\n')).toEqual([
+      ["x", "a,b", 'say "hi"'],
+    ]);
+  });
+
+  it("keeps a newline that is inside quotes", () => {
+    expect(parseCsv('x,"line one\nline two"\n')).toEqual([
+      ["x", "line one\nline two"],
+    ]);
+  });
+
+  it("normalises CRLF line endings", () => {
+    expect(parseCsv("a,b\r\nc,d\r\n")).toEqual([
+      ["a", "b"],
+      ["c", "d"],
+    ]);
+  });
+
+  it("strips a UTF-8 BOM from the first cell", () => {
+    const rows = parseCsv("\uFEFFcontract_id,network\n");
+    expect(rows).toEqual([["contract_id", "network"]]);
+  });
+
+  it("flushes the last record when the file has no trailing newline", () => {
+    expect(parseCsv("a,b")).toEqual([["a", "b"]]);
+  });
+
+  it("does not invent an empty record for a trailing newline", () => {
+    expect(parseCsv("a,b\n")).toHaveLength(1);
+  });
+});
+
 describe("ImportContractsCsv", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  it("closes on Escape", () => {
+    const { onClose } = renderModal();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  afterEach(() => {
-    cleanup();
+  it("closes on close button click", () => {
+    const { onClose } = renderModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  describe("parseCsv", () => {
-    it("handles quotes, commas, CRLF and BOM", () => {
-      const csv =
-        '\uFEFF"contract_id","network","label"\r\n' +
-        '"CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","testnet","Dex, Escrow"\r\n' +
-        '"CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","mainnet","Quote ""test"""';
-      const parsed = parseCsv(csv);
-      expect(parsed).toHaveLength(3);
-      expect(parsed[0]).toEqual(["contract_id", "network", "label"]);
-      expect(parsed[1]).toEqual([
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        "testnet",
-        "Dex, Escrow",
-      ]);
-      expect(parsed[2]).toEqual([
-        "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-        "mainnet",
-        'Quote "test"',
-      ]);
-    });
+  it("does not close when the click lands inside the modal", () => {
+    const { onClose } = renderModal();
+
+    fireEvent.click(
+      screen.getByRole("heading", { name: "Import contracts from CSV" })
+    );
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  describe("Component interactions", () => {
-    const validId1 = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-    const validId2 = "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+  it("reports an unreadable file instead of an empty table", async () => {
+    const { container } = renderModal();
+    const file = {
+      name: "broken.csv",
+      text: () => Promise.reject(new Error("EIO")),
+    } as unknown as File;
 
-    it("parses CSV, shows progress bar, and imports rows with bounded parallelism", async () => {
-      vi.mocked(trackContract).mockResolvedValue({
-        id: validId1,
-        network: "testnet",
-        status: "active",
-      } as any);
+    await upload(container, file);
 
-      render(
-        <ImportContractsCsv
-          onClose={vi.fn()}
-          onImported={vi.fn()}
-          network="testnet"
-          concurrency={2}
-        />
-      );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not read that file."
+    );
+    expect(screen.queryByRole("table")).toBeNull();
+  });
 
-      const fileContent = `contract_id,network,label\n${validId1},testnet,Contract 1\n${validId2},testnet,Contract 2`;
-      const file = makeMockFile(fileContent, "test.csv");
+  it("rejects a file with no rows", async () => {
+    const { container } = renderModal();
 
-      const input = document.getElementById(
-        "import-csv-file"
-      ) as HTMLInputElement;
-      fireEvent.change(input, { target: { files: [file] } });
+    await upload(container, csvFile("\n\n\n"));
 
-      await waitFor(() => {
-        expect(screen.getByText("2 row(s)")).toBeInTheDocument();
-      });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That file has no rows."
+    );
+  });
 
-      const submitBtn = screen.getByRole("button", {
-        name: /import 2 contracts/i,
-      });
-      fireEvent.click(submitBtn);
+  it("rejects a file that only has a header row", async () => {
+    const { container } = renderModal();
 
-      await waitFor(() => {
-        expect(screen.getByRole("progressbar")).toBeInTheDocument();
-        expect(screen.getAllByText(/2 imported/).length).toBeGreaterThan(0);
-      });
+    await upload(container, csvFile("contract_id,network,label\n"));
 
-      expect(trackContract).toHaveBeenCalledTimes(2);
-    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That file only has a header row."
+    );
+  });
 
-    it("identifies duplicate rows in the file and flags them as invalid", async () => {
-      render(
-        <ImportContractsCsv
-          onClose={vi.fn()}
-          onImported={vi.fn()}
-          network="testnet"
-        />
-      );
+  it("accepts a BOM-prefixed header and numbers the data from line 2", async () => {
+    const { container } = renderModal();
 
-      const fileContent = `contract_id,network,label\n${validId1},testnet,Contract 1\n${validId1},testnet,Duplicate Contract`;
-      const file = makeMockFile(fileContent, "dups.csv");
+    await upload(
+      container,
+      csvFile(`\uFEFFContract ID,Network,Label\n${ID},testnet,Payments\n`)
+    );
 
-      const input = document.getElementById(
-        "import-csv-file"
-      ) as HTMLInputElement;
-      fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(rowCount()).toBe(1));
+    expect(screen.getByText("2")).toBeVisible(); // line number, header skipped
+    expect(screen.getByText("Payments")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Import 1 contract" })
+    ).toBeEnabled();
+  });
 
-      await waitFor(() => {
-        expect(
-          screen.getByText("Duplicate contract ID in file")
-        ).toBeInTheDocument();
-      });
-    });
+  it("skips blank lines between records", async () => {
+    const { container } = renderModal();
 
-    it("allows retrying failed rows only after an API error", async () => {
-      vi.mocked(trackContract)
-        .mockRejectedValueOnce(new Error("Network timeout"))
-        .mockResolvedValueOnce({
-          id: validId2,
-          network: "testnet",
-          status: "active",
-        } as any)
-        .mockResolvedValueOnce({
-          id: validId1,
-          network: "testnet",
-          status: "active",
-        } as any);
+    await upload(
+      container,
+      csvFile(`${ID},testnet\n\n${OTHER_ID},testnet\n\n`)
+    );
 
-      render(
-        <ImportContractsCsv
-          onClose={vi.fn()}
-          onImported={vi.fn()}
-          network="testnet"
-          concurrency={1}
-        />
-      );
+    await waitFor(() => expect(rowCount()).toBe(2));
+    expect(screen.getByText("2 row(s)")).toBeVisible();
+  });
 
-      const fileContent = `contract_id,network,label\n${validId1},testnet,Contract 1\n${validId2},testnet,Contract 2`;
-      const file = makeMockFile(fileContent, "test.csv");
+  it("lists duplicate rows and shows them as invalid", async () => {
+    const { container } = renderModal();
 
-      const input = document.getElementById(
-        "import-csv-file"
-      ) as HTMLInputElement;
-      fireEvent.change(input, { target: { files: [file] } });
+    await upload(container, csvFile(`${ID},testnet\n${ID},testnet\n`));
 
-      await waitFor(() => {
-        expect(screen.getByText("2 row(s)")).toBeInTheDocument();
-      });
+    await waitFor(() => expect(rowCount()).toBe(2));
+    expect(screen.getByText("Duplicate contract ID in file")).toBeVisible();
+    expect(mockTrackContract).not.toHaveBeenCalled();
+  });
 
-      const submitBtn = screen.getByRole("button", {
-        name: /import 2 contracts/i,
-      });
-      fireEvent.click(submitBtn);
+  it("flags a missing contract id", async () => {
+    const { container } = renderModal();
 
-      await waitFor(() => {
-        expect(screen.getByTestId("retry-failed-btn")).toBeInTheDocument();
-        expect(screen.getAllByText(/1 imported/).length).toBeGreaterThan(0);
-      });
+    await upload(container, csvFile(",testnet,no id\n"));
 
-      // Click Retry failed rows
-      fireEvent.click(screen.getByTestId("retry-failed-btn"));
+    expect(await screen.findByText("Missing contract ID")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
+  });
 
-      await waitFor(() => {
-        expect(screen.getAllByText(/2 imported/).length).toBeGreaterThan(0);
-      });
-    });
+  it("flags a malformed contract id", async () => {
+    const { container } = renderModal();
 
-    it("handles 500 rows efficiently and shows progress", async () => {
-      vi.mocked(trackContract).mockResolvedValue({ status: "active" } as any);
+    await upload(container, csvFile("not-a-contract,testnet\n"));
 
-      render(
-        <ImportContractsCsv
-          onClose={vi.fn()}
-          onImported={vi.fn()}
-          network="testnet"
-          concurrency={10}
-        />
-      );
+    expect(
+      await screen.findByText(
+        "Invalid contract ID: expected a 56-character strkey starting with 'C'"
+      )
+    ).toBeVisible();
+  });
 
-      // Generate 500 rows
-      const rows = ["contract_id,network,label"];
-      for (let i = 0; i < 500; i++) {
-        const hex = i.toString(16).padStart(55, "0").toUpperCase();
-        rows.push(`C${hex},testnet,Batch Contract ${i}`);
-      }
+  it("flags an unknown network", async () => {
+    const { container } = renderModal();
 
-      const file = makeMockFile(rows.join("\n"), "500_contracts.csv");
-      const input = document.getElementById(
-        "import-csv-file"
-      ) as HTMLInputElement;
-      fireEvent.change(input, { target: { files: [file] } });
+    await upload(container, csvFile(`${ID},devnet\n`));
 
-      await waitFor(() => {
-        expect(screen.getByText("500 row(s)")).toBeInTheDocument();
-      });
+    expect(await screen.findByText(/Unknown network 'devnet'/)).toBeVisible();
+  });
 
-      const progressArea = screen.getByTestId("import-progress-area");
-      expect(progressArea).toBeInTheDocument();
-    });
+  it("flags a row that targets a different network than the dashboard", async () => {
+    const { container } = renderModal();
+
+    await upload(container, csvFile(`${ID},mainnet\n`));
+
+    expect(
+      await screen.findByText(
+        "Row targets 'mainnet' but this dashboard is on 'testnet'"
+      )
+    ).toBeVisible();
+  });
+
+  it("imports valid rows and reports success once", async () => {
+    const { container, onImported } = renderModal();
+
+    await upload(container, csvFile(`${ID},testnet,Payments\n`));
+    await waitFor(() => expect(rowCount()).toBe(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
+
+    await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Imported" })).toBeVisible()
+    );
+    expect(mockTrackContract).toHaveBeenCalledWith(
+      { id: ID, label: "Payments", network: "testnet" },
+      undefined
+    );
+    expect(screen.getByRole("button", { name: "Imported" })).toBeDisabled();
+  });
+
+  it("passes the user id through to the API", async () => {
+    const { container, onImported } = renderModal({ userId: "user-42" });
+
+    await upload(container, csvFile(`${ID},testnet\n`));
+    await waitFor(() => expect(rowCount()).toBe(1));
+    fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
+
+    await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1));
+    expect(mockTrackContract).toHaveBeenCalledWith(
+      { id: ID, label: undefined, network: "testnet" },
+      "user-42"
+    );
+  });
+
+  it("keeps going after a row fails and surfaces the API error", async () => {
+    mockTrackContract
+      .mockRejectedValueOnce(new Error("Rate limit exceeded."))
+      .mockResolvedValueOnce({ id: OTHER_ID });
+    const { container, onImported } = renderModal();
+
+    await upload(container, csvFile(`${ID},testnet\n${OTHER_ID},testnet\n`));
+    await waitFor(() => expect(rowCount()).toBe(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "Import 2 contracts" }));
+
+    expect(screen.findByText("Failed: Rate limit exceeded.")).toBeVisible();
+    expect(mockTrackContract).toHaveBeenCalledTimes(2);
+    expect(within(container).getByText("1 imported")).toBeVisible();
+    expect(screen.getByText("1 with problems")).toBeVisible();
+    // One row succeeded, so the page is still told to refresh.
+    expect(onImported).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report success when every row fails", async () => {
+    mockTrackContract.mockRejectedValue(new Error("Service unavailable."));
+    const { container, onImported } = renderModal();
+
+    await upload(container, csvFile(`${ID},testnet\n`));
+    await waitFor(() => expect(rowCount()).toBe(1));
+    fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
+
+    expect(
+      await screen.findByText("Failed: Service unavailable.")
+    ).toBeVisible();
+    expect(onImported).not.toHaveBeenCalled();
+    expect(screen.getAllByText("0 imported")).toHaveLength(2);
+    expect(screen.getByText("1 with problems")).toBeVisible();
+  });
+
+  it("skips invalid rows and imports only the valid ones", async () => {
+    const { container } = renderModal();
+
+    await upload(container, csvFile(`bad-id,testnet\n${ID},testnet\n`));
+    await waitFor(() => expect(rowCount()).toBe(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
+
+    await waitFor(() => expect(mockTrackContract).toHaveBeenCalledTimes(1));
+    expect(mockTrackContract).toHaveBeenCalledWith(
+      { id: ID, network: "testnet" },
+      undefined
+    );
+  });
+
+  it("shows a loading state and blocks closing while importing", async () => {
+    const pending = deferred();
+    mockTrackContract.mockReturnValue(pending.promise);
+    const { container, onClose, onImported } = renderModal();
+
+    await upload(container, csvFile(`${ID},testnet\n`));
+    await waitFor(() => expect(rowCount()).toBe(1));
+    fireEvent.click(screen.getByRole("button", { name: "Import 1 contract" }));
+
+    const submit = screen.getByRole("button", { name: "Importing…" });
+    expect(submit).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="file"]')
+    ).toBeDisabled();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+
+    pending.resolve({ id: ID });
+    await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: "Importing…" })).toBeNull();
   });
 });

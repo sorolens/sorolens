@@ -66,6 +66,31 @@ func main() {
 	// lazily on each scrape, so no background sampler is needed.
 	metrics.SetPool(func() metrics.PoolStat { return pool.Stat() })
 
+	fullStore := store.NewFullStore(pool)
+	if cfg.DatabaseReadURL != "" {
+		readPoolCfg, err := pgxpool.ParseConfig(cfg.DatabaseReadURL)
+		if err != nil {
+			logger.Error("parse replica pool config", "err", err)
+			os.Exit(1)
+		}
+		cfg.DatabasePool.Apply(readPoolCfg)
+		readPoolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
+		readPool, err := pgxpool.NewWithConfig(context.Background(), readPoolCfg)
+		if err != nil {
+			logger.Error("replica postgres connect", "err", err)
+			os.Exit(1)
+		}
+		defer readPool.Close()
+
+		lagGuard := store.NewReplicaLagGuard(cfg.ReplicaLagThreshold, store.NewPostgresLagSampler(readPool))
+		metrics.SetReplicaPool(func() metrics.PoolStat { return readPool.Stat() })
+		metrics.SetReplicaLag(func() time.Duration {
+			_, _, _ = lagGuard.CheckLag(context.Background())
+			return lagGuard.CurrentLag()
+		})
+		fullStore = store.NewStoreWithReplica(pool, readPool, lagGuard)
+	}
+
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
 		logger.Error("redis parse url", "err", err)
@@ -84,7 +109,7 @@ func main() {
 	})
 
 	h := &handler.Handler{
-		Store:       store.NewFullStore(pool),
+		Store:       fullStore,
 		DB:          &dbPinger{pool: pool},
 		Redis:       &redisPinger{client: redisClient},
 		RedisClient: &realRedisClient{client: redisClient},
@@ -96,6 +121,9 @@ func main() {
 		SlackSigningSecret: cfg.SlackSigningSecret,
 		SessionSigner:      middleware.NewSessionSigner(identitySigningKey(cfg, logger), cfg.IdentitySessionTTL),
 		TrustedProxySecret: cfg.TrustedIdentityProxySecret,
+		TrustedProxies:     cfg.TrustedProxies,
+		RateLimitPerMinute: cfg.RateLimitPerMinute,
+		RateLimitWindow:    cfg.RateLimitWindow,
 		RequestTimeout:     cfg.RequestTimeout,
 		StreamTimeout:      cfg.StreamTimeout,
 		RequireAuth:        cfg.RequireAuth,
@@ -246,4 +274,8 @@ func (r *realRedisClient) Incr(ctx context.Context, key string) (int64, error) {
 }
 func (r *realRedisClient) Expire(ctx context.Context, key string, expiration time.Duration) (bool, error) {
 	return r.client.Expire(ctx, key, expiration).Result()
+}
+
+func (r *realRedisClient) Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error) {
+	return r.client.Eval(ctx, script, keys, args...).Result()
 }

@@ -1,0 +1,65 @@
+name: Docs links
+
+# External link check for the documentation site (issue #847).
+#
+# Runs weekly and on demand, never on pull requests (CI is capped at five PR
+# checks). Internal links and anchors are checked on pull requests by the
+# strict MkDocs build in the "SDKs and contracts" job of ci.yml.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-links
+  cancel-in-progress: true
+
+jobs:
+  links:
+    name: Check external links in docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build site (strict)
+        run: |
+          python -m pip install -r docs/requirements.txt -e packages/python-sdk
+          NO_MKDOCS_2_WARNING=1 mkdocs build --strict
+      # Only http(s) links: relative links are already checked by the strict
+      # build above. Example hosts, placeholder URLs, the API itself and Sigstore
+      # identity strings in prose are excluded; code blocks are skipped by
+      # default. docs/configuration.md is generated and only holds example
+      # connection strings. 405 is accepted because Soroban RPC endpoints
+      # reject GET.
+      - name: Check links in the Markdown sources
+        uses: lycheeverse/lychee-action@v2
+        with:
+          fail: true
+          args: >-
+            --no-progress
+            --max-concurrency 8
+            --max-retries 3
+            --accept 200..=299,403,405,429
+            --scheme https
+            --scheme http
+            --exclude-loopback
+            --exclude-path docs/configuration.md
+            --exclude '^https?://([a-z0-9-]+\.)*(example|yourdomain)\.'
+            --exclude '^https://your-'
+            --exclude '^https://([a-z0-9-]+\.)?sorolens\.(xyz|vercel\.app|onrender\.com)'
+            --exclude '^https://token\.actions\.githubusercontent\.com'
+            --exclude '\.ingest\.sentry\.io'
+            --exclude '^https://github\.com/sorolens/sorolens/\.github/workflows/'
+            --exclude '^https://github\.com/sorolens/sorolens/edit/main/'
+            --exclude '^https://sorolens\.readthedocs\.io/'
+            docs/**/*.md
+            README.md
+            CONTRIBUTING.md

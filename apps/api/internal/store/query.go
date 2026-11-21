@@ -17,12 +17,14 @@ import (
 type FullStore interface {
 	Store
 	ContractBulkStore
+	ContractTokenStore
 	QueryStore
 	LiveStore
 	ArchiveStore
 	WatchdogStore
 	ContractUpgradeStore
 	ContractSpecStore
+	ContractEventSchemaStore
 	ContractTagStore
 	ContractNoteStore
 	HealthScoreStore
@@ -43,11 +45,22 @@ type FullStore interface {
 	WatchedAccountStore
 	AuditStore
 	ExportJobStore
+	UsageStore
+	MaintenanceStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
 func NewFullStore(pool *pgxpool.Pool) FullStore {
 	return &postgresStore{pool: pool}
+}
+
+// NewStoreWithReplica returns a FullStore backed by a primary pool and a replica read pool with lag guarding.
+func NewStoreWithReplica(primaryPool, readPool *pgxpool.Pool, guard *ReplicaLagGuard) FullStore {
+	return &postgresStore{
+		pool:            primaryPool,
+		readPool:        readPool,
+		replicaLagGuard: guard,
+	}
 }
 
 // EventFilters holds optional query filters for listing events.
@@ -206,8 +219,10 @@ type QueryStore interface {
 // ---- ListEvents --------------------------------------------------------------
 
 func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor string, limit int, f EventFilters) ([]Event, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	// The topic filter is appended only when set so the planner always sees a
 	// plain `topic_decoded @> $n::jsonb` predicate and can use the GIN index
@@ -225,7 +240,7 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 		dynamicClauses += fmt.Sprintf("  AND in_successful_call = $%d\n", len(args))
 	}
 
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
 		       in_successful_call, inserted_at
@@ -297,7 +312,7 @@ func topicFilterJSON(topic string) string {
 }
 
 func (s *postgresStore) StreamEventsCSV(ctx context.Context, contractID string, f EventFilters, w io.Writer) (err error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
 		       in_successful_call, inserted_at
@@ -352,7 +367,7 @@ func (s *postgresStore) RecentEvents(ctx context.Context, contractID string, lim
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
 		       in_successful_call, inserted_at
@@ -395,7 +410,7 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 		       COALESCE(function_name, ''),
 		       COALESCE(args_decoded, '{}'::jsonb),
@@ -439,10 +454,12 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 }
 
 func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor string, limit int, f InvocationFilters) ([]Invocation, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 		       COALESCE(function_name, ''),
 		       COALESCE(args_decoded, '{}'::jsonb),
@@ -503,7 +520,7 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 // ---- GetInvocation ----------------------------------------------------------
 
 func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invocation, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 		       COALESCE(function_name, ''),
 		       COALESCE(args_decoded, '{}'::jsonb),
@@ -541,7 +558,7 @@ func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invoc
 // ---- GetInvocationWithEvents ------------------------------------------------
 
 func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID, txHash string) (Invocation, []Event, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT i.tx_hash, i.contract_id, i.network, i.ledger, i.ledger_closed_at, i.status,
 		       COALESCE(i.function_name, ''),
 		       COALESCE(i.args_decoded, '{}'::jsonb),
@@ -651,7 +668,7 @@ func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID,
 const maxCallEdges = 5000
 
 func (s *postgresStore) GetCallEdges(ctx context.Context, txHash string) ([]CallEdge, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT tx_hash, parent_span_id, child_span_id, callee_contract_id, function_name,
 		       cpu, mem, fee_share, depth, network, ledger, ledger_closed_at, inserted_at
 		FROM call_edges
@@ -701,10 +718,12 @@ func (s *postgresStore) GetCallEdges(ctx context.Context, txHash string) ([]Call
 // cursor is (ledger, tx_hash), which is exactly the ORDER BY tuple, so pages
 // stay stable while the indexer appends newer rows.
 func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 		       COALESCE(function_name, ''),
 		       COALESCE(args_decoded, '{}'::jsonb),
@@ -771,10 +790,12 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 // ---- ListStorageEntries -----------------------------------------------------
 
 func (s *postgresStore) ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT contract_id, network, key_xdr, key_decoded, value_xdr, value_decoded,
 		       durability, live_until_ledger, last_modified_ledger, status, last_seen_at
 		FROM storage_entries
@@ -833,7 +854,7 @@ func windowToInterval(window string) string {
 
 func (s *postgresStore) GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error) {
 	interval := windowToInterval(window)
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM events          WHERE contract_id = $1) AS event_count,
 			(SELECT COUNT(*) FROM invocations     WHERE contract_id = $1) AS invocation_count,
@@ -900,7 +921,7 @@ func (s *postgresStore) GetContractInvocationStats(ctx context.Context, contract
 		  AND ledger_closed_at <= NOW()`
 
 	var stats ContractInvocationStats
-	err := s.pool.QueryRow(ctx, query, contractID).Scan(
+	err := s.readDB(ctx).QueryRow(ctx, query, contractID).Scan(
 		&stats.Last24Hours.InvocationCount, &stats.Last24Hours.FailedInvocations, &stats.Last24Hours.FailureRate,
 		&stats.Last24Hours.AvgFee, &stats.Last24Hours.P95Fee, &stats.Last24Hours.AvgCPU, &stats.Last24Hours.P95CPU,
 		&stats.Last7Days.InvocationCount, &stats.Last7Days.FailedInvocations, &stats.Last7Days.FailureRate,
@@ -924,7 +945,7 @@ func (s *postgresStore) DailyAggregates(ctx context.Context, contractID string, 
 	if days > 3650 {
 		days = 3650
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		WITH buckets AS (
 			SELECT date_trunc('day', d)::date AS day
 			FROM generate_series(now() - ($2::int || ' days')::interval, now(), '1 day') AS d
@@ -975,7 +996,7 @@ func (s *postgresStore) DailyAggregates(ctx context.Context, contractID string, 
 // ---- ContractFirstLedger ----------------------------------------------------
 
 func (s *postgresStore) ContractFirstLedger(ctx context.Context, contractID string) (uint32, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT COALESCE(MIN(ledger), 0) FROM (
 			SELECT ledger FROM events      WHERE contract_id = $1
 			UNION ALL
@@ -1000,7 +1021,7 @@ func (s *postgresStore) RecentHourlyActivity(ctx context.Context, contractID str
 	if hours > 24*31 {
 		hours = 24 * 31
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		WITH buckets AS (
 			SELECT date_trunc('hour', d) AS hour
 			FROM generate_series(now() - ($2::int || ' hours')::interval, now(), '1 hour') AS d
@@ -1054,7 +1075,7 @@ func (s *postgresStore) RecentHourlyActivity(ctx context.Context, contractID str
 // ---- GetStorageSnapshot -----------------------------------------------------
 
 func (s *postgresStore) GetStorageSnapshot(ctx context.Context, contractID string, ledger uint32) ([]StorageEntry, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT DISTINCT ON (key_xdr)
 		       contract_id, key_xdr, key_decoded, value_xdr, value_decoded,
 		       durability, live_until_ledger, last_modified_ledger, status, recorded_at
@@ -1090,7 +1111,7 @@ func (s *postgresStore) GetStorageSnapshot(ctx context.Context, contractID strin
 // ---- LastEventAtOrBefore ----------------------------------------------------
 
 func (s *postgresStore) LastEventAtOrBefore(ctx context.Context, contractID string, ledger uint32) (Event, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
 		       in_successful_call, inserted_at

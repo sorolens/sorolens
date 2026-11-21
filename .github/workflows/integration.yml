@@ -28,8 +28,6 @@ jobs:
 
       - name: Run integration and fault injection suite
         working-directory: tests/integration
-      - name: Run integration and fault injection suite
-        working-directory: tests/integration
         run: make integration-test && make fault-test
 
       - name: Set up Python for fuzzer

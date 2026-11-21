@@ -373,12 +373,30 @@ paths:
       security:
         - RoleAuth: [admin]
       parameters:
-        - name: since
+        - name: from
           in: query
+          required: false
           schema:
             type: string
             format: date-time
-          description: Only events at or after this RFC 3339 timestamp.
+          description: Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).
+          example: '2026-09-02T00:00:00Z'
+        - name: since
+          in: query
+          deprecated: true
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.
         - $ref: "#/components/parameters/Limit"
         - name: cursor
           in: query
@@ -421,12 +439,30 @@ paths:
       security:
         - RoleAuth: [admin]
       parameters:
-        - name: since
+        - name: from
           in: query
+          required: false
           schema:
             type: string
             format: date-time
-          description: Only events at or after this RFC 3339 timestamp.
+          description: Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).
+          example: '2026-09-02T00:00:00Z'
+        - name: since
+          in: query
+          deprecated: true
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.
         - $ref: "#/components/parameters/Limit"
         - name: cursor
           in: query
@@ -468,6 +504,9 @@ paths:
       responses:
         "200":
           description: Global counts across all tracked contracts
+          headers:
+            X-Cache:
+              $ref: "#/components/headers/XCache"
           content:
             application/json:
               schema:
@@ -486,6 +525,9 @@ paths:
                   total_storage_entries:
                     type: integer
                     format: int64
+                  approximate:
+                    type: boolean
+                    description: True when large table counts are estimated rather than exact.
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -723,6 +765,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Contract"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Contracts]
+      summary: Untrack one contract
+      description: |
+        Stops tracking a contract. Untracking is a soft delete: the contract
+        status flips to "paused" while the row and all indexed history are
+        retained, and the indexer stops polling it. Re-registering the
+        contract resumes tracking. Deleting a contract that is already paused
+        is a no-op; deleting one that was never registered returns 404. This
+        differs from the batch "untrack" action, which permanently deletes
+        the contracts and their indexed data.
+      operationId: deleteContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -1689,6 +1759,57 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/usage:
+    get:
+      tags: [API Keys]
+      summary: Get API key usage metrics and quota status
+      description: |
+        Returns aggregated request counts, endpoint group breakdowns, daily timeline,
+        and monthly quota usage for the caller's API key, or for any key if requested
+        by an admin (issue #792).
+      operationId: getApiKeyUsage
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: key_id
+          in: query
+          required: false
+          description: API key ID to query. Required when calling with user/session auth; optional when authenticating with an API key (defaults to calling key). Querying another key requires admin:* scope.
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          description: Start of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to 30 days ago.
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          description: End of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to now.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Aggregated usage statistics and quota tracking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyUsageSummary"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/admin/keys:
     get:
       tags: [API Keys]
@@ -2549,6 +2670,9 @@ paths:
       responses:
         "200":
           description: Global statistics
+          headers:
+            X-Cache:
+              $ref: "#/components/headers/XCache"
           content:
             application/json:
               schema:
@@ -2788,6 +2912,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/V2Contract"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [API v2]
+      summary: Untrack one contract
+      description: |
+        Stops tracking a contract. Same semantics as DELETE /api/v1/contracts/{id}:
+        the contract status flips to "paused" while the row and all indexed history
+        are retained, and the indexer stops polling it.
+      operationId: v2DeleteContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
         "404":
           $ref: "#/components/responses/Error"
         "429":
@@ -3097,6 +3247,34 @@ paths:
                 type: object
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/contracts/{id}/event-schemas:
+    get:
+      tags: [API v2]
+      summary: Inferred and declared event schemas for a contract (v2)
+      operationId: v2ContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -3589,6 +3767,50 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v2/usage:
+    get:
+      tags: [API v2]
+      summary: Get API key usage metrics and quota status (v2 passthrough)
+      operationId: v2GetApiKeyUsage
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: key_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Aggregated usage statistics and quota tracking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyUsageSummary"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v2/admin/keys:
     get:
       tags: [API v2]
@@ -4007,20 +4229,38 @@ paths:
             type: string
             enum: [contract, system, diagnostic]
         - $ref: "#/components/parameters/NetworkParam"
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `until` if both are sent.
+          example: '2026-09-02T00:00:00Z'
         - name: since
           in: query
+          deprecated: true
           required: false
           schema:
             type: string
             format: date-time
-          description: Inclusive lower bound on ledger_closed_at (RFC 3339).
+          description: Deprecated alias for `from`. Inclusive lower bound on ledger_closed_at (RFC 3339).
         - name: until
           in: query
+          deprecated: true
           required: false
           schema:
             type: string
             format: date-time
-          description: Inclusive upper bound on ledger_closed_at (RFC 3339).
+          description: Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).
       responses:
         "200":
           description: Page of events
@@ -4249,6 +4489,7 @@ paths:
             type: integer
             minimum: 1
             default: 50
+          description: Page size (default 50, clamped to 200).
       responses:
         "200":
           description: Upgrades, newest first
@@ -4374,6 +4615,34 @@ paths:
                 $ref: "#/components/schemas/ContractSpec"
         "404":
           description: Contract not found, or its interface spec has not been parsed yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/event-schemas:
+    get:
+      tags: [Contracts]
+      summary: Get inferred and declared event schemas for a contract
+      operationId: getContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
           content:
             application/json:
               schema:
@@ -4738,6 +5007,337 @@ paths:
                     description: Present when flat=true.
                   next_cursor:
                     type: string
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/alerts/counts:
+    get:
+      tags: [Alerts]
+      summary: Get alert counts broken down by state
+      description: Returns counts of open, acknowledged, snoozed, and resolved alerts.
+      operationId: getAlertCounts
+      parameters:
+        - name: contract_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional contract ID filter.
+        - $ref: "#/components/parameters/NetworkParam"
+      responses:
+        "200":
+          description: Counts of alerts by state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [counts]
+                properties:
+                  counts:
+                    type: object
+                    properties:
+                      open:
+                        type: integer
+                      acknowledged:
+                        type: integer
+                      snoozed:
+                        type: integer
+                      resolved:
+                        type: integer
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/alerts/{id}/ack:
+    post:
+      tags: [Alerts]
+      summary: Acknowledge an alert
+      description: Transitions an alert from open or snoozed to acknowledged.
+      operationId: acknowledgeAlert
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Alert ID
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractAlert"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/alerts/{id}/snooze:
+    post:
+      tags: [Alerts]
+      summary: Snooze an alert
+      description: Snoozes an alert for a specified duration, suppressing notifications until the snooze expires.
+      operationId: snoozeAlert
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Alert ID
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                duration:
+                  type: string
+                  example: "2h"
+                duration_seconds:
+                  type: integer
+                  example: 7200
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractAlert"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/alerts/{id}/resolve:
+    post:
+      tags: [Alerts]
+      summary: Resolve an alert
+      description: Marks an alert as resolved.
+      operationId: resolveAlert
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Alert ID
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractAlert"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/maintenance-windows:
+    get:
+      tags: [Maintenance]
+      summary: List maintenance windows
+      description: Returns scheduled maintenance windows, optionally filtered by scope or target ID.
+      operationId: listMaintenanceWindows
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [global, contract, group]
+          description: Scope filter
+        - name: target_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Target ID filter
+      responses:
+        "200":
+          description: List of maintenance windows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [maintenance_windows]
+                properties:
+                  maintenance_windows:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MaintenanceWindow"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Maintenance]
+      summary: Create a maintenance window
+      description: Creates a new maintenance window during which alert notifications are suppressed.
+      operationId: createMaintenanceWindow
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMaintenanceWindowRequest"
+      responses:
+        "201":
+          description: Maintenance window created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceWindow"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/maintenance-windows/{id}:
+    get:
+      tags: [Maintenance]
+      summary: Get a maintenance window by ID
+      operationId: getMaintenanceWindow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Maintenance window ID
+      responses:
+        "200":
+          description: Maintenance window details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceWindow"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags: [Maintenance]
+      summary: Update a maintenance window
+      operationId: updateMaintenanceWindow
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Maintenance window ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMaintenanceWindowRequest"
+      responses:
+        "200":
+          description: Updated maintenance window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceWindow"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Maintenance]
+      summary: Delete a maintenance window
+      operationId: deleteMaintenanceWindow
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Maintenance window ID
+      responses:
+        "204":
+          description: Maintenance window deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/InvalidInput"
         "500":
@@ -5690,6 +6290,30 @@ components:
           description: User-defined tags, sorted ascending. Always present; empty when the contract has no tags.
         backfill:
           $ref: "#/components/schemas/ContractBackfill"
+        token:
+          $ref: "#/components/schemas/TokenMetadata"
+
+    TokenMetadata:
+      type: object
+      description: Enriched metadata for Stellar Asset Contracts (SAC) or tokens.
+      required: [asset_code, issuer, decimals, symbol, name]
+      properties:
+        asset_code:
+          type: string
+          description: Stellar asset code (e.g. USDC or native).
+        issuer:
+          type: string
+          description: Stellar asset issuer account ID (or empty for native).
+        decimals:
+          type: integer
+          format: int32
+          description: Number of decimal places (SAC deterministically uses 7).
+        symbol:
+          type: string
+          description: Token symbol.
+        name:
+          type: string
+          description: Token name or asset identifier.
 
     ContractBackfill:
       type: object
@@ -6157,6 +6781,67 @@ components:
           format: date-time
           nullable: true
           description: When the key expires, or null if it does not expire.
+        monthly_quota:
+          type: integer
+          nullable: true
+          description: Monthly request quota, or null if unmetered.
+
+    UsageTimelinePoint:
+      type: object
+      required: [date, total_requests, by_group]
+      properties:
+        date:
+          type: string
+          example: "2026-11-20"
+        total_requests:
+          type: integer
+          format: int64
+          example: 125
+        by_group:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+
+    KeyUsageSummary:
+      type: object
+      required: [key_id, from, to, total_requests, by_group, timeline, month_used]
+      properties:
+        key_id:
+          type: string
+          example: "key_01h7..."
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        total_requests:
+          type: integer
+          format: int64
+          example: 1540
+        by_group:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/UsageTimelinePoint"
+        monthly_quota:
+          type: integer
+          nullable: true
+          example: 50000
+        month_used:
+          type: integer
+          format: int64
+          example: 1540
+        month_remaining:
+          type: integer
+          format: int64
+          nullable: true
+          example: 48460
 
     ReportSubscription:
       type: object
@@ -6278,6 +6963,9 @@ components:
       type: object
       required: [contract_id, severity, message, ledger, tx_hash, timestamp]
       properties:
+        id:
+          type: integer
+          format: int64
         contract_id:
           type: string
         severity:
@@ -6293,6 +6981,123 @@ components:
         timestamp:
           type: string
           format: date-time
+        state:
+          type: string
+          enum: [open, acknowledged, snoozed, resolved]
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
+        acknowledged_by:
+          type: string
+        snoozed_until:
+          type: string
+          format: date-time
+          nullable: true
+        snoozed_at:
+          type: string
+          format: date-time
+          nullable: true
+        snoozed_by:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolved_by:
+          type: string
+        maintenance_window_id:
+          type: integer
+          format: int64
+          nullable: true
+
+    MaintenanceWindow:
+      type: object
+      required: [id, name, scope, start_time, end_time, timezone, recurrence, suppress_notifications]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [global, contract, group]
+        target_id:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        recurrence:
+          type: string
+          enum: [none, daily, weekly]
+        suppress_notifications:
+          type: boolean
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateMaintenanceWindowRequest:
+      type: object
+      required: [name, start_time, end_time]
+      properties:
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [global, contract, group]
+          default: global
+        target_id:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+          default: UTC
+        recurrence:
+          type: string
+          enum: [none, daily, weekly]
+          default: none
+        suppress_notifications:
+          type: boolean
+          default: true
+
+    UpdateMaintenanceWindowRequest:
+      type: object
+      required: [name, start_time, end_time]
+      properties:
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+          default: UTC
+        recurrence:
+          type: string
+          enum: [none, daily, weekly]
+          default: none
+        suppress_notifications:
+          type: boolean
+          default: true
 
     MonitoredContract:
       type: object
@@ -6430,6 +7235,8 @@ components:
           format: date-time
         backfill:
           $ref: "#/components/schemas/ContractBackfill"
+        token:
+          $ref: "#/components/schemas/TokenMetadata"
 
     V2Event:
       type: object
@@ -6582,6 +7389,9 @@ components:
         total_storage_entries:
           type: integer
           format: int64
+        approximate:
+          type: boolean
+          description: True when large table counts are estimated rather than exact.
 
     V2ContractRate:
       type: object
@@ -7356,6 +8166,63 @@ components:
                 type: string
               count:
                 type: integer
+
+    ContractEventSchemasResponse:
+      type: object
+      required: [contract_id, event_schemas]
+      properties:
+        contract_id:
+          type: string
+        event_schemas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractEventSchema"
+        declared_spec:
+          type: object
+          description: Declared SEP-48 interface spec if available.
+
+    ContractEventSchema:
+      type: object
+      required: [contract_id, event_name, topic_arity, topic_types, value_shape, observed_shapes, first_seen_ledger, last_seen_ledger, updated_at]
+      properties:
+        contract_id:
+          type: string
+        event_name:
+          type: string
+        topic_arity:
+          type: integer
+        topic_types:
+          type: array
+          items:
+            type: string
+        value_shape:
+          type: string
+        observed_shapes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObservedShape"
+        first_seen_ledger:
+          type: integer
+        last_seen_ledger:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+
+    ObservedShape:
+      type: object
+      required: [topic_arity, topic_types, value_type, count]
+      properties:
+        topic_arity:
+          type: integer
+        topic_types:
+          type: array
+          items:
+            type: string
+        value_type:
+          type: string
+        count:
+          type: integer
 
     ContractSpec:
       type: object

@@ -142,6 +142,17 @@ jobs:
         run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
       - name: Verify Go client has no diff
         run: git diff --exit-code -- packages/go-client/internal
+      # Issue #819: keep the generated CLI reference and man pages in sync
+      # with the Cobra command tree without adding another pull request check.
+      - name: Verify CLI documentation is up to date
+        run: |
+          make docs-cli
+          changes=$(git status --porcelain --untracked-files=all -- docs/cli)
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            echo "::error::CLI documentation is stale; run make docs-cli and commit the result"
+            exit 1
+          fi
       # Issue #553: /api/v1 is frozen. Compare the PR spec with the base
       # commit only when docs/openapi.yaml changed; keep this in the existing
       # Go job so pull requests remain capped at five checks.
@@ -248,6 +259,15 @@ jobs:
       - name: Check unused exports
         working-directory: apps/web
         run: node scripts/check-unused-exports.mjs
+      # Issue #768: the browser extension has no dependencies, so it needs no
+      # install step. These run inside the existing Web job so the PR check
+      # count stays at five. Packaging runs in extension-release.yml.
+      - name: Lint browser extension (syntax and manifests)
+        working-directory: extension
+        run: node scripts/check.mjs
+      - name: Browser extension tests
+        working-directory: extension
+        run: node --test "tests/*.test.mjs"
       # These tests were never run in CI before this job existed, and 10 tests
       # in 5 files (NavigationProgress, CmdkSearch, LastUpdated, app layout, og)
       # already fail on main. The step is reported but does not fail the check
@@ -352,6 +372,9 @@ jobs:
   # ------------------------------------------------------------
   # SDKs and contracts: Python SDK, Rust SDK and the contracts. Each part runs
   # only when its paths changed.
+  # The docs site (mkdocs.yml) is built here too, strictly, which fails on
+  # broken internal links and anchors. External links are checked weekly in
+  # docs-links.yml.
   # ------------------------------------------------------------
   sdks:
     name: SDKs and contracts
@@ -373,6 +396,7 @@ jobs:
           jvm=true
           ts=true
           contracts=true
+          docs=true
           if [ "$EVENT" = "pull_request" ]; then
             files=$(git diff --name-only "$BASE_SHA"...HEAD)
             python=false
@@ -380,22 +404,25 @@ jobs:
             jvm=false
             ts=false
             contracts=false
+            docs=false
             echo "$files" | grep -qE '^(packages/python-sdk/|docs/openapi\.yaml|\.github/workflows/ci\.yml)' && python=true
             echo "$files" | grep -qE '^(packages/rust-sdk/|\.github/workflows/ci\.yml)' && rustsdk=true
             echo "$files" | grep -qE '^(packages/jvm-sdk/|docs/openapi\.yaml|\.github/workflows/ci\.yml)' && jvm=true
             echo "$files" | grep -qE '^(packages/typescript-sdk/|\.github/workflows/ci\.yml)' && ts=true
             echo "$files" | grep -qE '^(contracts/|\.github/workflows/ci\.yml)' && contracts=true
+            echo "$files" | grep -qE '^(docs/|mkdocs\.yml|\.readthedocs\.yaml|packages/python-sdk/(docs/|mkdocs\.yml|src/)|\.github/workflows/ci\.yml)' && docs=true
           fi
           echo "python=$python" >> "$GITHUB_OUTPUT"
           echo "rustsdk=$rustsdk" >> "$GITHUB_OUTPUT"
           echo "jvm=$jvm" >> "$GITHUB_OUTPUT"
           echo "ts=$ts" >> "$GITHUB_OUTPUT"
           echo "contracts=$contracts" >> "$GITHUB_OUTPUT"
-          echo "python=$python rustsdk=$rustsdk jvm=$jvm ts=$ts contracts=$contracts"
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+          echo "python=$python rustsdk=$rustsdk jvm=$jvm ts=$ts contracts=$contracts docs=$docs"
       # Python SDK. The full 3.11 to 3.13 matrix runs in python-sdk.yml after
       # merge; pull requests test the middle version.
       - name: Set up Python 3.12
-        if: steps.changes.outputs.python == 'true'
+        if: steps.changes.outputs.python == 'true' || steps.changes.outputs.docs == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -425,6 +452,13 @@ jobs:
       - name: Verify Python client has no diff
         if: steps.changes.outputs.python == 'true'
         run: git diff --exit-code -- packages/python-sdk/src/sorolens/_generated
+      # Documentation site: the same strict build Read the Docs runs. Fails on
+      # broken internal links, missing anchors and pages left out of nav.
+      - name: Docs - build site (strict, checks internal links)
+        if: steps.changes.outputs.docs == 'true'
+        run: |
+          python -m pip install -r docs/requirements.txt -e packages/python-sdk
+          NO_MKDOCS_2_WARNING=1 mkdocs build --strict --site-dir "$RUNNER_TEMP/docs-site"
       # Rust toolchain for the Rust SDK and the contracts.
       - name: Install Rust stable
         if: steps.changes.outputs.rustsdk == 'true' || steps.changes.outputs.contracts == 'true'

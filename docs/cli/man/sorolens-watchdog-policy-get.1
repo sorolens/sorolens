@@ -1,0 +1,100 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-watchdog-policy-get - Read the monitoring policy stored on-chain for a contract
+
+
+.SH SYNOPSIS
+\fBsorolens watchdog policy get  [flags]\fP
+
+
+.SH DESCRIPTION
+Read the monitoring policy of a monitored contract by simulating the
+watchdog contract's read-only get_policy entry point through the soroban CLI.
+Nothing is signed or submitted.
+
+.PP
+Policies are written by the watchdog admin with set_policy (see
+docs/watchdog-policy.md); this command is read-only.
+
+
+.SH OPTIONS
+\fB--dry-run\fP[=false]
+	Print the soroban CLI invocation without executing it
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for get
+
+.PP
+\fB--network\fP="testnet"
+	Stellar network (testnet, mainnet, futurenet)
+
+.PP
+\fB--network-passphrase\fP="Test SDF Network ; September 2015"
+	Network passphrase
+
+.PP
+\fB--rpc-url\fP="https://soroban-testnet.stellar.org:443"
+	Soroban RPC endpoint
+
+.PP
+\fB--soroban-bin\fP="soroban"
+	Path to the soroban CLI binary
+
+.PP
+\fB--source-account\fP=""
+	Public account address (G...) or soroban CLI key alias used to simulate the read
+
+.PP
+\fB--watchdog-contract-id\fP=""
+	Watchdog contract id (C...); defaults to $SOROLENS_WATCHDOG_CONTRACT_ID, then $WATCHDOG_CONTRACT_ID
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH EXAMPLE
+.EX
+  sorolens watchdog policy get CACX... --watchdog-contract-id CAC2... \\
+    --source-account GABC...
+.EE
+
+
+.SH SEE ALSO
+\fBsorolens-watchdog-policy(1)\fP

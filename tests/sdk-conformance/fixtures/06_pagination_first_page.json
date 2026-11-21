@@ -1,0 +1,27 @@
+{
+  "id": "06_pagination_first_page",
+  "description": "Pagination initial page with cursor for second page",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts?limit=1"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "contracts": [
+        {
+          "id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2",
+          "status": "active"
+        }
+      ],
+      "next_cursor": "cursor_page_2"
+    }
+  },
+  "expected": {
+    "status": 200,
+    "next_cursor": "cursor_page_2"
+  }
+}

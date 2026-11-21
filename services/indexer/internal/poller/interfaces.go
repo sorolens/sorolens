@@ -76,16 +76,9 @@ type Store interface {
 	// in the dead-letter queue (issue #202).
 	InsertFailedEvent(ctx context.Context, fe FailedEvent) error
 
-	// UpsertStorageEntries upserts storage entry snapshots for a contract
-	// into storage_entries (issue #503). Keys present in the snapshot are
-	// marked live; call MarkStorageEntriesArchived for stale keys.
-	UpsertStorageEntries(ctx context.Context, entries []StorageEntry) error
-	// ListStorageKeys returns the key_xdr values of all live storage entries
-	// for contractID so the next snapshot pass can re-fetch them.
-	ListStorageKeys(ctx context.Context, contractID string) ([]string, error)
-	// MarkStorageEntriesArchived sets status = 'archived' for entries of
-	// contractID whose key_xdr is NOT in activeKeys.
-	MarkStorageEntriesArchived(ctx context.Context, contractID string, activeKeys []string) error
+	// CountFailedEvents returns the number of events parked in the
+	// dead-letter queue for a network, used for the dlq_size metric.
+	CountFailedEvents(ctx context.Context, network string) (int, error)
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -93,8 +86,12 @@ type RedisClient interface {
 	// SetNX sets key to value with ttl if key does not already exist.
 	// Returns true if the key was set (lock acquired).
 	SetNX(ctx context.Context, key string, value string, ttl time.Duration) (bool, error)
-	// Del removes the key (releases the lock).
-	Del(ctx context.Context, key string) error
+	// Del releases the lock only if key's current value equals expectedValue,
+	// using a compare-and-delete so one process never deletes another's lock.
+	Del(ctx context.Context, key string, expectedValue string) error
+	// Renew resets key's TTL to ttl only if key's current value equals
+	// expectedValue, so the holder can extend a long-running lock.
+	Renew(ctx context.Context, key string, expectedValue string, ttl time.Duration) (bool, error)
 }
 
 // ---- local mirror types (avoid importing apps/api from this package) ------
@@ -321,12 +318,23 @@ type WatchedAccount struct {
 	AccountID string
 }
 
+// TokenMetadata mirrors store.TokenMetadata (token/SAC metadata).
+type TokenMetadata struct {
+	AssetCode string
+	Issuer    string
+	Decimals  uint32
+	Symbol    string
+	Name      string
+}
+
 // DiscoveredContract mirrors store.DiscoveredContract.
 type DiscoveredContract struct {
 	ContractID string
 	Network    string
 	AccountID  string
 	Ledger     int64
+	IsSAC      bool
+	SAC        *TokenMetadata
 }
 
 // ContractHealthScore mirrors store.ContractHealthScore.
