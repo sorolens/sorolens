@@ -88,10 +88,13 @@ client = Client(api_key="sk_...", retry=False)  # disable
 
 ### Pagination iterators
 
-`client.iter_events(contract_id, ...)` and `client.iter_invocations(contract_id, ...)`
-walk every page for you, and `contracts`, `events` and `invocations` expose the same
-walk as `iter(...)`. On `AsyncClient` they are async iterators. They take the same
-filters as `list(...)` and:
+`contracts`, `events` and `invocations` expose `iter(...)`, which follows
+`next_cursor` until the last page. The async version is an async iterator and
+accepts the same arguments as `list(...)`.
+
+For events and invocations, `client.iter_events(contract_id, ...)` and
+`client.iter_invocations(contract_id, ...)` (async iterators on `AsyncClient`)
+walk every page for you. They, and `events.iter` / `invocations.iter`:
 
 - fetch pages lazily: the next page is requested only once the current one is used up;
 - stop on the first empty `next_cursor`;

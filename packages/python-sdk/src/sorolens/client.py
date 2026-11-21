@@ -285,24 +285,14 @@ class _Contracts(_SyncResource):
         network: str | None = None,
         status: str | None = None,
     ) -> Iterator[Contract]:
-        """Yield every contract across all cursor pages, fetching each page lazily.
-
-        A page is requested only once the previous one is used up, and the walk
-        stops on the first empty ``next_cursor``. ``limit`` is the page size,
-        clamped to the server maximum of 200. If a request fails part-way, the
-        contracts already yielded stay with the caller and the error is raised on
-        the next step; a repeated cursor raises
-        :class:`~sorolens.exceptions.PaginationError`.
-        """
+        """Yield every contract across all cursor pages."""
         cursor: str | None = None
-        limit = page_limit(limit)
-        cursors = CursorTracker()
         while True:
             page = self.list(cursor=cursor, limit=limit, network=network, status=status)
             yield from page.contracts
-            cursor = cursors.advance(page.next_cursor)
-            if cursor is None:
+            if not page.next_cursor:
                 return
+            cursor = page.next_cursor
 
     def list(
         self,
@@ -997,25 +987,15 @@ class _AsyncContracts(_AsyncResource):
         network: str | None = None,
         status: str | None = None,
     ) -> AsyncIterator[Contract]:
-        """Yield every contract across all cursor pages, fetching each page lazily.
-
-        A page is requested only once the previous one is used up, and the walk
-        stops on the first empty ``next_cursor``. ``limit`` is the page size,
-        clamped to the server maximum of 200. If a request fails part-way, the
-        contracts already yielded stay with the caller and the error is raised on
-        the next step; a repeated cursor raises
-        :class:`~sorolens.exceptions.PaginationError`.
-        """
+        """Yield every contract across all cursor pages."""
         cursor: str | None = None
-        limit = page_limit(limit)
-        cursors = CursorTracker()
         while True:
             page = await self.list(cursor=cursor, limit=limit, network=network, status=status)
             for contract in page.contracts:
                 yield contract
-            cursor = cursors.advance(page.next_cursor)
-            if cursor is None:
+            if not page.next_cursor:
                 return
+            cursor = page.next_cursor
 
     async def list(
         self,
