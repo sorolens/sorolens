@@ -217,8 +217,10 @@ type QueryStore interface {
 // ---- ListEvents --------------------------------------------------------------
 
 func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor string, limit int, f EventFilters) ([]Event, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	// The topic filter is appended only when set so the planner always sees a
 	// plain `topic_decoded @> $n::jsonb` predicate and can use the GIN index
@@ -450,8 +452,10 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 }
 
 func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor string, limit int, f InvocationFilters) ([]Invocation, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
@@ -712,8 +716,10 @@ func (s *postgresStore) GetCallEdges(ctx context.Context, txHash string) ([]Call
 // cursor is (ledger, tx_hash), which is exactly the ORDER BY tuple, so pages
 // stay stable while the indexer appends newer rows.
 func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
@@ -782,8 +788,10 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 // ---- ListStorageEntries -----------------------------------------------------
 
 func (s *postgresStore) ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT contract_id, network, key_xdr, key_decoded, value_xdr, value_decoded,

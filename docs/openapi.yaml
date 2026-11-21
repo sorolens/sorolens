@@ -504,6 +504,9 @@ paths:
       responses:
         "200":
           description: Global counts across all tracked contracts
+          headers:
+            X-Cache:
+              $ref: "#/components/headers/XCache"
           content:
             application/json:
               schema:
@@ -522,6 +525,9 @@ paths:
                   total_storage_entries:
                     type: integer
                     format: int64
+                  approximate:
+                    type: boolean
+                    description: True when large table counts are estimated rather than exact.
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -2664,6 +2670,9 @@ paths:
       responses:
         "200":
           description: Global statistics
+          headers:
+            X-Cache:
+              $ref: "#/components/headers/XCache"
           content:
             application/json:
               schema:
@@ -4480,6 +4489,7 @@ paths:
             type: integer
             minimum: 1
             default: 50
+          description: Page size (default 50, clamped to 200).
       responses:
         "200":
           description: Upgrades, newest first
@@ -6902,6 +6912,9 @@ components:
         total_storage_entries:
           type: integer
           format: int64
+        approximate:
+          type: boolean
+          description: True when large table counts are estimated rather than exact.
 
     V2ContractRate:
       type: object

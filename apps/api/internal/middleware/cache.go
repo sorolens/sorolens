@@ -28,6 +28,7 @@ const (
 	CacheNamespaceContracts = "contracts"
 	CacheNamespaceWatchdog  = "watchdog"
 	CacheNamespaceLabels    = "labels"
+	CacheNamespaceStats     = "stats"
 )
 
 // cacheKeyPrefix is the Redis key prefix for cached responses; keys are

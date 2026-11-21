@@ -443,6 +443,7 @@ export interface GlobalStats {
   total_events: number;
   total_invocations: number;
   total_storage_entries: number;
+  approximate?: boolean;
 }
 
 // ---- live dashboard (#139) --------------------------------------------------

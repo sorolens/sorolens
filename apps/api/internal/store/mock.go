@@ -219,6 +219,8 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []Contract
 	for _, c := range m.contracts {
@@ -468,6 +470,8 @@ func (m *MockStore) ListEvents(_ context.Context, contractID, cursor string, lim
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []Event
 	for _, e := range m.events {
@@ -560,6 +564,8 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []Invocation
 	for _, inv := range m.invocations {
@@ -659,6 +665,8 @@ func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, c
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	out := make([]Invocation, 0, len(m.invocations))
 	for _, inv := range m.invocations {
@@ -724,6 +732,8 @@ func (m *MockStore) ListStorageEntries(_ context.Context, contractID, cursor str
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []StorageEntry
 	for _, se := range m.storageEntries {

@@ -180,6 +180,7 @@ type GlobalStats struct {
 	TotalEvents         int64
 	TotalInvocations    int64
 	TotalStorageEntries int64
+	Approximate         bool
 }
 
 // AlertSubscription represents a webhook subscription for watchdog alerts.

@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sorolens/sorolens/apps/api/internal/store"
@@ -73,13 +74,23 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	severity := strings.TrimSpace(q.Get("severity"))
+	if severity != "" {
+		canonical, ok := validAlertSeverities[strings.ToLower(severity)]
+		if !ok {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "severity must be one of: Info, Warning, Critical")
+			return
+		}
+		severity = canonical
+	}
+
 	f := store.AlertGroupFilters{
 		ContractID: q.Get("contract_id"),
-		Severity:   q.Get("severity"),
+		Severity:   severity,
 		Network:    network,
 	}
 
-	groups, next, err := h.Store.ListAlertGroups(r.Context(), q.Get("cursor"), intQuery(r, "limit", 100), f)
+	groups, next, err := h.Store.ListAlertGroups(r.Context(), q.Get("cursor"), pageLimitClamped(r, 100, 500), f)
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidCursor) {
 			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
@@ -110,13 +121,22 @@ func (h *Handler) listAlertsFlat(w http.ResponseWriter, r *http.Request) {
 			"network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	severity := strings.TrimSpace(q.Get("severity"))
+	if severity != "" {
+		canonical, ok := validAlertSeverities[strings.ToLower(severity)]
+		if !ok {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "severity must be one of: Info, Warning, Critical")
+			return
+		}
+		severity = canonical
+	}
 	alerts, next, err := h.Store.ListAlerts(
 		r.Context(),
 		q.Get("contract_id"),
-		q.Get("severity"),
+		severity,
 		network,
 		q.Get("cursor"),
-		intQuery(r, "limit", 100),
+		pageLimitClamped(r, 100, 500),
 	)
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidCursor) {

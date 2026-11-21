@@ -278,6 +278,7 @@ type v2GlobalStats struct {
 	TotalEvents         int64 `json:"total_events"`
 	TotalInvocations    int64 `json:"total_invocations"`
 	TotalStorageEntries int64 `json:"total_storage_entries"`
+	Approximate         bool  `json:"approximate"`
 }
 
 type v2ContractRate struct {
@@ -377,6 +378,7 @@ func (h *Handler) V2GlobalStats(w http.ResponseWriter, r *http.Request) {
 		TotalEvents:         gs.TotalEvents,
 		TotalInvocations:    gs.TotalInvocations,
 		TotalStorageEntries: gs.TotalStorageEntries,
+		Approximate:         gs.Approximate,
 	})
 }
 
@@ -393,9 +395,14 @@ func (h *Handler) V2ListContracts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
-	contracts, nextRaw, err := h.Store.ListContracts(r.Context(), rawCursor, intQuery(r, "limit", 50), store.ContractFilters{
+	status := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+	if status != "" && !validContractStatuses[status] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: pending, active, backfilling, error, paused")
+		return
+	}
+	contracts, nextRaw, err := h.Store.ListContracts(r.Context(), rawCursor, pageLimit(r, DefaultPageSize), store.ContractFilters{
 		Network: network,
-		Status:  r.URL.Query().Get("status"),
+		Status:  status,
 	})
 	if err != nil {
 		h.Logger.Error("v2 list contracts", "err", err)
@@ -471,12 +478,31 @@ func (h *Handler) V2ListEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
-	limit := intQuery(r, "limit", 50)
+	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
+	if eventType != "" && !validEventTypes[eventType] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "type must be one of: contract, system, diagnostic")
+		return
+	}
+	from, hasFrom, err := parseLedgerParam(r, "from")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	to, hasTo, err := parseLedgerParam(r, "to")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	if hasFrom && hasTo && from > to {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must not exceed to")
+		return
+	}
+	limit := pageLimit(r, DefaultPageSize)
 	f := store.EventFilters{
-		Type:    r.URL.Query().Get("type"),
+		Type:    eventType,
 		Network: network,
-		From:    uint32Query(r, "from"),
-		To:      uint32Query(r, "to"),
+		From:    from,
+		To:      to,
 	}
 	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
@@ -504,10 +530,7 @@ func (h *Handler) V2ListEvents(w http.ResponseWriter, r *http.Request) {
 
 // V2RecentEvents handles GET /api/v2/events/recent.
 func (h *Handler) V2RecentEvents(w http.ResponseWriter, r *http.Request) {
-	limit := intQuery(r, "limit", 50)
-	if limit > 200 {
-		limit = 200
-	}
+	limit := pageLimit(r, DefaultPageSize)
 	events, err := h.Store.RecentEventsAll(r.Context(), limit)
 	if err != nil {
 		h.Logger.Error("v2 recent events", "err", err)
@@ -564,6 +587,29 @@ func (h *Handler) V2ListInvocations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status != "" {
+		statusUpper := strings.ToUpper(status)
+		if !validInvocationStatuses[statusUpper] {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: SUCCESS, FAILED, NOT_FOUND")
+			return
+		}
+		status = statusUpper
+	}
+	from, hasFrom, err := parseLedgerParam(r, "from")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	to, hasTo, err := parseLedgerParam(r, "to")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	if hasFrom && hasTo && from > to {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must not exceed to")
+		return
+	}
 	// v2 renames the v1 `fn` query parameter to `function_name`, matching the
 	// response field, and still accepts `fn` for a migration window.
 	fn := r.URL.Query().Get("function_name")
@@ -571,13 +617,13 @@ func (h *Handler) V2ListInvocations(w http.ResponseWriter, r *http.Request) {
 		fn = r.URL.Query().Get("fn")
 	}
 	f := store.InvocationFilters{
-		Status:       r.URL.Query().Get("status"),
+		Status:       status,
 		FunctionName: fn,
 		Network:      network,
-		From:         uint32Query(r, "from"),
-		To:           uint32Query(r, "to"),
+		From:         from,
+		To:           to,
 	}
-	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, pageLimit(r, DefaultPageSize), f)
 	if err != nil {
 		h.Logger.Error("v2 list invocations", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list invocations")
@@ -602,12 +648,22 @@ func (h *Handler) V2ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	durability := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("durability")))
+	if durability != "" && !validDurabilities[durability] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "durability must be one of: temporary, persistent, instance")
+		return
+	}
+	status := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+	if status != "" && !validStorageStatuses[status] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: live, archived, deleted")
+		return
+	}
 	f := store.StorageFilters{
-		Durability: r.URL.Query().Get("durability"),
-		Status:     r.URL.Query().Get("status"),
+		Durability: durability,
+		Status:     status,
 		Network:    network,
 	}
-	entries, nextRaw, err := h.Store.ListStorageEntries(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	entries, nextRaw, err := h.Store.ListStorageEntries(r.Context(), contractID, rawCursor, pageLimit(r, DefaultPageSize), f)
 	if err != nil {
 		h.Logger.Error("v2 list storage entries", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list storage entries")
@@ -658,7 +714,7 @@ func (h *Handler) V2ListContractUpgrades(w http.ResponseWriter, r *http.Request)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to load contract")
 		return
 	}
-	upgrades, err := h.Store.ListContractUpgrades(r.Context(), contractID, intQuery(r, "limit", 50))
+	upgrades, err := h.Store.ListContractUpgrades(r.Context(), contractID, pageLimit(r, DefaultPageSize))
 	if err != nil {
 		h.Logger.Error("v2 list contract upgrades", "err", err, "contract_id", contractID)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list contract upgrades")
@@ -784,7 +840,7 @@ func (h *Handler) V2GetMonitoredContract(w http.ResponseWriter, r *http.Request)
 
 // V2ListHealthChecks handles GET /api/v2/watchdog/contracts/{id}/health.
 func (h *Handler) V2ListHealthChecks(w http.ResponseWriter, r *http.Request) {
-	checks, err := h.Store.ListHealthChecks(r.Context(), chi.URLParam(r, "id"), intQuery(r, "limit", 100))
+	checks, err := h.Store.ListHealthChecks(r.Context(), chi.URLParam(r, "id"), pageLimitClamped(r, 100, 500))
 	if err != nil {
 		h.Logger.Error("v2 list health checks", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list health checks")
@@ -812,13 +868,22 @@ func (h *Handler) V2ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	severity := strings.TrimSpace(r.URL.Query().Get("severity"))
+	if severity != "" {
+		canonical, ok := validAlertSeverities[strings.ToLower(severity)]
+		if !ok {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "severity must be one of: Info, Warning, Critical")
+			return
+		}
+		severity = canonical
+	}
 	alerts, next, err := h.Store.ListAlerts(
 		r.Context(),
 		chi.URLParam(r, "id"),
-		r.URL.Query().Get("severity"),
+		severity,
 		network,
 		r.URL.Query().Get("cursor"),
-		intQuery(r, "limit", 100),
+		pageLimitClamped(r, 100, 500),
 	)
 	if err != nil {
 		h.Logger.Error("v2 list alerts", "err", err)

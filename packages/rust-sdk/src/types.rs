@@ -301,6 +301,9 @@ pub struct GlobalStats {
     pub total_invocations: i64,
     /// Total indexed storage entries.
     pub total_storage_entries: i64,
+    /// True when large table counts are estimated rather than exact.
+    #[serde(default)]
+    pub approximate: bool,
 }
 
 /// Per-contract statistics.
