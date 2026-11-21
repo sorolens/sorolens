@@ -29,6 +29,34 @@ cd cli
 make build      # writes ./sorolens
 ```
 
+## Shell completion
+
+`sorolens completion` generates a completion script for your shell:
+
+```sh
+sorolens completion bash | source /dev/stdin   # current session only
+sorolens completion zsh > "${fpath[1]}/_sorolens"
+sorolens completion fish > ~/.config/fish/completions/sorolens.fish
+sorolens completion powershell > sorolens.ps1   # then source it from your profile
+```
+
+To install it permanently:
+
+```sh
+# Bash (Linux)
+sorolens completion bash > /etc/bash_completion.d/sorolens
+# Bash (macOS, Homebrew)
+sorolens completion bash > $(brew --prefix)/etc/bash_completion.d/sorolens
+# Zsh (enable completion first if needed: autoload -U compinit; compinit)
+sorolens completion zsh > "${fpath[1]}/_sorolens"
+# Fish
+sorolens completion fish > ~/.config/fish/completions/sorolens.fish
+# PowerShell
+sorolens completion powershell > sorolens.ps1
+```
+
+See `sorolens completion --help` for the full instructions per shell.
+
 ## Configuration
 
 Configuration is resolved from the environment, then `~/.sorolens.yml`, then
