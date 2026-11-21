@@ -64,6 +64,13 @@ HTTP 200 when Redis (when locking is enabled via `REDIS_URL`) and Postgres are
 both reachable, and HTTP 503 otherwise. Orchestrators can use these endpoints
 to restart a stuck indexer.
 
+> **Note:** `/readyz` currently behaves exactly like `/healthz`: both run the
+> same Redis and Postgres checks. Because that liveness check depends on
+> external dependencies, pointing a liveness probe at either endpoint can cause
+> a restart loop during a Redis or Postgres outage. Prefer them for readiness,
+> and keep the liveness probe dependency-free or set a generous
+> `failureThreshold`.
+
 The endpoint is owned by the indexer because the indexer is the component that
 talks to each network's Soroban RPC and owns the per-network ledger cursor.
 

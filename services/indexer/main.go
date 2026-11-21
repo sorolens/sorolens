@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -193,7 +194,10 @@ func main() {
 	// best-effort — a bind failure is logged but does not stop indexing.
 	recorder := metrics.New()
 	p.SetMetrics(recorder)
-	hc := &healthChecker{redisLock: redisLock, pgStore: st}
+	hc := &healthChecker{postgres: st.Pool()}
+	if redisLock != nil {
+		hc.redis = redisLock
+	}
 	metricsSrv := startMetricsServer(*metricsAddr, recorder.Handler(), hc, log)
 	defer func() {
 		if metricsSrv == nil {
@@ -410,12 +414,18 @@ func (r *stubRedis) Renew(ctx context.Context, key, expectedValue string, ttl ti
 	return true, nil
 }
 
+// pinger is the dependency surface the health checks need. Both *lock.Lock
+// (Redis) and *pgxpool.Pool (Postgres) satisfy it.
+type pinger interface {
+	Ping(ctx context.Context) error
+}
+
 // healthChecker reports dependency state for /healthz and /readyz.
 // A service is healthy when both Redis (when configured) and Postgres respond
 // to a ping.
 type healthChecker struct {
-	redisLock *lock.Lock // nil when locking is disabled (stub)
-	pgStore   *pgstore.Store
+	redis    pinger // nil when locking is disabled (stub)
+	postgres pinger
 }
 
 // check pings Redis and Postgres and returns a combined error if either is
@@ -423,12 +433,12 @@ type healthChecker struct {
 // other is still checked.
 func (h *healthChecker) check(ctx context.Context) error {
 	var errs []error
-	if h.redisLock != nil {
-		if err := h.redisLock.Ping(ctx); err != nil {
+	if h.redis != nil {
+		if err := h.redis.Ping(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("redis: %w", err))
 		}
 	}
-	if err := h.pgStore.Pool().Ping(ctx); err != nil {
+	if err := h.postgres.Ping(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("postgres: %w", err))
 	}
 	return errors.Join(errs...)
@@ -474,17 +484,28 @@ func startMetricsServer(addr string, h http.Handler, hc *healthChecker, log *slo
 	return srv
 }
 
+// healthResponse is the JSON body served by /healthz and /readyz. Error is
+// omitted on success; encoding/json escapes it, so dependency error text with
+// quotes, backslashes or newlines still produces a valid JSON document.
+type healthResponse struct {
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
 func (h *healthChecker) serveHealthz(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
+
+	status := http.StatusOK
+	resp := healthResponse{Status: "ok"}
 	if err := h.check(ctx); err != nil {
-		http.Error(w, `{"status":"fail","error":"`+err.Error()+`"}`, http.StatusServiceUnavailable)
-		w.Header().Set("Content-Type", "application/json")
-		return
+		status = http.StatusServiceUnavailable
+		resp = healthResponse{Status: "fail", Error: err.Error()}
 	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`{"status":"ok"}`))
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *healthChecker) serveReadyz(w http.ResponseWriter, r *http.Request) {
