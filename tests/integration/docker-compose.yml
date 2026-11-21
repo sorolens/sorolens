@@ -118,8 +118,11 @@ services:
       SOROBAN_RPC_URL: http://mock-rpc:8000
       SOROBAN_RPC_URL_TESTNET: http://mock-rpc:8000
       INDEXER_METRICS_ADDR: ""
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       mock-rpc:
         condition: service_healthy
