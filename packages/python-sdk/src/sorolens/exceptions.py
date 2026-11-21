@@ -14,6 +14,10 @@ class SorolensError(Exception):
         self.status_code = status_code
 
 
+class PaginationError(SorolensError):
+    """A paginated walk could not continue (for example, a cursor repeated)."""
+
+
 class APIError(SorolensError):
     """The API answered with a non-success status code."""
 
