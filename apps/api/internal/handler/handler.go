@@ -44,6 +44,7 @@ type APIStore interface {
 	store.WatchedAccountStore
 	store.AuditStore
 	store.ExportJobStore
+	store.UsageStore
 	store.MaintenanceStore
 }
 
@@ -124,6 +125,9 @@ type Handler struct {
 
 	// RequireAuth enforces authentication mode across all endpoints except health checks.
 	RequireAuth bool
+
+	// UsageFlusher flushes API key request counts to persistent storage (issue #792).
+	UsageFlusher *middleware.UsageFlusher
 
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.

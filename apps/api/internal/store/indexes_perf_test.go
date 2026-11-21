@@ -10,7 +10,7 @@ import (
 // TestTrigramAndCompositeIndexesMigration guards that the indexes required
 // by Issue #762 are present in the migration files and properly structured.
 func TestTrigramAndCompositeIndexesMigration(t *testing.T) {
-	migrationPath := filepath.Join("..", "db", "migrations", "000045_trigram_and_composite_indexes.up.sql")
+	migrationPath := filepath.Join("..", "db", "migrations", "000046_trigram_and_composite_indexes.up.sql")
 	content, err := os.ReadFile(migrationPath)
 	if err != nil {
 		t.Fatalf("failed to read migration file %s: %v", migrationPath, err)
@@ -34,7 +34,7 @@ func TestTrigramAndCompositeIndexesMigration(t *testing.T) {
 		}
 	}
 
-	downPath := filepath.Join("..", "db", "migrations", "000045_trigram_and_composite_indexes.down.sql")
+	downPath := filepath.Join("..", "db", "migrations", "000046_trigram_and_composite_indexes.down.sql")
 	downContent, err := os.ReadFile(downPath)
 	if err != nil {
 		t.Fatalf("failed to read down migration file %s: %v", downPath, err)

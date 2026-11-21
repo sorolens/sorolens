@@ -44,6 +44,7 @@ type FullStore interface {
 	WatchedAccountStore
 	AuditStore
 	ExportJobStore
+	UsageStore
 	MaintenanceStore
 }
 

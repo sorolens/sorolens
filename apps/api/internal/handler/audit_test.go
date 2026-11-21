@@ -199,6 +199,28 @@ func TestListAuditEventsPagination(t *testing.T) {
 	if len(body.Events) != 2 || body.Events[0].ID != 5 || body.Events[1].ID != 4 {
 		t.Fatalf("since filter: got %+v", body.Events)
 	}
+
+	// from and to are inclusive bounds (RFC 3339).
+	wFromTo := doRequestAsUser(srv, http.MethodGet,
+		"/api/v1/admin/audit?from="+base.Add(1*time.Hour).Format(time.RFC3339)+"&to="+base.Add(3*time.Hour).Format(time.RFC3339), "", adminUser, "")
+	var bodyFromTo auditListBody
+	if err := json.NewDecoder(wFromTo.Body).Decode(&bodyFromTo); err != nil {
+		t.Fatal(err)
+	}
+	if len(bodyFromTo.Events) != 3 || bodyFromTo.Events[0].ID != 4 || bodyFromTo.Events[2].ID != 2 {
+		t.Fatalf("from/to filter: got %+v", bodyFromTo.Events)
+	}
+
+	// from wins over deprecated since alias when both are sent.
+	wPrecedence := doRequestAsUser(srv, http.MethodGet,
+		"/api/v1/admin/audit?from="+base.Add(3*time.Hour).Format(time.RFC3339)+"&since="+base.Add(1*time.Hour).Format(time.RFC3339), "", adminUser, "")
+	var bodyPrecedence auditListBody
+	if err := json.NewDecoder(wPrecedence.Body).Decode(&bodyPrecedence); err != nil {
+		t.Fatal(err)
+	}
+	if len(bodyPrecedence.Events) != 2 || bodyPrecedence.Events[0].ID != 5 || bodyPrecedence.Events[1].ID != 4 {
+		t.Fatalf("precedence filter (from wins): got %+v", bodyPrecedence.Events)
+	}
 }
 
 func TestListAuditEventsValidationAndRoles(t *testing.T) {
@@ -211,6 +233,9 @@ func TestListAuditEventsValidationAndRoles(t *testing.T) {
 		want   int
 	}{
 		{"bad since", "/api/v1/admin/audit?since=yesterday", adminUser, http.StatusUnprocessableEntity},
+		{"bad from", "/api/v1/admin/audit?from=yesterday", adminUser, http.StatusUnprocessableEntity},
+		{"bad to", "/api/v1/admin/audit?to=tomorrow", adminUser, http.StatusUnprocessableEntity},
+		{"inverted range", "/api/v1/admin/audit?from=2026-09-02T00:00:00Z&to=2026-09-01T00:00:00Z", adminUser, http.StatusUnprocessableEntity},
 		{"bad cursor", "/api/v1/admin/audit?cursor=bm90LWEtbnVtYmVy", adminUser, http.StatusUnprocessableEntity},
 		{"contributor denied", "/api/v1/admin/audit", contributorUser, http.StatusForbidden},
 		{"viewer denied", "/api/v1/admin/audit", viewerUser, http.StatusForbidden},

@@ -30,6 +30,11 @@ pub enum Error {
     /// The API returned a non-success status code.
     #[error("sorolens api error: {0}")]
     Api(ApiError),
+
+    /// A paginated walk could not continue, for example because the API
+    /// returned a cursor the walk had already requested.
+    #[error("pagination error: {0}")]
+    Pagination(String),
 }
 
 impl Error {

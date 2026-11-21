@@ -119,10 +119,27 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         tags: ["Audit"],
         parameters: [
           {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).",
+            type: "string",
+          },
+          {
             name: "since",
             in: "query",
             required: false,
-            description: "Only events at or after this RFC 3339 timestamp.",
+            description:
+              "Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.",
             type: "string",
           },
           {
@@ -149,10 +166,27 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         tags: ["Audit"],
         parameters: [
           {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).",
+            type: "string",
+          },
+          {
             name: "since",
             in: "query",
             required: false,
-            description: "Only events at or after this RFC 3339 timestamp.",
+            description:
+              "Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.",
             type: "string",
           },
           {
@@ -960,6 +994,39 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             in: "path",
             required: true,
             description: "API key ID.",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/usage": {
+      get: {
+        operationId: "getApiKeyUsage",
+        summary: "Get API key usage metrics and quota status",
+        tags: ["API Keys"],
+        parameters: [
+          {
+            name: "key_id",
+            in: "query",
+            required: false,
+            description:
+              "API key ID to query. Required when calling with user/session auth; optional when authenticating with an API key (defaults to calling key). Querying another key requires admin:* scope.",
+            type: "string",
+          },
+          {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Start of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to 30 days ago.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "End of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to now.",
             type: "string",
           },
         ],
@@ -2251,6 +2318,33 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v2/usage": {
+      get: {
+        operationId: "v2GetApiKeyUsage",
+        summary: "Get API key usage metrics and quota status (v2 passthrough)",
+        tags: ["API v2"],
+        parameters: [
+          {
+            name: "key_id",
+            in: "query",
+            required: false,
+            type: "string",
+          },
+          {
+            name: "from",
+            in: "query",
+            required: false,
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v2/admin/keys": {
       get: {
         operationId: "v2AdminListKeys",
@@ -2474,11 +2568,27 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             type: "string",
           },
           {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive lower bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive upper bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `until` if both are sent.",
+            type: "string",
+          },
+          {
             name: "since",
             in: "query",
             required: false,
             description:
-              "Inclusive lower bound on ledger_closed_at (RFC 3339).",
+              "Deprecated alias for `from`. Inclusive lower bound on ledger_closed_at (RFC 3339).",
             type: "string",
           },
           {
@@ -2486,7 +2596,7 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             in: "query",
             required: false,
             description:
-              "Inclusive upper bound on ledger_closed_at (RFC 3339).",
+              "Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).",
             type: "string",
           },
         ],
@@ -2914,6 +3024,159 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             in: "query",
             required: false,
             description: "Maximum results to return (default 100).",
+            type: "integer",
+          },
+        ],
+      },
+    },
+    "/api/v1/alerts/counts": {
+      get: {
+        operationId: "getAlertCounts",
+        summary: "Get alert counts broken down by state",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "contract_id",
+            in: "query",
+            required: false,
+            description: "Optional contract ID filter.",
+            type: "string",
+          },
+          {
+            name: "network",
+            in: "query",
+            required: false,
+            description: "Network filter; empty means all networks.",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/alerts/{id}/ack": {
+      post: {
+        operationId: "acknowledgeAlert",
+        summary: "Acknowledge an alert",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Alert ID",
+            type: "integer",
+          },
+        ],
+      },
+    },
+    "/api/v1/alerts/{id}/snooze": {
+      post: {
+        operationId: "snoozeAlert",
+        summary: "Snooze an alert",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Alert ID",
+            type: "integer",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/alerts/{id}/resolve": {
+      post: {
+        operationId: "resolveAlert",
+        summary: "Resolve an alert",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Alert ID",
+            type: "integer",
+          },
+        ],
+      },
+    },
+    "/api/v1/maintenance-windows": {
+      get: {
+        operationId: "listMaintenanceWindows",
+        summary: "List maintenance windows",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "scope",
+            in: "query",
+            required: false,
+            description: "Scope filter",
+            type: "string",
+          },
+          {
+            name: "target_id",
+            in: "query",
+            required: false,
+            description: "Target ID filter",
+            type: "string",
+          },
+        ],
+      },
+      post: {
+        operationId: "createMaintenanceWindow",
+        summary: "Create a maintenance window",
+        tags: ["Maintenance"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/maintenance-windows/{id}": {
+      get: {
+        operationId: "getMaintenanceWindow",
+        summary: "Get a maintenance window by ID",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Maintenance window ID",
+            type: "integer",
+          },
+        ],
+      },
+      put: {
+        operationId: "updateMaintenanceWindow",
+        summary: "Update a maintenance window",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Maintenance window ID",
+            type: "integer",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
+      },
+      delete: {
+        operationId: "deleteMaintenanceWindow",
+        summary: "Delete a maintenance window",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Maintenance window ID",
             type: "integer",
           },
         ],

@@ -6,6 +6,7 @@ name: Load smoke (k6)
 # weekly schedule and on manual dispatch instead. The three k6 scripts fail the
 # job when latency/error-rate thresholds are breached (k6 exits non-zero on a
 # threshold failure), which is how the budgets are "enforced".
+
 on:
   workflow_dispatch:
     inputs:
@@ -24,6 +25,13 @@ on:
   schedule:
     # Weekly smoke on main.
     - cron: '0 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load-smoke-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   smoke:
