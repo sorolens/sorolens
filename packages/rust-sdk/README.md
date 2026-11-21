@@ -81,6 +81,28 @@ fn main() -> Result<(), Error> {
 }
 ```
 
+### Pagination
+
+`Client::contract_events_stream` and `Client::contract_invocations_stream` return an
+async pager (`while let Some(item) = stream.next().await`) of `Result` items that follows `next_cursor` for you; with the `blocking`
+feature, `BlockingClient::contract_events_iter` and `contract_invocations_iter` do the same
+as an `Iterator`. Pages are fetched lazily, the walk stops on the last page, `limit` is
+clamped to `MAX_PAGE_SIZE` (200), and a failed request is yielded as an `Err` after the
+items already received. A repeated cursor ends the walk with `Error::Pagination`.
+
+```rust
+use sorolens_sdk::{Client, Error, ListContractEventsParams};
+
+async fn print_events(client: &Client, contract_id: &str) -> Result<(), Error> {
+    let mut events =
+        client.contract_events_stream(contract_id, ListContractEventsParams::default().limit(200));
+    while let Some(event) = events.next().await {
+        println!("{}", event?.id);
+    }
+    Ok(())
+}
+```
+
 ## Authentication
 
 Most read endpoints accept an optional API key, sent as
@@ -128,7 +150,7 @@ out of the box (a local `httpmock` server) and against a live API when
 
 | Example                                              | Shows                                                                        |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [`examples/pagination.rs`](examples/pagination.rs)   | Walking every page with `ListContractsParams::cursor` and `next_cursor`.     |
+| [`examples/pagination.rs`](examples/pagination.rs)   | Paging contracts by hand, then `Client::contract_events_stream`.             |
 | [`examples/errors.rs`](examples/errors.rs)           | `Error::Api` (404, structured body) and `Error::InvalidRequest`.             |
 | [`examples/sse.rs`](examples/sse.rs)                 | Streaming `GET /api/v1/stream/events` with `reqwest::Response::chunk`.      |
 | [`examples/webhooks.rs`](examples/webhooks.rs)       | Verifying `X-Sorolens-Signature` HMAC-SHA256 webhook deliveries.            |

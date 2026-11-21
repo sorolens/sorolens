@@ -52,6 +52,8 @@ python -m venv .venv-docs
    only contains `docs/`.
 5. Run `make docs-build` before you push.
 
+For architectural decisions that are hard to reverse or affect multiple components, see the [ADR contributor note](../adr/README.md#when-to-write-an-adr).
+
 Files kept in `docs/` that are not pages (for example `DESIGN.md` and
 `dashboards/`) are listed in `exclude_docs` in `mkdocs.yml`.
 

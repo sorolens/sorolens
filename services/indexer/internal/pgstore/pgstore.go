@@ -425,6 +425,18 @@ func (s *Store) InsertFailedEvent(ctx context.Context, fe poller.FailedEvent) er
 	return insertFailedEvent(ctx, s.pool, fe)
 }
 
+// CountFailedEvents returns the number of events parked in the DLQ for a
+// network.
+func (s *Store) CountFailedEvents(ctx context.Context, network string) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM failed_events WHERE network = $1`,
+		networkOrDefault(network)).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count failed events: %w", err)
+	}
+	return n, nil
+}
+
 func insertFailedEvent(ctx context.Context, q execer, fe poller.FailedEvent) error {
 	attempts := fe.Attempts
 	if attempts <= 0 {

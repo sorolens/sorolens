@@ -187,6 +187,12 @@ func (f *fakeStore) InsertFailedEvent(_ context.Context, fe FailedEvent) error {
 	return nil
 }
 
+func (f *fakeStore) CountFailedEvents(_ context.Context, _ string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.failedEvents), nil
+}
+
 func (f *fakeStore) BatchInsertInvocations(_ context.Context, invs []Invocation) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -350,29 +356,47 @@ func (f *fakeStore) UpsertContractHealthScore(_ context.Context, s ContractHealt
 // ---- fake RedisClient -----------------------------------------------------
 
 type fakeRedis struct {
-	mu   sync.Mutex
-	held map[string]struct{}
+	mu     sync.Mutex
+	held   map[string]struct{}
+	values []string
 }
 
 func newFakeRedis() *fakeRedis {
 	return &fakeRedis{held: make(map[string]struct{})}
 }
 
-func (r *fakeRedis) SetNX(_ context.Context, key, _ string, _ time.Duration) (bool, error) {
+func (r *fakeRedis) SetNX(_ context.Context, key, value string, _ time.Duration) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.held[key]; exists {
 		return false, nil
 	}
 	r.held[key] = struct{}{}
+	r.values = append(r.values, value)
 	return true, nil
 }
 
-func (r *fakeRedis) Del(_ context.Context, key string) error {
+// acquiredValues returns the lock values of successful SetNX calls, in order.
+func (r *fakeRedis) acquiredValues() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, len(r.values))
+	copy(out, r.values)
+	return out
+}
+
+func (r *fakeRedis) Del(_ context.Context, key, _ string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.held, key)
 	return nil
+}
+
+func (r *fakeRedis) Renew(_ context.Context, key, _ string, _ time.Duration) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.held[key]
+	return ok, nil
 }
 
 // ---- helpers --------------------------------------------------------------
@@ -628,6 +652,43 @@ func TestPoller_RespectsRedisLock(t *testing.T) {
 	// Lock was held: no RPC calls should have been made.
 	if len(rpc.eventsCalls) != 0 {
 		t.Errorf("expected no GetEvents calls when locked, got %d", len(rpc.eventsCalls))
+	}
+}
+
+// TestPoller_LockTokenIsUniquePerAcquire checks that each pass acquires the
+// per-contract lock with a freshly generated token instead of the old
+// constant "1", so two holders can be told apart.
+func TestPoller_LockTokenIsUniquePerAcquire(t *testing.T) {
+	t.Parallel()
+
+	contractID := "CTOKEN"
+	store := newFakeStore([]Contract{{ID: contractID, Status: "active"}})
+	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
+
+	redis := newFakeRedis()
+	rpc := &fakeRPC{latestLedger: &LatestLedger{Sequence: 500000}}
+	p := New(rpc, store, redis, testConfig(), testLogger())
+
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+
+	values := redis.acquiredValues()
+	if len(values) < 2 {
+		t.Fatalf("expected at least two successful acquires, got %d", len(values))
+	}
+	first, second := values[len(values)-2], values[len(values)-1]
+	if first == "" || second == "" {
+		t.Fatalf("lock tokens must not be empty: %q, %q", first, second)
+	}
+	if first == "1" || second == "1" {
+		t.Fatalf("lock token must not be the old constant %q", "1")
+	}
+	if first == second {
+		t.Fatalf("two acquisitions used the same lock token %q", first)
 	}
 }
 

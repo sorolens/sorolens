@@ -19,6 +19,7 @@ import (
 	"github.com/sorolens/sorolens/services/indexer/internal/callgraph"
 	"github.com/sorolens/sorolens/services/indexer/internal/failure"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
+	"github.com/sorolens/sorolens/services/indexer/internal/lock"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
 	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
@@ -32,6 +33,10 @@ const (
 
 	// lockKeyPrefix is the Redis key prefix for per-contract indexer locks.
 	lockKeyPrefix = "sorolens:lock:indexer:"
+
+	// lockReleaseTimeout bounds the fresh-context release so shutdown can never
+	// block on a Redis that has stopped responding.
+	lockReleaseTimeout = 5 * time.Second
 
 	// newContractBackfillWindow is how far behind the chain head a new
 	// contract's backfill reaches. At ~5s per ledger this is approximately 6
@@ -289,6 +294,18 @@ func (p *Poller) processAll(ctx context.Context) error {
 			p.log.Error("rule evaluation pass", "err", err)
 		}
 	}
+
+	// Report DLQ size per network so operators can see the backlog.
+	if p.metrics != nil {
+		for network := range p.rpcClients {
+			n, err := p.store.CountFailedEvents(ctx, network)
+			if err != nil {
+				p.log.Warn("dlq size: count failed", "network", network, "err", err)
+				continue
+			}
+			p.metrics.SetDlqSize(network, float64(n))
+		}
+	}
 	return nil
 }
 
@@ -521,9 +538,15 @@ func (p *Poller) indexContract(ctx, stop context.Context, contract Contract) err
 		return nil
 	}
 
-	// Acquire per-contract advisory lock to prevent concurrent runs.
+	// Acquire per-contract advisory lock to prevent concurrent runs. A fresh
+	// random token per acquisition lets holders be told apart, so renew and
+	// release only ever touch this run's lock.
 	lockKey := lockKeyPrefix + contractID
-	acquired, err := p.redis.SetNX(ctx, lockKey, "1", lockTTL)
+	lockValue, err := lock.NewToken()
+	if err != nil {
+		return fmt.Errorf("generate lock token: %w", err)
+	}
+	acquired, err := p.redis.SetNX(ctx, lockKey, lockValue, lockTTL)
 	if err != nil {
 		return fmt.Errorf("acquire lock: %w", err)
 	}
@@ -532,7 +555,41 @@ func (p *Poller) indexContract(ctx, stop context.Context, contract Contract) err
 			"contract_id", contractID)
 		return nil
 	}
-	defer p.redis.Del(ctx, lockKey) //nolint:errcheck
+
+	// Renew the lock while the run is active so a long pass never loses it.
+	renewStop := make(chan struct{})
+	renewDone := make(chan error, 1)
+	go func() {
+		defer func() { renewDone <- nil }()
+		ticker := time.NewTicker(lockTTL / 2)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-renewStop:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := p.redis.Renew(ctx, lockKey, lockValue, lockTTL); err != nil {
+					p.log.Warn("lock renewal failed",
+						"contract_id", contractID,
+						"err", err,
+					)
+				}
+			}
+		}
+	}()
+	defer func() {
+		close(renewStop)
+		<-renewDone
+	}()
+	// Release on a fresh context: the run context is cancelled on shutdown, but
+	// the lock still has to be removed so the next process can take over.
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), lockReleaseTimeout)
+		defer cancel()
+		_ = p.redis.Del(releaseCtx, lockKey, lockValue)
+	}()
 
 	// Detect Wasm upgrades (contract code changes) before scanning events so
 	// an upgrade with no indexable events still gets recorded. Any error here
@@ -551,6 +608,7 @@ func (p *Poller) indexContract(ctx, stop context.Context, contract Contract) err
 
 	latest, err := rpc.GetLatestLedger(ctx)
 	if err != nil {
+		p.metrics.RecordRpcError(network)
 		return fmt.Errorf("get latest ledger: %w", err)
 	}
 
@@ -802,6 +860,7 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 
 	result, err := rpc.GetEvents(ctx, startLedger, endLedger, filters)
 	if err != nil {
+		p.metrics.RecordRpcError(network)
 		return nil, nil, fmt.Errorf("get events [%d,%d]: %w", startLedger, endLedger, err)
 	}
 

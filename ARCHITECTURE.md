@@ -1212,3 +1212,20 @@ the one-object-per-month layout bounds the work to the months touched.
 
 **Rationale:** Heavy dashboard reads must not starve indexer writes or compromise read-your-writes guarantees. All writes and read-after-write mutations are directed to the primary pool. If replica replication lag exceeds the configured threshold, read queries fall back to the primary pool automatically. See [docs/read_replica.md](docs/read_replica.md).
 
+---
+
+## 6. Decision Records
+
+Formal Architecture Decision Records (ADRs) capture significant, hard-to-reverse architectural choices across the system:
+
+- [Architecture Decision Records Index](docs/adr/README.md)
+- [ADR 0001: Postgres partitioning for events table](docs/adr/0001-postgres-partitioning.md)
+- [ADR 0002: Keyset cursor pagination for API feeds](docs/adr/0002-cursor-pagination.md)
+- [ADR 0003: Horizontally-scaled indexer with worker sharding](docs/adr/0003-indexer-sharding.md)
+- [ADR 0004: S3-compatible Parquet cold storage for historical events](docs/adr/0004-cold-storage.md)
+- [ADR 0005: API versioning and /api/v1 freeze](docs/adr/0005-api-versioning.md)
+- [ADR 0006: Server-Sent Events (SSE) and WebSocket protocol selection](docs/adr/0006-sse-vs-websocket.md)
+- [ADR 0007: Two-tier authentication: API key scopes and user roles](docs/adr/0007-key-scopes-and-roles.md)
+- [ADR 0008: OpenAPI spec as source of truth and automated SDK generation](docs/adr/0008-sdk-generation.md)
+
+
