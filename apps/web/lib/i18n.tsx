@@ -146,14 +146,14 @@ const messages = {
       "Usa la CLI o la API para empezar a seguir un contrato Soroban, o haz clic en",
     "contracts.empty.firstRun.action": "el asistente de seguimiento",
     "contracts.empty.firstRun.bodySuffix": "para añadir uno desde aquí.",
-    "contracts.empty.noResults.title": "Ningún contrato coincide con tu búsqueda",
+    "contracts.empty.noResults.title":
+      "Ningún contrato coincide con tu búsqueda",
     "contracts.empty.noResults.body":
       "Ningún contrato coincide con tu búsqueda.",
     "events.error.title": "No se pudieron cargar los eventos.",
     "events.empty.firstRun.title": "Aún no hay eventos indexados.",
     "events.empty.firstRun.suffix": "para empezar a ver eventos aquí.",
-    "events.empty.noResults.title":
-      "Ningún evento coincide con estos filtros.",
+    "events.empty.noResults.title": "Ningún evento coincide con estos filtros.",
     "invocations.error.title": "No se pudieron cargar las invocaciones.",
     "invocations.empty.firstRun.title": "Aún no hay invocaciones indexadas",
     "invocations.empty.firstRun.body":
