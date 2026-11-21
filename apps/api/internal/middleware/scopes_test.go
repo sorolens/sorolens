@@ -10,10 +10,13 @@ import (
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
-// scopeError mirrors the JSON body RequireScopes writes on a rejection.
+// scopeError mirrors the JSON envelope RequireScopes writes on a rejection.
 type scopeError struct {
-	Error    string `json:"error"`
-	Required string `json:"required"`
+	Error struct {
+		Code      int    `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id"`
+	} `json:"error"`
 }
 
 // scopeKey builds an API key with the given scopes.
@@ -155,11 +158,8 @@ func TestRequireScopes(t *testing.T) {
 				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 					t.Fatalf("decode rejection body %q: %v", rec.Body.String(), err)
 				}
-				if body.Error != tt.wantError {
-					t.Errorf("error = %q, want %q", body.Error, tt.wantError)
-				}
-				if body.Required != tt.wantRequired {
-					t.Errorf("required = %q, want %q", body.Required, tt.wantRequired)
+				if body.Error.Message != tt.wantError {
+					t.Errorf("error message = %q, want %q", body.Error.Message, tt.wantError)
 				}
 			} else if rec.Body.Len() != 0 {
 				t.Errorf("allowed request wrote a body: %q", rec.Body.String())

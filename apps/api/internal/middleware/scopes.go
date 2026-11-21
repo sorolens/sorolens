@@ -1,12 +1,12 @@
 package middleware
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
@@ -209,15 +209,11 @@ func RequireScopes(logger *slog.Logger) func(http.Handler) http.Handler {
 					if logger != nil {
 						logger.Debug("scope middleware: invalid credential", "path", r.URL.Path)
 					}
-					writeScopeError(w, http.StatusUnauthorized, map[string]string{
-						"error": "invalid API key",
-					})
+					writeError(w, r, http.StatusUnauthorized, "", "invalid API key")
 					return
 				}
 				if hasScopeRule && required == ScopeAdmin {
-					writeScopeError(w, http.StatusUnauthorized, map[string]string{
-						"error": "authentication required",
-					})
+					writeError(w, r, http.StatusUnauthorized, "", "authentication required")
 					return
 				}
 				next.ServeHTTP(w, r)
@@ -233,10 +229,7 @@ func RequireScopes(logger *slog.Logger) func(http.Handler) http.Handler {
 				return
 			}
 
-			writeScopeError(w, http.StatusForbidden, map[string]string{
-				"error":    "missing scope",
-				"required": required,
-			})
+			writeError(w, r, http.StatusForbidden, "", "missing scope")
 		})
 	}
 }
@@ -260,8 +253,4 @@ func extractAPIKey(r *http.Request) string {
 	return strings.TrimSpace(r.URL.Query().Get("api_key"))
 }
 
-func writeScopeError(w http.ResponseWriter, status int, body map[string]string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
-}
+

@@ -32,6 +32,7 @@ type Recorder struct {
 
 	eventsProcessed *prometheus.CounterVec
 	runDuration     *prometheus.HistogramVec
+	parkedTransactions *prometheus.CounterVec
 }
 
 // New returns a Recorder with all indexer collectors registered on a new
@@ -77,6 +78,12 @@ func New() *Recorder {
 			Help:      "Duration of a full indexer pass in seconds, by run mode.",
 			Buckets:   []float64{0.5, 1, 2.5, 5, 10, 30, 60, 120, 270, 300},
 		}, []string{"mode"}),
+		parkedTransactions: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "indexer",
+			Name:      "parked_transactions_total",
+			Help:      "Total number of transactions parked after exhausted retries, by network.",
+		}, []string{"network"}),
 	}
 	r.registry.MustRegister(
 		collectors.NewGoCollector(),
@@ -87,6 +94,7 @@ func New() *Recorder {
 		r.lastIndexedLedger,
 		r.eventsProcessed,
 		r.runDuration,
+		r.parkedTransactions,
 	)
 	return r
 }
@@ -124,6 +132,14 @@ func (r *Recorder) ObserveRunDuration(mode string, seconds float64) {
 		return
 	}
 	r.runDuration.WithLabelValues(mode).Observe(seconds)
+}
+
+// AddParkedTransaction records a parked transaction for a network.
+func (r *Recorder) AddParkedTransaction(network string) {
+	if r == nil {
+		return
+	}
+	r.parkedTransactions.WithLabelValues(network).Inc()
 }
 
 // Registry returns the registry holding the indexer collectors.

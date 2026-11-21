@@ -138,6 +138,16 @@ paths:
       responses:
         '200':
           description: New secret returned
+  /api/v1/indexer/parked/requeue:
+    post:
+      tags: [Operations]
+      summary: Requeue parked indexer transactions
+      operationId: requeueParkedTransactions
+      security:
+        - RoleAuth: [admin]
+      responses:
+        '200':
+          description: Parked transactions requeued
   /health:
     get:
       tags: [Health]
@@ -178,19 +188,7 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
         "503":
-          description: A dependency is unavailable
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: unavailable
-                  checks:
-                    type: object
-                    additionalProperties:
-                      type: string
+          $ref: "#/components/responses/InternalError"
 
   /graphql:
     post:
@@ -1107,6 +1105,90 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/contracts/{id}/invocations/simulate:
+    post:
+      tags: [Invocations]
+      summary: Dry-run contract invocation against indexed state
+      description: |
+        Executes a simulated invocation against a local Soroban runtime seeded with indexed storage entries
+        without touching the network. Returns simulation results, events, resource usage, and footprint.
+
+        ### Documented Limitations
+        - **State Freshness**: Simulation relies on the latest indexed storage entries from Sorolens DB and may lag behind live network state if indexer catching-up is delayed.
+        - **Unsupported Host Functions**: Certain advanced host functions or host-specific syscalls outside standard Soroban SDK bindings may not be fully emulated in local simulation runtime.
+        - **Resource Bounds**: Execution time is hard-bounded (max 5 seconds) and memory is capped per invocation.
+      operationId: simulateContractInvocation
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [function]
+              properties:
+                function:
+                  type: string
+                  description: Name of the contract function to invoke.
+                args:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+                  description: Function arguments as ScVal JSON objects.
+                ledger:
+                  type: integer
+                  format: int32
+                  minimum: 1
+                  description: Optional historical ledger sequence to seed storage state from.
+      responses:
+        "200":
+          description: Successful simulation result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [simulation, result, resource_fee, cpu_instructions, memory_bytes, events]
+                properties:
+                  simulation:
+                    type: boolean
+                    example: true
+                  result:
+                    type: object
+                    additionalProperties: true
+                  resource_fee:
+                    type: string
+                    example: "10000"
+                  cpu_instructions:
+                    type: integer
+                    format: int64
+                    example: 150000
+                  memory_bytes:
+                    type: integer
+                    format: int64
+                    example: 40960
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+                  footprint:
+                    type: object
+                    additionalProperties: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/contracts/{id}/invocations:
     get:
       tags: [Invocations]
@@ -1211,6 +1293,83 @@ paths:
                 $ref: "#/components/schemas/InvocationDetail"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/storage/diff:
+    get:
+      tags: [Storage]
+      summary: Storage entry diff between two ledgers
+      description: Render a diff of every storage entry that was created, changed, removed, or expired between two ledgers.
+      operationId: getContractStorageDiff
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Starting ledger sequence number.
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Ending ledger sequence number (must be greater than or equal to from).
+        - name: prefix
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional key prefix filter.
+        - name: durability
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [temporary, persistent, instance]
+          description: Optional durability filter.
+      responses:
+        "200":
+          description: Storage diff groups returned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contract_id, from_ledger, to_ledger, created, changed, removed, expired]
+                properties:
+                  contract_id:
+                    type: string
+                  from_ledger:
+                    type: integer
+                    format: int32
+                  to_ledger:
+                    type: integer
+                    format: int32
+                  created:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StorageDiffEntry"
+                  changed:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StorageDiffChange"
+                  removed:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StorageDiffEntry"
+                  expired:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StorageDiffEntry"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
 

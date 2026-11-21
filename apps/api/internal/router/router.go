@@ -154,6 +154,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	reg.MustRegister(metrics.HTTPRequestsInFlight, metrics.HTTPRequestsTotal, metrics.HTTPRequestDuration)
 	reg.MustRegister(metrics.PoolCollector())
 	r.Get("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP)
+
+	// Slack slash commands (issue #127). Outside /api/v1 because Slack posts
+	// form-encoded bodies, which the JSON content-type guard would reject;
+	// every request is authenticated by its Slack signature instead.
+	r.Post("/integrations/slack/commands", h.SlackCommand)
+
 	pprofAdmin := middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)
 	r.With(pprofAdmin).Get("/debug/pprof", pprof.Index)
 	r.With(pprofAdmin).Get("/debug/pprof/", pprof.Index)
@@ -165,21 +171,6 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	for _, profile := range []string{"allocs", "block", "goroutine", "heap", "mutex", "threadcreate"} {
 		r.With(pprofAdmin).Get("/debug/pprof/"+profile, pprof.Handler(profile).ServeHTTP)
 	}
-
-	// Slack slash commands (issue #127). Outside /api/v1 because Slack posts
-	// form-encoded bodies, which the JSON content-type guard would reject;
-	// every request is authenticated by its Slack signature instead.
-	r.Post("/integrations/slack/commands", h.SlackCommand)
-
-	// pprof (issue #157). Gated behind admin role so probing always gets 403
-	// rather than 401, avoiding path enumeration by unauthenticated callers.
-	adminOnly := middleware.RequireRoleOrForbidden(h.Logger, middleware.RoleAdmin)
-	r.With(adminOnly).HandleFunc("/debug/pprof", pprof.Index)
-	r.With(adminOnly).HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	r.With(adminOnly).HandleFunc("/debug/pprof/profile", pprof.Profile)
-	r.With(adminOnly).HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	r.With(adminOnly).HandleFunc("/debug/pprof/trace", pprof.Trace)
-	r.With(adminOnly).HandleFunc("/debug/pprof/{name}", pprof.Index)
 
 	// GraphQL (issue #125): read-only, POST only. Same credential rules as
 	// the REST read routes: anonymous is allowed, an API key needs
@@ -359,6 +350,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Dead-letter queue for events that failed processing (issue #202).
 		get("/dlq", h.ListFailedEvents)
 		r.With(scope, contributor).Post("/dlq/{id}/requeue", h.RequeueFailedEvent)
+		r.With(scope, admin).Post("/indexer/parked/requeue", h.RequeueParkedTransactions)
 
 		// Self-service API keys (issue #613). A workspace session manages
 		// only the keys it owns; the handlers bind creation to the verified
