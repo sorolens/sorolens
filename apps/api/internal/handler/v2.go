@@ -115,6 +115,29 @@ type v2Contract struct {
 	AddedAt            string  `json:"added_at"`
 	// Backfill is absent until the indexer has started the backfill.
 	Backfill *v2ContractBackfill `json:"backfill,omitempty"`
+	// Token is enriched token metadata for Stellar Asset Contracts (SAC) or tokens.
+	Token *v2TokenMetadata `json:"token,omitempty"`
+}
+
+type v2TokenMetadata struct {
+	AssetCode string `json:"asset_code"`
+	Issuer    string `json:"issuer"`
+	Decimals  uint32 `json:"decimals"`
+	Symbol    string `json:"symbol"`
+	Name      string `json:"name"`
+}
+
+func v2TokenMetadataFromStore(t *store.TokenMetadata) *v2TokenMetadata {
+	if t == nil {
+		return nil
+	}
+	return &v2TokenMetadata{
+		AssetCode: t.AssetCode,
+		Issuer:    t.Issuer,
+		Decimals:  t.Decimals,
+		Symbol:    t.Symbol,
+		Name:      t.Name,
+	}
 }
 
 // v2ContractBackfill is contractBackfillResponse with v2 timestamps.
@@ -158,6 +181,7 @@ func v2ContractFromStore(c store.Contract) v2Contract {
 		Status:             c.Status,
 		AddedAt:            v2Time(c.AddedAt),
 		Backfill:           v2ContractBackfillFromStore(c.Backfill),
+		Token:              v2TokenMetadataFromStore(c.Token),
 	}
 }
 

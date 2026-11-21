@@ -22,6 +22,17 @@ type Contract struct {
 	// Backfill is the saved position of the contract's new-contract backfill.
 	// GetContract fills it; it is nil until the indexer starts the backfill.
 	Backfill *BackfillProgress
+	// Token holds enriched token metadata when the contract is a Stellar Asset Contract.
+	Token *TokenMetadata
+}
+
+// TokenMetadata holds token metadata for Stellar Asset Contract (SAC) instances.
+type TokenMetadata struct {
+	AssetCode string `json:"asset_code"`
+	Issuer    string `json:"issuer"`
+	Decimals  uint32 `json:"decimals"`
+	Symbol    string `json:"symbol"`
+	Name      string `json:"name"`
 }
 
 // BackfillProgress is how far the indexer has walked a contract's backfill

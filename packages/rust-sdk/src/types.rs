@@ -190,6 +190,24 @@ pub struct Contract {
     pub status: ContractStatus,
     /// When the contract was registered with Sorolens.
     pub added_at: DateTime<Utc>,
+    /// Enriched token metadata for SAC or token instances.
+    #[serde(default)]
+    pub token: Option<TokenMetadata>,
+}
+
+/// Enriched token metadata for Stellar Asset Contracts (SAC) or tokens.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TokenMetadata {
+    /// Stellar asset code (e.g. USDC or native).
+    pub asset_code: String,
+    /// Stellar asset issuer account ID (or empty for native).
+    pub issuer: String,
+    /// Number of decimal places (SAC deterministically uses 7).
+    pub decimals: u32,
+    /// Token symbol.
+    pub symbol: String,
+    /// Token name or asset identifier.
+    pub name: String,
 }
 
 /// A single contract event.

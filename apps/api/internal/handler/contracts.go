@@ -35,6 +35,29 @@ type contractResponse struct {
 	// Backfill reports new-contract backfill progress on the detail endpoint.
 	// It is absent until the indexer has started the backfill.
 	Backfill *contractBackfillResponse `json:"backfill,omitempty"`
+	// Token is enriched token metadata for Stellar Asset Contracts (SAC) or tokens.
+	Token *tokenMetadataResponse `json:"token,omitempty"`
+}
+
+type tokenMetadataResponse struct {
+	AssetCode string `json:"asset_code"`
+	Issuer    string `json:"issuer"`
+	Decimals  uint32 `json:"decimals"`
+	Symbol    string `json:"symbol"`
+	Name      string `json:"name"`
+}
+
+func tokenMetadataFromStore(t *store.TokenMetadata) *tokenMetadataResponse {
+	if t == nil {
+		return nil
+	}
+	return &tokenMetadataResponse{
+		AssetCode: t.AssetCode,
+		Issuer:    t.Issuer,
+		Decimals:  t.Decimals,
+		Symbol:    t.Symbol,
+		Name:      t.Name,
+	}
 }
 
 // contractBackfillResponse is the progress of a contract's backfill, which the
@@ -87,6 +110,8 @@ type contractListResponse struct {
 	// TrackingPreset is the preset type applied when the contract was tracked.
 	// Empty when no preset was selected.
 	TrackingPreset string `json:"tracking_preset,omitempty"`
+	// Token is enriched token metadata for Stellar Asset Contracts (SAC) or tokens.
+	Token *tokenMetadataResponse `json:"token,omitempty"`
 }
 
 type eventResponse struct {
@@ -304,6 +329,7 @@ func contractFromStore(c store.Contract) contractResponse {
 		Tags:               tags,
 		TrackingPreset:     c.TrackingPreset,
 		Backfill:           contractBackfillFromStore(c.Backfill),
+		Token:              tokenMetadataFromStore(c.Token),
 	}
 }
 
@@ -322,6 +348,7 @@ func contractListFromStore(c store.Contract) contractListResponse {
 		LastActivityAt: c.LastActivityAt,
 		Tags:           tags,
 		TrackingPreset: c.TrackingPreset,
+		Token:          tokenMetadataFromStore(c.Token),
 	}
 }
 
@@ -1260,6 +1287,7 @@ func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
 			Status:             c.Status,
 			AddedAt:            c.AddedAt,
 			TrackingPreset:     c.TrackingPreset,
+			Token:              tokenMetadataFromStore(c.Token),
 		}
 	}
 

@@ -17,6 +17,7 @@ import (
 type FullStore interface {
 	Store
 	ContractBulkStore
+	ContractTokenStore
 	QueryStore
 	LiveStore
 	ArchiveStore

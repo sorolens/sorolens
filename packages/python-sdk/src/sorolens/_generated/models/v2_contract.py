@@ -12,6 +12,7 @@ from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
     from ..models.contract_backfill import ContractBackfill
+    from ..models.token_metadata import TokenMetadata
 
 
 T = TypeVar("T", bound="V2Contract")
@@ -32,6 +33,7 @@ class V2Contract:
         backfill (ContractBackfill | Unset): Progress of the new-contract backfill, returned by the contract detail
             endpoint once the indexer has started it. Ledgers are scanned from newest_ledger down to oldest_ledger, and a
             restarted indexer resumes at next_ledger.
+        token (TokenMetadata | Unset): Enriched metadata for Stellar Asset Contracts (SAC) or tokens.
     """
 
     id: str
@@ -43,6 +45,7 @@ class V2Contract:
     status: str
     added_at: datetime.datetime
     backfill: ContractBackfill | Unset = UNSET
+    token: TokenMetadata | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -72,6 +75,10 @@ class V2Contract:
         if not isinstance(self.backfill, Unset):
             backfill = self.backfill.to_dict()
 
+        token: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.token, Unset):
+            token = self.token.to_dict()
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -88,12 +95,15 @@ class V2Contract:
         )
         if backfill is not UNSET:
             field_dict["backfill"] = backfill
+        if token is not UNSET:
+            field_dict["token"] = token
 
         return field_dict
 
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         from ..models.contract_backfill import ContractBackfill
+        from ..models.token_metadata import TokenMetadata
 
         d = dict(src_dict)
         id = d.pop("id")
@@ -144,6 +154,13 @@ class V2Contract:
         else:
             backfill = ContractBackfill.from_dict(_backfill)
 
+        _token = d.pop("token", UNSET)
+        token: TokenMetadata | Unset
+        if isinstance(_token, Unset):
+            token = UNSET
+        else:
+            token = TokenMetadata.from_dict(_token)
+
         v2_contract = cls(
             id=id,
             network=network,
@@ -154,6 +171,7 @@ class V2Contract:
             status=status,
             added_at=added_at,
             backfill=backfill,
+            token=token,
         )
 
         v2_contract.additional_properties = d

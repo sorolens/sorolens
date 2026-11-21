@@ -238,6 +238,7 @@ from .test_integration_id import TestIntegrationId
 from .test_integration_response_200 import TestIntegrationResponse200
 from .test_integration_response_409 import TestIntegrationResponse409
 from .test_integration_response_502 import TestIntegrationResponse502
+from .token_metadata import TokenMetadata
 from .update_group_body import UpdateGroupBody
 from .uptime_result import UptimeResult
 from .uptime_result_window import UptimeResultWindow
@@ -542,6 +543,7 @@ __all__ = (
     "TestIntegrationResponse200",
     "TestIntegrationResponse409",
     "TestIntegrationResponse502",
+    "TokenMetadata",
     "UpdateGroupBody",
     "UptimeResult",
     "UptimeResultWindow",
