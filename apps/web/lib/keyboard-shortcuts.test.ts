@@ -20,7 +20,8 @@ function memoryStorage(): Storage {
       return data.size;
     },
     clear: () => data.clear(),
-    getItem: (key: string) => (data.has(key) ? (data.get(key) as string) : null),
+    getItem: (key: string) =>
+      data.has(key) ? (data.get(key) as string) : null,
     key: (index: number) => Array.from(data.keys())[index] ?? null,
     removeItem: (key: string) => {
       data.delete(key);
@@ -31,9 +32,16 @@ function memoryStorage(): Storage {
   };
 }
 
-function bindings(runs: Record<string, ReturnType<typeof vi.fn>>): ShortcutBinding[] {
+function bindings(
+  runs: Record<string, ReturnType<typeof vi.fn>>
+): ShortcutBinding[] {
   return [
-    { id: "contracts", sequence: "g c", label: "Contracts", run: runs.contracts },
+    {
+      id: "contracts",
+      sequence: "g c",
+      label: "Contracts",
+      run: runs.contracts,
+    },
     { id: "events", sequence: "g e", label: "Events", run: runs.events },
     { id: "search", sequence: "/", label: "Search", run: runs.search },
   ];

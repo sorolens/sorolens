@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 
 import { HelpDialog } from "@/components/HelpDialog";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import { OPEN_SEARCH_EVENT, type ShortcutBinding } from "@/lib/keyboard-shortcuts";
+import {
+  OPEN_SEARCH_EVENT,
+  type ShortcutBinding,
+} from "@/lib/keyboard-shortcuts";
 
 /**
  * Registers the dashboard's global shortcuts and renders the `?` help dialog.

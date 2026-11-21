@@ -33,10 +33,12 @@ function pressOn(target: Element, key: string, init: KeyboardEventInit = {}) {
 
 const bindings = (
   run: () => void,
-  searchRun: () => void = vi.fn()
+  searchRun: () => void = vi.fn(),
+  helpRun: () => void = vi.fn()
 ): ShortcutBinding[] => [
   { id: "contracts", sequence: "g c", label: "Contracts", run },
   { id: "search", sequence: "/", label: "Search", run: searchRun },
+  { id: "help", sequence: "?", label: "Help", run: helpRun },
 ];
 
 describe("useKeyboardShortcuts", () => {
@@ -66,6 +68,16 @@ describe("useKeyboardShortcuts", () => {
 
     const event = press("/");
     expect(searchRun).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("maps Shift+/ to the ? binding", () => {
+    const helpRun = vi.fn();
+    renderHook(() => useKeyboardShortcuts(bindings(vi.fn(), vi.fn(), helpRun)));
+
+    const event = press("/", { shiftKey: true });
+
+    expect(helpRun).toHaveBeenCalledTimes(1);
     expect(event.defaultPrevented).toBe(true);
   });
 

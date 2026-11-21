@@ -144,7 +144,10 @@ export function createSequencer(
     armed = [];
   }
 
-  function handle(key: string, now: number = Date.now()): ShortcutBinding | null {
+  function handle(
+    key: string,
+    now: number = Date.now()
+  ): ShortcutBinding | null {
     const pressed = key.toLowerCase();
 
     // Drop prefixes that timed out before considering this key.

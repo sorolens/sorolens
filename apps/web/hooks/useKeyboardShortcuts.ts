@@ -61,7 +61,8 @@ export function useKeyboardShortcuts(
       // Never steal keys from a form field or an active IME composition.
       if (event.isComposing || isTypingTarget(event.target)) return;
 
-      const fired = sequencer.handle(event.key);
+      const key = event.key === "/" && event.shiftKey ? "?" : event.key;
+      const fired = sequencer.handle(key);
       if (fired) {
         event.preventDefault();
         fired.run();

@@ -96,7 +96,10 @@ export function HelpDialog({
               <span>{entry.label}</span>
               <span className="flex items-center gap-1">
                 {entry.keys.map((key, index) => (
-                  <span key={`${key}-${index}`} className="flex items-center gap-1">
+                  <span
+                    key={`${key}-${index}`}
+                    className="flex items-center gap-1"
+                  >
                     {index > 0 && (
                       <span
                         aria-hidden
