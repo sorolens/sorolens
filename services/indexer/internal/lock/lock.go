@@ -10,6 +10,8 @@ package lock
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -35,6 +37,17 @@ else
 	return 0
 end
 `
+
+// NewToken returns a fresh random token that identifies one lock holder.
+// Tokens are 128 bits rendered as 32 hex characters, so two acquisitions of
+// the same key are always distinguishable.
+func NewToken() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("lock: generate token: %w", err)
+	}
+	return hex.EncodeToString(b[:]), nil
+}
 
 // Lock is a Redis-backed advisory lock.
 type Lock struct {
