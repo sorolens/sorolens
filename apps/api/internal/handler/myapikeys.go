@@ -23,6 +23,9 @@ import (
 type createMyAPIKeyRequest struct {
 	Name   string   `json:"name"`
 	Scopes []string `json:"scopes"`
+	// AllowedCIDRs and AllowedOrigins optionally restrict the key (issue #793).
+	AllowedCIDRs   []string `json:"allowed_cidrs,omitempty"`
+	AllowedOrigins []string `json:"allowed_origins,omitempty"`
 }
 
 // ListMyAPIKeys handles GET /api/v1/me/api-keys.
@@ -92,6 +95,11 @@ func (h *Handler) CreateMyAPIKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to create API key")
 		return
 	}
+	allowedCIDRs, allowedOrigins, err := normalizeRestrictions(req.AllowedCIDRs, req.AllowedOrigins)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
 	key := store.APIKey{
 		ID:        newID(),
 		Name:      req.Name,
@@ -100,10 +108,18 @@ func (h *Handler) CreateMyAPIKey(w http.ResponseWriter, r *http.Request) {
 		Scopes:    req.Scopes,
 		CreatedAt: time.Now().UTC(),
 		UserID:    &userID,
+		// Self-service keys can be restricted to their owner's networks and
+		// origins just like admin-created ones.
+		AllowedCIDRs:   allowedCIDRs,
+		AllowedOrigins: allowedOrigins,
 	}
 	if err := h.Store.CreateAPIKey(r.Context(), key); err != nil {
 		if errors.Is(err, store.ErrInvalidScope) {
 			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid scope")
+			return
+		}
+		if errors.Is(err, store.ErrInvalidCIDR) || errors.Is(err, store.ErrInvalidOrigin) {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
 			return
 		}
 		h.Logger.Error("create api key", "err", err)
