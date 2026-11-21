@@ -304,6 +304,29 @@ func (s *Store) BatchInsertWithCursor(ctx context.Context, network string, ledge
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	now := time.Now()
+	parked, err := insertWindowRows(ctx, tx, events, invocations, now)
+	if err != nil {
+		return nil, err
+	}
+
+	if syncState.ContractID != "" {
+		if err := upsertSyncState(ctx, tx, syncState, now); err != nil {
+			return nil, err
+		}
+	}
+	if err := setIndexerCursor(ctx, tx, network, ledger); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("batch insert with cursor: commit: %w", err)
+	}
+	return parked, nil
+}
+
+// insertWindowRows writes a window's events and invocations inside tx. Events
+// the database rejects are parked in the dead-letter queue and returned.
+func insertWindowRows(ctx context.Context, tx pgx.Tx, events []poller.Event, invocations []poller.Invocation, now time.Time) ([]poller.FailedEvent, error) {
 	var parked []poller.FailedEvent
 	for _, e := range events {
 		rejected, cause, err := insertEventAttempts(ctx, tx, e, now)
@@ -331,19 +354,6 @@ func (s *Store) BatchInsertWithCursor(ctx context.Context, network string, ledge
 		if err := execBatch(ctx, tx, batch, "batch insert invocations"); err != nil {
 			return nil, err
 		}
-	}
-
-	if syncState.ContractID != "" {
-		if err := upsertSyncState(ctx, tx, syncState, now); err != nil {
-			return nil, err
-		}
-	}
-	if err := setIndexerCursor(ctx, tx, network, ledger); err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("batch insert with cursor: commit: %w", err)
 	}
 	return parked, nil
 }
@@ -411,6 +421,18 @@ type execer interface {
 // earlier failure of the same event.
 func (s *Store) InsertFailedEvent(ctx context.Context, fe poller.FailedEvent) error {
 	return insertFailedEvent(ctx, s.pool, fe)
+}
+
+// CountFailedEvents returns the number of events parked in the DLQ for a
+// network.
+func (s *Store) CountFailedEvents(ctx context.Context, network string) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM failed_events WHERE network = $1`,
+		networkOrDefault(network)).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count failed events: %w", err)
+	}
+	return n, nil
 }
 
 func insertFailedEvent(ctx context.Context, q execer, fe poller.FailedEvent) error {
@@ -691,6 +713,8 @@ type AlertSubscription struct {
 	ChannelType string
 	// RoutingKey is the PagerDuty integration key (pagerduty only).
 	RoutingKey string
+	// SigningSecret is the whsec_... key used to sign outgoing deliveries.
+	SigningSecret string
 }
 
 // ListAlertSubscriptions returns the alert subscriptions configured for a
@@ -702,7 +726,7 @@ type AlertSubscription struct {
 // never registered with the watchdog simply have nothing to list.
 func (s *Store) ListAlertSubscriptions(ctx context.Context, contractID string) ([]AlertSubscription, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, contract_id, webhook_url, severity_filter, channel_type, routing_key
+		SELECT id, contract_id, webhook_url, severity_filter, channel_type, routing_key, signing_secret
 		FROM alert_subscriptions
 		WHERE contract_id = $1
 		ORDER BY created_at ASC`, contractID,
@@ -716,7 +740,7 @@ func (s *Store) ListAlertSubscriptions(ctx context.Context, contractID string) (
 	for rows.Next() {
 		var sub AlertSubscription
 		if err := rows.Scan(&sub.ID, &sub.ContractID, &sub.WebhookURL,
-			&sub.SeverityFilter, &sub.ChannelType, &sub.RoutingKey); err != nil {
+			&sub.SeverityFilter, &sub.ChannelType, &sub.RoutingKey, &sub.SigningSecret); err != nil {
 			return nil, fmt.Errorf("list alert subscriptions scan: %w", err)
 		}
 		out = append(out, sub)

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 export async function runCheck(options = {}) {
   const contractId = options.contractId ?? process.env.INPUT_CONTRACT_ID ?? process.env.CONTRACT_ID;
-  const apiUrl = (options.apiUrl ?? process.env.INPUT_API_URL ?? process.env.API_URL ?? 'https://api.sorolens.com').replace(/\/+$/, '');
+  const apiUrl = (options.apiUrl ?? process.env.INPUT_API_URL ?? process.env.API_URL ?? 'https://api.sorolens.xyz').replace(/\/+$/, '');
   const apiKey = options.apiKey ?? process.env.INPUT_API_KEY ?? process.env.API_KEY ?? '';
   const minTtlLedgers = Number(options.minTtlLedgers ?? process.env.INPUT_MIN_TTL_LEDGERS ?? process.env.MIN_TTL_LEDGERS ?? 0);
   const minHealthScore = Number(options.minHealthScore ?? process.env.INPUT_MIN_HEALTH_SCORE ?? process.env.MIN_HEALTH_SCORE ?? 0);

@@ -16,6 +16,8 @@ func InitTracer() (*sdktrace.TracerProvider, error) {
 	var exp sdktrace.SpanExporter
 	var err error
 
+	// OTEL_EXPORTER_OTLP_ENDPOINT is the OTLP/gRPC collector (host:port) that receives
+	// traces. Empty disables trace export.
 	if endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); endpoint != "" {
 		exp, err = otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(endpoint))
 		if err != nil {

@@ -27,6 +27,7 @@ var watchdogStatusCmd = &cobra.Command{
 func init() {
 	watchdogCmd.AddCommand(watchdogStatusCmd)
 	watchdogCmd.AddCommand(watchdogregister.NewRegisterCommand())
+	watchdogCmd.AddCommand(watchdogregister.NewPolicyCommand())
 	rootCmd.AddCommand(watchdogCmd)
 }
 
@@ -36,7 +37,7 @@ func runWatchdogStatus(cmd *cobra.Command, args []string) error {
 		_ = os.Setenv("NO_COLOR", "1")
 	}
 
-	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
+	c := newClient(globalConfig.Timeout)
 
 	stop := startSpinner("Fetching watchdog status...")
 	mc, err := c.GetMonitoredContract(cmd.Context(), contractID)

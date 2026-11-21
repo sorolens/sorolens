@@ -55,11 +55,12 @@ This flow runs when a contract ID is first submitted to the system (either via t
    - Calls RPC getNetwork to confirm the node is reachable
    - Calls RPC getLedgerEntries for the contract instance entry
      - If not found: return 404 (contract does not exist on-chain)
-   - Inserts row into `contracts` table with status = "backfilling"
+   - Inserts row into `contracts` table with status = "pending"
    - Returns 201 Created
 
 2. On next cron run (at most 5 minutes later), the indexer sees
-   the contract in "backfilling" status.
+   the "pending" contract, records the range in `contract_backfills` and
+   sets status = "backfilling". A restart reuses the saved row.
 
 3. Indexer sets a Redis advisory lock:
    SET sorolens:lock:backfill:<contract_id> <job_id> NX PX 300000
@@ -67,9 +68,10 @@ This flow runs when a contract ID is first submitted to the system (either via t
 
 4. Indexer determines backfill range:
    - Calls RPC getLatestLedger -> current_ledger
-   - start_ledger = current_ledger - 120,960 (approximately 7 days at 5s/ledger)
-   - If network only retains 24h of events, start_ledger is adjusted to
-     current_ledger - 17,280 (approximately 1 day at 5s/ledger)
+   - oldest_ledger = current_ledger - 100,000 (approximately 5.8 days at 5s/ledger)
+   - If the node retains less history, oldest_ledger is raised to the oldest
+     ledger it reports. Ledgers are then scanned from newest to oldest in
+     bounded windows, each committed with the new position.
 
 5. Indexer calls RPC getEvents in paginated batches:
    params: {
@@ -216,6 +218,17 @@ CREATE INDEX idx_events_tx_hash ON events (tx_hash);
 
 -- Time-range queries from the dashboard.
 CREATE INDEX idx_events_ledger_closed_at ON events (ledger_closed_at DESC);
+
+-- Events table is partitioned by month on ledger_closed_at.
+-- An events_default DEFAULT partition catches backfills, future events,
+-- and any row falling outside active monthly partitions so inserts never fail.
+--
+-- Partition Maintenance & Retention:
+-- - Future monthly partitions are pre-provisioned up to 6 months in advance
+--   via `maintain_events_partitions()` (run automatically by the indexer and retention job).
+-- - Old events exceeding the retention threshold (EVENTS_RETENTION_DAYS, default 90 days)
+--   are moved into `events_archive` by the retention job (`cmd/retention`) and viewable via
+--   `events_with_archive`, keeping active table scans fast and bounding disk growth.
 
 -- ============================================================
 -- invocations
@@ -509,9 +522,19 @@ Get a single contract's metadata and sync state.
 
 #### `DELETE /api/v1/contracts/:id`
 
-Stop tracking a contract. Data is retained but the indexer stops polling.
+Stop tracking a contract. Requires the `write:contracts` scope and at least
+the `contributor` role, like registration. Untracking is a soft delete: the
+contract status flips to `paused` while the row and all indexed history are
+retained, and the indexer stops polling it (it only polls contracts whose
+status is `pending`, `backfilling` or `active`). Re-registering the contract
+flips the status back to `pending` and resumes tracking. Deleting a contract
+that is already paused is a no-op; deleting one that was never registered
+returns `404`. This differs from the batch `untrack` action, which
+permanently deletes the contracts and their indexed data.
 
 **Response:** `204 No Content`.
+
+**Responses:** `204`, `401`, `403`, `404 Not Found`, `500`.
 
 ---
 
@@ -1029,6 +1052,19 @@ reference.
 
 ---
 
+### 4.12 GraphQL API & Security Controls
+
+The GraphQL endpoint (`/graphql`) provides flexible schema querying over contracts, events, invocations, storage entries, and watchdog alerts. To protect database performance and system availability against abusive or complex queries, the server enforces:
+
+- **AST Depth Limiting:** Queries exceeding maximum depth (default `10`) are rejected before execution.
+- **Complexity Budgeting:** Operations are budgeted based on field weights and pagination multipliers (default budget `5000`), rejecting alias amplification attacks.
+- **Page Size Limits:** List fields are hard-capped at 100 entries per page.
+- **Persisted Query Allowlist:** Production supports strict persisted query execution mode, locking down arbitrary query submission.
+
+See [`docs/graphql_security.md`](docs/graphql_security.md) for full threat modeling, configuration options, and attack resistance proofs.
+
+---
+
 ## 5. Design Decisions with Rationale
 
 ### 5.1 Cron-driven indexer over a persistent worker
@@ -1177,3 +1213,27 @@ the one-object-per-month layout bounds the work to the months touched.
 - `apps/web/hooks/usePushSubscription.ts` — React hook managing the push subscription lifecycle (idle → subscribing → subscribed → denied).
 - `apps/web/components/OfflineAlert.tsx` — `OfflineBanner` (shown when offline) + `OfflineAlertPanel` (the `/offline-alerts` page body).
 - `apps/web/app/offline-alerts/page.tsx` — dedicated page for the queued-alert view.
+
+### 5.8 Read-Replica Routing and Replication-Lag Guard (issue #794)
+
+**Decision:** Route read-only queries to a secondary PostgreSQL read replica pool (`DATABASE_READ_URL`) with an automated replication-lag guard (`DATABASE_REPLICA_LAG_THRESHOLD`).
+
+**Rationale:** Heavy dashboard reads must not starve indexer writes or compromise read-your-writes guarantees. All writes and read-after-write mutations are directed to the primary pool. If replica replication lag exceeds the configured threshold, read queries fall back to the primary pool automatically. See [docs/read_replica.md](docs/read_replica.md).
+
+---
+
+## 6. Decision Records
+
+Formal Architecture Decision Records (ADRs) capture significant, hard-to-reverse architectural choices across the system:
+
+- [Architecture Decision Records Index](docs/adr/README.md)
+- [ADR 0001: Postgres partitioning for events table](docs/adr/0001-postgres-partitioning.md)
+- [ADR 0002: Keyset cursor pagination for API feeds](docs/adr/0002-cursor-pagination.md)
+- [ADR 0003: Horizontally-scaled indexer with worker sharding](docs/adr/0003-indexer-sharding.md)
+- [ADR 0004: S3-compatible Parquet cold storage for historical events](docs/adr/0004-cold-storage.md)
+- [ADR 0005: API versioning and /api/v1 freeze](docs/adr/0005-api-versioning.md)
+- [ADR 0006: Server-Sent Events (SSE) and WebSocket protocol selection](docs/adr/0006-sse-vs-websocket.md)
+- [ADR 0007: Two-tier authentication: API key scopes and user roles](docs/adr/0007-key-scopes-and-roles.md)
+- [ADR 0008: OpenAPI spec as source of truth and automated SDK generation](docs/adr/0008-sdk-generation.md)
+
+

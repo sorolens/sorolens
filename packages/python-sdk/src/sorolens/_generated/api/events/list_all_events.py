@@ -20,6 +20,8 @@ def _get_kwargs(
     contract_id: str | Unset = UNSET,
     type_: ListAllEventsType | Unset = UNSET,
     network: ListAllEventsNetwork | Unset = UNSET,
+    from_: datetime.datetime | Unset = UNSET,
+    to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
 ) -> dict[str, Any]:
@@ -43,6 +45,16 @@ def _get_kwargs(
         json_network = network.value
 
     params["network"] = json_network
+
+    json_from_: str | Unset = UNSET
+    if not isinstance(from_, Unset):
+        json_from_ = from_.isoformat()
+    params["from"] = json_from_
+
+    json_to: str | Unset = UNSET
+    if not isinstance(to, Unset):
+        json_to = to.isoformat()
+    params["to"] = json_to
 
     json_since: str | Unset = UNSET
     if not isinstance(since, Unset):
@@ -108,6 +120,8 @@ def sync_detailed(
     contract_id: str | Unset = UNSET,
     type_: ListAllEventsType | Unset = UNSET,
     network: ListAllEventsNetwork | Unset = UNSET,
+    from_: datetime.datetime | Unset = UNSET,
+    to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
 ) -> Response[Error | ListAllEventsResponse200]:
@@ -121,6 +135,8 @@ def sync_detailed(
         contract_id (str | Unset):
         type_ (ListAllEventsType | Unset):
         network (ListAllEventsNetwork | Unset):
+        from_ (datetime.datetime | Unset):
+        to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         until (datetime.datetime | Unset):
 
@@ -138,6 +154,8 @@ def sync_detailed(
         contract_id=contract_id,
         type_=type_,
         network=network,
+        from_=from_,
+        to=to,
         since=since,
         until=until,
     )
@@ -157,6 +175,8 @@ def sync(
     contract_id: str | Unset = UNSET,
     type_: ListAllEventsType | Unset = UNSET,
     network: ListAllEventsNetwork | Unset = UNSET,
+    from_: datetime.datetime | Unset = UNSET,
+    to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
 ) -> Error | ListAllEventsResponse200 | None:
@@ -170,6 +190,8 @@ def sync(
         contract_id (str | Unset):
         type_ (ListAllEventsType | Unset):
         network (ListAllEventsNetwork | Unset):
+        from_ (datetime.datetime | Unset):
+        to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         until (datetime.datetime | Unset):
 
@@ -188,6 +210,8 @@ def sync(
         contract_id=contract_id,
         type_=type_,
         network=network,
+        from_=from_,
+        to=to,
         since=since,
         until=until,
     ).parsed
@@ -201,6 +225,8 @@ async def asyncio_detailed(
     contract_id: str | Unset = UNSET,
     type_: ListAllEventsType | Unset = UNSET,
     network: ListAllEventsNetwork | Unset = UNSET,
+    from_: datetime.datetime | Unset = UNSET,
+    to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
 ) -> Response[Error | ListAllEventsResponse200]:
@@ -214,6 +240,8 @@ async def asyncio_detailed(
         contract_id (str | Unset):
         type_ (ListAllEventsType | Unset):
         network (ListAllEventsNetwork | Unset):
+        from_ (datetime.datetime | Unset):
+        to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         until (datetime.datetime | Unset):
 
@@ -231,6 +259,8 @@ async def asyncio_detailed(
         contract_id=contract_id,
         type_=type_,
         network=network,
+        from_=from_,
+        to=to,
         since=since,
         until=until,
     )
@@ -248,6 +278,8 @@ async def asyncio(
     contract_id: str | Unset = UNSET,
     type_: ListAllEventsType | Unset = UNSET,
     network: ListAllEventsNetwork | Unset = UNSET,
+    from_: datetime.datetime | Unset = UNSET,
+    to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
 ) -> Error | ListAllEventsResponse200 | None:
@@ -261,6 +293,8 @@ async def asyncio(
         contract_id (str | Unset):
         type_ (ListAllEventsType | Unset):
         network (ListAllEventsNetwork | Unset):
+        from_ (datetime.datetime | Unset):
+        to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         until (datetime.datetime | Unset):
 
@@ -280,6 +314,8 @@ async def asyncio(
             contract_id=contract_id,
             type_=type_,
             network=network,
+            from_=from_,
+            to=to,
             since=since,
             until=until,
         )

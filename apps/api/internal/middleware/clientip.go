@@ -29,24 +29,22 @@ func NewClientIPResolver(trustedCIDRs []string) (*ClientIPResolver, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid trusted proxy CIDR %q", s)
 		}
+		if ones, _ := network.Mask.Size(); ones == 0 {
+			// Trusting every address would let any caller supply its own
+			// X-Forwarded-For, defeating the allowlist.
+			return nil, fmt.Errorf("trusted proxy CIDR %q covers every address", s)
+		}
 		r.trusted = append(r.trusted, network)
 	}
 	return r, nil
 }
 
-// ParseTrustedProxyCIDRs splits a comma-separated CIDR list, as read from
-// TRUSTED_PROXY_CIDRS.
-func ParseTrustedProxyCIDRs(raw string) []string {
-	if strings.TrimSpace(raw) == "" {
-		return nil
-	}
-	return strings.Split(raw, ",")
-}
-
 // ClientIP returns the client address for r. Behind a trusted proxy it walks
 // X-Forwarded-For from right to left and returns the first address that is not
 // itself a trusted proxy, which is the furthest hop the proxy vouches for.
-// Invalid entries are skipped; if every hop is trusted the peer is returned.
+// A malformed entry to the right of that hop makes the chain unverifiable, so
+// it fails closed and returns nil; if every hop is trusted the peer is
+// returned.
 func (c *ClientIPResolver) ClientIP(r *http.Request) net.IP {
 	if r == nil {
 		return nil
@@ -56,11 +54,18 @@ func (c *ClientIPResolver) ClientIP(r *http.Request) net.IP {
 		return peer
 	}
 	var last net.IP
-	entries := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+	// A proxy may append a separate X-Forwarded-For line instead of extending
+	// the first one, so every line is joined before the right-to-left walk.
+	entries := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
 	for i := len(entries) - 1; i >= 0; i-- {
+		if strings.TrimSpace(entries[i]) == "" {
+			continue
+		}
 		ip := parseIP(entries[i])
 		if ip == nil {
-			continue
+			// A hop we cannot parse means we cannot know which address the
+			// proxy vouched for, so do not fall back to a guess.
+			return nil
 		}
 		last = ip
 		if !c.trusts(ip) {

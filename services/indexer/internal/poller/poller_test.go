@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -134,6 +135,8 @@ type fakeStore struct {
 	// wasmBinaries is the content-addressed Wasm cache (issue #162):
 	// wasm hash -> raw bytes.
 	wasmBinaries map[string][]byte
+	// backfills is the saved backfill position per contract (issue #509).
+	backfills map[string]BackfillProgress
 }
 
 func newFakeStore(contracts []Contract) *fakeStore {
@@ -182,6 +185,12 @@ func (f *fakeStore) InsertFailedEvent(_ context.Context, fe FailedEvent) error {
 	defer f.mu.Unlock()
 	f.failedEvents = append(f.failedEvents, fe)
 	return nil
+}
+
+func (f *fakeStore) CountFailedEvents(_ context.Context, _ string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.failedEvents), nil
 }
 
 func (f *fakeStore) BatchInsertInvocations(_ context.Context, invs []Invocation) error {
@@ -347,29 +356,47 @@ func (f *fakeStore) UpsertContractHealthScore(_ context.Context, s ContractHealt
 // ---- fake RedisClient -----------------------------------------------------
 
 type fakeRedis struct {
-	mu   sync.Mutex
-	held map[string]struct{}
+	mu     sync.Mutex
+	held   map[string]struct{}
+	values []string
 }
 
 func newFakeRedis() *fakeRedis {
 	return &fakeRedis{held: make(map[string]struct{})}
 }
 
-func (r *fakeRedis) SetNX(_ context.Context, key, _ string, _ time.Duration) (bool, error) {
+func (r *fakeRedis) SetNX(_ context.Context, key, value string, _ time.Duration) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.held[key]; exists {
 		return false, nil
 	}
 	r.held[key] = struct{}{}
+	r.values = append(r.values, value)
 	return true, nil
 }
 
-func (r *fakeRedis) Del(_ context.Context, key string) error {
+// acquiredValues returns the lock values of successful SetNX calls, in order.
+func (r *fakeRedis) acquiredValues() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, len(r.values))
+	copy(out, r.values)
+	return out
+}
+
+func (r *fakeRedis) Del(_ context.Context, key, _ string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.held, key)
 	return nil
+}
+
+func (r *fakeRedis) Renew(_ context.Context, key, _ string, _ time.Duration) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.held[key]
+	return ok, nil
 }
 
 // ---- helpers --------------------------------------------------------------
@@ -546,7 +573,7 @@ func TestPoller_RunOnce_indexesActiveContract(t *testing.T) {
 	}
 }
 
-func TestPoller_SkipsPendingContract(t *testing.T) {
+func TestPoller_PicksUpPendingContract(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeStore([]Contract{{ID: "CTEST", Status: "pending"}})
@@ -556,8 +583,23 @@ func TestPoller_SkipsPendingContract(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	if len(rpc.eventsCalls) == 0 {
+		t.Error("expected a pending contract to start backfilling")
+	}
+}
+
+func TestPoller_SkipsPausedAndErroredContracts(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeStore([]Contract{{ID: "CPAUSED", Status: "paused"}, {ID: "CERROR", Status: "error"}})
+	rpc := &fakeRPC{}
+	p := New(rpc, store, newFakeRedis(), testConfig(), testLogger())
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
 	if len(rpc.eventsCalls) != 0 {
-		t.Errorf("expected no RPC calls for pending contract, got %d", len(rpc.eventsCalls))
+		t.Errorf("expected no RPC calls for paused or errored contracts, got %d", len(rpc.eventsCalls))
 	}
 }
 
@@ -576,13 +618,17 @@ func TestPoller_NewContractStartsFromBackfillWindow(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Expected start: 200000 - 100000 = 100000.
+	// The backfill walks down from the head and stops at 200000 - 100000.
 	if len(rpc.eventsCalls) == 0 {
 		t.Fatal("expected at least one GetEvents call")
 	}
-	wantStart := uint32(200000 - newContractBackfillWindow)
-	if rpc.eventsCalls[0].StartLedger != wantStart {
-		t.Errorf("start ledger: want %d, got %d", wantStart, rpc.eventsCalls[0].StartLedger)
+	wantOldest := uint32(200000 - newContractBackfillWindow)
+	last := rpc.eventsCalls[len(rpc.eventsCalls)-1]
+	if last.StartLedger != wantOldest {
+		t.Errorf("oldest ledger: want %d, got %d", wantOldest, last.StartLedger)
+	}
+	if first := rpc.eventsCalls[0]; first.EndLedger != 200001 {
+		t.Errorf("first window should end at the head: got end %d", first.EndLedger)
 	}
 }
 
@@ -606,6 +652,43 @@ func TestPoller_RespectsRedisLock(t *testing.T) {
 	// Lock was held: no RPC calls should have been made.
 	if len(rpc.eventsCalls) != 0 {
 		t.Errorf("expected no GetEvents calls when locked, got %d", len(rpc.eventsCalls))
+	}
+}
+
+// TestPoller_LockTokenIsUniquePerAcquire checks that each pass acquires the
+// per-contract lock with a freshly generated token instead of the old
+// constant "1", so two holders can be told apart.
+func TestPoller_LockTokenIsUniquePerAcquire(t *testing.T) {
+	t.Parallel()
+
+	contractID := "CTOKEN"
+	store := newFakeStore([]Contract{{ID: contractID, Status: "active"}})
+	store.syncStates[contractID] = SyncState{ContractID: contractID, LastLedger: 499000}
+
+	redis := newFakeRedis()
+	rpc := &fakeRPC{latestLedger: &LatestLedger{Sequence: 500000}}
+	p := New(rpc, store, redis, testConfig(), testLogger())
+
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+
+	values := redis.acquiredValues()
+	if len(values) < 2 {
+		t.Fatalf("expected at least two successful acquires, got %d", len(values))
+	}
+	first, second := values[len(values)-2], values[len(values)-1]
+	if first == "" || second == "" {
+		t.Fatalf("lock tokens must not be empty: %q, %q", first, second)
+	}
+	if first == "1" || second == "1" {
+		t.Fatalf("lock token must not be the old constant %q", "1")
+	}
+	if first == second {
+		t.Fatalf("two acquisitions used the same lock token %q", first)
 	}
 }
 
@@ -1114,5 +1197,68 @@ func TestBatchInsertWithCursor_RetryThenSuccess(t *testing.T) {
 	}
 	if st.syncStates["C1"].LastLedger != 10 || st.indexerCursors["testnet"] != 10 {
 		t.Fatalf("cursors = %+v / %+v, want both at 10", st.syncStates["C1"], st.indexerCursors["testnet"])
+	}
+}
+
+func TestBoundedConcurrencyAndFailureIsolation(t *testing.T) {
+	t.Parallel()
+
+	const totalContracts = 8
+	const concurrencyLimit = 3
+
+	var contracts []Contract
+	for i := 0; i < totalContracts; i++ {
+		cID := fmt.Sprintf("contract_%d", i)
+		contracts = append(contracts, Contract{
+			ID:      cID,
+			Status:  "active",
+			Network: "testnet",
+		})
+	}
+
+	st := newFakeStore(contracts)
+	for _, c := range contracts {
+		st.syncStates[c.ID] = SyncState{ContractID: c.ID, LastLedger: 500}
+	}
+
+	var active int64
+	var maxActive int64
+
+	rpc := &fakeRPC{
+		latestLedger: &LatestLedger{Sequence: 1000},
+		events:       make(map[string]*GetEventsResult),
+		onGetEvents: func() {
+			cur := atomic.AddInt64(&active, 1)
+			defer atomic.AddInt64(&active, -1)
+			for {
+				max := atomic.LoadInt64(&maxActive)
+				if cur <= max || atomic.CompareAndSwapInt64(&maxActive, max, cur) {
+					break
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
+		},
+	}
+	// Contract 2 simulated error in fakeStore
+	st.eventInsertErrs = map[string]error{
+		"contract_2": errors.New("isolated contract error"),
+	}
+
+	cfg := Config{
+		Concurrency:  concurrencyLimit,
+		LedgerWindow: 100,
+	}
+
+	p := NewWithRPCClients(map[string]RPCClient{"testnet": rpc}, st, newFakeRedis(), cfg, slog.Default())
+	if err := p.processAll(context.Background()); err != nil {
+		t.Fatalf("processAll failed: %v", err)
+	}
+
+	observed := atomic.LoadInt64(&maxActive)
+	if observed > concurrencyLimit {
+		t.Errorf("max active concurrent contracts %d exceeded concurrency limit %d", observed, concurrencyLimit)
+	}
+	if observed < 2 {
+		t.Errorf("expected concurrent processing, max active was %d", observed)
 	}
 }

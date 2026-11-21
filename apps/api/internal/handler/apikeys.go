@@ -18,15 +18,17 @@ import (
 // ---- response types ---------------------------------------------------------
 
 type apiKeyResponse struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	KeyPrefix  string     `json:"key_prefix"`
-	Scopes     []string   `json:"scopes"`
-	UserID     *string    `json:"user_id"`
-	CreatedAt  time.Time  `json:"created_at"`
-	LastUsedAt *time.Time `json:"last_used_at"`
-	RevokedAt  *time.Time `json:"revoked_at"`
-	RotatedAt  *time.Time `json:"rotated_at"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	KeyPrefix    string     `json:"key_prefix"`
+	Scopes       []string   `json:"scopes"`
+	UserID       *string    `json:"user_id"`
+	CreatedAt    time.Time  `json:"created_at"`
+	LastUsedAt   *time.Time `json:"last_used_at"`
+	RevokedAt    *time.Time `json:"revoked_at"`
+	RotatedAt    *time.Time `json:"rotated_at"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	MonthlyQuota *int       `json:"monthly_quota,omitempty"`
 	// AllowedCIDRs and AllowedOrigins are the key's source restrictions
 	// (issue #793). An empty array means unrestricted.
 	AllowedCIDRs   []string `json:"allowed_cidrs"`
@@ -46,6 +48,10 @@ type createAPIKeyRequest struct {
 	// A bound key carries that user's identity; an unbound key only
 	// authenticates scopes.
 	UserID *string `json:"user_id,omitempty"`
+	// ExpiresAt sets an optional expiration time for the key.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// MonthlyQuota sets an optional monthly request quota for this key.
+	MonthlyQuota *int `json:"monthly_quota,omitempty"`
 	// AllowedCIDRs and AllowedOrigins optionally restrict where the key may
 	// be used (issue #793). Omitted or empty means unrestricted.
 	AllowedCIDRs   []string `json:"allowed_cidrs,omitempty"`
@@ -96,6 +102,8 @@ func apiKeyFromStore(k store.APIKey) apiKeyResponse {
 		LastUsedAt:     k.LastUsedAt,
 		RevokedAt:      k.RevokedAt,
 		RotatedAt:      k.RotatedAt,
+		ExpiresAt:      k.ExpiresAt,
+		MonthlyQuota:   k.MonthlyQuota,
 		AllowedCIDRs:   cidrs,
 		AllowedOrigins: origins,
 	}
@@ -155,6 +163,11 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.MonthlyQuota != nil && *req.MonthlyQuota < 0 {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "monthly_quota must be non-negative")
+		return
+	}
+
 	token, err := newAPIToken()
 	if err != nil {
 		h.Logger.Error("generate api key", "err", err)
@@ -169,6 +182,8 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		Scopes:         req.Scopes,
 		CreatedAt:      time.Now().UTC(),
 		UserID:         boundUser,
+		ExpiresAt:      req.ExpiresAt,
+		MonthlyQuota:   req.MonthlyQuota,
 		AllowedCIDRs:   allowedCIDRs,
 		AllowedOrigins: allowedOrigins,
 	}

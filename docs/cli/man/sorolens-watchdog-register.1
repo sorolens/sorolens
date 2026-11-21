@@ -1,0 +1,144 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-watchdog-register - Register a contract for monitoring via the watchdog contract
+
+
+.SH SYNOPSIS
+\fBsorolens watchdog register  [flags]\fP
+
+
+.SH DESCRIPTION
+Register a contract for monitoring by invoking the watchdog contract's
+register_contract entry point on-chain.
+
+.PP
+ is the 'C...' address of the contract to monitor.
+--name is stored as a Soroban Symbol (letters, digits and underscores, at
+most 9 characters) and --interval is the expected health-check cadence
+(e.g. 300s, 5m, 1h).
+
+.PP
+Credentials, in decreasing precedence:
+  1. --secret-key or --source-account flag
+  2. SOROLENS_WATCHDOG_SECRET environment variable
+  3. a named account configured in the soroban CLI (--soroban-account)
+
+.PP
+The watchdog contract id comes from --watchdog-contract-id, the
+SOROLENS_WATCHDOG_CONTRACT_ID environment variable, or the repository's
+WATCHDOG_CONTRACT_ID.
+
+.PP
+Use --dry-run to print the soroban CLI invocation without executing it.
+
+
+.SH OPTIONS
+\fB--dry-run\fP[=false]
+	Print the soroban CLI invocation without executing it
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for register
+
+.PP
+\fB--interval\fP=0s
+	Expected health-check interval (e.g. 300s, 5m, 1h; must be > 0)
+
+.PP
+\fB--name\fP=""
+	Registration name stored on-chain as a Soroban Symbol (letters, digits, underscores; max 9 chars)
+
+.PP
+\fB--network\fP="testnet"
+	Stellar network (testnet, mainnet, futurenet)
+
+.PP
+\fB--network-passphrase\fP="Test SDF Network ; September 2015"
+	Network passphrase
+
+.PP
+\fB--rpc-url\fP="https://soroban-testnet.stellar.org:443"
+	Soroban RPC endpoint
+
+.PP
+\fB--secret-key\fP=""
+	Stellar secret seed (S...); falls back to $SOROLENS_WATCHDOG_SECRET
+
+.PP
+\fB--simulate\fP[=false]
+	Simulate the invocation instead of submitting it (no transaction is applied)
+
+.PP
+\fB--soroban-account\fP=""
+	Named source account already configured in the soroban CLI (soroban keys add)
+
+.PP
+\fB--soroban-bin\fP="soroban"
+	Path to the soroban CLI binary
+
+.PP
+\fB--source-account\fP=""
+	Stellar secret seed or account address used to sign (alias of --secret-key)
+
+.PP
+\fB--watchdog-contract-id\fP=""
+	Watchdog contract id (C...); defaults to $SOROLENS_WATCHDOG_CONTRACT_ID, then $WATCHDOG_CONTRACT_ID
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH EXAMPLE
+.EX
+  # Preview the invocation without sending it
+  sorolens watchdog register CACX... --name my_app --interval 300s \\
+    --watchdog-contract-id CAC2... --dry-run
+
+  # Register on testnet using a secret key
+  sorolens watchdog register CACX... --name my_app --interval 300s \\
+    --watchdog-contract-id CAC2... --source-account SABC...
+
+  # Use a soroban CLI key alias instead of a raw secret
+  sorolens watchdog register CACX... --name my_app --interval 300s \\
+    --watchdog-contract-id CAC2... --soroban-account deployer
+.EE
+
+
+.SH SEE ALSO
+\fBsorolens-watchdog(1)\fP

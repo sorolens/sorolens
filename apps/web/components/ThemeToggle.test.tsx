@@ -11,6 +11,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeToggle } from "./ThemeToggle";
@@ -115,5 +116,36 @@ describe("ThemeToggle", () => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("dark")
     );
     expect(window.localStorage.getItem("theme")).toBe("system");
+  });
+
+  it("exposes a labelled group with the pressed option marked", async () => {
+    renderToggle();
+    await act(async () => {}); // flush the mounted effect
+
+    const group = screen.getByRole("group", { name: "Color theme" });
+    expect(within(group).getAllByRole("button")).toHaveLength(3);
+
+    // The default (no stored preference) is system.
+    expect(screen.getByRole("button", { name: "System mode" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "Light mode" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Dark mode" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Dark mode" })).toHaveAttribute(
+        "aria-pressed",
+        "true"
+      )
+    );
+    expect(screen.getByRole("button", { name: "System mode" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
   });
 });

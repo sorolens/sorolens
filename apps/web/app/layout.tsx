@@ -1,16 +1,16 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Suspense } from "react";
 import "./globals.css";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import { PlausibleAnalytics } from "@/components/PlausibleAnalytics";
+import { SkipLink } from "@/components/SkipLink";
 import { ThemeProvider } from "@/components/ThemeProvider";
-
-/** Single source of truth for absolute metadata URLs (issue #620). */
-const SITE_URL =
-  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "https://sorolens.dev";
+import { NONCE_HEADER } from "@/lib/csp";
+import { siteOrigin } from "@/lib/siteUrl";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
+  metadataBase: new URL(siteOrigin()),
   manifest: "/manifest.json",
   title: {
     default: "Sorolens — Indexed Observability for Soroban",
@@ -65,15 +65,20 @@ export const viewport: Viewport = {
   themeColor: "#7c3aed",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Reading the request also renders every page per request, which a nonce
+  // requires: a statically generated page could not carry a fresh one.
+  const nonce = (await headers()).get(NONCE_HEADER) ?? undefined;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `
               try {
@@ -85,9 +90,10 @@ export default function RootLayout({
             `,
           }}
         />
-        <PlausibleAnalytics />
+        <PlausibleAnalytics nonce={nonce} />
       </head>
       <body className="min-h-screen antialiased">
+        <SkipLink />
         <ThemeProvider>
           {/* useSearchParams inside NavigationProgress requires a Suspense boundary */}
           <Suspense fallback={null}>

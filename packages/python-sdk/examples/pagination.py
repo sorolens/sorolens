@@ -1,4 +1,9 @@
-"""Cursor pagination against ``GET /api/v1/contracts``.
+"""Cursor pagination against the list endpoints.
+
+``walk_contracts`` follows ``next_cursor`` by hand. ``iter_events`` and
+``iter_invocations`` do the same walk for you: they fetch each page lazily,
+stop on the last cursor, and raise an error only after yielding the items
+already received.
 
 Run against a live server::
 
@@ -65,8 +70,63 @@ PAGE_2 = {
 }
 
 
+CONTRACT_ID = PAGE_1["contracts"][0]["id"]
+
+EVENT = {
+    "contract_id": CONTRACT_ID,
+    "network": "testnet",
+    "ledger": 51240,
+    "ledger_closed_at": "2026-01-15T12:05:00Z",
+    "tx_hash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+    "type": "contract",
+    "topic_xdr": ["AAAAAQ=="],
+    "value_xdr": "AAAAAg==",
+    "topic_decoded": ["counter"],
+    "value_decoded": {"value": 7},
+    "in_successful_call": True,
+}
+
+INVOCATION = {
+    "contract_id": CONTRACT_ID,
+    "network": "testnet",
+    "ledger": 51240,
+    "ledger_closed_at": "2026-01-15T12:05:00Z",
+    "status": "SUCCESS",
+    "function_name": "increment",
+    "args_decoded": {},
+    "result_decoded": {"value": 7},
+    "result_xdr": "AAAAAw==",
+    "resource_fee_charged": 12000,
+    "cpu_insn": 450000,
+    "mem_byte": 2048,
+    "ledger_read_byte": 512,
+    "ledger_write_byte": 256,
+    "application_order": 1,
+}
+
+
+def item_page(key: str, cursor: str | None) -> dict:
+    """Two canned pages of two items each for the events/invocations routes."""
+    template = EVENT if key == "events" else INVOCATION
+    page = 1 if cursor == "page-2" else 0
+    items = []
+    for n in range(2):
+        item = dict(template)
+        if key == "events":
+            item["id"] = f"evt-{page}-{n}"
+        else:
+            item["tx_hash"] = f"tx-{page}-{n}"
+        items.append(item)
+    return {key: items, "next_cursor": "" if page else "page-2"}
+
+
 def offline_handler(request: httpx.Request) -> httpx.Response:
     cursor = request.url.params.get("cursor")
+    path = request.url.path
+    if path.endswith("/events"):
+        return httpx.Response(200, json=item_page("events", cursor))
+    if path.endswith("/invocations"):
+        return httpx.Response(200, json=item_page("invocations", cursor))
     page = PAGE_2 if cursor == "page-2" else PAGE_1
     return httpx.Response(200, json=page)
 
@@ -97,13 +157,23 @@ def main() -> int:
     offline = not os.environ.get("SOROLENS_API_URL")
     with build_client() as client:
         contract_ids = walk_contracts(client)
+        # The iterators follow the cursors for you, one page at a time.
+        event_ids = [event.id for event in client.iter_events(CONTRACT_ID, limit=PAGE_SIZE)]
+        tx_hashes = [
+            invocation.tx_hash
+            for invocation in client.iter_invocations(CONTRACT_ID, limit=PAGE_SIZE)
+        ]
 
     print(f"paginated through {len(contract_ids)} contracts")
     for contract_id in contract_ids:
         print(f"  {contract_id}")
 
+    print(f"iterated {len(event_ids)} events and {len(tx_hashes)} invocations")
+
     if offline:
         assert len(contract_ids) == 3, contract_ids
+        assert event_ids == ["evt-0-0", "evt-0-1", "evt-1-0", "evt-1-1"], event_ids
+        assert tx_hashes == ["tx-0-0", "tx-0-1", "tx-1-0", "tx-1-1"], tx_hashes
         assert len(set(contract_ids)) == 3, "cursor pages must not repeat items"
     return 0
 

@@ -15,7 +15,7 @@ Real-time monitoring, alerting, and on-chain health checks for Soroban smart con
 
 ## The problem
 
-Soroban's public RPC retains events for 24 hours and transaction data for up to 7 days. There is no persistent index of what your contract did, what it cost, or which storage entries are close to expiring. The Stellar Lab contract explorer is excellent for point-in-time inspection but has no history, no API, and no way to know when a contract you depend on is unhealthy. Sorolens fills that gap.
+Soroban RPC nodes retain events and transaction data for a limited window, 7 days by default. There is no persistent index of what your contract did, what it cost, or which storage entries are close to expiring. The Stellar Lab contract explorer is excellent for point-in-time inspection but has no history, no API, and no way to know when a contract you depend on is unhealthy. Sorolens fills that gap.
 ---
 
 ## What it does
@@ -62,6 +62,37 @@ go run ./services/indexer --mode once
 ```
 
 The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
+
+### Authenticating the CLI
+
+Commands that write to the API (`track`, `label`, `tui`, ...) authenticate
+with an API key. Provide it one of these ways, in precedence order:
+
+1. `--api-key` flag, accepted before or after the subcommand:
+   `sorolens --api-key <key> track <contract-id>`
+2. `SOROLENS_API_KEY` environment variable.
+3. `api_key` entry in `~/.sorolens.yml` — stored in plaintext, so prefer
+   one of the options above or a profile key.
+4. The active profile's stored key (`sorolens config profile add <name>
+   --api-key-stdin`), which lives in the OS keyring.
+
+`sorolens config show` reports whether a key is configured (masked, never
+printed). See [`docs/authentication.md`](docs/authentication.md) for scopes
+and key management, and [`docs/configuration.md`](docs/configuration.md) for
+every CLI option. The [CLI command reference](docs/cli/README.md) documents
+every command and flag.
+
+### 4. Optional: local metrics stack
+
+```bash
+docker compose --profile observability up -d
+./scripts/observability-smoke.sh
+```
+
+Prometheus (<http://localhost:9090>) and Grafana (<http://localhost:3001>) start with the
+`Sorolens Overview` dashboard and the alert rules already provisioned. Grafana's admin
+password is generated on first start; see
+[docs/observability.md](./docs/observability.md) for how to read it and what is scraped.
 
 The indexer processes contracts concurrently. Set `INDEXER_WORKERS` to tune
 the worker count; it defaults to `GOMAXPROCS`. Each contract is handled by one
@@ -211,7 +242,7 @@ Required environment variables:
 | `STELLAR_NETWORK`      | `testnet`, `mainnet`, or `futurenet`                                                                           |
 | `SOROBAN_RPC_URL`      | Soroban JSON-RPC endpoint                                                                                      |
 | `WATCHDOG_CONTRACT_ID` | Deployed watchdog contract address                                                                             |
-| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins (e.g. `https://sorolens-web-iota.vercel.app`); omit or set to `*` to allow all |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins (e.g. `https://sorolens.xyz`); omit or set to `*` to allow all |
 
 The API is healthy once `GET /health` returns `{"status":"ok"}`. `GET /readyz`
 additionally checks Postgres and Redis reachability.
@@ -226,7 +257,9 @@ deploy.
 
 ### Full Deployment Guide
 
-For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md).
+For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md). Every configuration option of each component is listed in the generated [configuration reference](docs/configuration.md).
+
+To run Sorolens on a Kubernetes cluster you already have, use the Helm chart: see [Self-hosting on Kubernetes](docs/self-hosting/kubernetes.md). Release images and CLI binaries are signed with cosign and carry SLSA provenance; [Verifying releases](docs/verifying-releases.md) has the commands to check them.
 
 ---
 
@@ -239,7 +272,7 @@ For step-by-step incident response, troubleshooting, and maintenance procedures,
 - **[Backup Restore](docs/runbook.md#3-backup-and-disaster-recovery-restore)**: Point-In-Time-Recovery (PITR) via WAL replay and logical restores (`scripts/restore.sh`, `scripts/backup.sh`).
 - **[Key Rotation](docs/runbook.md#4-key-and-secret-rotation)**: Zero-downtime rotation of API keys, webhook signing secrets, and server environment secrets.
 
-See also [`docs/metrics.md`](docs/metrics.md) for Prometheus metrics and alerting rules, [`docs/backups.md`](docs/backups.md) for backup configurations, and [`docs/indexer.md`](docs/indexer.md) for indexer options.
+See also [`docs/metrics.md`](docs/metrics.md) for Prometheus metrics and alerting rules, [`docs/backups.md`](docs/backups.md) for backup configurations, [`docs/indexer.md`](docs/indexer.md) for indexer options, and [`docs/hubble-import.md`](docs/hubble-import.md) for importing history older than the RPC window.
 
 ---
 
@@ -283,6 +316,7 @@ sorolens/
   deploy/
     terraform/    Self-hosting Terraform modules (AWS; see docs/self-hosting/aws.md)
     pulumi/       Self-hosting Pulumi (TypeScript) components, mirroring terraform/
+    helm/         Helm chart for Kubernetes (see docs/self-hosting/kubernetes.md)
   docs/
     authentication.md Authentication & API keys guide (scopes, roles, sessions, curl examples)
     deployment.md Deployment guide (Neon, Upstash, Vercel, Docker, Mainnet)

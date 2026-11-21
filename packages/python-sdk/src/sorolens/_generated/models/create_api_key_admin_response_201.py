@@ -27,6 +27,8 @@ class CreateApiKeyAdminResponse201:
         key (str):
         user_id (None | str | Unset): User this key acts as. Null for scope-only keys.
         rotated_at (datetime.datetime | None | Unset): When the key's secret was last rotated in place.
+        expires_at (datetime.datetime | None | Unset): When the key expires, or null if it does not expire.
+        monthly_quota (int | None | Unset): Monthly request quota, or null if unmetered.
         allowed_cidrs (list[str] | Unset): CIDR ranges the key may be used from (issue #793). Empty means no address
             restriction.
         allowed_origins (list[str] | Unset): Browser origins the key may be used from. Empty means no Origin
@@ -43,6 +45,8 @@ class CreateApiKeyAdminResponse201:
     key: str
     user_id: None | str | Unset = UNSET
     rotated_at: datetime.datetime | None | Unset = UNSET
+    expires_at: datetime.datetime | None | Unset = UNSET
+    monthly_quota: int | None | Unset = UNSET
     allowed_cidrs: list[str] | Unset = UNSET
     allowed_origins: list[str] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -86,6 +90,20 @@ class CreateApiKeyAdminResponse201:
         else:
             rotated_at = self.rotated_at
 
+        expires_at: None | str | Unset
+        if isinstance(self.expires_at, Unset):
+            expires_at = UNSET
+        elif isinstance(self.expires_at, datetime.datetime):
+            expires_at = self.expires_at.isoformat()
+        else:
+            expires_at = self.expires_at
+
+        monthly_quota: int | None | Unset
+        if isinstance(self.monthly_quota, Unset):
+            monthly_quota = UNSET
+        else:
+            monthly_quota = self.monthly_quota
+
         allowed_cidrs: list[str] | Unset = UNSET
         if not isinstance(self.allowed_cidrs, Unset):
             allowed_cidrs = self.allowed_cidrs
@@ -112,6 +130,10 @@ class CreateApiKeyAdminResponse201:
             field_dict["user_id"] = user_id
         if rotated_at is not UNSET:
             field_dict["rotated_at"] = rotated_at
+        if expires_at is not UNSET:
+            field_dict["expires_at"] = expires_at
+        if monthly_quota is not UNSET:
+            field_dict["monthly_quota"] = monthly_quota
         if allowed_cidrs is not UNSET:
             field_dict["allowed_cidrs"] = allowed_cidrs
         if allowed_origins is not UNSET:
@@ -190,6 +212,32 @@ class CreateApiKeyAdminResponse201:
 
         rotated_at = _parse_rotated_at(d.pop("rotated_at", UNSET))
 
+        def _parse_expires_at(data: object) -> datetime.datetime | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                expires_at_type_0 = datetime.datetime.fromisoformat(data)
+
+                return expires_at_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(datetime.datetime | None | Unset, data)
+
+        expires_at = _parse_expires_at(d.pop("expires_at", UNSET))
+
+        def _parse_monthly_quota(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        monthly_quota = _parse_monthly_quota(d.pop("monthly_quota", UNSET))
+
         allowed_cidrs = cast(list[str], d.pop("allowed_cidrs", UNSET))
 
         allowed_origins = cast(list[str], d.pop("allowed_origins", UNSET))
@@ -205,6 +253,8 @@ class CreateApiKeyAdminResponse201:
             key=key,
             user_id=user_id,
             rotated_at=rotated_at,
+            expires_at=expires_at,
+            monthly_quota=monthly_quota,
             allowed_cidrs=allowed_cidrs,
             allowed_origins=allowed_origins,
         )

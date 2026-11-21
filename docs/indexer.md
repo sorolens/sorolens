@@ -32,8 +32,55 @@ export SOROBAN_RPC_URL_FUTURENET=https://rpc-futurenet.stellar.org
 # https://developers.stellar.org/docs/data/apis/rpc/providers
 ```
 
-Public nodes keep about 7 days of history, so a newly tracked contract can
-only backfill that far.
+Soroban RPC keeps 7 days of history by default, so a newly tracked contract can
+only backfill that far. See [New-contract backfill](#new-contract-backfill).
+
+## New-contract backfill
+
+A contract moves through three states, stored per contract:
+
+| Status        | Meaning                                                                    |
+| ------------- | -------------------------------------------------------------------------- |
+| `pending`     | Registered; the indexer has not picked it up yet.                          |
+| `backfilling` | New events are tailed while older ledgers are scanned from newest to oldest. |
+| `active`      | The backfill finished and `backfill_complete_at` is set.                   |
+
+The backfill reaches 100,000 ledgers (about 5.8 days) behind the chain head, which
+fits inside the 7-day default retention. If a node retains less, the indexer
+detects the out-of-range error and shortens the backfill to what the node still
+serves.
+
+Each window's rows and the new position commit in one transaction to the
+`contract_backfills` table, so killing the indexer at any point resumes at the
+first unscanned ledger. One contract spends at most 30 seconds per pass on its
+backfill, then continues on the next pass.
+
+| Variable                  | Default | Description                                                                                                                                                 |
+| ------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `INDEXER_BACKFILL_WINDOW` | `10000` | Ledgers scanned per backfill step (`--backfill-window`). Capped at `--ledger-window`. Lower it if a busy contract fails with `more than 100 pages`. |
+
+`GET /api/v1/contracts/{id}` and `GET /api/v2/contracts/{id}` report progress in
+the `backfill` object:
+
+```json
+{
+  "status": "backfilling",
+  "backfill": {
+    "oldest_ledger": 900000,
+    "newest_ledger": 1000000,
+    "next_ledger": 950000,
+    "ledgers_total": 100001,
+    "ledgers_done": 50000,
+    "percent": 49.99,
+    "started_at": "2026-11-19T10:00:00Z",
+    "updated_at": "2026-11-19T10:04:00Z",
+    "completed_at": null
+  }
+}
+```
+
+History older than the RPC window comes from the optional
+[Hubble importer](hubble-import.md).
 
 ## Postgres
 
@@ -52,3 +99,11 @@ The store tests run when `POSTGRES_TEST_URL` points at a migrated database:
 POSTGRES_TEST_URL=postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable \
   go test ./services/indexer/internal/pgstore/...
 ```
+
+## Redis run lock
+
+| Variable   | Default                   | Description                                                                                                                                                                 |
+| ---------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REDIS_URL` | `redis://localhost:6379` | Redis URL for the per-contract run lock. The indexer acquires a Redis lock (`SET key <random token> NX PX <ttl>`) before indexing each contract, renews it while the run is active, and releases it with a compare-and-delete Lua script so one runner never deletes another's lock. An unset or empty `REDIS_URL` falls back to this default, so locking stays enabled. To disable locking (and fall back to the always-grant stub), pass an explicitly empty flag: `-redis-url=""`; then only one indexer should run per contract set. |
+
+When the URL is non-empty (including the default), Redis is checked at startup and an unreachable server makes the indexer exit with a non-zero status, so two runners can never process the same ledgers. When locking is disabled with `-redis-url=""`, no Redis connection is attempted.

@@ -53,7 +53,7 @@ or user-bound key.
 
 If you believe you have found a security vulnerability in Sorolens, please report it by email:
 
-**security@sorolens.dev**
+**security@sorolens.xyz**
 
 Do not open a public GitHub issue for security vulnerabilities. Public disclosure before a fix is available puts all users of the project at risk.
 
@@ -80,7 +80,7 @@ If a fix requires more time, we will communicate that before the 90-day mark and
 
 We follow a coordinated disclosure model:
 
-1. **Report privately.** Send the details to security@sorolens.dev instead of opening a public issue.
+1. **Report privately.** Send the details to security@sorolens.xyz instead of opening a public issue.
 2. **Acknowledge and triage.** We confirm receipt within 48 hours and share a preliminary assessment within 7 days.
 3. **Fix and agree a date.** We develop and test a fix and agree a disclosure date with you. Our target is 90 days from the initial report.
 4. **Publish.** We release the fix and publish the disclosure (with a CVE where applicable) once the fix is available.
@@ -133,4 +133,4 @@ Out of scope:
 
 ## Questions
 
-For anything unclear about this policy, email security@sorolens.dev.
+For anything unclear about this policy, email security@sorolens.xyz.

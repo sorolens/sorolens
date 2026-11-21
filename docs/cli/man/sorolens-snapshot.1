@@ -1,0 +1,84 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-snapshot - Show a storage and state snapshot for a contract
+
+
+.SH SYNOPSIS
+\fBsorolens snapshot  [flags]\fP
+
+
+.SH DESCRIPTION
+Display a snapshot of a contract's storage entries and state.
+
+.PP
+By default, fetches the current state snapshot export. Supply --ledger to view
+a historical storage snapshot as of a specific ledger sequence number.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for snapshot
+
+.PP
+\fB--ledger\fP=0
+	Ledger sequence number to snapshot at
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH EXAMPLE
+.EX
+  # View current contract snapshot
+  sorolens snapshot CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+  # View snapshot at a historical ledger
+  sorolens snapshot CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA --ledger 123456
+
+  # Output in machine-readable JSON format
+  sorolens snapshot CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA --json
+.EE
+
+
+.SH SEE ALSO
+\fBsorolens(1)\fP

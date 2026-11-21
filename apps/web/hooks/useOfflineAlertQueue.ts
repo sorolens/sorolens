@@ -3,7 +3,7 @@
  *
  * Drains new alerts from `useEventStream`'s `onAlert` callback into the
  * IndexedDB queue while offline, and exposes the pending list so the UI
- * can render the OfflineAlertBanner.
+ * can render the OfflineBanner.
  */
 "use client";
 

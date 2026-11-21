@@ -2,7 +2,11 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <main className="flex min-h-screen items-center justify-center px-6 py-16">
+    <main
+      id="main"
+      tabIndex={-1}
+      className="flex min-h-screen items-center justify-center px-6 py-16"
+    >
       <section className="w-full max-w-lg text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[var(--color-accent)]">
           Signal not found

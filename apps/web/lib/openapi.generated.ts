@@ -112,6 +112,53 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/admin/audit": {
+      get: {
+        operationId: "listAuditEventsRoot",
+        summary: "List audit events (admin role only)",
+        tags: ["Audit"],
+        parameters: [
+          {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).",
+            type: "string",
+          },
+          {
+            name: "since",
+            in: "query",
+            required: false,
+            description:
+              "Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.",
+            type: "string",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            description: "Page size (default 50, clamped to 200).",
+            type: "integer",
+          },
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            description: "Opaque cursor from next_cursor of the previous page.",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/admin/audit": {
       get: {
         operationId: "listAuditEvents",
@@ -119,10 +166,27 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         tags: ["Audit"],
         parameters: [
           {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).",
+            type: "string",
+          },
+          {
             name: "since",
             in: "query",
             required: false,
-            description: "Only events at or after this RFC 3339 timestamp.",
+            description:
+              "Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.",
             type: "string",
           },
           {
@@ -148,6 +212,66 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         summary: "Global index statistics",
         tags: ["Stats"],
         parameters: [],
+      },
+    },
+    "/api/v1/exports": {
+      post: {
+        operationId: "createExportJob",
+        summary: "Create an asynchronous export job",
+        tags: ["Exports"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/exports/{id}": {
+      get: {
+        operationId: "getExportJob",
+        summary: "Get export job status and progress",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+      delete: {
+        operationId: "deleteExportJob",
+        summary: "Delete an export job",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/exports/{id}/download": {
+      get: {
+        operationId: "downloadExport",
+        summary: "Download completed export file",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+          {
+            name: "token",
+            in: "query",
+            required: true,
+            type: "string",
+          },
+        ],
       },
     },
     "/api/v1/contracts": {
@@ -235,6 +359,20 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
       get: {
         operationId: "getContract",
         summary: "Get one contract",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+      delete: {
+        operationId: "deleteContract",
+        summary: "Untrack one contract",
         tags: ["Contracts"],
         parameters: [
           {
@@ -894,6 +1032,39 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/usage": {
+      get: {
+        operationId: "getApiKeyUsage",
+        summary: "Get API key usage metrics and quota status",
+        tags: ["API Keys"],
+        parameters: [
+          {
+            name: "key_id",
+            in: "query",
+            required: false,
+            description:
+              "API key ID to query. Required when calling with user/session auth; optional when authenticating with an API key (defaults to calling key). Querying another key requires admin:* scope.",
+            type: "string",
+          },
+          {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Start of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to 30 days ago.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "End of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to now.",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/admin/keys": {
       get: {
         operationId: "listApiKeysAdmin",
@@ -1404,6 +1575,66 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v2/exports": {
+      post: {
+        operationId: "createExportJobV2",
+        summary: "Create an asynchronous export job",
+        tags: ["Exports"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v2/exports/{id}": {
+      get: {
+        operationId: "getExportJobV2",
+        summary: "Get export job status and progress",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+      delete: {
+        operationId: "deleteExportJobV2",
+        summary: "Delete an export job",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v2/exports/{id}/download": {
+      get: {
+        operationId: "downloadExportV2",
+        summary: "Download completed export file",
+        tags: ["Exports"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+          {
+            name: "token",
+            in: "query",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v2/contracts": {
       get: {
         operationId: "v2ListContracts",
@@ -1466,6 +1697,20 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
       get: {
         operationId: "v2GetContract",
         summary: "Get one contract",
+        tags: ["API v2"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+      delete: {
+        operationId: "v2DeleteContract",
+        summary: "Untrack one contract",
         tags: ["API v2"],
         parameters: [
           {
@@ -1774,6 +2019,22 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
       get: {
         operationId: "v2ContractGraph",
         summary: "Contract dependency graph (v1 shape)",
+        tags: ["API v2"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v2/contracts/{id}/event-schemas": {
+      get: {
+        operationId: "v2ContractEventSchemas",
+        summary: "Inferred and declared event schemas for a contract (v2)",
         tags: ["API v2"],
         parameters: [
           {
@@ -2122,6 +2383,33 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v2/usage": {
+      get: {
+        operationId: "v2GetApiKeyUsage",
+        summary: "Get API key usage metrics and quota status (v2 passthrough)",
+        tags: ["API v2"],
+        parameters: [
+          {
+            name: "key_id",
+            in: "query",
+            required: false,
+            type: "string",
+          },
+          {
+            name: "from",
+            in: "query",
+            required: false,
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v2/admin/keys": {
       get: {
         operationId: "v2AdminListKeys",
@@ -2345,11 +2633,27 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             type: "string",
           },
           {
+            name: "from",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive lower bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.",
+            type: "string",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description:
+              "Inclusive upper bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `until` if both are sent.",
+            type: "string",
+          },
+          {
             name: "since",
             in: "query",
             required: false,
             description:
-              "Inclusive lower bound on ledger_closed_at (RFC 3339).",
+              "Deprecated alias for `from`. Inclusive lower bound on ledger_closed_at (RFC 3339).",
             type: "string",
           },
           {
@@ -2357,7 +2661,7 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             in: "query",
             required: false,
             description:
-              "Inclusive upper bound on ledger_closed_at (RFC 3339).",
+              "Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).",
             type: "string",
           },
         ],
@@ -2543,6 +2847,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             description: "Contract ID (starts with C).",
             type: "string",
           },
+          {
+            name: "history_limit",
+            in: "query",
+            required: false,
+            description:
+              "Maximum number of recorded hourly snapshots to return, oldest first. Omit to skip history.",
+            type: "integer",
+          },
         ],
       },
     },
@@ -2582,6 +2894,22 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
       get: {
         operationId: "getContractSpec",
         summary: "Get a contract's parsed SEP-48 interface spec",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/event-schemas": {
+      get: {
+        operationId: "getContractEventSchemas",
+        summary: "Get inferred and declared event schemas for a contract",
         tags: ["Contracts"],
         parameters: [
           {

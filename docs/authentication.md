@@ -300,7 +300,10 @@ this is the default and keeps existing keys unchanged.
   `203.0.113.0/24`).
 - `allowed_origins` — browser origins as `scheme://host[:port]` with an
   `http` or `https` scheme. Paths, queries, fragments and embedded credentials
-  are rejected. Matching is case-insensitive on scheme and host.
+  are rejected. Matching is case-insensitive on scheme and host, and an entry
+  written with the scheme's default port (`https://app.example.com:443`,
+  `http://dev.example.com:80`) also matches the browser's port-less origin.
+  Non-default ports stay distinct, and the scheme is significant.
 
 Pass either list on `POST /api/v1/api-keys` (or `POST /api/v1/me/api-keys`),
 or change them later with `PATCH /api/v1/api-keys/{id}` (or
@@ -338,14 +341,55 @@ Content-Type: application/json
 }
 ```
 
+#### What the Origin restriction does and does not do
+
+An origin allowlist is a browser-enforced restriction, not an authentication
+factor. Browsers set `Origin` themselves and refuse to let page script forge
+it, so the check keeps a key embedded in a web app from being replayed by a
+page on another origin. `Origin` is still just a request header: any
+non-browser client (curl, a script, a stolen key used from a server) can send
+whatever `Origin` value it likes. Origin restrictions therefore do **not**
+protect a leaked key on their own, and they are not a substitute for keeping
+the key secret. Use `allowed_cidrs` for a network-level restriction, which is
+enforced against the resolved connection address rather than a header the
+caller controls.
+
+An origin-restricted key is rejected when the request carries no `Origin`
+header at all, because the check fails closed. That is deliberate: a
+header-less request cannot prove it came from an allowed browser origin.
+Consequently an origin-restricted key cannot be used for ordinary
+server-to-server requests, which normally send no `Origin`; give such a key no
+`allowed_origins` and restrict it by `allowed_cidrs` instead.
+
 #### Resolving the client address behind a proxy
 
 The address is the transport peer by default. `X-Forwarded-For` is only
 believed when the peer is inside `TRUSTED_PROXY_CIDRS` (comma-separated
-CIDRs); the rightmost hop that is not itself a trusted proxy is used. This
-prevents a caller from choosing the address its key is checked against. Set
-the variable to your load balancer or CDN ranges when the API runs behind one;
-otherwise leave it empty.
+CIDRs); every forwarded line is joined and the rightmost hop that is not
+itself a trusted proxy is used. Repeated header lines are therefore treated as
+one chain, and a malformed entry to the right of the first untrusted hop makes
+the address unresolvable: the request is rejected rather than falling back to
+a value the caller may have chosen. A trusted-proxy list that is invalid or
+covers every address (`0.0.0.0/0`, `::/0`) stops the API at startup, and an
+empty list is the safe default: the transport peer is used and
+`X-Forwarded-For` is ignored. Set the variable to your load balancer or CDN
+ranges when the API runs behind one; otherwise leave it empty. Hosted
+deployments read the same variable, so it must be set wherever the API is
+deployed (for Vercel, in the project's environment variables).
+
+#### Who may change a key's allowlist
+
+Key-management mutations currently accept either a workspace session or an
+API key: `POST`/`PATCH /api/v1/me/api-keys` need the contributor role, and
+`/api/v1/api-keys` needs the admin role, and a bound API key inherits its
+user's role. That means a leaked bounded key can create a new key with no
+allowlists, or PATCH its own allowlists to `[]`, and the restriction is gone
+even if the original key is later revoked. This is the existing authentication
+model and this change does not alter it. A safer model, recommended as a
+follow-up, is to accept only a session identity for key creation and allowlist
+changes (and only an admin session for `/api/v1/api-keys`), leaving API-key
+authentication for read-only key metadata. Until then, treat a bound key as
+being able to manage keys for its user and scope it accordingly.
 
 ---
 

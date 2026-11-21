@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
 from typing import Any, Self, TypeVar, cast
 
@@ -20,6 +21,7 @@ class CreateApiKeyBody:
         name (str): Human-friendly key name.
         scopes (list[CreateApiKeyBodyScopesItem]): Scopes granted to the key.
         user_id (str | Unset): Optional user the key acts as. The user must exist. Omit for a scope-only key.
+        expires_at (datetime.datetime | Unset): Optional expiry timestamp. Expired keys are rejected by authentication.
         allowed_cidrs (list[str] | Unset): CIDR ranges the key may be used from (issue #793). Omit or leave empty for no
             address restriction.
         allowed_origins (list[str] | Unset): Browser origins the key may be used from, as scheme://host[:port]. Omit or
@@ -29,6 +31,7 @@ class CreateApiKeyBody:
     name: str
     scopes: list[CreateApiKeyBodyScopesItem]
     user_id: str | Unset = UNSET
+    expires_at: datetime.datetime | Unset = UNSET
     allowed_cidrs: list[str] | Unset = UNSET
     allowed_origins: list[str] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -42,6 +45,10 @@ class CreateApiKeyBody:
             scopes.append(scopes_item)
 
         user_id = self.user_id
+
+        expires_at: str | Unset = UNSET
+        if not isinstance(self.expires_at, Unset):
+            expires_at = self.expires_at.isoformat()
 
         allowed_cidrs: list[str] | Unset = UNSET
         if not isinstance(self.allowed_cidrs, Unset):
@@ -61,6 +68,8 @@ class CreateApiKeyBody:
         )
         if user_id is not UNSET:
             field_dict["user_id"] = user_id
+        if expires_at is not UNSET:
+            field_dict["expires_at"] = expires_at
         if allowed_cidrs is not UNSET:
             field_dict["allowed_cidrs"] = allowed_cidrs
         if allowed_origins is not UNSET:
@@ -82,6 +91,13 @@ class CreateApiKeyBody:
 
         user_id = d.pop("user_id", UNSET)
 
+        _expires_at = d.pop("expires_at", UNSET)
+        expires_at: datetime.datetime | Unset
+        if isinstance(_expires_at, Unset):
+            expires_at = UNSET
+        else:
+            expires_at = datetime.datetime.fromisoformat(_expires_at)
+
         allowed_cidrs = cast(list[str], d.pop("allowed_cidrs", UNSET))
 
         allowed_origins = cast(list[str], d.pop("allowed_origins", UNSET))
@@ -90,6 +106,7 @@ class CreateApiKeyBody:
             name=name,
             scopes=scopes,
             user_id=user_id,
+            expires_at=expires_at,
             allowed_cidrs=allowed_cidrs,
             allowed_origins=allowed_origins,
         )

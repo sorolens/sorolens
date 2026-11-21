@@ -43,6 +43,33 @@ the defaults:
 
 `SOROLENS_OUTPUT_FORMAT` is accepted as an alias of `SOROLENS_OUTPUT`.
 
+### Profiles and API keys
+
+Named profiles hold an API URL, a network and an API key for different
+deployments. Selection order: `--profile`, then `SOROLENS_PROFILE`, then the
+default profile in `~/.sorolens.yml`. Within a profile, flags and
+`SOROLENS_API_URL` / `SOROLENS_NETWORK` still win over stored values.
+
+```sh
+printf '%s' "$KEY" | sorolens config profile add prod \
+  --api-url https://api.example.com --network mainnet --api-key-stdin --use
+sorolens config profile list
+sorolens config profile use prod
+sorolens --profile staging contracts list
+sorolens config profile remove staging
+sorolens config show        # keys are always masked
+```
+
+API keys are stored in the OS keyring (macOS Keychain, Windows Credential
+Manager, Secret Service) through `github.com/zalando/go-keyring`. When no
+keyring is available the key is written to `~/.sorolens-credentials.yml` with
+mode `0600` and a warning is printed. Keys are never written to
+`~/.sorolens.yml` and never printed. The active profile's key is sent as the
+`X-API-Key` / bearer header on API requests.
+
+Existing config files keep working. The first time a profile is written, the
+top-level `api_url` and `network` are migrated into a `default` profile.
+
 ```sh
 sorolens --api-url https://api.sorolens.xyz --network testnet inspect CDLZ...
 ```
@@ -53,6 +80,8 @@ sorolens --api-url https://api.sorolens.xyz --network testnet inspect CDLZ...
 | ------------------------------------ | --------------------------------------------- |
 | `sorolens track <contract-id>`       | Start tracking a contract                     |
 | `sorolens inspect <contract-id>`     | Contract metadata, stats and recent activity  |
+| `sorolens inspect --tx <hash>`       | One transaction: function, resources, events  |
+| `sorolens invocations <contract-id>` | Recent invocations (`--status`, `--fn`)       |
 | `sorolens events <contract-id>`      | List contract events                          |
 | `sorolens tail --contract <id>`      | Follow events as they stream in                |
 | `sorolens status <contract-id>`      | Watchdog status for a contract                 |
@@ -62,9 +91,74 @@ sorolens --api-url https://api.sorolens.xyz --network testnet inspect CDLZ...
 | `sorolens compare <id> <id>...`      | Compare 2–5 contracts side by side             |
 | `sorolens label <name> <id>`         | Attach a public label to a contract or account |
 | `sorolens tui`                       | Interactive terminal UI                        |
+| `sorolens doctor`                    | Diagnose config, connectivity, auth and clock  |
 | `sorolens version`                   | Print the CLI version                          |
 
 Add `--json` to any command for machine-readable output.
+
+### Diagnostics: `sorolens doctor`
+
+`sorolens doctor` checks the active configuration and the API it points at, and
+prints `pass`, `warn` or `fail` for each check with a hint for anything that is
+not passing. It exits with status 1 when any check fails, so it can gate a
+script. API keys, bearer tokens and URL credentials are redacted from every
+output format, so the report is safe to paste into an issue.
+
+| Check          | What it verifies                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------- |
+| `config`       | `~/.sorolens.yml` parses, the active profile exists, the API URL is valid, where the key comes from |
+| `reachability` | `GET /health` answers at the API URL                                                               |
+| `tls`          | HTTPS is used for a remote API and the certificate is trusted and not about to expire              |
+| `auth`         | The API key is accepted and has `read:contracts` (fail) and `read:watchdog` (warn)                 |
+| `version`      | `GET /api/version` reports a server version this CLI supports (`>=0.1.0 <1.0.0`)                   |
+| `clock`        | Local clock skew against the server's `Date` header (warn at 30s, fail at 5m)                       |
+
+When the API URL is invalid or the API cannot be reached, the checks that need
+it report `warn` with "Not checked" rather than being left out, so the list of
+checks is always the same.
+
+`sorolens doctor --json` prints a stable document. `schema_version` changes
+only when a field or a check is removed or renamed; new fields and checks may
+be added without a bump.
+
+```json
+{
+  "schema_version": 1,
+  "ok": false,
+  "cli_version": "v0.2.0",
+  "api_url": "https://api.sorolens.xyz",
+  "profile": "prod",
+  "summary": { "pass": 5, "warn": 0, "fail": 1 },
+  "checks": [
+    { "name": "config", "status": "pass", "message": "Using ~/.sorolens.yml, profile \"prod\", API https://api.sorolens.xyz." },
+    { "name": "auth", "status": "fail", "message": "The API key was rejected (HTTP 401): it is unknown, revoked or expired.", "hint": "Create a new key and store it with 'sorolens config profile add <name> --api-key-stdin'." }
+  ]
+}
+```
+
+- `checks` always lists `config`, `reachability`, `tls`, `auth`, `version` and `clock`, in that order.
+- `status` is one of `pass`, `warn` or `fail`; `hint` is omitted on `pass`.
+- `ok` is `false` exactly when `summary.fail` is greater than zero.
+- `profile` is `(none)` when no profile is active.
+
+### Output formats and `--query`
+
+`--output` (or `SOROLENS_OUTPUT`) accepts `table` (default), `json`, `yaml` and
+`jsonl`; `--json` is shorthand for `--output json`. `jsonl` writes one compact
+JSON document per line, element by element for list results.
+
+`--query` applies a jq-style path filter to structured output. Supported
+syntax: `.key`, `."quoted key"`, `[N]` (negative counts from the end), `[]`
+(iterate) and `|` to chain, for example:
+
+```bash
+sorolens contracts list --output jsonl --query '.[] | .id'
+sorolens watchdog status CAAA... --output yaml --query '.status'
+```
+
+A query implies `--output json` unless a structured format is chosen, and is
+rejected with `--output table`. Syntax and runtime errors report the position
+in the expression. The filter is implemented in Go; no external program runs.
 
 `compare` renders events, invocations, failure rate, CPU and fee averages,
 health scores and a unicode event-volume sparkline for each contract. Pick a
@@ -75,6 +169,13 @@ failing the command:
 sorolens compare CAAA... CBBB... --window 7d
 sorolens compare CAAA... CBBB... CCCC... --json
 ```
+
+## Plugins
+
+Executables named `sorolens-<name>` on `PATH` become subcommands
+(`sorolens <name>`); `sorolens plugin list` shows them. Built-in commands cannot
+be shadowed and API keys are not passed to plugins unless `--plugin-api-key` is
+set. See [docs/cli-plugins.md](../docs/cli-plugins.md).
 
 ## Releasing
 

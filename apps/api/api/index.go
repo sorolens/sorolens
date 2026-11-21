@@ -63,7 +63,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		redisClient := redis.NewClient(redisOpts)
 
 		clientIPs, err := middleware.NewClientIPResolver(
-			middleware.ParseTrustedProxyCIDRs(os.Getenv("TRUSTED_PROXY_CIDRS")))
+			apiconfig.ParseTrustedProxyCIDRs(os.Getenv("TRUSTED_PROXY_CIDRS")))
 		if err != nil {
 			logger.Error("trusted proxy CIDRs", "err", err)
 			return

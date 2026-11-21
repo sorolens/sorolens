@@ -24,21 +24,21 @@ func (s *postgresStore) CreateAPIKey(ctx context.Context, k APIKey) error {
 		return err
 	}
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO api_keys (id, name, key_prefix, key_hash, scopes, created_at, user_id, allowed_cidrs, allowed_origins)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		k.ID, k.Name, k.KeyPrefix, k.KeyHash, k.Scopes, k.CreatedAt, k.UserID, cidrs, origins,
+		INSERT INTO api_keys (id, name, key_prefix, key_hash, scopes, created_at, user_id, expires_at, monthly_quota, allowed_cidrs, allowed_origins)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		k.ID, k.Name, k.KeyPrefix, k.KeyHash, k.Scopes, k.CreatedAt, k.UserID, k.ExpiresAt, k.MonthlyQuota, cidrs, origins,
 	)
 	return err
 }
 
 func (s *postgresStore) GetAPIKeyByHash(ctx context.Context, hash string) (APIKey, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at, rotated_at, user_id, allowed_cidrs, allowed_origins
+		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at, rotated_at, user_id, expires_at, monthly_quota, allowed_cidrs, allowed_origins
 		FROM api_keys
 		WHERE key_hash = $1 AND revoked_at IS NULL`, hash)
 	var k APIKey
 	err := row.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.KeyHash, &k.Scopes,
-		&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt, &k.RotatedAt, &k.UserID,
+		&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt, &k.RotatedAt, &k.UserID, &k.ExpiresAt, &k.MonthlyQuota,
 		&k.AllowedCIDRs, &k.AllowedOrigins)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return APIKey{}, ErrNotFound
@@ -48,12 +48,12 @@ func (s *postgresStore) GetAPIKeyByHash(ctx context.Context, hash string) (APIKe
 
 func (s *postgresStore) GetAPIKey(ctx context.Context, id string) (APIKey, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at, rotated_at, user_id, allowed_cidrs, allowed_origins
+		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at, rotated_at, user_id, expires_at, monthly_quota, allowed_cidrs, allowed_origins
 		FROM api_keys
 		WHERE id = $1`, id)
 	var k APIKey
 	err := row.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.KeyHash, &k.Scopes,
-		&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt, &k.RotatedAt, &k.UserID,
+		&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt, &k.RotatedAt, &k.UserID, &k.ExpiresAt, &k.MonthlyQuota,
 		&k.AllowedCIDRs, &k.AllowedOrigins)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return APIKey{}, ErrNotFound
@@ -85,7 +85,7 @@ func (s *postgresStore) ListAPIKeys(ctx context.Context, cursor string, limit in
 		limit = 50
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at, rotated_at, user_id, allowed_cidrs, allowed_origins
+		SELECT id, name, key_prefix, key_hash, scopes, created_at, last_used_at, revoked_at, rotated_at, user_id, expires_at, monthly_quota, allowed_cidrs, allowed_origins
 		FROM api_keys
 		WHERE ($1 = '' OR id > $1)
 		ORDER BY id ASC
@@ -99,7 +99,7 @@ func (s *postgresStore) ListAPIKeys(ctx context.Context, cursor string, limit in
 	for rows.Next() {
 		var k APIKey
 		if err := rows.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.KeyHash, &k.Scopes,
-			&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt, &k.RotatedAt, &k.UserID,
+			&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt, &k.RotatedAt, &k.UserID, &k.ExpiresAt, &k.MonthlyQuota,
 			&k.AllowedCIDRs, &k.AllowedOrigins); err != nil {
 			return nil, "", err
 		}

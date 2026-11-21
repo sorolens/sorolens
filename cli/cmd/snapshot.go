@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/sorolens/sorolens/cli/internal/client"
 	"github.com/sorolens/sorolens/cli/internal/format"
 	"github.com/spf13/cobra"
 )
@@ -50,7 +49,7 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 	}
 
 	ledger, _ := cmd.Flags().GetUint32("ledger")
-	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
+	c := newClient(globalConfig.Timeout)
 
 	if ledger > 0 {
 		stop := startSpinner(fmt.Sprintf("Fetching snapshot for %s at ledger %d...", contractID, ledger))

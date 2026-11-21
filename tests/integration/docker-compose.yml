@@ -7,7 +7,7 @@
 # The API image is built from the monorepo root because apps/api/Dockerfile
 # copies the API module from there. The indexer runs on demand
 # (`docker compose run --rm indexer -mode once`) after the suite has registered
-# and activated its fixture contract.
+# its fixture contract.
 services:
   postgres:
     image: postgres:16-alpine
@@ -40,6 +40,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    ports:
+      - "8000:8000"
+    networks:
+      - integration_net
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.11.0
+    command: ["-host=0.0.0.0"]
+    ports:
+      - "8474:8474"
+      - "8001:8001"
+      - "5433:5433"
     networks:
       - integration_net
 
@@ -106,8 +118,11 @@ services:
       SOROBAN_RPC_URL: http://mock-rpc:8000
       SOROBAN_RPC_URL_TESTNET: http://mock-rpc:8000
       INDEXER_METRICS_ADDR: ""
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       mock-rpc:
         condition: service_healthy

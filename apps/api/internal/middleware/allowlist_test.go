@@ -215,8 +215,54 @@ func TestClientIPResolverNeverTrustsForwardedHeadersByDefault(t *testing.T) {
 	}
 }
 
+// TestClientIPJoinsRepeatedForwardedForLines is the regression test for a
+// caller that supplies its own X-Forwarded-For line when the trusted proxy
+// appends a second line rather than extending the first: the walk must see the
+// proxy-appended address, not the caller-chosen one.
+func TestClientIPJoinsRepeatedForwardedForLines(t *testing.T) {
+	res, err := NewClientIPResolver([]string{"10.0.0.0/8"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.RemoteAddr = "10.0.0.5:1234"
+	r.Header.Add("X-Forwarded-For", "203.0.113.9")   // supplied by the caller
+	r.Header.Add("X-Forwarded-For", "198.51.100.77") // appended by the proxy
+	if got := res.ClientIP(r).String(); got != "198.51.100.77" {
+		t.Fatalf("ClientIP = %s, want the proxy-appended 198.51.100.77", got)
+	}
+}
+
+// TestClientIPFailsClosedOnMalformedForwardedHop covers a malformed entry to
+// the right of the first untrusted hop: the chain cannot be verified, so no
+// address is returned rather than falling back to a parseable but unvouched
+// entry further left.
+func TestClientIPFailsClosedOnMalformedForwardedHop(t *testing.T) {
+	res, err := NewClientIPResolver([]string{"10.0.0.0/8"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.RemoteAddr = "10.0.0.5:1234"
+	r.Header.Set("X-Forwarded-For", "203.0.113.9, not-an-ip")
+	if got := res.ClientIP(r); got != nil {
+		t.Fatalf("ClientIP = %v, want nil for a malformed proxy hop", got)
+	}
+}
+
 func TestNewClientIPResolverRejectsInvalidCIDR(t *testing.T) {
 	if _, err := NewClientIPResolver([]string{"10.0.0.0/8", "not-a-cidr"}); err == nil {
 		t.Fatal("NewClientIPResolver accepted an invalid CIDR")
+	}
+}
+
+// TestNewClientIPResolverRejectsCatchAllRanges pins the rule that a trusted
+// proxy list covering every address is a configuration error, not a way to
+// trust all callers.
+func TestNewClientIPResolverRejectsCatchAllRanges(t *testing.T) {
+	for _, cidr := range []string{"0.0.0.0/0", "::/0"} {
+		if _, err := NewClientIPResolver([]string{cidr}); err == nil {
+			t.Fatalf("NewClientIPResolver accepted the catch-all range %s", cidr)
+		}
 	}
 }

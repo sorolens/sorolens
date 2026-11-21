@@ -85,6 +85,16 @@ func TestNormalizeAllowedOrigins(t *testing.T) {
 			want: []string{"http://localhost:3000"},
 		},
 		{
+			name: "default https port is dropped",
+			in:   []string{"https://app.example.com:443"},
+			want: []string{"https://app.example.com"},
+		},
+		{
+			name: "default http port is dropped",
+			in:   []string{"http://dev.example.com:80"},
+			want: []string{"http://dev.example.com"},
+		},
+		{
 			name: "IPv6 literal origin is accepted",
 			in:   []string{"http://[::1]:8080"},
 			want: []string{"http://[::1]:8080"},
@@ -187,6 +197,10 @@ func TestAPIKeyAllowedOrigin(t *testing.T) {
 		{name: "case-insensitive match", origins: []string{"https://app.example.com"}, origin: "https://APP.example.com", want: true},
 		{name: "different host", origins: []string{"https://app.example.com"}, origin: "https://api.example.com", want: false},
 		{name: "different port", origins: []string{"https://app.example.com"}, origin: "https://app.example.com:8443", want: false},
+		{name: "default https port in the entry matches a bare origin", origins: []string{"https://app.example.com:443"}, origin: "https://app.example.com", want: true},
+		{name: "default http port in the entry matches a bare origin", origins: []string{"http://dev.example.com:80"}, origin: "http://dev.example.com", want: true},
+		{name: "non-default port in the entry stays distinct", origins: []string{"https://app.example.com:8443"}, origin: "https://app.example.com", want: false},
+		{name: "scheme remains significant", origins: []string{"https://app.example.com"}, origin: "http://app.example.com", want: false},
 		{name: "missing origin fails closed", origins: []string{"https://app.example.com"}, origin: "", want: false},
 		{name: "null origin fails closed", origins: []string{"https://app.example.com"}, origin: "null", want: false},
 	}

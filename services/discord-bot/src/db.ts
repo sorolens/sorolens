@@ -71,6 +71,35 @@ export function openDb(path: string): Database.Database {
       assigned_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS assign_grants_by_user ON assign_grants (discord_id);
+
+    -- Community and rewards settings (single row, id = 1).
+    CREATE TABLE IF NOT EXISTS community_settings (
+      id                INTEGER PRIMARY KEY CHECK (id = 1),
+      channel_id        TEXT,
+      congrats_channel_id TEXT,
+      congrats_enabled  INTEGER NOT NULL DEFAULT 1,
+      cotw_enabled      INTEGER NOT NULL DEFAULT 1,
+      cotw_role_id      TEXT,
+      cotw_holder_id    TEXT,
+      cotw_last_week    TEXT
+    );
+
+    -- Merged-PR milestones and the role each one grants.
+    CREATE TABLE IF NOT EXISTS milestones (
+      pr_count INTEGER PRIMARY KEY,
+      role_id  TEXT NOT NULL
+    );
+
+    -- Channel alert subscriptions: channels subscribed to watchdog alerts for contracts.
+    CREATE TABLE IF NOT EXISTS alert_subscriptions (
+      channel_id  TEXT NOT NULL,
+      contract_id TEXT NOT NULL,
+      severity    TEXT NOT NULL DEFAULT 'all',
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (channel_id, contract_id)
+    );
+    CREATE INDEX IF NOT EXISTS alert_subs_contract ON alert_subscriptions (contract_id);
   `);
   // Added after the first release: when applications were last switched on
   // (ms since epoch). Messages sent before it are ignored.
@@ -380,4 +409,205 @@ export function listAllGrants(): AssignGrant[] {
       "SELECT issue_number AS issueNumber, discord_id AS discordId, github_login AS githubLogin, assigned_at AS assignedAt FROM assign_grants ORDER BY issue_number"
     )
     .all() as AssignGrant[];
+}
+
+// ---- community and rewards --------------------------------------------------
+
+export interface CommunitySettings {
+  /** Where the contributor of the week is posted. */
+  channelId: string | null;
+  /** Where merge congratulations are posted. */
+  congratsChannelId: string | null;
+  congratsEnabled: boolean;
+  cotwEnabled: boolean;
+  cotwRoleId: string | null;
+  /** Discord id currently holding the contributor-of-the-week role. */
+  cotwHolderId: string | null;
+  /** Week key (Sunday date) last announced. */
+  cotwLastWeek: string | null;
+}
+
+export function getCommunitySettings(): CommunitySettings {
+  const row = requireDb()
+    .prepare(
+      "SELECT channel_id, congrats_channel_id, congrats_enabled, cotw_enabled, cotw_role_id, cotw_holder_id, cotw_last_week FROM community_settings WHERE id = 1"
+    )
+    .get() as
+    | {
+        channel_id: string | null;
+        congrats_channel_id: string | null;
+        congrats_enabled: number;
+        cotw_enabled: number;
+        cotw_role_id: string | null;
+        cotw_holder_id: string | null;
+        cotw_last_week: string | null;
+      }
+    | undefined;
+  return {
+    channelId: row?.channel_id ?? null,
+    congratsChannelId: row?.congrats_channel_id ?? null,
+    congratsEnabled: row ? row.congrats_enabled === 1 : true,
+    cotwEnabled: row ? row.cotw_enabled === 1 : true,
+    cotwRoleId: row?.cotw_role_id ?? null,
+    cotwHolderId: row?.cotw_holder_id ?? null,
+    cotwLastWeek: row?.cotw_last_week ?? null,
+  };
+}
+
+export function updateCommunitySettings(
+  patch: Partial<CommunitySettings>
+): CommunitySettings {
+  const n = { ...getCommunitySettings(), ...patch };
+  requireDb()
+    .prepare(
+      `INSERT INTO community_settings (id, channel_id, congrats_channel_id, congrats_enabled, cotw_enabled, cotw_role_id, cotw_holder_id, cotw_last_week)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         channel_id       = excluded.channel_id,
+         congrats_channel_id = excluded.congrats_channel_id,
+         congrats_enabled = excluded.congrats_enabled,
+         cotw_enabled     = excluded.cotw_enabled,
+         cotw_role_id     = excluded.cotw_role_id,
+         cotw_holder_id   = excluded.cotw_holder_id,
+         cotw_last_week   = excluded.cotw_last_week`
+    )
+    .run(
+      n.channelId,
+      n.congratsChannelId,
+      n.congratsEnabled ? 1 : 0,
+      n.cotwEnabled ? 1 : 0,
+      n.cotwRoleId,
+      n.cotwHolderId,
+      n.cotwLastWeek
+    );
+  return n;
+}
+
+export function setMilestone(count: number, roleId: string): void {
+  requireDb()
+    .prepare(
+      `INSERT INTO milestones (pr_count, role_id) VALUES (?, ?)
+       ON CONFLICT(pr_count) DO UPDATE SET role_id = excluded.role_id`
+    )
+    .run(count, roleId);
+}
+
+export function removeMilestone(count: number): boolean {
+  return (
+    requireDb().prepare("DELETE FROM milestones WHERE pr_count = ?").run(count)
+      .changes > 0
+  );
+}
+
+export function listMilestones(): { count: number; roleId: string }[] {
+  return requireDb()
+    .prepare("SELECT pr_count AS count, role_id AS roleId FROM milestones ORDER BY pr_count")
+    .all() as { count: number; roleId: string }[];
+}
+
+/** Every linked member (no paging), for leaderboards. */
+export function allLinks(): Link[] {
+  return requireDb()
+    .prepare(
+      "SELECT discord_id AS discordId, github_login AS githubLogin, linked_at AS linkedAt FROM links"
+    )
+    .all() as Link[];
+}
+
+// ---- alert subscriptions ----------------------------------------------------
+
+export interface Subscription {
+  channelId: string;
+  contractId: string;
+  severity: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function upsertSubscription(
+  channelId: string,
+  contractId: string,
+  severity = "all"
+): Subscription {
+  const conn = requireDb();
+  const normalizedContract = contractId.trim().toUpperCase();
+  const normalizedSeverity = severity.trim().toLowerCase();
+  conn
+    .prepare(
+      `INSERT INTO alert_subscriptions (channel_id, contract_id, severity, created_at, updated_at)
+       VALUES (?, ?, ?, datetime('now'), datetime('now'))
+       ON CONFLICT(channel_id, contract_id) DO UPDATE SET
+         severity   = excluded.severity,
+         updated_at = datetime('now')`
+    )
+    .run(channelId, normalizedContract, normalizedSeverity);
+  return getSubscription(channelId, normalizedContract)!;
+}
+
+export function removeSubscription(
+  channelId: string,
+  contractId: string
+): boolean {
+  const conn = requireDb();
+  const normalizedContract = contractId.trim().toUpperCase();
+  const r = conn
+    .prepare(
+      "DELETE FROM alert_subscriptions WHERE channel_id = ? AND contract_id = ?"
+    )
+    .run(channelId, normalizedContract);
+  return r.changes > 0;
+}
+
+export function getSubscription(
+  channelId: string,
+  contractId: string
+): Subscription | null {
+  const conn = requireDb();
+  const normalizedContract = contractId.trim().toUpperCase();
+  const row = conn
+    .prepare(
+      `SELECT channel_id AS channelId, contract_id AS contractId, severity, created_at AS createdAt, updated_at AS updatedAt
+       FROM alert_subscriptions WHERE channel_id = ? AND contract_id = ?`
+    )
+    .get(channelId, normalizedContract) as Subscription | undefined;
+  return row ?? null;
+}
+
+export function listSubscriptionsForChannel(channelId: string): Subscription[] {
+  const conn = requireDb();
+  return conn
+    .prepare(
+      `SELECT channel_id AS channelId, contract_id AS contractId, severity, created_at AS createdAt, updated_at AS updatedAt
+       FROM alert_subscriptions WHERE channel_id = ? ORDER BY contract_id ASC`
+    )
+    .all(channelId) as Subscription[];
+}
+
+export function listSubscriptionsForContract(contractId: string): Subscription[] {
+  const conn = requireDb();
+  const normalizedContract = contractId.trim().toUpperCase();
+  return conn
+    .prepare(
+      `SELECT channel_id AS channelId, contract_id AS contractId, severity, created_at AS createdAt, updated_at AS updatedAt
+       FROM alert_subscriptions WHERE contract_id = ? ORDER BY channel_id ASC`
+    )
+    .all(normalizedContract) as Subscription[];
+}
+
+export function listAllSubscriptions(): Subscription[] {
+  const conn = requireDb();
+  return conn
+    .prepare(
+      `SELECT channel_id AS channelId, contract_id AS contractId, severity, created_at AS createdAt, updated_at AS updatedAt
+       FROM alert_subscriptions ORDER BY channel_id ASC, contract_id ASC`
+    )
+    .all() as Subscription[];
+}
+
+export function clearSubscriptionsForChannel(channelId: string): number {
+  const conn = requireDb();
+  const r = conn
+    .prepare("DELETE FROM alert_subscriptions WHERE channel_id = ?")
+    .run(channelId);
+  return r.changes;
 }

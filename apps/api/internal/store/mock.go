@@ -31,6 +31,7 @@ type MockStore struct {
 	alertSubscriptions    []AlertSubscription
 	users                 map[string]User
 	healthScores          map[string]ContractHealthScore
+	healthScoreHistory    map[string]map[time.Time]HealthScoreSample
 	failedEvents          map[int64]FailedEvent
 	failedEventSeq        int64
 	indexerCursors        map[string]uint32
@@ -42,41 +43,46 @@ type MockStore struct {
 	contractTags          map[string]map[string]bool
 	wasmBinaries          map[string]ContractWasm
 	contractSpecs         map[string]ContractSpec
+	contractEventSchemas  map[string]map[string]ContractEventSchema
 	contractVerifications map[string]ContractVerification
 	alertRules            []AlertRule
 	contractNotes         map[string][]ContractNote
 	watchedAccounts       map[string]WatchedAccount
+	*MockExportJobStore
 
 	// auditMu guards auditEvents: the audit middleware writes asynchronously.
-	auditMu     sync.Mutex
-	auditEvents []AuditEvent
+	auditMu      sync.Mutex
+	auditEvents  []AuditEvent
+	usageRecords []APIKeyUsageRecord
 
 	// Error injection
-	UpsertContractErr             error
-	GetContractErr                error
-	ListContractsErr              error
-	DeleteContractsErr            error
-	SetContractLabelErr           error
-	GetGlobalStatsErr             error
-	ListEventsErr                 error
-	ListInvocationsErr            error
-	GetInvocationErr              error
-	GetInvocationWithEventsErr    error
-	GetCallEdgesErr               error
-	ListStorageErr                error
-	GetContractStatsErr           error
-	GetContractInvocationStatsErr error
-	RecentEventsErr               error
-	RecentInvocationsErr          error
-	CreateAPIKeyErr               error
-	GetAPIKeyErr                  error
-	UpsertUserErr                 error
-	GetUserErr                    error
-	ListUpgradesErr               error
-	GetHealthScoreErr             error
-	RecordContractVersionErr      error
-	ListContractVersionsErr       error
-	GetLatestContractVersionErr   error
+	UpsertContractErr                 error
+	GetContractErr                    error
+	UntrackContractErr                error
+	ListContractsErr                  error
+	DeleteContractsErr                error
+	SetContractLabelErr               error
+	GetGlobalStatsErr                 error
+	ListEventsErr                     error
+	ListInvocationsErr                error
+	GetInvocationErr                  error
+	GetInvocationWithEventsErr        error
+	GetCallEdgesErr                   error
+	ListStorageErr                    error
+	GetContractStatsErr               error
+	GetContractInvocationStatsErr     error
+	GetContractResourcePercentilesErr error
+	RecentEventsErr                   error
+	RecentInvocationsErr              error
+	CreateAPIKeyErr                   error
+	GetAPIKeyErr                      error
+	UpsertUserErr                     error
+	GetUserErr                        error
+	ListUpgradesErr                   error
+	GetHealthScoreErr                 error
+	RecordContractVersionErr          error
+	ListContractVersionsErr           error
+	GetLatestContractVersionErr       error
 
 	UpsertVerificationErr error
 	GetVerificationErr    error
@@ -165,6 +171,7 @@ func NewMockStore() *MockStore {
 		failedEvents:          make(map[int64]FailedEvent),
 		labels:                make([]Label, 0),
 		watchedAccounts:       make(map[string]WatchedAccount),
+		MockExportJobStore:    NewMockExportJobStore(),
 	}
 }
 
@@ -191,6 +198,19 @@ func (m *MockStore) GetContract(_ context.Context, contractID string) (Contract,
 	}
 	c.Tags = m.tagsFor(contractID)
 	return c, nil
+}
+
+func (m *MockStore) UntrackContract(_ context.Context, contractID string) error {
+	if m.UntrackContractErr != nil {
+		return m.UntrackContractErr
+	}
+	c, ok := m.contracts[contractID]
+	if !ok {
+		return ErrNotFound
+	}
+	c.Status = "paused"
+	m.contracts[contractID] = c
+	return nil
 }
 
 func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {
@@ -298,6 +318,7 @@ func (m *MockStore) DeleteContracts(_ context.Context, ids []string) (int64, err
 	for id := range removed {
 		delete(m.syncStates, id)
 		delete(m.healthScores, id)
+		delete(m.healthScoreHistory, id)
 		for _, items := range m.watchlist {
 			delete(items, id)
 		}
@@ -381,6 +402,26 @@ func (m *MockStore) CreateNextMonthPartition(_ context.Context) error { return n
 
 func (m *MockStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error {
 	return nil
+}
+
+func (m *MockStore) MaintainPartitions(_ context.Context, _ int) error { return nil }
+
+func (m *MockStore) ArchiveOldEvents(_ context.Context, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, errors.New("retention days must be positive")
+	}
+	cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+	var remaining []Event
+	var moved int64
+	for _, e := range m.events {
+		if e.LedgerClosedAt.Before(cutoff) {
+			moved++
+		} else {
+			remaining = append(remaining, e)
+		}
+	}
+	m.events = remaining
+	return moved, nil
 }
 
 func (m *MockStore) GetIndexerCursor(_ context.Context, network string) (uint32, error) {
@@ -1039,7 +1080,7 @@ func (m *MockStore) GetAPIKeyByHash(_ context.Context, hash string) (APIKey, err
 		return APIKey{}, m.GetAPIKeyErr
 	}
 	for _, k := range m.apiKeys {
-		if k.KeyHash == hash && !k.Revoked() {
+		if k.KeyHash == hash && !k.Revoked() && !k.Expired(time.Now()) {
 			return k, nil
 		}
 	}

@@ -52,7 +52,7 @@ func runReport(cmd *cobra.Command, args []string) error {
 		contractID = args[0]
 	}
 
-	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
+	c := newClient(globalConfig.Timeout)
 
 	if contractID == "" {
 		// Attempt to resolve from tracked contracts if only one exists.

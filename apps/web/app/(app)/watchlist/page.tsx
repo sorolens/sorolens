@@ -5,6 +5,7 @@ import Link from "next/link";
 import { listWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/api";
 import type { WatchlistItem } from "@/lib/types";
 import { StarButton } from "@/components/StarButton";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorState, errorMessage } from "@/components/ErrorState";
 import { useSessionUserId } from "@/lib/useSession";
 
@@ -13,6 +14,7 @@ export default function WatchlistPage() {
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -117,12 +119,19 @@ export default function WatchlistPage() {
                   <td className="px-4 py-3 tabular-nums text-[var(--color-text-secondary)]">
                     {new Date(item.added_at).toLocaleDateString()}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 flex items-center gap-2">
                     <StarButton
                       contractId={item.contract_id}
                       userId={userId}
                       initialInWatchlist
                     />
+                    <button
+                      type="button"
+                      onClick={() => setPendingRemoveId(item.contract_id)}
+                      className="text-xs text-red-400 hover:underline"
+                    >
+                      Remove
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -130,6 +139,21 @@ export default function WatchlistPage() {
           </table>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingRemoveId !== null}
+        title="Remove from watchlist"
+        description="Are you sure you want to remove this contract from your watchlist?"
+        confirmText="Remove"
+        isDestructive={true}
+        onConfirm={async () => {
+          if (pendingRemoveId) {
+            await handleToggle(pendingRemoveId, true);
+            setPendingRemoveId(null);
+          }
+        }}
+        onClose={() => setPendingRemoveId(null)}
+      />
     </div>
   );
 }

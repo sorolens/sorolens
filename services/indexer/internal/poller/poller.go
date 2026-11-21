@@ -12,15 +12,16 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/sorolens/sorolens/services/indexer/internal/anomaly"
 	"github.com/sorolens/sorolens/services/indexer/internal/callgraph"
 	"github.com/sorolens/sorolens/services/indexer/internal/healthscore"
+	"github.com/sorolens/sorolens/services/indexer/internal/lock"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/partition"
 	"github.com/sorolens/sorolens/services/indexer/internal/wasm"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -31,9 +32,15 @@ const (
 	// lockKeyPrefix is the Redis key prefix for per-contract indexer locks.
 	lockKeyPrefix = "sorolens:lock:indexer:"
 
-	// newContractBackfillWindow is how many ledgers back to start a backfill
-	// for a contract with no prior sync state. At ~5s per ledger this is
-	// approximately 6 days, safely within the 7-day RPC retention window.
+	// lockReleaseTimeout bounds the fresh-context release so shutdown can never
+	// block on a Redis that has stopped responding.
+	lockReleaseTimeout = 5 * time.Second
+
+	// newContractBackfillWindow is how far behind the chain head a new
+	// contract's backfill reaches. At ~5s per ledger this is approximately 6
+	// days, inside the 7-day (120,960 ledger) history retention that Soroban
+	// RPC defaults to. A node configured to keep less is detected at runtime
+	// and the backfill is shortened to what it retains (see runBackfill).
 	newContractBackfillWindow uint32 = 100_000
 )
 
@@ -42,9 +49,15 @@ type Config struct {
 	// Workers is the maximum number of contracts processed concurrently. Values
 	// less than one default to GOMAXPROCS.
 	Workers int
+	// Concurrency sets the bounded worker pool limit (INDEXER_CONCURRENCY).
+	// If set to > 0, it takes precedence over Workers.
+	Concurrency int
 	// LedgerWindow is the maximum number of ledgers to request per getEvents
 	// call. Matches INDEXER_LEDGER_WINDOW from the API config.
 	LedgerWindow uint32
+	// BackfillWindow is how many ledgers one backfill step scans. Zero means
+	// DefaultBackfillWindow. It never exceeds LedgerWindow.
+	BackfillWindow uint32
 	// PollInterval is the sleep duration between full passes in continuous mode.
 	PollInterval time.Duration
 	// MaxDuration is the wall-clock budget for a single once-mode pass.
@@ -195,52 +208,31 @@ func (p *Poller) processAll(ctx context.Context) error {
 	if err := partition.EnsureNextMonthPartition(ctx, p.store); err != nil {
 		p.log.Warn("failed to ensure next month partition", "err", err)
 	}
-	workerCount := p.cfg.Workers
-	if workerCount < 1 {
-		workerCount = runtime.GOMAXPROCS(0)
+	limit := p.cfg.Concurrency
+	if limit < 1 {
+		limit = p.cfg.Workers
 	}
-	jobs := make(chan Contract, workerCount)
-	var workers sync.WaitGroup
-	workers.Add(workerCount)
-	for i := 0; i < workerCount; i++ {
-		go func() {
-			defer workers.Done()
-			for contract := range jobs {
-				// Preserve graceful shutdown semantics: contracts already being
-				// processed finish, but queued contracts do not start after cancel.
-				if ctx.Err() != nil {
-					continue
-				}
-				if err := p.processContract(context.WithoutCancel(ctx), contract); err != nil {
-					// One failing contract must not block the rest of the pass.
-					p.log.Error("failed to index contract",
-						"contract_id", contract.ID,
-						"err", err,
-					)
-				}
-			}
-		}()
-	}
-	stopWorkers := func() {
-		close(jobs)
-		workers.Wait()
+	if limit < 1 {
+		limit = runtime.GOMAXPROCS(0)
 	}
 
 	// Track contracts deployed by watched accounts first so they are
 	// indexed in this same pass (issue #123).
 	p.runDiscovery(ctx)
 
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(limit)
+
 	var cursor string
 	for {
 		// Check for shutdown between contract batches.
 		if ctx.Err() != nil {
-			stopWorkers()
-			return nil
+			break
 		}
 
 		contracts, next, err := p.store.ListContracts(ctx, cursor, 50)
 		if err != nil {
-			stopWorkers()
+			_ = g.Wait()
 			return fmt.Errorf("list contracts: %w", err)
 		}
 
@@ -249,14 +241,23 @@ func (p *Poller) processAll(ctx context.Context) error {
 			if ctx.Err() != nil {
 				break contractBatch
 			}
-			if c.Status != "active" && c.Status != "backfilling" {
+			if c.Status != "active" && c.Status != "backfilling" && c.Status != "pending" {
 				continue
 			}
-			select {
-			case <-ctx.Done():
-				break contractBatch
-			case jobs <- c:
-			}
+			contract := c
+			g.Go(func() error {
+				if gctx.Err() != nil {
+					return nil
+				}
+				if err := p.indexContract(context.WithoutCancel(gctx), gctx, contract); err != nil {
+					// One failing contract must not block the rest of the pass.
+					p.log.Error("failed to index contract",
+						"contract_id", contract.ID,
+						"err", err,
+					)
+				}
+				return nil
+			})
 		}
 		if ctx.Err() != nil {
 			break
@@ -267,7 +268,9 @@ func (p *Poller) processAll(ctx context.Context) error {
 		}
 		cursor = next
 	}
-	stopWorkers()
+	if err := g.Wait(); err != nil {
+		return err
+	}
 
 	if p.cfg.AnomalyEnabled {
 		p.runAnomalyDetection(ctx)
@@ -287,6 +290,18 @@ func (p *Poller) processAll(ctx context.Context) error {
 	if p.ruleEval != nil {
 		if err := p.ruleEval.EvaluatePass(ctx); err != nil {
 			p.log.Error("rule evaluation pass", "err", err)
+		}
+	}
+
+	// Report DLQ size per network so operators can see the backlog.
+	if p.metrics != nil {
+		for network := range p.rpcClients {
+			n, err := p.store.CountFailedEvents(ctx, network)
+			if err != nil {
+				p.log.Warn("dlq size: count failed", "network", network, "err", err)
+				continue
+			}
+			p.metrics.SetDlqSize(network, float64(n))
 		}
 	}
 	return nil
@@ -503,6 +518,13 @@ func healthInputsToScoreInputs(in HealthInputs) healthscore.Inputs {
 // contract's on-chain Wasm hash for upgrades before scanning events so a code
 // upgrade with no indexable events still gets recorded.
 func (p *Poller) processContract(ctx context.Context, contract Contract) error {
+	return p.indexContract(ctx, ctx, contract)
+}
+
+// indexContract is processContract with a separate shutdown signal. ctx keeps
+// in-flight RPC and store calls alive so the current window always commits;
+// stop only ends a backfill between windows.
+func (p *Poller) indexContract(ctx, stop context.Context, contract Contract) error {
 	contractID := contract.ID
 	network := contract.Network
 	rpc, ok := p.selectRPCClient(network)
@@ -514,9 +536,15 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return nil
 	}
 
-	// Acquire per-contract advisory lock to prevent concurrent runs.
+	// Acquire per-contract advisory lock to prevent concurrent runs. A fresh
+	// random token per acquisition lets holders be told apart, so renew and
+	// release only ever touch this run's lock.
 	lockKey := lockKeyPrefix + contractID
-	acquired, err := p.redis.SetNX(ctx, lockKey, "1", lockTTL)
+	lockValue, err := lock.NewToken()
+	if err != nil {
+		return fmt.Errorf("generate lock token: %w", err)
+	}
+	acquired, err := p.redis.SetNX(ctx, lockKey, lockValue, lockTTL)
 	if err != nil {
 		return fmt.Errorf("acquire lock: %w", err)
 	}
@@ -525,7 +553,41 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 			"contract_id", contractID)
 		return nil
 	}
-	defer p.redis.Del(ctx, lockKey) //nolint:errcheck
+
+	// Renew the lock while the run is active so a long pass never loses it.
+	renewStop := make(chan struct{})
+	renewDone := make(chan error, 1)
+	go func() {
+		defer func() { renewDone <- nil }()
+		ticker := time.NewTicker(lockTTL / 2)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-renewStop:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := p.redis.Renew(ctx, lockKey, lockValue, lockTTL); err != nil {
+					p.log.Warn("lock renewal failed",
+						"contract_id", contractID,
+						"err", err,
+					)
+				}
+			}
+		}
+	}()
+	defer func() {
+		close(renewStop)
+		<-renewDone
+	}()
+	// Release on a fresh context: the run context is cancelled on shutdown, but
+	// the lock still has to be removed so the next process can take over.
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), lockReleaseTimeout)
+		defer cancel()
+		_ = p.redis.Del(releaseCtx, lockKey, lockValue)
+	}()
 
 	// Detect Wasm upgrades (contract code changes) before scanning events so
 	// an upgrade with no indexable events still gets recorded. Any error here
@@ -544,6 +606,7 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 
 	latest, err := rpc.GetLatestLedger(ctx)
 	if err != nil {
+		p.metrics.RecordRpcError(network)
 		return fmt.Errorf("get latest ledger: %w", err)
 	}
 
@@ -552,24 +615,32 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 		return fmt.Errorf("get sync state: %w", err)
 	}
 
-	var startLedger uint32
-	if syncState.LastLedger == 0 {
-		// New contract: best-effort backfill from within the retention window.
-		if latest.Sequence > newContractBackfillWindow {
-			startLedger = latest.Sequence - newContractBackfillWindow
-		} else {
-			startLedger = 1
-		}
-		p.log.Warn("new contract, starting partial backfill; events before this ledger are unavailable",
-			"contract_id", contractID,
-			"start_ledger", startLedger,
-			"retention_window_ledgers", newContractBackfillWindow,
-		)
-	} else {
-		startLedger = syncState.LastLedger + 1
+	if !needsBackfill(contract, syncState) {
+		return p.indexForward(ctx, rpc, contract, latest.Sequence, syncState)
 	}
 
-	if startLedger > latest.Sequence {
+	// New contract: tail the chain head from the start of the backfill while
+	// older ledgers are walked in bounded windows behind it.
+	progress, err := p.beginBackfill(ctx, contract, latest.Sequence, syncState)
+	if err != nil {
+		return err
+	}
+	if syncState.LastLedger == 0 {
+		syncState.LastLedger = progress.NewestLedger
+	}
+	if err := p.indexForward(ctx, rpc, contract, latest.Sequence, syncState); err != nil {
+		return err
+	}
+	return p.runBackfill(ctx, stop, rpc, contract, progress)
+}
+
+// indexForward indexes the next window of ledgers after the contract's cursor.
+func (p *Poller) indexForward(ctx context.Context, rpc RPCClient, contract Contract, latest uint32, syncState SyncState) error {
+	contractID := contract.ID
+	network := contract.Network
+
+	startLedger := syncState.LastLedger + 1
+	if startLedger > latest {
 		p.log.Info("contract is up to date",
 			"contract_id", contractID,
 			"last_ledger", syncState.LastLedger,
@@ -578,7 +649,7 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 	}
 
 	// Fetch events in windows to respect RPC page limits.
-	endLedger := min32(startLedger+p.cfg.LedgerWindow-1, latest.Sequence)
+	endLedger := min32(startLedger+p.cfg.LedgerWindow-1, latest)
 
 	log := p.log.With(
 		"contract_id", contractID,
@@ -616,7 +687,7 @@ func (p *Poller) processContract(ctx context.Context, contract Contract) error {
 	// uses the batch's final ledger as the committed cursor, which is clamped
 	// at zero against the observed head.
 	p.metrics.AddEventsProcessed(network, len(events))
-	p.metrics.ObserveNetwork(network, latest.Sequence, endLedger)
+	p.metrics.ObserveNetwork(network, latest, endLedger)
 
 	log.Info("contract indexed",
 		"events", len(events),
@@ -787,6 +858,7 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 
 	result, err := rpc.GetEvents(ctx, startLedger, endLedger, filters)
 	if err != nil {
+		p.metrics.RecordRpcError(network)
 		return nil, nil, fmt.Errorf("get events [%d,%d]: %w", startLedger, endLedger, err)
 	}
 

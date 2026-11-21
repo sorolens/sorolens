@@ -50,6 +50,9 @@ import { ContractChangelogPanel } from "@/components/ContractChangelogPanel";
 import { ContractForecastChart } from "@/components/ContractForecastChart";
 import { ContractInvocationsPanel } from "@/components/ContractInvocationsPanel";
 import { ContractWatchdogPanel } from "@/components/ContractWatchdogPanel";
+import { ContractTokensPanel } from "@/components/ContractTokensPanel";
+import { ResourcePercentilesTable } from "@/components/ResourcePercentilesTable";
+import { hasTokenActivity } from "@/lib/tokens";
 import { useEventStream } from "@/hooks/useEventStream";
 
 const TABS = [
@@ -58,6 +61,7 @@ const TABS = [
   { id: "invocations", label: "Invocations" },
   { id: "storage", label: "Storage" },
   { id: "watchdog", label: "Watchdog" },
+  { id: "tokens", label: "Tokens" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -154,6 +158,26 @@ function ContractDetailContent({ id }: { id: string }) {
     return () =>
       globalThis.window.removeEventListener("hashchange", onHashChange);
   }, []);
+
+  // The Tokens tab only exists for contracts with indexed token transfers.
+  const [hasTokens, setHasTokens] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHasTokens(null);
+    hasTokenActivity(id).then((available) => {
+      if (!cancelled) setHasTokens(available);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (hasTokens === false && activeTab === "tokens") {
+      setActiveTab("overview");
+    }
+  }, [hasTokens, activeTab]);
 
   const handleSelectTab = (tabId: TabId) => {
     setActiveTab(tabId);
@@ -539,7 +563,7 @@ function ContractDetailContent({ id }: { id: string }) {
         aria-label="Contract sections"
         className="mb-6 flex border-b border-[var(--color-border)] gap-6"
       >
-        {TABS.map((tab) => {
+        {TABS.filter((tab) => tab.id !== "tokens" || hasTokens).map((tab) => {
           const selected = activeTab === tab.id;
           return (
             <button
@@ -642,6 +666,12 @@ function ContractDetailContent({ id }: { id: string }) {
             </div>
           )}
         </section>
+
+        <ResourcePercentilesTable
+          percentiles={stats?.resource_percentiles}
+          invocationCount={stats?.window_invocation_count ?? 0}
+          windowLabel={windowLabel ?? "24h"}
+        />
 
         <ContractForecastChart contractId={id} />
 
@@ -795,6 +825,19 @@ function ContractDetailContent({ id }: { id: string }) {
         className={activeTab === "watchdog" ? "space-y-8" : "hidden"}
       >
         <ContractWatchdogPanel contractId={id} />
+      </div>
+
+      {/* Tokens Tab */}
+      <div
+        role="tabpanel"
+        id="tabpanel-tokens"
+        aria-labelledby="tab-tokens"
+        hidden={activeTab !== "tokens"}
+        className={activeTab === "tokens" ? "space-y-8" : "hidden"}
+      >
+        {activeTab === "tokens" && hasTokens && (
+          <ContractTokensPanel contractId={id} />
+        )}
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ contract without leaving Discord.
 
 This page documents the slash commands and how they authenticate. Setup,
 deployment, the issue self-assign rules and the admin commands are in the
-bot's [README](../services/discord-bot/README.md).
+bot's [README](https://github.com/sorolens/sorolens/blob/main/services/discord-bot/README.md).
 
 ## Commands
 
@@ -31,7 +31,7 @@ apply channel the owner set with `/assign-setup`. The bot assigns them on
 GitHub, first come, first served, up to the per-person max, and reacts ✅ or
 ❌. The owner releases issues with `/assign-issues add`, checks what is open
 with `/assign-available`, and opens a round with `/assign-toggle on`. See the
-[README](../services/discord-bot/README.md#issue-self-assign-drips-wave) for
+[README](https://github.com/sorolens/sorolens/blob/main/services/discord-bot/README.md#issue-self-assign-drips-wave) for
 the full rules.
 
 ### Contract queries

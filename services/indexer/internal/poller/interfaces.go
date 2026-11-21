@@ -27,6 +27,13 @@ type Store interface {
 	// returned to the caller. The network cursor never advances past a
 	// window whose data did not commit.
 	BatchInsertWithCursor(ctx context.Context, network string, ledger uint32, events []Event, invocations []Invocation, syncState SyncState) ([]FailedEvent, error)
+	// BeginBackfill records the backfill range for a contract and moves it to
+	// the backfilling status. An existing saved position wins over p and is
+	// returned, which is how a restarted indexer resumes.
+	BeginBackfill(ctx context.Context, p BackfillProgress) (BackfillProgress, error)
+	// CommitBackfillWindow atomically writes one scanned window together with
+	// its new position, and activates the contract on the final window.
+	CommitBackfillWindow(ctx context.Context, w BackfillWindow) ([]FailedEvent, error)
 	GetSyncState(ctx context.Context, contractID string) (SyncState, error)
 	UpsertSyncState(ctx context.Context, s SyncState) error
 	CreateNextMonthPartition(ctx context.Context) error
@@ -68,6 +75,10 @@ type Store interface {
 	// InsertFailedEvent parks an event that exhausted processing retries
 	// in the dead-letter queue (issue #202).
 	InsertFailedEvent(ctx context.Context, fe FailedEvent) error
+
+	// CountFailedEvents returns the number of events parked in the
+	// dead-letter queue for a network, used for the dlq_size metric.
+	CountFailedEvents(ctx context.Context, network string) (int, error)
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -75,8 +86,12 @@ type RedisClient interface {
 	// SetNX sets key to value with ttl if key does not already exist.
 	// Returns true if the key was set (lock acquired).
 	SetNX(ctx context.Context, key string, value string, ttl time.Duration) (bool, error)
-	// Del removes the key (releases the lock).
-	Del(ctx context.Context, key string) error
+	// Del releases the lock only if key's current value equals expectedValue,
+	// using a compare-and-delete so one process never deletes another's lock.
+	Del(ctx context.Context, key string, expectedValue string) error
+	// Renew resets key's TTL to ttl only if key's current value equals
+	// expectedValue, so the holder can extend a long-running lock.
+	Renew(ctx context.Context, key string, expectedValue string, ttl time.Duration) (bool, error)
 }
 
 // ---- local mirror types (avoid importing apps/api from this package) ------

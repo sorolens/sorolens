@@ -42,12 +42,15 @@ type APIKey struct {
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 	RevokedAt  *time.Time
+	ExpiresAt  *time.Time
 	// UserID binds the key to a user when non-nil. The key then carries that
 	// user's identity (issue #518). Unbound keys authenticate scopes only.
 	UserID *string
 	// RotatedAt is when the key's secret was last regenerated in place,
 	// or nil if it has never been rotated.
 	RotatedAt *time.Time
+	// MonthlyQuota is the optional hard quota on monthly requests (issue #792).
+	MonthlyQuota *int
 	// AllowedCIDRs restricts the key to these source networks (issue #793).
 	// Empty or nil means the key is not restricted by address.
 	AllowedCIDRs []string
@@ -58,6 +61,11 @@ type APIKey struct {
 
 // Revoked reports whether the key has been revoked.
 func (k APIKey) Revoked() bool { return k.RevokedAt != nil }
+
+// Expired reports whether the key has expired relative to now.
+func (k APIKey) Expired(now time.Time) bool {
+	return k.ExpiresAt != nil && !now.Before(*k.ExpiresAt)
+}
 
 // HasScope reports whether the key grants the required scope. admin:*
 // always grants access; a trailing ":*" wildcard grants every scope in
@@ -167,7 +175,13 @@ func normalizeOrigin(raw string) (string, error) {
 	if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
 		return "", &InvalidAllowlistError{Reason: fmt.Sprintf("invalid origin %q: must not contain credentials, a path, a query or a fragment", s)}
 	}
-	return scheme + "://" + strings.ToLower(u.Host), nil
+	host := strings.ToLower(u.Host)
+	// Browsers omit the default port from the Origin header, so an allowlist
+	// entry written with it must still match.
+	if port := u.Port(); (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+		host = strings.TrimSuffix(host, ":"+port)
+	}
+	return scheme + "://" + host, nil
 }
 
 // AllowsClientIP reports whether ip is permitted by the key's allowlist. An

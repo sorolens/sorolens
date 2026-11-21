@@ -64,13 +64,39 @@ Open the popup → **Settings** (or the extension's Options page):
 
 | Setting          | Where it is stored | Notes                                                                                                                                                 |
 | ---------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API key (#131)   | `storage.local`    | Scoped key; `write:contracts` lets the extension register contracts that are not indexed yet. Never synced, never sent to a page script.              |
-| User ID          | `storage.sync`     | Sent as `X-User-ID`, the identity the `/watchlist` routes key on. Copy `sorolens_user_id` from the dashboard's `localStorage` to share one watchlist. |
+| API key (#131)   | `storage.local`    | The credential. Create one in the dashboard under **Settings → Browser extension**; `write:contracts` lets the extension register contracts that are not indexed yet. Never synced, never sent to a page script.    |
+| User ID          | `storage.sync`     | Sent as `X-User-ID`, which the API **ignores** unless a trusted proxy signed it (issue #518). It is not how the extension gets a watchlist — the key above is. |
 | API base URL     | `storage.sync`     | Defaults to `https://api.sorolens.xyz`. Host access is requested at save time, so self-hosted APIs work.                                              |
 | Default network  | `storage.sync`     | `mainnet`, `testnet`, `futurenet` or `standalone`.                                                                                                    |
 | Watchlist toggle | `storage.sync`     | Off means "register for indexing only".                                                                                                               |
 | Inline buttons   | `storage.sync`     | Off keeps detection (badge + popup) but injects no page UI.                                                                                           |
 | Notifications    | `storage.sync`     | On by default. Polls watched contracts every 5 minutes, shows an unread badge and raises one notification per new alert. Choose Critical/Warning/Info. |
+
+### Pairing with the dashboard
+
+The extension and the dashboard share one workspace by sharing one credential:
+
+1. Dashboard → **Settings → Browser extension** → **Create extension key**. The
+   key is minted by `POST /api/v1/me/api-keys` with the `read:contracts` and
+   `write:contracts` scopes, bound to the session user the dashboard already
+   uses, and shown once.
+2. Paste it into the extension's **API key** field. It goes to
+   `storage.local`, which is neither synced across browsers nor readable by a
+   page script.
+3. Every request now carries `Authorization: Bearer <key>`, and the API derives
+   the user from that key (`apps/api/internal/middleware/identity.go`), so
+   `POST /api/v1/watchlist` writes to the same watchlist the dashboard shows.
+
+There is nothing to copy out of `localStorage`. The older instructions here said
+to copy `sorolens_user_id` from the dashboard; that stopped working when raw
+`X-User-ID` headers became untrusted in issue #518. The dashboard mints a
+signed workspace session instead and stores it under `sorolens_session` — a
+bearer credential that must never be shared, and which is deleted once a
+session exists.
+
+To stop the extension, revoke the key in **Settings → API keys**. The
+`user_…` value in the **User ID** field is a local placeholder and grants
+nothing.
 
 ## What the button does
 
@@ -78,8 +104,8 @@ Open the popup → **Settings** (or the extension's Options page):
 2. If not, `POST /api/v1/contracts` with `{ id, network }` (needs
    `write:contracts` + contributor role; a failure is surfaced as a warning and
    does not block step 3).
-3. `POST /api/v1/watchlist` with `{ contract_id }` — adds it to
-   `X-User-ID`'s watchlist.
+3. `POST /api/v1/watchlist` with `{ contract_id }` — adds it to the watchlist
+   of the user the API key is bound to.
 4. `GET /api/v1/watchlist/{id}/status` re-reads the resulting state.
 
 Clicking a **Tracked** button reverses step 3 with
@@ -101,6 +127,21 @@ python3 tools/generate-icons.py  # regenerate src/icons/*.png
 
 `npm run check`, `npm test`, `npm run build` and `npm run package` wrap the same
 commands. `npm run package:chrome` / `npm run package:firefox` build one target.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs `node scripts/check.mjs` and
+`node --test "tests/*.test.mjs"` as steps of the existing **Web** job on every
+pull request, so a change to `src/shared/api.js` or the OpenAPI that breaks the
+extension fails an existing check (the PR check count stays at five). No
+`npm install` is needed.
+
+Packaging does not run on pull requests. `.github/workflows/extension-release.yml`
+runs the same checks, builds both targets, lints the Firefox build with
+`web-ext` and uploads `dist/*.zip` as the `sorolens-extension` artifact. Start it
+manually (Actions → Extension Release → Run workflow) or push an
+`extension-v*` tag, which also attaches the zips to a release. Run the same thing
+locally with `node scripts/package.mjs`.
 
 ### Testing both browsers
 

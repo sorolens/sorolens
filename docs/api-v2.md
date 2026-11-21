@@ -78,6 +78,7 @@ chi route table and fails if a v1 route has no v2 equivalent.
 | POST            | `/api/v1/contracts`                                                                            | `/api/v2/contracts`                         |
 | GET             | `/api/v1/contracts`                                                                            | `/api/v2/contracts`                         |
 | GET             | `/api/v1/contracts/{id}`                                                                       | `/api/v2/contracts/{id}`                    |
+| DELETE          | `/api/v1/contracts/{id}`                                                                       | `/api/v2/contracts/{id}`                    |
 | GET             | `/api/v1/contracts/{id}/events`                                                                | `/api/v2/contracts/{id}/events`             |
 | GET             | `/api/v1/contracts/{id}/invocations`                                                           | `/api/v2/contracts/{id}/invocations`        |
 | GET             | `/api/v1/contracts/{id}/storage`                                                               | `/api/v2/contracts/{id}/storage`            |

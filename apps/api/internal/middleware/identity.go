@@ -257,7 +257,7 @@ func resolveIdentity(r *http.Request, lookup IdentityLookup, opts IdentityOption
 		if strings.HasPrefix(token, SessionTokenPrefix) {
 			return resolveSession(r, lookup, opts, token)
 		}
-		return resolveAPIKey(r, lookup, token)
+		return resolveAPIKey(r, lookup, opts, token)
 	}
 	if opts.ProxySecret != "" {
 		return resolveTrustedProxy(r, lookup, opts)
@@ -284,9 +284,13 @@ func resolveSession(r *http.Request, lookup IdentityLookup, opts IdentityOptions
 	}, true
 }
 
-func resolveAPIKey(r *http.Request, lookup IdentityLookup, token string) (VerifiedIdentity, bool) {
+func resolveAPIKey(r *http.Request, lookup IdentityLookup, opts IdentityOptions, token string) (VerifiedIdentity, bool) {
 	key, err := lookup.GetAPIKeyByHash(r.Context(), store.HashKey(token))
-	if err != nil || key.Revoked() {
+	now := time.Now()
+	if opts.Now != nil {
+		now = opts.Now()
+	}
+	if err != nil || key.Revoked() || key.Expired(now) {
 		return VerifiedIdentity{}, false
 	}
 
