@@ -32,7 +32,7 @@ function memoryStorage(): Storage {
 describe("isValidEmail", () => {
   it("accepts ordinary addresses", () => {
     expect(isValidEmail("dev@example.com")).toBe(true);
-    expect(isValidEmail("first.last+tag@sorolens.dev")).toBe(true);
+    expect(isValidEmail("first.last+tag@sorolens.xyz")).toBe(true);
   });
 
   it("rejects malformed addresses", () => {
@@ -113,5 +113,59 @@ describe("loadSettings / saveSettings", () => {
     saveSettings(DEFAULT_SETTINGS, storage);
     clearSettings(storage);
     expect(storage.getItem(SETTINGS_STORAGE_KEY)).toBeNull();
+  });
+});
+
+describe("unavailable storage", () => {
+  /** A Storage whose reads fail, as when the browser blocks site data. */
+  function throwingStorage(): Storage {
+    const storage = memoryStorage();
+    return {
+      ...storage,
+      getItem: () => {
+        throw new Error("Storage is blocked");
+      },
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => {
+        throw new Error("Storage is blocked");
+      },
+    } as Storage;
+  }
+
+  it("loadSettings falls back to defaults when a read throws", () => {
+    expect(loadSettings(throwingStorage())).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("saveSettings reports failure when a write throws", () => {
+    expect(saveSettings(DEFAULT_SETTINGS, throwingStorage())).toBe(false);
+  });
+
+  it("clearSettings swallows a failing removal", () => {
+    expect(() => clearSettings(throwingStorage())).not.toThrow();
+  });
+
+  it("all helpers fall back safely when localStorage itself throws", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage"
+    );
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("Access is denied for this document");
+      },
+    });
+
+    try {
+      expect(loadSettings()).toEqual(DEFAULT_SETTINGS);
+      expect(saveSettings(DEFAULT_SETTINGS)).toBe(false);
+      expect(() => clearSettings()).not.toThrow();
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(globalThis, "localStorage", descriptor);
+      }
+    }
   });
 });

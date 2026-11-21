@@ -25,11 +25,11 @@ type AuditEvent struct {
 type AuditStore interface {
 	// InsertAuditEvent appends one audit row.
 	InsertAuditEvent(ctx context.Context, e AuditEvent) error
-	// ListAuditEvents returns audit rows at or after since (zero means no
-	// lower bound), newest first. cursor is the ID of the last row of the
+	// ListAuditEvents returns audit rows within [from, to] (zero means
+	// unbounded), newest first. cursor is the ID of the last row of the
 	// previous page (0 for the first page); the returned cursor is 0 when
 	// there are no more pages.
-	ListAuditEvents(ctx context.Context, since time.Time, cursor int64, limit int) ([]AuditEvent, int64, error)
+	ListAuditEvents(ctx context.Context, from, to time.Time, cursor int64, limit int) ([]AuditEvent, int64, error)
 }
 
 func (s *postgresStore) InsertAuditEvent(ctx context.Context, e AuditEvent) error {
@@ -50,22 +50,26 @@ func (s *postgresStore) InsertAuditEvent(ctx context.Context, e AuditEvent) erro
 	return nil
 }
 
-func (s *postgresStore) ListAuditEvents(ctx context.Context, since time.Time, cursor int64, limit int) ([]AuditEvent, int64, error) {
+func (s *postgresStore) ListAuditEvents(ctx context.Context, from, to time.Time, cursor int64, limit int) ([]AuditEvent, int64, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	var sinceArg *time.Time
-	if !since.IsZero() {
-		sinceArg = &since
+	var fromArg, toArg *time.Time
+	if !from.IsZero() {
+		fromArg = &from
+	}
+	if !to.IsZero() {
+		toArg = &to
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, actor, action, resource_type, resource_id, ip, user_agent,
 		       request_body_hash, status, at
 		FROM audit_events
 		WHERE ($1::timestamptz IS NULL OR at >= $1)
-		  AND ($2 = 0 OR id < $2)
+		  AND ($2::timestamptz IS NULL OR at <= $2)
+		  AND ($3 = 0 OR id < $3)
 		ORDER BY id DESC
-		LIMIT $3`, sinceArg, cursor, limit+1)
+		LIMIT $4`, fromArg, toArg, cursor, limit+1)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list audit events: %w", err)
 	}

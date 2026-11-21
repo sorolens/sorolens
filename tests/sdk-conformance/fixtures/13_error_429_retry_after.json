@@ -1,0 +1,26 @@
+{
+  "id": "13_error_429_retry_after",
+  "description": "429 Rate limited with Retry-After header",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts"
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "Content-Type": "application/json",
+      "Retry-After": "5"
+    },
+    "body": {
+      "error": {
+        "code": "RATE_LIMITED",
+        "message": "too many requests"
+      }
+    }
+  },
+  "expected": {
+    "status": 429,
+    "retry_after": "5",
+    "error_code": "RATE_LIMITED"
+  }
+}

@@ -142,3 +142,91 @@ func TestListAllEventsEmpty(t *testing.T) {
 		t.Fatalf("empty store: %+v", body)
 	}
 }
+
+func TestListAllEventsTimeRange(t *testing.T) {
+	srv := newTestHandler(seedGlobalEvents(t), true, true)
+
+	t.Run("boundary values from and to inclusive", func(t *testing.T) {
+		body := listGlobal(t, srv, "?from=2026-09-01T02:00:00Z&to=2026-09-01T04:00:00Z")
+		if len(body.Events) != 3 {
+			t.Fatalf("want 3 events, got %d", len(body.Events))
+		}
+	})
+
+	t.Run("boundary value from equal to to", func(t *testing.T) {
+		body := listGlobal(t, srv, "?from=2026-09-01T03:00:00Z&to=2026-09-01T03:00:00Z")
+		if len(body.Events) != 1 {
+			t.Fatalf("want 1 event, got %d", len(body.Events))
+		}
+	})
+
+	t.Run("offset timestamps normalized to UTC", func(t *testing.T) {
+		// +02:00 -> 04:00 is 02:00 UTC
+		// -03:00 -> 01:00 is 04:00 UTC
+		body := listGlobal(t, srv, "?from=2026-09-01T04:00:00%2B02:00&to=2026-09-01T01:00:00-03:00")
+		if len(body.Events) != 3 {
+			t.Fatalf("want 3 events with offset timestamps, got %d", len(body.Events))
+		}
+	})
+
+	t.Run("old aliases still work", func(t *testing.T) {
+		body := listGlobal(t, srv, "?since=2026-09-01T02:00:00Z&until=2026-09-01T04:00:00Z")
+		if len(body.Events) != 3 {
+			t.Fatalf("want 3 events with since/until, got %d", len(body.Events))
+		}
+	})
+
+	t.Run("primary parameters win over old aliases", func(t *testing.T) {
+		// from=02:00 wins over since=00:00; to=03:00 wins over until=06:00 -> hours 2 and 3 = 2 events
+		body := listGlobal(t, srv, "?from=2026-09-01T02:00:00Z&since=2026-09-01T00:00:00Z&to=2026-09-01T03:00:00Z&until=2026-09-01T06:00:00Z")
+		if len(body.Events) != 2 {
+			t.Fatalf("want 2 events (primary wins), got %d", len(body.Events))
+		}
+	})
+
+	t.Run("invalid from returns 422 standard envelope", func(t *testing.T) {
+		w := doRequest(srv, http.MethodGet, "/api/v1/events?from=invalid", "", "")
+		if w.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("want 422, got %d", w.Code)
+		}
+		var errResp struct {
+			Error struct {
+				Code      string `json:"code"`
+				Message   string `json:"message"`
+				RequestID string `json:"request_id"`
+			} `json:"error"`
+		}
+		if err := json.NewDecoder(w.Body).Decode(&errResp); err != nil {
+			t.Fatalf("decode error envelope: %v", err)
+		}
+		if errResp.Error.Code != "INVALID_INPUT" {
+			t.Errorf("want code INVALID_INPUT, got %q", errResp.Error.Code)
+		}
+		if errResp.Error.Message != "from must be an RFC 3339 timestamp" {
+			t.Errorf("unexpected message: %q", errResp.Error.Message)
+		}
+	})
+
+	t.Run("inverted range returns 422 standard envelope", func(t *testing.T) {
+		w := doRequest(srv, http.MethodGet, "/api/v1/events?from=2026-09-01T04:00:00Z&to=2026-09-01T02:00:00Z", "", "")
+		if w.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("want 422, got %d", w.Code)
+		}
+		var errResp struct {
+			Error struct {
+				Code      string `json:"code"`
+				Message   string `json:"message"`
+				RequestID string `json:"request_id"`
+			} `json:"error"`
+		}
+		if err := json.NewDecoder(w.Body).Decode(&errResp); err != nil {
+			t.Fatalf("decode error envelope: %v", err)
+		}
+		if errResp.Error.Code != "INVALID_INPUT" {
+			t.Errorf("want code INVALID_INPUT, got %q", errResp.Error.Code)
+		}
+		if errResp.Error.Message != "to must not be before from" {
+			t.Errorf("unexpected message: %q", errResp.Error.Message)
+		}
+	})
+}

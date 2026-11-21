@@ -1,0 +1,80 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-config-profile-add - Create or update a profile
+
+
+.SH SYNOPSIS
+\fBsorolens config profile add  [flags]\fP
+
+
+.SH DESCRIPTION
+Create or update a named profile. The API key is read from standard input
+with --api-key-stdin so it never appears in shell history or the process list,
+and is stored in the OS keyring (a 0600 file with a warning when no keyring
+is available).
+
+
+.SH OPTIONS
+\fB--api-key-stdin\fP[=false]
+	Read the API key from standard input
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL for this profile
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for add
+
+.PP
+\fB--network\fP=""
+	Stellar network for this profile
+
+.PP
+\fB--use\fP[=false]
+	Make this the default profile
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH EXAMPLE
+.EX
+  printf '%s' "$KEY" | sorolens config profile add prod --api-url https://api.example.com --network mainnet --api-key-stdin --use
+.EE
+
+
+.SH SEE ALSO
+\fBsorolens-config-profile(1)\fP

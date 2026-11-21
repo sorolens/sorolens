@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MonoId } from "@sorolens/ui";
 import {
   ApiError,
@@ -69,6 +70,7 @@ export default function NotificationsPage() {
     message: string;
   } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async (uid: string) => {
     setLoading(true);
@@ -514,7 +516,7 @@ export default function NotificationsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(s.id)}
+                          onClick={() => setPendingDeleteId(s.id)}
                           disabled={deleting === s.id}
                           className="text-xs text-red-400 hover:underline disabled:opacity-50"
                         >
@@ -528,6 +530,22 @@ export default function NotificationsPage() {
             </table>
           </div>
         )}
+
+        <ConfirmDialog
+          isOpen={pendingDeleteId !== null}
+          title="Delete subscription"
+          description="Are you sure you want to delete this notification subscription? You will no longer receive alerts for this channel."
+          confirmText="Delete subscription"
+          isDestructive={true}
+          isLoading={deleting !== null}
+          onConfirm={async () => {
+            if (pendingDeleteId) {
+              await handleDelete(pendingDeleteId);
+              setPendingDeleteId(null);
+            }
+          }}
+          onClose={() => setPendingDeleteId(null)}
+        />
       </section>
 
       <section className="rounded-lg border border-[var(--color-border)] p-5 text-sm">

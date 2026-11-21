@@ -54,7 +54,7 @@ func TestRunDigestSendsAndRendersContent(t *testing.T) {
 
 	sent, err := reportdigest.RunDigest(context.Background(), fs, mailer, reportdigest.Config{
 		Frequency:  store.ReportDaily,
-		BaseURL:    "https://sorolens.dev",
+		BaseURL:    "https://sorolens.xyz",
 		SigningKey: []byte("test-key"),
 	}, time.Date(2026, 1, 5, 8, 0, 0, 0, time.UTC))
 	if err != nil {

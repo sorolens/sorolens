@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
 )
 
 // TestMain swaps in a plain client: the other tests deliver to httptest
@@ -44,7 +43,7 @@ func TestDeliverRefusesInternalDestinations(t *testing.T) {
 		"ipv4-mapped ipv6": "http://[::ffff:127.0.0.1]:9/hook",
 	} {
 		t.Run(name, func(t *testing.T) {
-			sub := AlertSubscription{ID: "s", ChannelType: ChannelWebhook, WebhookURL: url, SeverityFilter: "Critical"}
+			sub := AlertSubscription{ID: "s", ChannelType: ChannelWebhook, WebhookURL: url, SeverityFilter: "Critical", SigningSecret: "whsec_ssrf_test"}
 			deliver(context.Background(), sub, criticalAlert(), logger)
 		})
 	}

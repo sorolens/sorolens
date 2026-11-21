@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/sorolens/sorolens/cli/internal/client"
 	"github.com/sorolens/sorolens/cli/internal/format"
+	"github.com/spf13/cobra"
 )
 
 var contractsCmd = &cobra.Command{
@@ -56,7 +56,7 @@ func runContractsList(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("invalid --limit %d: must be at least 1", contractsLimit)
 	}
 
-	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
+	c := newClient(globalConfig.Timeout)
 	stop := startSpinner("Fetching contracts...")
 	resp, err := c.ListContracts(cmd.Context(), client.ListContractsOpts{
 		Network: globalConfig.Network,
@@ -99,7 +99,7 @@ func runContractsGet(cmd *cobra.Command, args []string) error {
 		_ = os.Setenv("NO_COLOR", "1")
 	}
 
-	c := client.New(globalConfig.APIURL, globalConfig.Timeout)
+	c := newClient(globalConfig.Timeout)
 	stop := startSpinner("Fetching contract...")
 	contract, err := c.GetContract(cmd.Context(), contractID)
 	stop()

@@ -116,6 +116,11 @@ func PoolSettingsFromEnv() (PoolSettings, error) {
 type Config struct {
 	// DatabaseURL is the pooled Postgres connection string used by the API.
 	DatabaseURL string
+	// DatabaseReadURL is the optional Postgres replica connection string.
+	DatabaseReadURL string
+	// ReplicaLagThreshold is the maximum tolerable replication lag before
+	// falling back to the primary database. Defaults to 10s.
+	ReplicaLagThreshold time.Duration
 	// DatabasePool contains the API's pgx pool limits and recycling settings.
 	DatabasePool PoolSettings
 	// DirectDatabaseURL is the non-pooled connection string used for migrations.
@@ -205,6 +210,9 @@ type Config struct {
 	// GraphQLPersistedOnly restricts /graphql to the embedded persisted
 	// queries (GRAPHQL_PERSISTED_ONLY).
 	GraphQLPersistedOnly bool
+	// RequireAuth enforces authentication across all endpoints except health
+	// checks when set to true (API_REQUIRE_AUTH).
+	RequireAuth bool
 }
 
 // Load reads configuration from environment variables and returns an error
@@ -218,6 +226,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		DatabaseReadURL:      os.Getenv("DATABASE_READ_URL"),
 		DatabasePool:         databasePool,
 		DirectDatabaseURL:    os.Getenv("DIRECT_DATABASE_URL"),
 		RedisURL:             os.Getenv("REDIS_URL"),
@@ -249,6 +258,14 @@ func Load() (*Config, error) {
 	}
 	cfg.IndexerPollInterval = poll
 
+	// DATABASE_REPLICA_LAG_THRESHOLD is the maximum replication lag permitted before queries fall back to the primary database.
+	replicaLagStr := getEnvDefault("DATABASE_REPLICA_LAG_THRESHOLD", "10s")
+	replicaLag, err := time.ParseDuration(replicaLagStr)
+	if err != nil || replicaLag <= 0 {
+		return nil, fmt.Errorf("DATABASE_REPLICA_LAG_THRESHOLD: invalid duration %q (must be > 0)", replicaLagStr)
+	}
+	cfg.ReplicaLagThreshold = replicaLag
+
 	windowStr := getEnvDefault("INDEXER_LEDGER_WINDOW", "120960")
 	window, err := strconv.Atoi(windowStr)
 	if err != nil {
@@ -277,12 +294,20 @@ func Load() (*Config, error) {
 		}
 		cfg.GraphQLPersistedOnly = b
 	}
+	if v := os.Getenv("API_REQUIRE_AUTH"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, fmt.Errorf("API_REQUIRE_AUTH: invalid boolean %q: %w", v, err)
+		}
+		cfg.RequireAuth = b
+	}
 
 	cfg.VerifyBuildCommand = strings.Fields(getEnvDefault("VERIFY_BUILD_COMMAND", "stellar contract build"))
 	if len(cfg.VerifyBuildCommand) == 0 {
 		return nil, fmt.Errorf("VERIFY_BUILD_COMMAND: must contain at least one argument")
 	}
 
+	// VERIFY_TIMEOUT bounds a single contract verification build (Go duration).
 	verifyTimeoutStr := getEnvDefault("VERIFY_TIMEOUT", "10m")
 	verifyTimeout, err := time.ParseDuration(verifyTimeoutStr)
 	if err != nil {

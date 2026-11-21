@@ -41,7 +41,10 @@ func main() {
 	backfillWindow := flag.Uint("backfill-window", uint(envInt("INDEXER_BACKFILL_WINDOW", int(poller.DefaultBackfillWindow))), "Ledgers scanned per new-contract backfill step")
 	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics, /healthz and /readyz HTTP server (empty disables it)")
 	redisURL := flag.String("redis-url", envString("REDIS_URL", "redis://localhost:6379"), "Redis URL for the run lock (empty disables locking, falls back to stub)")
-	workers := envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))
+	// INDEXER_CONCURRENCY (or the older INDEXER_WORKERS) is how many contracts
+	// one pass indexes concurrently; defaults to the number of usable CPUs.
+	concurrency := flag.Int("concurrency", envInt("INDEXER_CONCURRENCY", envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))), "Bounded worker pool concurrency for contract processing")
+	workers := *concurrency
 	// Sharded topology (issue #272). The default role preserves the original
 	// single-process behaviour: index every contract in this process.
 	role := flag.String("role", envString("INDEXER_ROLE", "all"), "Role: all, coordinator, or worker")
@@ -71,6 +74,7 @@ func main() {
 
 	cfg := poller.Config{
 		Workers:              workers,
+		Concurrency:          *concurrency,
 		LedgerWindow:         uint32(*ledgerWindow),
 		BackfillWindow:       uint32(*backfillWindow),
 		PollInterval:         *pollInterval,
@@ -142,6 +146,8 @@ func main() {
 	if ws, ok := storeAny.(watchdogStore); ok {
 		wdStore = ws
 	}
+	// WATCHDOG_ENABLED set to "true" makes the indexer record watchdog heartbeats
+	// for WATCHDOG_CONTRACT_ID while it polls.
 	watchdogEnabled := os.Getenv("WATCHDOG_ENABLED") == "true"
 	watchdogContractID := os.Getenv("WATCHDOG_CONTRACT_ID")
 

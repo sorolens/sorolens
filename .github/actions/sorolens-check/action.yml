@@ -12,7 +12,7 @@ inputs:
   api-url:
     description: 'Sorolens API base URL'
     required: false
-    default: 'https://api.sorolens.com'
+    default: 'https://api.sorolens.xyz'
   api-key:
     description: 'Sorolens API key for authenticated API access'
     required: false

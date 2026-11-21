@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: sorolens
+    orgId: 1
+    folder: Sorolens
+    folderUid: sorolens
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

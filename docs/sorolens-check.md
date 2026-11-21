@@ -25,7 +25,7 @@ jobs:
         uses: sorolens/sorolens/.github/actions/sorolens-check@main
         with:
           contract-id: ${{ vars.CONTRACT_ID }}
-          api-url: 'https://api.sorolens.com'
+          api-url: 'https://api.sorolens.xyz'
           api-key: ${{ secrets.SOROLENS_API_KEY }}
           min-ttl-ledgers: 50000 # ~3.5 days of ledgers
           min-health-score: 80
@@ -33,4 +33,4 @@ jobs:
 
 ## Action Inputs and Outputs
 
-See [.github/actions/sorolens-check/README.md](../.github/actions/sorolens-check/README.md) for full configuration options.
+See [.github/actions/sorolens-check/README.md](https://github.com/sorolens/sorolens/blob/main/.github/actions/sorolens-check/README.md) for full configuration options.

@@ -27,6 +27,9 @@ archives:
     files:
       - README.md
       - LICENSE
+      - src: ../docs/cli/man/*.1
+        dst: share/man/man1
+        strip_parent: true
 
 checksum:
   name_template: "checksums.txt"

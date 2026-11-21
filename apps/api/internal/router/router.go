@@ -106,11 +106,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		Sessions:    h.SessionSigner,
 		ProxySecret: h.TrustedProxySecret,
 	}, h.Logger))
-	// Audit trail for every mutating /api/ request (issue #122). It sits
+	r.Use(middleware.RequireAuthMode(h.RequireAuth, h.Logger))
+	// Audit trail for every mutating /api/ and /admin request (issue #122). It sits
 	// outside rate limiting, content-type and auth checks so their
 	// rejections are audited too, and inside Recoverer so a panic is
 	// recorded as 500 before being recovered.
-	r.Use(middleware.Audit(h.Store, h.Logger, "/api/"))
+	r.Use(middleware.Audit(h.Store, h.Logger, "/api/", "/admin"))
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(middleware.Metrics)
 
@@ -126,6 +127,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(middleware.Compression)
 
 	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
+	r.Use(middleware.UsageMeter(h.RedisClient, h.UsageFlusher))
 
 	// Health (not rate-limited)
 	r.Get("/health", h.Health)
@@ -148,6 +150,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	reg.MustRegister(middleware.CacheCollectors()...)
 	reg.MustRegister(middleware.RateLimitCollectors()...)
+	reg.MustRegister(middleware.UsageMeterCollectors()...)
 	reg.MustRegister(metrics.HTTPRequestsInFlight, metrics.HTTPRequestsTotal, metrics.HTTPRequestDuration)
 	reg.MustRegister(metrics.PoolCollector())
 	r.Get("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP)
@@ -188,6 +191,11 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		panic(fmt.Sprintf("graphql handler: %v", err))
 	}
 	r.With(middleware.RequireScopes(h.Logger)).Post("/graphql", gql.ServeHTTP)
+
+	// Root admin surface: GET /admin/audit (issue #523)
+	r.With(middleware.RequireRole(h.Logger, middleware.RoleAdmin)).Route("/admin", func(r chi.Router) {
+		r.Get("/audit", h.ListAuditEvents)
+	})
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
@@ -294,6 +302,10 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// shared state, so it needs the same contributor role, and it purges both
 		// caches since it can untrack contracts and retag them.
 		r.With(scope, contributor, purgeContracts, purgeLabels).Post("/contracts/batch", h.BatchContracts)
+		// Single-contract untrack (#532). Same gate as registration and the
+		// batch untrack, and the same cache purge as the batch route since
+		// it changes the contract's status.
+		r.With(scope, contributor, purgeContracts, purgeLabels).Delete("/contracts/{id}", h.DeleteContract)
 		r.With(scope, contributor, purgeLabels).Post("/labels", h.CreateLabel)
 		r.With(scope, cacheLabels).Get("/labels", h.ListLabels)
 		r.With(scope, cacheLabels).Get("/resolve", h.ResolveLabel)
@@ -328,6 +340,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/verification", h.GetContractVerification)
 		get("/contracts/{id}/wasm", h.GetContractWasm)
 		get("/contracts/{id}/spec", h.GetContractSpec)
+		get("/contracts/{id}/event-schemas", h.GetContractEventSchemas)
 
 		// User-defined contract tags (issue #459). Wrapped by the contributor
 		// role so an anonymous caller cannot label a contract even though the
@@ -353,6 +366,15 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Get("/me/api-keys", h.ListMyAPIKeys)
 		r.With(scope, contributor).Post("/me/api-keys", h.CreateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
+
+		// Asynchronous export jobs (issue #785)
+		r.With(scope).Post("/exports", h.CreateExport)
+		get("/exports/{id}", h.GetExport)
+		r.With(scope).Delete("/exports/{id}", h.DeleteExport)
+		r.Get("/exports/{id}/download", h.DownloadExport)
+
+		// API key request usage and quota tracking (issue #792).
+		get("/usage", h.GetUsage)
 
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
@@ -469,6 +491,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Post("/me/api-keys", h.CreateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
 
+		// Asynchronous export jobs (issue #785)
+		r.With(scope).Post("/exports", h.CreateExport)
+		get("/exports/{id}", h.GetExport)
+		r.With(scope).Delete("/exports/{id}", h.DeleteExport)
+		r.Get("/exports/{id}/download", h.DownloadExport)
+
 		// Stats
 		get("/stats/global", h.V2GlobalStats)
 
@@ -477,6 +505,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Post("/contracts", h.V2RegisterContract)
 		get("/contracts", h.V2ListContracts)
 		get("/contracts/{id}", h.V2GetContract)
+		// Single-contract untrack (#532). A 204 carries no body to reshape,
+		// so the v1 handler is reused directly. The purge keeps the v1
+		// contract/label caches coherent with the write.
+		purgeContracts := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceContracts)
+		purgeLabels := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceLabels)
+		r.With(scope, contributor, purgeContracts, purgeLabels).Delete("/contracts/{id}", h.DeleteContract)
 		get("/contracts/{id}/events", h.V2ListEvents)
 		get("/contracts/{id}/invocations", h.V2ListInvocations)
 		get("/contracts/{id}/storage", h.V2ListStorageEntries)
@@ -485,8 +519,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/snapshot", h.V2ContractSnapshot)
 		get("/contracts/{id}/upgrades", h.V2ListContractUpgrades)
 		get("/contracts/{id}/health-score", h.V2GetContractHealthScore)
+		get("/contracts/{id}/event-schemas", h.GetContractEventSchemas)
 		get("/contracts/{id}/stream", h.V2StreamEvents)
 		get("/contracts/{id}/graph", h.V2ContractGraph)
+
+		// API key request usage and quota tracking (issue #792).
+		get("/usage", h.GetUsage)
 
 		// API keys (admin scope + admin role). These reuse the v1 handlers and
 		// are declared passthrough in docs/api-v2.md.

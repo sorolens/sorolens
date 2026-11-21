@@ -9,7 +9,7 @@
 
 This guide deploys the whole Sorolens stack (API, indexer, dashboard,
 PostgreSQL, Redis) into one AWS region with the Terraform module in
-[`deploy/terraform`](../../deploy/terraform). A Pulumi (TypeScript) option is
+[`deploy/terraform`](https://github.com/sorolens/sorolens/tree/main/deploy/terraform). A Pulumi (TypeScript) option is
 at the end.
 
 **Time:** about 15 minutes of hands-on work, but `terraform apply` itself
@@ -43,7 +43,7 @@ created in parallel. Building images the first time adds to that.
   dashboard.
 - Nothing but the load balancer is reachable from the internet. Data stores
   are encrypted at rest and in transit; passwords are generated and kept in
-  Secrets Manager. Details: [modules/aws](../../deploy/terraform/modules/aws/README.md).
+  Secrets Manager. Details: [modules/aws](https://github.com/sorolens/sorolens/blob/main/deploy/terraform/modules/aws/README.md).
 
 ## Current limitations (read first)
 
@@ -130,7 +130,7 @@ Edit `terraform.tfvars`:
 | `watchdog_contract_id`                              | Your deployed watchdog contract, if any.                                        |
 
 Every module input is documented in
-[modules/aws](../../deploy/terraform/modules/aws/README.md#inputs).
+[modules/aws](https://github.com/sorolens/sorolens/blob/main/deploy/terraform/modules/aws/README.md#inputs).
 
 **State holds secrets.** The generated database password and Redis token are
 in Terraform state. For anything beyond a test, enable the S3 backend block
@@ -272,7 +272,7 @@ recovery window, and your ECR repositories.
 ## Pulumi instead of Terraform
 
 The same stack is available as a Pulumi component,
-[`SorolensAws`](../../deploy/pulumi). With the [Pulumi CLI](https://www.pulumi.com/docs/iac/download-install/):
+[`SorolensAws`](https://github.com/sorolens/sorolens/tree/main/deploy/pulumi). With the [Pulumi CLI](https://www.pulumi.com/docs/iac/download-install/):
 
 ```sh
 cd deploy/pulumi && pnpm install && cd examples/aws

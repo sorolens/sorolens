@@ -39,7 +39,7 @@ vi.mock("@/lib/network", () => ({
 
 vi.mock("@/lib/apiKeys", () => ({
   listMyApiKeys: () => listMyApiKeys(),
-  createMyApiKey: () => createMyApiKey(),
+  createMyApiKey: (...args: unknown[]) => createMyApiKey(...args),
   revokeMyApiKey: (id: string) => revokeMyApiKey(id),
 }));
 
@@ -48,6 +48,12 @@ vi.mock("@/lib/user", () => ({
 }));
 
 import { SETTINGS_STORAGE_KEY } from "@/lib/settings";
+import {
+  EXTENSION_INSTALL_URL,
+  EXTENSION_KEY_NAME,
+  EXTENSION_KEY_SCOPES,
+  EXTENSION_RELEASES_URL,
+} from "@/lib/extension";
 
 const KEY = {
   id: "key-1",
@@ -113,6 +119,7 @@ describe("SettingsPage", () => {
     expect(screen.getByTestId("settings-network")).toBeTruthy();
     expect(screen.getByTestId("settings-notifications")).toBeTruthy();
     expect(screen.getByTestId("settings-identity")).toBeTruthy();
+    expect(screen.getByTestId("settings-extension")).toBeTruthy();
     expect(screen.getByTestId("settings-api-key")).toBeTruthy();
   });
 
@@ -209,6 +216,76 @@ describe("SettingsPage", () => {
     expect(screen.getByTestId("settings-user-id-copy")).toBeTruthy();
   });
 
+  it("links the extension install docs from Settings", async () => {
+    await renderPage();
+
+    const card = screen.getByTestId("settings-extension");
+    const install = within(card).getByRole("link", {
+      name: "Install instructions",
+    });
+    const releases = within(card).getByRole("link", { name: "Release builds" });
+    expect(install).toHaveAttribute("href", EXTENSION_INSTALL_URL);
+    expect(releases).toHaveAttribute("href", EXTENSION_RELEASES_URL);
+    // Pairing must not send the user hunting for devtools.
+    expect(card.textContent).toContain("Create extension key");
+    expect(card.textContent).not.toContain("localStorage");
+  });
+
+  it("mints a key scoped to what the extension calls and shows it once", async () => {
+    createMyApiKey.mockResolvedValueOnce({
+      ...KEY,
+      name: EXTENSION_KEY_NAME,
+      scopes: [...EXTENSION_KEY_SCOPES],
+      key: "sl_extension_secret",
+    });
+
+    await renderPage();
+    fireEvent.click(
+      within(screen.getByTestId("settings-extension")).getByRole("button", {
+        name: "Create extension key",
+      })
+    );
+
+    // Exactly the two scopes the extension's endpoints require, and no more.
+    await waitFor(() =>
+      expect(createMyApiKey).toHaveBeenCalledWith(EXTENSION_KEY_NAME, [
+        "read:contracts",
+        "write:contracts",
+      ])
+    );
+    expect(screen.getByTestId("settings-extension-key").textContent).toBe(
+      "sl_extension_secret"
+    );
+    expect(
+      within(screen.getByTestId("settings-extension")).getByRole("button", {
+        name: "Copy",
+      })
+    ).toBeTruthy();
+    // Shown once, from component state; never persisted where a page script or
+    // a sync would reach it.
+    expect(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "").not.toContain(
+      "sl_extension_secret"
+    );
+  });
+
+  it("reports a failed extension-key request without showing a token", async () => {
+    createMyApiKey.mockRejectedValueOnce(new Error("key service is down"));
+
+    await renderPage();
+    fireEvent.click(
+      within(screen.getByTestId("settings-extension")).getByRole("button", {
+        name: "Create extension key",
+      })
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("settings-extension-error").textContent
+      ).toContain("key service is down")
+    );
+    expect(screen.queryByTestId("settings-extension-key")).toBeNull();
+  });
+
   it("creates a real key through the API and never stores the plaintext", async () => {
     const created = { ...KEY, key: "sl_plaintext_secret" };
     createMyApiKey.mockResolvedValueOnce(created);
@@ -253,6 +330,11 @@ describe("SettingsPage", () => {
         name: "Revoke",
       })
     );
+
+    const confirmButton = await screen.findByRole("button", {
+      name: "Revoke key",
+    });
+    fireEvent.click(confirmButton);
 
     await waitFor(() => expect(revokeMyApiKey).toHaveBeenCalledWith("key-1"));
     expect(screen.queryByTestId("settings-api-key-row")).toBeNull();

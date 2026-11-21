@@ -362,6 +362,72 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /admin/audit:
+    get:
+      tags: [Audit]
+      summary: List audit events (admin role only)
+      description: >-
+        Structured trail of every state-changing API request, newest first.
+        Only a SHA-256 hash of each request body is stored, never the body.
+      operationId: listAuditEventsRoot
+      security:
+        - RoleAuth: [admin]
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).
+          example: '2026-09-02T00:00:00Z'
+        - name: since
+          in: query
+          deprecated: true
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.
+        - $ref: "#/components/parameters/Limit"
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Opaque cursor from next_cursor of the previous page.
+      responses:
+        "200":
+          description: Page of audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next_cursor]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEvent"
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor for the next page; empty when no more pages.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/admin/audit:
     get:
       tags: [Audit]
@@ -373,12 +439,30 @@ paths:
       security:
         - RoleAuth: [admin]
       parameters:
-        - name: since
+        - name: from
           in: query
+          required: false
           schema:
             type: string
             format: date-time
-          description: Only events at or after this RFC 3339 timestamp.
+          description: Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).
+          example: '2026-09-02T00:00:00Z'
+        - name: since
+          in: query
+          deprecated: true
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.
         - $ref: "#/components/parameters/Limit"
         - name: cursor
           in: query
@@ -442,6 +526,89 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/InternalError"
+
+  /api/v1/exports:
+    post:
+      tags: [Exports]
+      summary: Create an asynchronous export job
+      operationId: createExportJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, format]
+              properties:
+                type:
+                  type: string
+                  enum: [events, snapshot]
+                format:
+                  type: string
+                  enum: [csv, ndjson]
+                filters:
+                  type: object
+      responses:
+        "202":
+          description: Export job accepted
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/exports/{id}:
+    get:
+      tags: [Exports]
+      summary: Get export job status and progress
+      operationId: getExportJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export job details
+        "404":
+          description: Export job not found
+    delete:
+      tags: [Exports]
+      summary: Delete an export job
+      operationId: deleteExportJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Export job deleted
+        "404":
+          description: Export job not found
+
+  /api/v1/exports/{id}/download:
+    get:
+      tags: [Exports]
+      summary: Download completed export file
+      operationId: downloadExport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export file stream
+        "403":
+          description: Forbidden or invalid token
+        "410":
+          description: Download link expired
 
   /api/v1/contracts:
     get:
@@ -592,6 +759,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Contract"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Contracts]
+      summary: Untrack one contract
+      description: |
+        Stops tracking a contract. Untracking is a soft delete: the contract
+        status flips to "paused" while the row and all indexed history are
+        retained, and the indexer stops polling it. Re-registering the
+        contract resumes tracking. Deleting a contract that is already paused
+        is a no-op; deleting one that was never registered returns 404. This
+        differs from the batch "untrack" action, which permanently deletes
+        the contracts and their indexed data.
+      operationId: deleteContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -1435,6 +1630,10 @@ paths:
                     enum: [read:contracts, write:contracts, read:watchdog, admin:*]
                   minItems: 1
                   description: Scopes granted to the key.
+                expires_at:
+                  type: string
+                  format: date-time
+                  description: Optional expiry timestamp. Expired keys are rejected by authentication.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -1551,6 +1750,57 @@ paths:
           $ref: "#/components/responses/ForbiddenScope"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/usage:
+    get:
+      tags: [API Keys]
+      summary: Get API key usage metrics and quota status
+      description: |
+        Returns aggregated request counts, endpoint group breakdowns, daily timeline,
+        and monthly quota usage for the caller's API key, or for any key if requested
+        by an admin (issue #792).
+      operationId: getApiKeyUsage
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: key_id
+          in: query
+          required: false
+          description: API key ID to query. Required when calling with user/session auth; optional when authenticating with an API key (defaults to calling key). Querying another key requires admin:* scope.
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          description: Start of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to 30 days ago.
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          description: End of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to now.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Aggregated usage statistics and quota tracking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyUsageSummary"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -2465,6 +2715,89 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v2/exports:
+    post:
+      tags: [Exports]
+      summary: Create an asynchronous export job
+      operationId: createExportJobV2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, format]
+              properties:
+                type:
+                  type: string
+                  enum: [events, snapshot]
+                format:
+                  type: string
+                  enum: [csv, ndjson]
+                filters:
+                  type: object
+      responses:
+        "202":
+          description: Export job accepted
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v2/exports/{id}:
+    get:
+      tags: [Exports]
+      summary: Get export job status and progress
+      operationId: getExportJobV2
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export job details
+        "404":
+          description: Export job not found
+    delete:
+      tags: [Exports]
+      summary: Delete an export job
+      operationId: deleteExportJobV2
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Export job deleted
+        "404":
+          description: Export job not found
+
+  /api/v2/exports/{id}/download:
+    get:
+      tags: [Exports]
+      summary: Download completed export file
+      operationId: downloadExportV2
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export file stream
+        "403":
+          description: Forbidden or invalid token
+        "410":
+          description: Download link expired
+
   /api/v2/contracts:
     get:
       tags: [API v2]
@@ -2570,6 +2903,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/V2Contract"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [API v2]
+      summary: Untrack one contract
+      description: |
+        Stops tracking a contract. Same semantics as DELETE /api/v1/contracts/{id}:
+        the contract status flips to "paused" while the row and all indexed history
+        are retained, and the indexer stops polling it.
+      operationId: v2DeleteContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
         "404":
           $ref: "#/components/responses/Error"
         "429":
@@ -2879,6 +3238,34 @@ paths:
                 type: object
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/contracts/{id}/event-schemas:
+    get:
+      tags: [API v2]
+      summary: Inferred and declared event schemas for a contract (v2)
+      operationId: v2ContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -3371,6 +3758,50 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v2/usage:
+    get:
+      tags: [API v2]
+      summary: Get API key usage metrics and quota status (v2 passthrough)
+      operationId: v2GetApiKeyUsage
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: key_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Aggregated usage statistics and quota tracking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyUsageSummary"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v2/admin/keys:
     get:
       tags: [API v2]
@@ -3789,20 +4220,38 @@ paths:
             type: string
             enum: [contract, system, diagnostic]
         - $ref: "#/components/parameters/NetworkParam"
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `until` if both are sent.
+          example: '2026-09-02T00:00:00Z'
         - name: since
           in: query
+          deprecated: true
           required: false
           schema:
             type: string
             format: date-time
-          description: Inclusive lower bound on ledger_closed_at (RFC 3339).
+          description: Deprecated alias for `from`. Inclusive lower bound on ledger_closed_at (RFC 3339).
         - name: until
           in: query
+          deprecated: true
           required: false
           schema:
             type: string
             format: date-time
-          description: Inclusive upper bound on ledger_closed_at (RFC 3339).
+          description: Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).
       responses:
         "200":
           description: Page of events
@@ -4058,6 +4507,14 @@ paths:
         - ApiKeyAuth: [read:contracts]
       parameters:
         - $ref: "#/components/parameters/ContractID"
+        - name: history_limit
+          in: query
+          required: false
+          description: Maximum number of recorded hourly snapshots to return, oldest first. Omit to skip history.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 720
       responses:
         "200":
           description: The cached health score
@@ -4071,9 +4528,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
-
   /api/v1/contracts/{id}/summary:
     get:
       tags: [Stats]
@@ -4147,6 +4605,34 @@ paths:
                 $ref: "#/components/schemas/ContractSpec"
         "404":
           description: Contract not found, or its interface spec has not been parsed yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/event-schemas:
+    get:
+      tags: [Contracts]
+      summary: Get inferred and declared event schemas for a contract
+      operationId: getContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
           content:
             application/json:
               schema:
@@ -5743,6 +6229,37 @@ components:
           format: int64
         window_duration:
           type: string
+        resource_percentiles:
+          $ref: "#/components/schemas/ResourcePercentiles"
+
+    PercentileValues:
+      type: object
+      required: [p50, p95, p99]
+      properties:
+        p50:
+          type: number
+          format: double
+        p95:
+          type: number
+          format: double
+        p99:
+          type: number
+          format: double
+
+    ResourcePercentiles:
+      type: object
+      description: >-
+        Per-invocation resource usage percentiles over the requested window.
+        Returned by the contract stats endpoint; every value is 0 when the
+        window has no invocations.
+      required: [cpu_insn, mem_byte, fee]
+      properties:
+        cpu_insn:
+          $ref: "#/components/schemas/PercentileValues"
+        mem_byte:
+          $ref: "#/components/schemas/PercentileValues"
+        fee:
+          $ref: "#/components/schemas/PercentileValues"
 
     ContractInvocationStats:
       type: object
@@ -5894,6 +6411,72 @@ components:
           format: date-time
           nullable: true
           description: When the key's secret was last rotated in place.
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the key expires, or null if it does not expire.
+        monthly_quota:
+          type: integer
+          nullable: true
+          description: Monthly request quota, or null if unmetered.
+
+    UsageTimelinePoint:
+      type: object
+      required: [date, total_requests, by_group]
+      properties:
+        date:
+          type: string
+          example: "2026-11-20"
+        total_requests:
+          type: integer
+          format: int64
+          example: 125
+        by_group:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+
+    KeyUsageSummary:
+      type: object
+      required: [key_id, from, to, total_requests, by_group, timeline, month_used]
+      properties:
+        key_id:
+          type: string
+          example: "key_01h7..."
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        total_requests:
+          type: integer
+          format: int64
+          example: 1540
+        by_group:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/UsageTimelinePoint"
+        monthly_quota:
+          type: integer
+          nullable: true
+          example: 50000
+        month_used:
+          type: integer
+          format: int64
+          example: 1540
+        month_remaining:
+          type: integer
+          format: int64
+          nullable: true
+          example: 48460
 
     ReportSubscription:
       type: object
@@ -7017,6 +7600,20 @@ components:
         computed_at:
           type: string
           format: date-time
+        history:
+          type: array
+          description: Recorded hourly snapshots, oldest first. Included when history_limit is requested.
+          items:
+            type: object
+            required: [computed_at, score]
+            properties:
+              computed_at:
+                type: string
+                format: date-time
+              score:
+                type: integer
+                minimum: 0
+                maximum: 100
 
     ContractSummary:
       type: object
@@ -7079,6 +7676,63 @@ components:
                 type: string
               count:
                 type: integer
+
+    ContractEventSchemasResponse:
+      type: object
+      required: [contract_id, event_schemas]
+      properties:
+        contract_id:
+          type: string
+        event_schemas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractEventSchema"
+        declared_spec:
+          type: object
+          description: Declared SEP-48 interface spec if available.
+
+    ContractEventSchema:
+      type: object
+      required: [contract_id, event_name, topic_arity, topic_types, value_shape, observed_shapes, first_seen_ledger, last_seen_ledger, updated_at]
+      properties:
+        contract_id:
+          type: string
+        event_name:
+          type: string
+        topic_arity:
+          type: integer
+        topic_types:
+          type: array
+          items:
+            type: string
+        value_shape:
+          type: string
+        observed_shapes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObservedShape"
+        first_seen_ledger:
+          type: integer
+        last_seen_ledger:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+
+    ObservedShape:
+      type: object
+      required: [topic_arity, topic_types, value_type, count]
+      properties:
+        topic_arity:
+          type: integer
+        topic_types:
+          type: array
+          items:
+            type: string
+        value_type:
+          type: string
+        count:
+          type: integer
 
     ContractSpec:
       type: object
@@ -7201,6 +7855,19 @@ components:
         health_score:
           type: integer
           nullable: true
+        health_components:
+          type: object
+          description: Latest component scores. Omitted when health has not yet been computed.
+          required: [uptime, error_rate, performance, storage_ttl]
+          properties:
+            uptime:
+              type: integer
+            error_rate:
+              type: integer
+            performance:
+              type: integer
+            storage_ttl:
+              type: integer
         last_synced_ledger:
           type: integer
           format: int64

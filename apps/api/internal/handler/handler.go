@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sorolens/sorolens/apps/api/internal/coldstorage"
 	"github.com/sorolens/sorolens/apps/api/internal/graph"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
@@ -22,6 +23,7 @@ type APIStore interface {
 	store.WatchdogStore
 	store.ContractUpgradeStore
 	store.ContractSpecStore
+	store.ContractEventSchemaStore
 	store.ContractTagStore
 	store.ContractNoteStore
 	store.HealthScoreStore
@@ -41,6 +43,8 @@ type APIStore interface {
 	store.AlertRuleStore
 	store.WatchedAccountStore
 	store.AuditStore
+	store.ExportJobStore
+	store.UsageStore
 }
 
 // Pinger is implemented by both the postgres pool and the Redis client.
@@ -74,6 +78,11 @@ type Handler struct {
 	// ledger ranges that are no longer in Postgres.
 	Cold      ColdEventReader
 	StreamHub *StreamHub
+
+	// ObjectStore backs asynchronous exports (issue #785) and cold storage.
+	ObjectStore coldstorage.ObjectStore
+	// ExportSigningKey signs asynchronous export download tokens.
+	ExportSigningKey string
 
 	// Verifier rebuilds submitted contract source and compares the resulting
 	// Wasm hash against the on-chain hash (issue #263). It is nil on
@@ -112,6 +121,12 @@ type Handler struct {
 	// reporting handlers fall back to REPORT_SIGNING_KEY; with neither set the
 	// reports are emitted unsigned and every response says so.
 	ReportSigningKey string
+
+	// RequireAuth enforces authentication mode across all endpoints except health checks.
+	RequireAuth bool
+
+	// UsageFlusher flushes API key request counts to persistent storage (issue #792).
+	UsageFlusher *middleware.UsageFlusher
 
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.

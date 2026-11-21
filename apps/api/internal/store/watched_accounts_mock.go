@@ -80,7 +80,7 @@ func (m *MockStore) InsertAuditEvent(_ context.Context, e AuditEvent) error {
 	return nil
 }
 
-func (m *MockStore) ListAuditEvents(_ context.Context, since time.Time, cursor int64, limit int) ([]AuditEvent, int64, error) {
+func (m *MockStore) ListAuditEvents(_ context.Context, from, to time.Time, cursor int64, limit int) ([]AuditEvent, int64, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
@@ -92,7 +92,10 @@ func (m *MockStore) ListAuditEvents(_ context.Context, since time.Time, cursor i
 		if cursor != 0 && e.ID >= cursor {
 			continue
 		}
-		if !since.IsZero() && e.At.Before(since) {
+		if !from.IsZero() && e.At.Before(from) {
+			continue
+		}
+		if !to.IsZero() && e.At.After(to) {
 			continue
 		}
 		out = append(out, e)

@@ -1,0 +1,12 @@
+# Accepted exceptions to the zero-downtime migration policy (docs/migrations.md).
+# One line per finding: <file> <rule> <reason>. The reason is required.
+# Entries for migrations that are already applied must never be "fixed" by
+# editing the migration; golang-migrate does not re-run applied versions.
+
+000004_multi_network.up.sql index-not-concurrent Applied before the policy (#845). Built while events held testnet data only, before partitioning (000005).
+000020_events_contract_time_index.up.sql index-not-concurrent events is partitioned (000005); PostgreSQL rejects CONCURRENTLY on a partitioned parent. Applied before the policy (#845).
+000021_events_tx_hash_index.up.sql index-not-concurrent IF NOT EXISTS no-op on every deployment that ran 000001/000005; events is partitioned, so CONCURRENTLY is unavailable.
+000023_topic_decoded_gin_index.up.sql index-not-concurrent events is partitioned (000005); PostgreSQL rejects CONCURRENTLY on a partitioned parent, as the migration documents.
+000027_webhook_signing_secrets.up.sql set-not-null alert_subscriptions is a small configuration table; the scan under lock is negligible. Applied before the policy (#845).
+000036_api_key_user_id.up.sql index-not-concurrent Partial index on api_keys, a small table, over a column added NULL in the same migration. Applied before the policy (#845).
+000039_api_key_expires_at.up.sql index-not-concurrent Partial index on api_keys, a small table, over a column added NULL in the same migration. Merged before the policy (#845).

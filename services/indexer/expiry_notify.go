@@ -90,6 +90,7 @@ func (c *contractSubscriptions) ListByContract(ctx context.Context, contractID s
 			SeverityFilter: r.SeverityFilter,
 			ChannelType:    r.ChannelType,
 			RoutingKey:     r.RoutingKey,
+			SigningSecret:  r.SigningSecret,
 		})
 	}
 	return out, nil

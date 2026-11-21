@@ -467,6 +467,28 @@ func (h *Handler) GetContract(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, contractFromStore(c))
 }
 
+// DeleteContract handles DELETE /api/v1/contracts/{id}.
+//
+// Untracking is a soft delete by policy: the contract status flips to
+// "paused" while the row and all indexed history are retained. The indexer
+// only polls contracts whose status is pending, backfilling or active, so a
+// paused contract stops being indexed. Re-registering the contract flips the
+// status back to "pending" and resumes tracking. Deleting a contract that is
+// already paused is a no-op success; deleting one that was never registered
+// returns 404.
+func (h *Handler) DeleteContract(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := h.Store.UntrackContract(r.Context(), id); errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "contract not found")
+		return
+	} else if err != nil {
+		h.Logger.Error("untrack contract", "err", err, "contract_id", id)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to untrack contract")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // AddContractTag handles POST /api/v1/contracts/{id}/tags.
 //
 // Body: {"tag": "prod"}. Adding a tag that is already present is idempotent.
@@ -835,14 +857,23 @@ func (h *Handler) ContractStats(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch stats")
 		return
 	}
-	writeJSON(w, http.StatusOK, contractStatsResponse{
-		EventCount:            cs.EventCount,
-		InvocationCount:       cs.InvocationCount,
-		StorageCount:          cs.StorageCount,
-		LastSyncedLedger:      cs.LastSyncedLedger,
-		WindowEventCount:      cs.WindowEventCount,
-		WindowInvocationCount: cs.WindowInvocationCount,
-		WindowDuration:        cs.WindowDuration,
+	percentiles, err := h.Store.GetContractResourcePercentiles(r.Context(), contractID, window)
+	if err != nil {
+		h.Logger.Error("get contract resource percentiles", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch stats")
+		return
+	}
+	writeJSON(w, http.StatusOK, contractStatsDetailResponse{
+		contractStatsResponse: contractStatsResponse{
+			EventCount:            cs.EventCount,
+			InvocationCount:       cs.InvocationCount,
+			StorageCount:          cs.StorageCount,
+			LastSyncedLedger:      cs.LastSyncedLedger,
+			WindowEventCount:      cs.WindowEventCount,
+			WindowInvocationCount: cs.WindowInvocationCount,
+			WindowDuration:        cs.WindowDuration,
+		},
+		ResourcePercentiles: resourcePercentilesFromStore(percentiles),
 	})
 }
 
