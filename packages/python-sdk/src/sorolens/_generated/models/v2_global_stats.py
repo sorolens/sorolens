@@ -7,6 +7,8 @@ from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..types import UNSET, Unset
+
 T = TypeVar("T", bound="V2GlobalStats")
 
 
@@ -18,12 +20,14 @@ class V2GlobalStats:
         total_events (int):
         total_invocations (int):
         total_storage_entries (int):
+        approximate (bool | Unset): True when large table counts are estimated rather than exact.
     """
 
     tracked_contracts: int
     total_events: int
     total_invocations: int
     total_storage_entries: int
+    approximate: bool | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -35,6 +39,8 @@ class V2GlobalStats:
 
         total_storage_entries = self.total_storage_entries
 
+        approximate = self.approximate
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -45,6 +51,8 @@ class V2GlobalStats:
                 "total_storage_entries": total_storage_entries,
             }
         )
+        if approximate is not UNSET:
+            field_dict["approximate"] = approximate
 
         return field_dict
 
@@ -59,11 +67,14 @@ class V2GlobalStats:
 
         total_storage_entries = d.pop("total_storage_entries")
 
+        approximate = d.pop("approximate", UNSET)
+
         v2_global_stats = cls(
             tracked_contracts=tracked_contracts,
             total_events=total_events,
             total_invocations=total_invocations,
             total_storage_entries=total_storage_entries,
+            approximate=approximate,
         )
 
         v2_global_stats.additional_properties = d

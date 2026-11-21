@@ -168,6 +168,75 @@ type contractInvocationStatsResponse struct {
 
 // ---- helpers ----------------------------------------------------------------
 
+// MaxPageSize is the upper bound on page sizes for list endpoints (issue #776).
+// Limits exceeding MaxPageSize are clamped to this value to prevent unbounded queries.
+const MaxPageSize = 200
+
+// DefaultPageSize is the default number of items returned by paginated list endpoints when ?limit is omitted.
+const DefaultPageSize = 50
+
+var validContractStatuses = map[string]bool{
+	"pending":     true,
+	"active":      true,
+	"backfilling": true,
+	"error":       true,
+	"paused":      true,
+}
+
+var validInvocationStatuses = map[string]bool{
+	"SUCCESS":   true,
+	"FAILED":    true,
+	"NOT_FOUND": true,
+}
+
+var validDurabilities = map[string]bool{
+	"temporary":  true,
+	"persistent": true,
+	"instance":   true,
+}
+
+var validStorageStatuses = map[string]bool{
+	"live":     true,
+	"archived": true,
+	"deleted":  true,
+}
+
+var validAlertSeverities = map[string]string{
+	"info":     "Info",
+	"warning":  "Warning",
+	"critical": "Critical",
+}
+
+// pageLimit reads the ?limit query parameter with def as the default,
+// clamping to MaxPageSize.
+func pageLimit(r *http.Request, def int) int {
+	return pageLimitClamped(r, def, MaxPageSize)
+}
+
+// pageLimitClamped reads the ?limit query parameter with def as the default,
+// clamping to max.
+func pageLimitClamped(r *http.Request, def, max int) int {
+	n := intQuery(r, "limit", def)
+	if max > 0 && n > max {
+		return max
+	}
+	return n
+}
+
+// parseLedgerParam reads an optional positive integer query parameter representing
+// a ledger sequence. It returns ok=true when present and valid, or an error if malformed.
+func parseLedgerParam(r *http.Request, key string) (uint32, bool, error) {
+	v := strings.TrimSpace(r.URL.Query().Get(key))
+	if v == "" {
+		return 0, false, nil
+	}
+	n, err := strconv.ParseUint(v, 10, 32)
+	if err != nil || n < 1 {
+		return 0, true, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return uint32(n), true, nil
+}
+
 func intQuery(r *http.Request, key string, def int) int {
 	v := r.URL.Query().Get(key)
 	if v == "" {
@@ -420,7 +489,12 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "sort must be one of: id, label, network, status, added_at; dir must be asc or desc")
 		return
 	}
-	limit := intQuery(r, "limit", 50)
+	status := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+	if status != "" && !validContractStatuses[status] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: pending, active, backfilling, error, paused")
+		return
+	}
+	limit := pageLimit(r, DefaultPageSize)
 	tag := normalizeTag(r.URL.Query().Get("tag"))
 	if tag != "" && !validTag(tag) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, invalidTagMessage)
@@ -428,7 +502,7 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 	}
 	f := store.ContractFilters{
 		Network: network,
-		Status:  r.URL.Query().Get("status"),
+		Status:  status,
 		Tag:     tag,
 		Sort:    sort,
 		SortDir: dir,
@@ -571,6 +645,21 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
+	from, hasFrom, err := parseLedgerParam(r, "from")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	to, hasTo, err := parseLedgerParam(r, "to")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	if hasFrom && hasTo && from > to {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must not exceed to")
+		return
+	}
 	var inSuccess *bool
 	if param := r.URL.Query().Get("in_successful_call"); param != "" {
 		if param == "true" {
@@ -579,17 +668,21 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		} else if param == "false" {
 			v := false
 			inSuccess = &v
+		} else {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "in_successful_call must be true or false")
+			return
 		}
 	}
+	limit := pageLimit(r, DefaultPageSize)
 	f := store.EventFilters{
-		Type:             r.URL.Query().Get("type"),
+		Type:             eventType,
 		Network:          network,
 		Topic:            strings.TrimSpace(r.URL.Query().Get("topic")),
-		From:             uint32Query(r, "from"),
-		To:               uint32Query(r, "to"),
+		From:             from,
+		To:               to,
 		InSuccessfulCall: inSuccess,
 	}
-	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list events", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list events")
@@ -603,7 +696,7 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	// Postgres path uses; archive-backed pages are not cursor-paginated, so
 	// next_cursor stays empty.
 	if len(events) == 0 && h.Cold != nil && f.From > 0 && rawCursor == "" {
-		archived, coldErr := h.Cold.Events(r.Context(), contractID, f.From, f.To, intQuery(r, "limit", 50))
+		archived, coldErr := h.Cold.Events(r.Context(), contractID, f.From, f.To, limit)
 		if coldErr != nil {
 			h.Logger.Error("list archived events", "err", coldErr, "contract_id", contractID)
 		} else if len(archived) > 0 {
@@ -634,14 +727,38 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status != "" {
+		statusUpper := strings.ToUpper(status)
+		if !validInvocationStatuses[statusUpper] {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: SUCCESS, FAILED, NOT_FOUND")
+			return
+		}
+		status = statusUpper
+	}
+	from, hasFrom, err := parseLedgerParam(r, "from")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	to, hasTo, err := parseLedgerParam(r, "to")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	if hasFrom && hasTo && from > to {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must not exceed to")
+		return
+	}
+	limit := pageLimit(r, DefaultPageSize)
 	f := store.InvocationFilters{
-		Status:       r.URL.Query().Get("status"),
+		Status:       status,
 		FunctionName: r.URL.Query().Get("function_name"),
 		Network:      network,
-		From:         uint32Query(r, "from"),
-		To:           uint32Query(r, "to"),
+		From:         from,
+		To:           to,
 	}
-	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list invocations", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list invocations")
@@ -775,19 +892,47 @@ func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "until must be an RFC3339 timestamp or YYYY-MM-DD date")
 		return
 	}
+	if since != nil && until != nil && until.Before(*since) {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "until must be after since")
+		return
+	}
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status != "" {
+		statusUpper := strings.ToUpper(status)
+		if !validInvocationStatuses[statusUpper] {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: SUCCESS, FAILED, NOT_FOUND")
+			return
+		}
+		status = statusUpper
+	}
+	from, hasFrom, err := parseLedgerParam(r, "from")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	to, hasTo, err := parseLedgerParam(r, "to")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	if hasFrom && hasTo && from > to {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must not exceed to")
+		return
+	}
 
+	limit := pageLimit(r, DefaultPageSize)
 	f := store.InvocationFilters{
 		ContractID:   strings.TrimSpace(r.URL.Query().Get("contract_id")),
-		Status:       r.URL.Query().Get("status"),
+		Status:       status,
 		FunctionName: r.URL.Query().Get("fn"),
 		Network:      network,
-		From:         uint32Query(r, "from"),
-		To:           uint32Query(r, "to"),
+		From:         from,
+		To:           to,
 		Since:        since,
 		Until:        until,
 	}
 	invs, nextLedger, nextTxHash, err := h.Store.ListAllInvocations(
-		r.Context(), cursorLedger, cursorTxHash, intQuery(r, "limit", 50), f,
+		r.Context(), cursorLedger, cursorTxHash, limit, f,
 	)
 	if err != nil {
 		h.Logger.Error("list all invocations", "err", err)
@@ -822,12 +967,23 @@ func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	durability := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("durability")))
+	if durability != "" && !validDurabilities[durability] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "durability must be one of: temporary, persistent, instance")
+		return
+	}
+	status := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+	if status != "" && !validStorageStatuses[status] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: live, archived, deleted")
+		return
+	}
+	limit := pageLimit(r, DefaultPageSize)
 	f := store.StorageFilters{
-		Durability: r.URL.Query().Get("durability"),
-		Status:     r.URL.Query().Get("status"),
+		Durability: durability,
+		Status:     status,
 		Network:    network,
 	}
-	entries, nextRaw, err := h.Store.ListStorageEntries(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	entries, nextRaw, err := h.Store.ListStorageEntries(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list storage entries", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list storage entries")
@@ -1083,7 +1239,7 @@ func (h *Handler) StreamEvents(w http.ResponseWriter, r *http.Request) {
 // or label (issue #159).
 func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
-	limit := intQuery(r, "limit", 10)
+	limit := pageLimitClamped(r, 10, MaxPageSize)
 
 	contracts, err := h.Store.SearchContracts(r.Context(), q, limit)
 	if err != nil {

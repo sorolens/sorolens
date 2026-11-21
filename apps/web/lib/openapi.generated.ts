@@ -2763,6 +2763,7 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
+            description: "Page size (default 50, clamped to 200).",
             type: "integer",
             default: "50",
           },

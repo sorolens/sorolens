@@ -9,6 +9,7 @@ type globalStatsResponse struct {
 	TotalEvents         int64 `json:"total_events"`
 	TotalInvocations    int64 `json:"total_invocations"`
 	TotalStorageEntries int64 `json:"total_storage_entries"`
+	Approximate         bool  `json:"approximate"`
 }
 
 // GlobalStats handles GET /api/v1/stats/global.
@@ -24,5 +25,6 @@ func (h *Handler) GlobalStats(w http.ResponseWriter, r *http.Request) {
 		TotalEvents:         gs.TotalEvents,
 		TotalInvocations:    gs.TotalInvocations,
 		TotalStorageEntries: gs.TotalStorageEntries,
+		Approximate:         gs.Approximate,
 	})
 }
