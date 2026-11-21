@@ -135,6 +135,7 @@ nav:
       - Observability stack: observability.md
       - Backups and PITR: backups.md
       - Migrations: migrations.md
+      - Hot query performance: perf/explain_hot_queries.md
       - Discord bot: discord-bot.md
   - Contributing:
       - Editing these docs: contributing/docs.md

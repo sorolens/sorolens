@@ -72,5 +72,11 @@ func Library() []LibraryRule {
 			Severity:    "Warning",
 			Source:      "sum(invocations) == 0 for 15m on network testnet",
 		},
+		{
+			Name:        "Resource limits near-miss",
+			Description: "Invocation reached 85% or more of Soroban network resource limits.",
+			Severity:    "Warning",
+			Source:      "resource_utilisation >= 85% for 5m",
+		},
 	}
 }

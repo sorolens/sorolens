@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 )
@@ -136,4 +137,129 @@ func (m *MockStore) DeleteEventsByID(_ context.Context, ids []string) (int64, er
 	}
 	m.events = kept
 	return deleted, nil
+}
+
+func (m *MockStore) ensureMaintenance() {
+	if m.maintenanceWindows == nil {
+		m.maintenanceWindows = make(map[int64]MaintenanceWindow)
+	}
+}
+
+func (m *MockStore) CreateMaintenanceWindow(_ context.Context, w MaintenanceWindow) (MaintenanceWindow, error) {
+	if w.Name == "" || w.StartTime.IsZero() || w.EndTime.IsZero() || !w.EndTime.After(w.StartTime) {
+		return MaintenanceWindow{}, ErrInvalidMaintenanceWindow
+	}
+	if w.Scope != "global" && w.Scope != "contract" && w.Scope != "group" {
+		return MaintenanceWindow{}, ErrInvalidMaintenanceWindow
+	}
+	if (w.Scope == "contract" || w.Scope == "group") && w.TargetID == "" {
+		return MaintenanceWindow{}, ErrInvalidMaintenanceWindow
+	}
+	if w.Timezone == "" {
+		w.Timezone = "UTC"
+	}
+	if _, err := time.LoadLocation(w.Timezone); err != nil {
+		return MaintenanceWindow{}, fmt.Errorf("%w: invalid timezone %s", ErrInvalidMaintenanceWindow, w.Timezone)
+	}
+	if w.Recurrence == "" {
+		w.Recurrence = "none"
+	}
+
+	m.ensureMaintenance()
+	m.maintenanceWindowSeq++
+	w.ID = m.maintenanceWindowSeq
+	w.CreatedAt = time.Now().UTC()
+	w.UpdatedAt = w.CreatedAt
+	m.maintenanceWindows[w.ID] = w
+	return w, nil
+}
+
+func (m *MockStore) GetMaintenanceWindow(_ context.Context, id int64) (MaintenanceWindow, error) {
+	m.ensureMaintenance()
+	w, ok := m.maintenanceWindows[id]
+	if !ok {
+		return MaintenanceWindow{}, ErrMaintenanceWindowNotFound
+	}
+	return w, nil
+}
+
+func (m *MockStore) UpdateMaintenanceWindow(_ context.Context, w MaintenanceWindow) (MaintenanceWindow, error) {
+	if w.ID == 0 || w.Name == "" || !w.EndTime.After(w.StartTime) {
+		return MaintenanceWindow{}, ErrInvalidMaintenanceWindow
+	}
+	if w.Timezone == "" {
+		w.Timezone = "UTC"
+	}
+	if _, err := time.LoadLocation(w.Timezone); err != nil {
+		return MaintenanceWindow{}, fmt.Errorf("%w: invalid timezone %s", ErrInvalidMaintenanceWindow, w.Timezone)
+	}
+	m.ensureMaintenance()
+	existing, ok := m.maintenanceWindows[w.ID]
+	if !ok {
+		return MaintenanceWindow{}, ErrMaintenanceWindowNotFound
+	}
+	existing.Name = w.Name
+	existing.StartTime = w.StartTime
+	existing.EndTime = w.EndTime
+	existing.Timezone = w.Timezone
+	existing.Recurrence = w.Recurrence
+	existing.SuppressNotifications = w.SuppressNotifications
+	existing.UpdatedAt = time.Now().UTC()
+	m.maintenanceWindows[w.ID] = existing
+	return existing, nil
+}
+
+func (m *MockStore) DeleteMaintenanceWindow(_ context.Context, id int64) error {
+	m.ensureMaintenance()
+	if _, ok := m.maintenanceWindows[id]; !ok {
+		return ErrMaintenanceWindowNotFound
+	}
+	delete(m.maintenanceWindows, id)
+	return nil
+}
+
+func (m *MockStore) ListMaintenanceWindows(_ context.Context, scope, targetID string) ([]MaintenanceWindow, error) {
+	m.ensureMaintenance()
+	var out []MaintenanceWindow
+	for _, w := range m.maintenanceWindows {
+		if scope != "" && w.Scope != scope {
+			continue
+		}
+		if targetID != "" && w.TargetID != targetID {
+			continue
+		}
+		out = append(out, w)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].StartTime.After(out[j].StartTime)
+	})
+	return out, nil
+}
+
+func (m *MockStore) IsUnderMaintenance(ctx context.Context, contractID string, groupID string, t time.Time) (*MaintenanceWindow, bool, error) {
+	windows, err := m.ListMaintenanceWindows(ctx, "", "")
+	if err != nil {
+		return nil, false, err
+	}
+	for _, w := range windows {
+		matchesScope := false
+		switch w.Scope {
+		case "global":
+			matchesScope = true
+		case "contract":
+			if contractID != "" && w.TargetID == contractID {
+				matchesScope = true
+			}
+		case "group":
+			if groupID != "" && w.TargetID == groupID {
+				matchesScope = true
+			}
+		}
+
+		if matchesScope && w.IsActive(t) {
+			win := w
+			return &win, win.SuppressNotifications, nil
+		}
+	}
+	return nil, false, nil
 }

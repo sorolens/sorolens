@@ -220,6 +220,20 @@
         ]
       },
       {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
         "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
         "operations": [
           "getApiKeyUsage",
@@ -431,6 +445,20 @@
         ]
       },
       {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
         "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
         "operations": [
           "getApiKeyUsage",
@@ -621,6 +649,20 @@
         ]
       },
       {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
         "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
         "operations": [
           "getApiKeyUsage",
@@ -800,6 +842,20 @@
           "downloadExportV2",
           "getExportJob",
           "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
         ]
       },
       {
