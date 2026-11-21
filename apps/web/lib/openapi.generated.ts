@@ -3030,6 +3030,159 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/alerts/counts": {
+      get: {
+        operationId: "getAlertCounts",
+        summary: "Get alert counts broken down by state",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "contract_id",
+            in: "query",
+            required: false,
+            description: "Optional contract ID filter.",
+            type: "string",
+          },
+          {
+            name: "network",
+            in: "query",
+            required: false,
+            description: "Network filter; empty means all networks.",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/alerts/{id}/ack": {
+      post: {
+        operationId: "acknowledgeAlert",
+        summary: "Acknowledge an alert",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Alert ID",
+            type: "integer",
+          },
+        ],
+      },
+    },
+    "/api/v1/alerts/{id}/snooze": {
+      post: {
+        operationId: "snoozeAlert",
+        summary: "Snooze an alert",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Alert ID",
+            type: "integer",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/alerts/{id}/resolve": {
+      post: {
+        operationId: "resolveAlert",
+        summary: "Resolve an alert",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Alert ID",
+            type: "integer",
+          },
+        ],
+      },
+    },
+    "/api/v1/maintenance-windows": {
+      get: {
+        operationId: "listMaintenanceWindows",
+        summary: "List maintenance windows",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "scope",
+            in: "query",
+            required: false,
+            description: "Scope filter",
+            type: "string",
+          },
+          {
+            name: "target_id",
+            in: "query",
+            required: false,
+            description: "Target ID filter",
+            type: "string",
+          },
+        ],
+      },
+      post: {
+        operationId: "createMaintenanceWindow",
+        summary: "Create a maintenance window",
+        tags: ["Maintenance"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/maintenance-windows/{id}": {
+      get: {
+        operationId: "getMaintenanceWindow",
+        summary: "Get a maintenance window by ID",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Maintenance window ID",
+            type: "integer",
+          },
+        ],
+      },
+      put: {
+        operationId: "updateMaintenanceWindow",
+        summary: "Update a maintenance window",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Maintenance window ID",
+            type: "integer",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
+      },
+      delete: {
+        operationId: "deleteMaintenanceWindow",
+        summary: "Delete a maintenance window",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Maintenance window ID",
+            type: "integer",
+          },
+        ],
+      },
+    },
     "/api/v1/reports/subscriptions": {
       get: {
         operationId: "listReportSubscriptions",

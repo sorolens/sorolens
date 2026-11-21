@@ -77,6 +77,12 @@ func (m *MockStore) InsertContractAlert(_ context.Context, a ContractAlert) erro
 			return nil
 		}
 	}
+	if a.ID == 0 {
+		a.ID = int64(len(m.alerts) + 1)
+	}
+	if a.State == "" {
+		a.State = AlertStateOpen
+	}
 	m.alerts = append(m.alerts, a)
 	return nil
 }
@@ -142,11 +148,11 @@ func (m *MockStore) ListHealthChecks(_ context.Context, contractID string, limit
 	return out, nil
 }
 
-// ListAlerts mirrors the postgres keyset pagination: rows are ordered
-// newest first by (timestamp desc, contract_id desc) and the optional
-// cursor selects strictly older rows. The returned cursor points at the
-// last row of the page and is empty when the feed is exhausted.
-func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network, cursor string, limit int) ([]ContractAlert, string, error) {
+func (m *MockStore) ListAlerts(ctx context.Context, contractID, severity, network, cursor string, limit int) ([]ContractAlert, string, error) {
+	return m.ListAlertsWithState(ctx, contractID, severity, network, "", cursor, limit)
+}
+
+func (m *MockStore) ListAlertsWithState(_ context.Context, contractID, severity, network, state, cursor string, limit int) ([]ContractAlert, string, error) {
 	// Same page-size bounds as the postgres implementation.
 	if limit <= 0 || limit > 500 {
 		limit = 100
@@ -161,6 +167,7 @@ func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network,
 		cursorTS, cursorID = ts, id
 	}
 	m.ensureWatchdog()
+	now := time.Now().UTC()
 	out := make([]ContractAlert, 0)
 	for i := len(m.alerts) - 1; i >= 0; i-- {
 		a := m.alerts[i]
@@ -173,6 +180,17 @@ func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network,
 		if network != "" && m.monitored[a.ContractID].Network != network {
 			continue
 		}
+		// Handle snooze expiry in mock
+		effectiveState := a.State
+		if effectiveState == "" {
+			effectiveState = AlertStateOpen
+		}
+		if effectiveState == AlertStateSnoozed && a.SnoozedUntil != nil && a.SnoozedUntil.Before(now) {
+			effectiveState = AlertStateOpen
+		}
+		if state != "" && effectiveState != state {
+			continue
+		}
 		if cursor != "" {
 			// Keyset: keep rows strictly older than the (timestamp, id) pair
 			// under (timestamp DESC, contract_id DESC) ordering.
@@ -183,6 +201,7 @@ func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network,
 				continue
 			}
 		}
+		a.State = effectiveState
 		out = append(out, a)
 		if len(out) > limit {
 			break
@@ -195,6 +214,90 @@ func (m *MockStore) ListAlerts(_ context.Context, contractID, severity, network,
 		out = out[:limit]
 	}
 	return out, next, nil
+}
+
+func (m *MockStore) AcknowledgeAlert(_ context.Context, id int64, user string) (ContractAlert, error) {
+	m.ensureWatchdog()
+	for i, a := range m.alerts {
+		if a.ID == id {
+			if a.State == AlertStateResolved {
+				return ContractAlert{}, ErrInvalidTransition
+			}
+			now := time.Now().UTC()
+			m.alerts[i].State = AlertStateAcknowledged
+			m.alerts[i].AcknowledgedAt = &now
+			m.alerts[i].AcknowledgedBy = user
+			return m.alerts[i], nil
+		}
+	}
+	return ContractAlert{}, ErrAlertNotFound
+}
+
+func (m *MockStore) SnoozeAlert(_ context.Context, id int64, duration time.Duration, user string) (ContractAlert, error) {
+	if duration <= 0 {
+		return ContractAlert{}, ErrInvalidTransition
+	}
+	m.ensureWatchdog()
+	for i, a := range m.alerts {
+		if a.ID == id {
+			if a.State == AlertStateResolved {
+				return ContractAlert{}, ErrInvalidTransition
+			}
+			now := time.Now().UTC()
+			until := now.Add(duration)
+			m.alerts[i].State = AlertStateSnoozed
+			m.alerts[i].SnoozedAt = &now
+			m.alerts[i].SnoozedBy = user
+			m.alerts[i].SnoozedUntil = &until
+			return m.alerts[i], nil
+		}
+	}
+	return ContractAlert{}, ErrAlertNotFound
+}
+
+func (m *MockStore) ResolveAlert(_ context.Context, id int64, user string) (ContractAlert, error) {
+	m.ensureWatchdog()
+	for i, a := range m.alerts {
+		if a.ID == id {
+			if a.State == AlertStateResolved {
+				return ContractAlert{}, ErrInvalidTransition
+			}
+			now := time.Now().UTC()
+			m.alerts[i].State = AlertStateResolved
+			m.alerts[i].ResolvedAt = &now
+			m.alerts[i].ResolvedBy = user
+			return m.alerts[i], nil
+		}
+	}
+	return ContractAlert{}, ErrAlertNotFound
+}
+
+func (m *MockStore) GetAlertCountsByState(_ context.Context, contractID, network string) (map[string]int64, error) {
+	m.ensureWatchdog()
+	counts := map[string]int64{
+		AlertStateOpen:         0,
+		AlertStateAcknowledged: 0,
+		AlertStateSnoozed:      0,
+		AlertStateResolved:     0,
+	}
+	now := time.Now().UTC()
+	for _, a := range m.alerts {
+		if contractID != "" && a.ContractID != contractID {
+			continue
+		}
+		if network != "" && m.monitored[a.ContractID].Network != network {
+			continue
+		}
+		st := a.State
+		if st == "" {
+			st = AlertStateOpen
+		}
+		if st == AlertStateSnoozed && a.SnoozedUntil != nil && a.SnoozedUntil.Before(now) {
+			st = AlertStateOpen
+		}
+		counts[st]++
+	}
+	return counts, nil
 }
 
 func (m *MockStore) GetWatchdogStats(_ context.Context, network string) (WatchdogStats, error) {

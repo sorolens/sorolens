@@ -104,23 +104,33 @@ type eventResponse struct {
 	InSuccessfulCall bool      `json:"in_successful_call"`
 }
 
+type ResourceUtilisation struct {
+	CPUInstructionsRatio float64 `json:"cpu_instructions_ratio"`
+	MemoryBytesRatio     float64 `json:"memory_bytes_ratio"`
+	LedgerReadByteRatio  float64 `json:"ledger_read_byte_ratio"`
+	LedgerWriteByteRatio float64 `json:"ledger_write_byte_ratio"`
+	MaxRatio             float64 `json:"max_ratio"`
+	NearLimit            bool    `json:"near_limit"`
+}
+
 type invocationResponse struct {
-	TxHash             string         `json:"tx_hash"`
-	ContractID         string         `json:"contract_id"`
-	Network            string         `json:"network"`
-	Ledger             uint32         `json:"ledger"`
-	LedgerClosedAt     time.Time      `json:"ledger_closed_at"`
-	Status             string         `json:"status"`
-	FunctionName       string         `json:"function_name"`
-	ArgsDecoded        map[string]any `json:"args_decoded"`
-	ResultDecoded      any            `json:"result_decoded"`
-	ResultXDR          string         `json:"result_xdr"`
-	ResourceFeeCharged int64          `json:"resource_fee_charged"`
-	CPUInsn            int64          `json:"cpu_insn"`
-	MemByte            int64          `json:"mem_byte"`
-	LedgerReadByte     int64          `json:"ledger_read_byte"`
-	LedgerWriteByte    int64          `json:"ledger_write_byte"`
-	ApplicationOrder   int            `json:"application_order"`
+	TxHash             string               `json:"tx_hash"`
+	ContractID         string               `json:"contract_id"`
+	Network            string               `json:"network"`
+	Ledger             uint32               `json:"ledger"`
+	LedgerClosedAt     time.Time            `json:"ledger_closed_at"`
+	Status             string               `json:"status"`
+	FunctionName       string               `json:"function_name"`
+	ArgsDecoded        map[string]any       `json:"args_decoded"`
+	ResultDecoded      any                  `json:"result_decoded"`
+	ResultXDR          string               `json:"result_xdr"`
+	ResourceFeeCharged int64                `json:"resource_fee_charged"`
+	CPUInsn            int64                `json:"cpu_insn"`
+	MemByte            int64                `json:"mem_byte"`
+	LedgerReadByte     int64                `json:"ledger_read_byte"`
+	LedgerWriteByte    int64                `json:"ledger_write_byte"`
+	ApplicationOrder   int                  `json:"application_order"`
+	Utilisation        *ResourceUtilisation `json:"utilisation,omitempty"`
 }
 
 type invocationDetailResponse struct {
@@ -342,6 +352,39 @@ func eventFromStore(e store.Event) eventResponse {
 	}
 }
 
+func computeInvocationUtilisation(cpu, mem, read, write int64) *ResourceUtilisation {
+	const (
+		maxCPU   = 100000000.0
+		maxMem   = 41943040.0
+		maxRead  = 200000.0
+		maxWrite = 100000.0
+	)
+	cpuRatio := float64(cpu) / maxCPU
+	memRatio := float64(mem) / maxMem
+	readRatio := float64(read) / maxRead
+	writeRatio := float64(write) / maxWrite
+
+	maxRatio := cpuRatio
+	if memRatio > maxRatio {
+		maxRatio = memRatio
+	}
+	if readRatio > maxRatio {
+		maxRatio = readRatio
+	}
+	if writeRatio > maxRatio {
+		maxRatio = writeRatio
+	}
+
+	return &ResourceUtilisation{
+		CPUInstructionsRatio: cpuRatio,
+		MemoryBytesRatio:     memRatio,
+		LedgerReadByteRatio:  readRatio,
+		LedgerWriteByteRatio: writeRatio,
+		MaxRatio:             maxRatio,
+		NearLimit:            maxRatio >= 0.85,
+	}
+}
+
 func invocationFromStore(inv store.Invocation) invocationResponse {
 	return invocationResponse{
 		TxHash:             inv.TxHash,
@@ -360,6 +403,7 @@ func invocationFromStore(inv store.Invocation) invocationResponse {
 		LedgerReadByte:     inv.LedgerReadByte,
 		LedgerWriteByte:    inv.LedgerWriteByte,
 		ApplicationOrder:   inv.ApplicationOrder,
+		Utilisation:        computeInvocationUtilisation(inv.CPUInsn, inv.MemByte, inv.LedgerReadByte, inv.LedgerWriteByte),
 	}
 }
 

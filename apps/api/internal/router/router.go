@@ -260,10 +260,21 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Cross-contract events explorer feed (issue #97).
 		get("/events", h.ListAllEvents)
 
-		// Alert deduplication and grouping engine (issue #269).
+		// Alert deduplication, grouping and lifecycle (issues #269, #789).
 		// GET /api/v1/alerts          — grouped view (default)
 		// GET /api/v1/alerts?flat=true — raw ContractAlert feed
 		get("/alerts", h.ListAlerts)
+		get("/alerts/counts", h.AlertCounts)
+		r.With(scope, contributor).Post("/alerts/{id}/ack", h.AcknowledgeAlert)
+		r.With(scope, contributor).Post("/alerts/{id}/snooze", h.SnoozeAlert)
+		r.With(scope, contributor).Post("/alerts/{id}/resolve", h.ResolveAlert)
+
+		// Maintenance windows (issue #790).
+		get("/maintenance-windows", h.ListMaintenanceWindows)
+		get("/maintenance-windows/{id}", h.GetMaintenanceWindow)
+		r.With(scope, contributor).Post("/maintenance-windows", h.CreateMaintenanceWindow)
+		r.With(scope, contributor).Put("/maintenance-windows/{id}", h.UpdateMaintenanceWindow)
+		r.With(scope, contributor).Delete("/maintenance-windows/{id}", h.DeleteMaintenanceWindow)
 
 		// Integrations catalog and test-send (issue #612). Reads are public
 		// like the rest of the v0.1 surface; the test send triggers an
