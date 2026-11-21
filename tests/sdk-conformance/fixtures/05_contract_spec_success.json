@@ -1,0 +1,29 @@
+{
+  "id": "05_contract_spec_success",
+  "description": "Retrieve contract parsed spec",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts/CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2/spec"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2",
+      "parsed_at": "2026-08-01T00:00:00Z",
+      "spec": {
+        "functions": [
+          {
+            "name": "increment"
+          }
+        ]
+      }
+    }
+  },
+  "expected": {
+    "status": 200,
+    "function_count": 1
+  }
+}

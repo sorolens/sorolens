@@ -15,6 +15,10 @@ const (
 	discoveryOther       = "GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U"
 	discoveredContract   = "CASLIQNFCMW3UXPTVA5KDQZK6NEBPK4K35XY2SEQ3D7JGRCOVLP2BKBK"
 	createContractEnvXDR = "AAAAAgAAAACKiOPddAnxlf1S2y08ul1yymcJvx2UEhvzdIgBtA9vXAAAAGQAAAAAAAAAZQAAAAEAAAAAAAAAAAAAAABqtc/XAAAAAAAAAAEAAAAAAAAAGAAAAAMAAAAAAAAAAAAAAACKiOPddAnxlf1S2y08ul1yymcJvx2UEhvzdIgBtA9vXAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAAAAAAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHAAAAAAAAAAAAAAAAAAAAAbQPb1wAAABA5aONoYGOc+6cgzNer55szSaCepvoisKlMKivkWC20HBojwVgCjY2NkjZkN21ICcW7t8IQQQoLqd3BH3CER4fDA=="
+	sacContractID   = "CDL5UKTHSI4MPDVKDOFM2MVN2PZN3G76NTHSE5BLEXINTTFAOZSHRXVU"
+	fromAssetEnvXDR = "AAAAAgAAAACKiOPddAnxlf1S2y08ul1yymcJvx2UEhvzdIgBtA9vXAAAAGQAAAAAAAAAZQAAAAEAAAAAAAAAAAAAAABqtc/X" +
+		"AAAAAAAAAAEAAAAAAAAAGAAAAAEAAAABAAAAAVVTRAAAAAAAgTl3Dqh9F19Wo1Rmw0x+zMuNipG07jeiXfYPW4/Js5QAAAAB" +
+		"AAAAAAAAAAAAAAABtA9vXAAAAEBmGxbSKcJ2C9cC/89XczCXUhmefHoKtOP+24b3GBBmMeiYgyJb/nQGzim1Ul/tE5ogKGQuL/ojv04gRFnKvW8O"
 )
 
 // discoveryRPC is a fakeRPC that also serves getTransactions pages keyed by
@@ -148,6 +152,47 @@ func TestDiscoveryTracksContractDeployedByWatchedAccount(t *testing.T) {
 	}
 	if len(st.recorded) != 1 {
 		t.Fatalf("second pass must not re-record, got %d", len(st.recorded))
+	}
+}
+
+func TestDiscoveryTracksSACContractEnriched(t *testing.T) {
+	rpc, st := newDiscoveryFixture(discoveryAccount)
+	// Replace transactions with SAC deployment
+	rpc.pages[""] = &GetTransactionsResult{
+		LatestLedger: 500000,
+		Cursor:       "end",
+		Transactions: []LedgerTransaction{{
+			Status:      "SUCCESS",
+			Ledger:      499990,
+			TxHash:      "sactx",
+			EnvelopeXDR: fromAssetEnvXDR,
+		}},
+	}
+	p := NewWithRPCClients(map[string]RPCClient{"testnet": rpc}, st, newFakeRedis(), testConfig(), testLogger())
+
+	if err := p.Run(context.Background(), "once"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if len(st.recorded) != 1 {
+		t.Fatalf("want 1 discovered contract, got %d", len(st.recorded))
+	}
+	got := st.recorded[0]
+	if !got.IsSAC {
+		t.Errorf("want IsSAC=true, got %v", got.IsSAC)
+	}
+	if got.ContractID != sacContractID {
+		t.Errorf("contract ID: want %s, got %s", sacContractID, got.ContractID)
+	}
+	wantSAC := &TokenMetadata{
+		AssetCode: "USD",
+		Issuer:    discoveryOther,
+		Decimals:  7,
+		Symbol:    "USD",
+		Name:      "USD",
+	}
+	if got.SAC == nil || *got.SAC != *wantSAC {
+		t.Errorf("SAC metadata: want %+v, got %+v", wantSAC, got.SAC)
 	}
 }
 

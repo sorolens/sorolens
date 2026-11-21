@@ -19,10 +19,7 @@ type recentEventsResponse struct {
 // dashboard's ticker polls this endpoint every 5 seconds and de-duplicates by
 // event id, so no server-side cursor is needed.
 func (h *Handler) RecentEvents(w http.ResponseWriter, r *http.Request) {
-	limit := intQuery(r, "limit", 50)
-	if limit > 200 {
-		limit = 200
-	}
+	limit := pageLimit(r, DefaultPageSize)
 	events, err := h.Store.RecentEventsAll(r.Context(), limit)
 	if err != nil {
 		h.Logger.Error("recent events", "err", err)

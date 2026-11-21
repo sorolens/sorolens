@@ -10,6 +10,13 @@ on:
     tags:
       - "python-sdk-v*"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: python-sdk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test Python SDK (${{ matrix.python-version }})
@@ -21,6 +28,7 @@ jobs:
     defaults:
       run:
         working-directory: packages/python-sdk
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -33,6 +33,13 @@ type Store interface {
 	// GetContract returns the contract with the given ID, or ErrNotFound.
 	GetContract(ctx context.Context, contractID string) (Contract, error)
 
+	// UntrackContract stops indexing a contract by flipping its status to
+	// "paused". The row and all indexed history are retained; re-registering
+	// the contract flips the status back to "pending" and resumes tracking.
+	// Returns ErrNotFound when the contract does not exist. Untracking an
+	// already-paused contract is a no-op success.
+	UntrackContract(ctx context.Context, contractID string) error
+
 	// ListContracts returns a cursor-paginated list of tracked contracts
 	// matching the optional filters. cursor is opaque; pass "" for the first
 	// page. Returns the next cursor (empty string when there are no more
@@ -206,6 +213,14 @@ type LabelStore interface {
 	UpsertLabel(ctx context.Context, label Label) error
 	ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error)
 	ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error)
+}
+
+// ContractTokenStore is the read/write surface for SAC token metadata.
+type ContractTokenStore interface {
+	// UpsertContractToken inserts or updates token metadata for a contract.
+	UpsertContractToken(ctx context.Context, contractID string, m TokenMetadata) error
+	// GetContractToken returns token metadata for a contract, or ErrNotFound.
+	GetContractToken(ctx context.Context, contractID string) (TokenMetadata, error)
 }
 
 // ContractBulkStore is the write surface for bulk contract actions used by the

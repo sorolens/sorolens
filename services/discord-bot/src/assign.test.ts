@@ -13,6 +13,8 @@ import {
   parseIssueList,
   parseIssueRefs,
   processApplication,
+  pruneStaleGrants,
+  remainingIssues,
   type AssignDeps,
 } from "./assign.js";
 import * as db from "./db.js";
@@ -199,6 +201,43 @@ describe("processApplication", () => {
     await processApplication(msg("#10"), deps);
     const r = await processApplication(msg("#10", "u2"), deps);
     expect(r).toMatchObject({ outcomes: [{ ok: false, reason: "is already taken" }] });
+  });
+
+  it("lets anyone take an issue whose earlier holder was unassigned on GitHub", async () => {
+    await processApplication(msg("#10", "u2"), deps);
+    issues.get(10)!.assignees = [];
+    const r = await processApplication(msg("#10"), deps);
+    expect(r).toMatchObject({ outcomes: [{ issue: 10, ok: true }] });
+    expect(db.getGrant(10)).toMatchObject({ discordId: "u1", githubLogin: "alice" });
+  });
+
+  it("frees stale records so the announcement lists every free issue", async () => {
+    db.addToPool([14, 15]);
+    issues.set(14, issue(14));
+    issues.set(15, issue(15));
+    db.claimIssue(10, "u2", "bob"); // unassigned on GitHub since
+    db.claimIssue(11, "u2", "bob");
+    issues.get(11)!.assignees = ["bob"]; // still theirs
+    db.claimIssue(12, "u1", "alice");
+    issues.get(12)!.assignees = ["alice"];
+    issues.get(12)!.state = "closed"; // closed
+    db.claimIssue(13, "u1", "alice");
+    issues.get(13)!.assignees = ["carol"]; // reassigned to someone else
+    db.claimIssue(14, "u1", "alice");
+    const getIssue = deps.getIssue;
+    deps.getIssue = vi.fn(async (r, n) => {
+      if (n === 14) throw new Error("GitHub down");
+      return getIssue(r, n);
+    });
+    expect(remainingIssues(deps)).toEqual([15]);
+
+    const freed = await pruneStaleGrants(db.listPool(), deps);
+    expect(freed).toEqual([10, 12, 13]);
+    expect(remainingIssues(deps)).toEqual([10, 12, 13, 15]);
+    expect(db.getGrant(11)).not.toBeNull();
+    expect(db.getGrant(14)).not.toBeNull(); // left alone when GitHub can't be asked
+    // Only issues with a record are looked up.
+    expect(deps.getIssue).toHaveBeenCalledTimes(5);
   });
 
   it("releases the claim when GitHub drops the assignee", async () => {

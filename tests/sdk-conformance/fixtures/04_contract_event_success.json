@@ -1,0 +1,29 @@
+{
+  "id": "04_contract_event_success",
+  "description": "Retrieve specific contract event by ID",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts/CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2/events?limit=1"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "events": [
+        {
+          "id": "ev_001",
+          "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2",
+          "type": "contract",
+          "ledger": 1234
+        }
+      ],
+      "next_cursor": ""
+    }
+  },
+  "expected": {
+    "status": 200,
+    "count": 1
+  }
+}

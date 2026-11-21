@@ -89,15 +89,29 @@ func init() {
 }
 
 // newClient builds an API client for the active configuration and attaches
-// the active profile's API key, when one is stored.
+// the resolved API key, when one is set.
 func newClient(timeout time.Duration) *client.Client {
 	c := client.New(globalConfig.APIURL, timeout)
-	if globalConfig.Profile != "" {
-		if key, err := newSecretStore().Get(globalConfig.Profile); err == nil && key != "" {
-			c = c.WithAPIKey(key)
-		}
+	if key := resolvedAPIKey(); key != "" {
+		c = c.WithAPIKey(key)
 	}
 	return c
+}
+
+// resolvedAPIKey returns the API key for the current invocation, in
+// precedence order: the global --api-key flag, the SOROLENS_API_KEY env var,
+// or the api_key config-file entry (all resolved into globalConfig.APIKey by
+// applyConfig), then the active profile's stored key.
+func resolvedAPIKey() string {
+	if globalConfig.APIKey != "" {
+		return globalConfig.APIKey
+	}
+	if globalConfig.Profile != "" {
+		if key, err := newSecretStore().Get(globalConfig.Profile); err == nil && key != "" {
+			return key
+		}
+	}
+	return ""
 }
 
 func userConfigPath() (string, error) {
@@ -269,10 +283,8 @@ func runProfileRemove(_ *cobra.Command, args []string) error {
 
 func runConfigShow(_ *cobra.Command, _ []string) error {
 	key := "(none)"
-	if globalConfig.Profile != "" {
-		if k, err := newSecretStore().Get(globalConfig.Profile); err == nil && k != "" {
-			key = "********"
-		}
+	if resolvedAPIKey() != "" {
+		key = "********"
 	}
 	profile := globalConfig.Profile
 	if profile == "" {

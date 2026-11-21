@@ -22,11 +22,13 @@ how to scrape them.
 
 ## Endpoints
 
-| Service            | Endpoint       | Auth | Default address                  |
-| ------------------ | -------------- | ---- | -------------------------------- |
-| API                | `GET /metrics` | none | `PORT` (8080)                    |
-| API admin listener | `GET /metrics` | none | `METRICS_PORT` (only if set)     |
-| Indexer            | `GET /metrics` | none | `INDEXER_METRICS_ADDR` (`:9100`) |
+| Service            | Endpoint                          | Auth | Default address                  |
+| ------------------ | --------------------------------- | ---- | -------------------------------- |
+| API                | `GET /metrics`                    | none | `PORT` (8080)                    |
+| API admin listener | `GET /metrics`                    | none | `METRICS_PORT` (only if set)     |
+| Indexer            | `GET /metrics`                    | none | `INDEXER_METRICS_ADDR` (`:9100`) |
+| Indexer            | `GET /healthz`                    | none | `INDEXER_METRICS_ADDR` (`:9100`) |
+| Indexer            | `GET /readyz`                     | none | `INDEXER_METRICS_ADDR` (`:9100`) |
 
 Both services return the Prometheus text exposition format
 (`Content-Type: text/plain; version=0.0.4`).
@@ -47,12 +49,27 @@ private interface and excluded from the public ingress.
 METRICS_PORT=9090 go run ./cmd/api
 ```
 
-The indexer serves `/metrics` on `INDEXER_METRICS_ADDR` (default `:9100`). Set
-`INDEXER_METRICS_ADDR=` (empty) to disable the endpoint.
+The indexer serves `/metrics`, `/healthz` and `/readyz` on
+`INDEXER_METRICS_ADDR` (default `:9100`). Set `INDEXER_METRICS_ADDR=` (empty)
+to disable the endpoint.
 
 ```bash
 curl -s http://localhost:9100/metrics | grep sorolens_indexer
+curl -s http://localhost:9100/healthz
+curl -s http://localhost:9100/readyz
 ```
+
+`/healthz` and `/readyz` report the indexer's dependency state: they return
+HTTP 200 when Redis (when locking is enabled via `REDIS_URL`) and Postgres are
+both reachable, and HTTP 503 otherwise. Orchestrators can use these endpoints
+to restart a stuck indexer.
+
+> **Note:** `/readyz` currently behaves exactly like `/healthz`: both run the
+> same Redis and Postgres checks. Because that liveness check depends on
+> external dependencies, pointing a liveness probe at either endpoint can cause
+> a restart loop during a Redis or Postgres outage. Prefer them for readiness,
+> and keep the liveness probe dependency-free or set a generous
+> `failureThreshold`.
 
 The endpoint is owned by the indexer because the indexer is the component that
 talks to each network's Soroban RPC and owns the per-network ledger cursor.
@@ -147,6 +164,8 @@ unnamed RPC client, the value is `default`.
 | `sorolens_indexer_head_ledger`            | Gauge     | `network` | Latest ledger sequence reported by the network's Soroban RPC.                                                                                                                                    |
 | `sorolens_indexer_last_indexed_ledger`    | Gauge     | `network` | Last ledger sequence committed by the indexer for the network (its indexer cursor).                                                                                                              |
 | `sorolens_indexer_events_processed_total` | Counter   | `network` | Contract events persisted.                                                                                                                                                                       |
+| `sorolens_indexer_rpc_errors_total`       | Counter   | `network` | Soroban RPC call failures.                                                                                                                                                                       |
+| `sorolens_indexer_dlq_size`               | Gauge     | `network` | Number of events parked in the dead-letter queue.                                                                                                                                                |
 | `sorolens_indexer_run_duration_seconds`   | Histogram | `mode`    | Duration of a full indexer pass (`once` or `continuous`).                                                                                                                                        |
 
 Notes:
@@ -158,6 +177,11 @@ Notes:
 - `events_processed_total` only counts events after the batch insert succeeds; a
   failed insert does not increment it, and a zero increment never creates a
   series.
+- `rpc_errors_total` increments for every Soroban RPC call failure (get latest
+  ledger, get events, get ledger entries), by network. It never prevents a
+  request from failing — metrics recording is best-effort.
+- `dlq_size` reports the number of events parked in the dead-letter queue for
+  each network, refreshed at the end of every pass.
 - `run_duration_seconds` buckets extend to 300s to cover the `INDEXER_MAX_DURATION`
   default of 270s.
 
@@ -243,6 +267,18 @@ histogram_quantile(
 )
 ```
 
+**RPC error rate**
+
+```promql
+sum by (network) (rate(sorolens_indexer_rpc_errors_total[5m]))
+```
+
+**DLQ backlog**
+
+```promql
+sorolens_indexer_dlq_size
+```
+
 ---
 
 ## Scrape configuration
@@ -263,7 +299,7 @@ scrape_configs:
 Because the indexer runs as a cron job (GitHub Actions) in the default
 deployment, its metrics are only scrapeable while a process is running. Run it
 with `--mode continuous` to keep the endpoint up; see
-[`ARCHITECTURE.md` § 5.1](../ARCHITECTURE.md) for the migration path from cron
+[`ARCHITECTURE.md` § 5.1](https://github.com/sorolens/sorolens/blob/main/ARCHITECTURE.md) for the migration path from cron
 to a persistent worker.
 
 ---

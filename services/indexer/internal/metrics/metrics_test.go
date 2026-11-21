@@ -146,3 +146,56 @@ func TestHandlerExposesEventsAndRunDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestRecorderRecordRpcError(t *testing.T) {
+	t.Parallel()
+
+	r := New()
+	r.RecordRpcError("testnet")
+	r.RecordRpcError("testnet")
+	r.RecordRpcError("mainnet")
+
+	if got := testutil.ToFloat64(r.rpcErrors.WithLabelValues("testnet")); got != 2 {
+		t.Fatalf("testnet rpc errors = %v, want 2", got)
+	}
+	if got := testutil.ToFloat64(r.rpcErrors.WithLabelValues("mainnet")); got != 1 {
+		t.Fatalf("mainnet rpc errors = %v, want 1", got)
+	}
+}
+
+func TestRecorderSetDlqSize(t *testing.T) {
+	t.Parallel()
+
+	r := New()
+	r.SetDlqSize("testnet", 7)
+	r.SetDlqSize("mainnet", 3)
+
+	if got := testutil.ToFloat64(r.dlqSize.WithLabelValues("testnet")); got != 7 {
+		t.Fatalf("testnet dlq size = %v, want 7", got)
+	}
+	if got := testutil.ToFloat64(r.dlqSize.WithLabelValues("mainnet")); got != 3 {
+		t.Fatalf("mainnet dlq size = %v, want 3", got)
+	}
+}
+
+func TestHandlerExposesNewMetrics(t *testing.T) {
+	t.Parallel()
+
+	r := New()
+	r.RecordRpcError("testnet")
+	r.SetDlqSize("testnet", 4)
+
+	req := httptest.NewRequest("GET", "/metrics", nil)
+	rec := httptest.NewRecorder()
+	r.Handler().ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		"sorolens_indexer_rpc_errors_total",
+		"sorolens_indexer_dlq_size",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("/metrics body missing %q\nbody:\n%s", want, body)
+		}
+	}
+}

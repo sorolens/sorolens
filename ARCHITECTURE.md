@@ -522,9 +522,19 @@ Get a single contract's metadata and sync state.
 
 #### `DELETE /api/v1/contracts/:id`
 
-Stop tracking a contract. Data is retained but the indexer stops polling.
+Stop tracking a contract. Requires the `write:contracts` scope and at least
+the `contributor` role, like registration. Untracking is a soft delete: the
+contract status flips to `paused` while the row and all indexed history are
+retained, and the indexer stops polling it (it only polls contracts whose
+status is `pending`, `backfilling` or `active`). Re-registering the contract
+flips the status back to `pending` and resumes tracking. Deleting a contract
+that is already paused is a no-op; deleting one that was never registered
+returns `404`. This differs from the batch `untrack` action, which
+permanently deletes the contracts and their indexed data.
 
 **Response:** `204 No Content`.
+
+**Responses:** `204`, `401`, `403`, `404 Not Found`, `500`.
 
 ---
 
@@ -1189,3 +1199,27 @@ the one-object-per-month layout bounds the work to the months touched.
 - `apps/web/hooks/usePushSubscription.ts` — React hook managing the push subscription lifecycle (idle → subscribing → subscribed → denied).
 - `apps/web/components/OfflineAlert.tsx` — `OfflineBanner` (shown when offline) + `OfflineAlertPanel` (the `/offline-alerts` page body).
 - `apps/web/app/offline-alerts/page.tsx` — dedicated page for the queued-alert view.
+
+### 5.8 Read-Replica Routing and Replication-Lag Guard (issue #794)
+
+**Decision:** Route read-only queries to a secondary PostgreSQL read replica pool (`DATABASE_READ_URL`) with an automated replication-lag guard (`DATABASE_REPLICA_LAG_THRESHOLD`).
+
+**Rationale:** Heavy dashboard reads must not starve indexer writes or compromise read-your-writes guarantees. All writes and read-after-write mutations are directed to the primary pool. If replica replication lag exceeds the configured threshold, read queries fall back to the primary pool automatically. See [docs/read_replica.md](docs/read_replica.md).
+
+---
+
+## 6. Decision Records
+
+Formal Architecture Decision Records (ADRs) capture significant, hard-to-reverse architectural choices across the system:
+
+- [Architecture Decision Records Index](docs/adr/README.md)
+- [ADR 0001: Postgres partitioning for events table](docs/adr/0001-postgres-partitioning.md)
+- [ADR 0002: Keyset cursor pagination for API feeds](docs/adr/0002-cursor-pagination.md)
+- [ADR 0003: Horizontally-scaled indexer with worker sharding](docs/adr/0003-indexer-sharding.md)
+- [ADR 0004: S3-compatible Parquet cold storage for historical events](docs/adr/0004-cold-storage.md)
+- [ADR 0005: API versioning and /api/v1 freeze](docs/adr/0005-api-versioning.md)
+- [ADR 0006: Server-Sent Events (SSE) and WebSocket protocol selection](docs/adr/0006-sse-vs-websocket.md)
+- [ADR 0007: Two-tier authentication: API key scopes and user roles](docs/adr/0007-key-scopes-and-roles.md)
+- [ADR 0008: OpenAPI spec as source of truth and automated SDK generation](docs/adr/0008-sdk-generation.md)
+
+

@@ -23,6 +23,7 @@ type APIStore interface {
 	store.WatchdogStore
 	store.ContractUpgradeStore
 	store.ContractSpecStore
+	store.ContractEventSchemaStore
 	store.ContractTagStore
 	store.ContractNoteStore
 	store.HealthScoreStore
@@ -43,6 +44,9 @@ type APIStore interface {
 	store.WatchedAccountStore
 	store.AuditStore
 	store.ExportJobStore
+	store.UsageStore
+	store.MaintenanceStore
+	store.ContractTokenStore
 }
 
 // Pinger is implemented by both the postgres pool and the Redis client.
@@ -108,6 +112,11 @@ type Handler struct {
 	// TrustedProxySecret enables identity headers signed by a reverse proxy.
 	// Empty disables that identity source.
 	TrustedProxySecret string
+	// TrustedProxies are the proxy peers allowed to supply X-Forwarded-For.
+	TrustedProxies []string
+	// RateLimitPerMinute and RateLimitWindow configure anonymous rate limits.
+	RateLimitPerMinute int
+	RateLimitWindow    time.Duration
 	// RequestTimeout caps handling of every /api/v1 route except the SSE
 	// stream (issue #154). Zero means middleware.DefaultRequestTimeout.
 	RequestTimeout time.Duration
@@ -122,6 +131,9 @@ type Handler struct {
 
 	// RequireAuth enforces authentication mode across all endpoints except health checks.
 	RequireAuth bool
+
+	// UsageFlusher flushes API key request counts to persistent storage (issue #792).
+	UsageFlusher *middleware.UsageFlusher
 
 	// summaryCacheOnce guards lazy construction of summaryCache, the
 	// process-wide memo for composite per-contract dashboard summaries.

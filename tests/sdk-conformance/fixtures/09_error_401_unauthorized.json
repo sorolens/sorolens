@@ -1,0 +1,24 @@
+{
+  "id": "09_error_401_unauthorized",
+  "description": "401 Unauthorized missing or invalid token",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts"
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "authentication required"
+      }
+    }
+  },
+  "expected": {
+    "status": 401,
+    "error_code": "UNAUTHORIZED"
+  }
+}

@@ -27,10 +27,7 @@ def test_sign_matches_published_vector() -> None:
 
 
 def test_signature_header_matches_published_vector() -> None:
-    assert (
-        signature_header(TIMESTAMP, SIGNATURE)
-        == f"t=1700000000,v1={SIGNATURE}"
-    )
+    assert signature_header(TIMESTAMP, SIGNATURE) == f"t=1700000000,v1={SIGNATURE}"
 
 
 def test_verify_accepts_published_vector() -> None:

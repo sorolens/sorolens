@@ -1,0 +1,107 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-completion - Generate shell completion scripts
+
+
+.SH SYNOPSIS
+\fBsorolens completion [bash|zsh|fish|powershell]\fP
+
+
+.SH DESCRIPTION
+Generate shell completion scripts for sorolens.
+
+.PP
+To load completions:
+
+.PP
+Bash:
+  $ source <(sorolens completion bash)
+
+.PP
+# To load completions for each session, execute once:
+  # Linux:
+  $ sorolens completion bash > /etc/bash_completion.d/sorolens
+  # macOS:
+  $ sorolens completion bash > $(brew --prefix)/etc/bash_completion.d/sorolens
+
+.PP
+Zsh:
+  # If shell completion is not already enabled in your environment,
+  # enable it first:
+  $ echo "autoload -U compinit; compinit" >> ~/.zshrc
+
+.PP
+# To load completions for each session, execute once:
+  $ sorolens completion zsh > "${fpath[1]}/_sorolens"
+
+.PP
+# Then start a new shell for this to take effect.
+
+.PP
+Fish:
+  $ sorolens completion fish | source
+
+.PP
+# To load completions for each session, execute once:
+  $ sorolens completion fish > ~/.config/fish/completions/sorolens.fish
+
+.PP
+PowerShell:
+  PS> sorolens completion powershell | Out-String | Invoke-Expression
+
+.PP
+# To load completions for every new session, run:
+  PS> sorolens completion powershell > sorolens.ps1
+  # and source this file from your PowerShell profile.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for completion
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH SEE ALSO
+\fBsorolens(1)\fP
