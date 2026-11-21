@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { LocalePreferences } from "@/components/LocalePreferences";
 import { LocaleProvider, useLocale } from "./i18n";
@@ -33,5 +39,36 @@ describe("locale preferences", () => {
       new Intl.NumberFormat("es").format(1_234_567)
     );
     expect(localStorage.getItem("sorolens_locale")).toBe("es");
+  });
+
+  it("serves list empty-state copy from the catalog in both locales", async () => {
+    function CopyProbe() {
+      const { t } = useLocale();
+      return <p data-testid="copy">{t("watchlist.empty.title")}</p>;
+    }
+
+    localStorage.setItem("sorolens_locale", "es");
+    render(
+      <LocaleProvider>
+        <CopyProbe />
+      </LocaleProvider>
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("copy").textContent).toBe(
+        "Aún no hay marcadores"
+      )
+    );
+  });
+
+  it("falls back to English outside a LocaleProvider", () => {
+    function CopyProbe() {
+      const { t } = useLocale();
+      return <p data-testid="copy">{t("watchlist.empty.title")}</p>;
+    }
+
+    render(<CopyProbe />);
+
+    expect(screen.getByTestId("copy").textContent).toBe("No bookmarks yet");
   });
 });

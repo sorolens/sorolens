@@ -14,7 +14,7 @@ import { MonoId } from "@sorolens/ui";
 import { listAllEvents } from "@/lib/api";
 import { networkFilter, useNetwork } from "@/lib/network";
 import { TableSkeleton } from "@/components/Skeleton";
-import { ErrorState } from "@/components/ErrorState";
+import { EmptyState } from "@/components/EmptyState";
 import {
   FIRST_PAGE,
   dateRangeError,
@@ -133,6 +133,7 @@ function EventRow({ event }: { event: GlobalEvent }) {
 
 function EventsExplorerPage() {
   const { network } = useNetwork();
+  const { t } = useLocale();
 
   // Applied filters and the current page live in the URL (issue #618), so
   // a filtered view survives reload and can be shared. The draft inputs are
@@ -384,39 +385,39 @@ function EventsExplorerPage() {
       </form>
 
       {error ? (
-        <ErrorState
-          title="Couldn't load events."
+        <EmptyState
+          variant="error"
+          title={t("events.error.title")}
           message={error}
           onRetry={() => setReloadKey((k) => k + 1)}
         />
       ) : loading && events.length === 0 ? (
         <TableSkeleton rows={8} />
       ) : events.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] p-10 text-center text-sm text-[var(--color-text-secondary)]">
-          {hasFilters ? (
-            <>
-              <p>No events match these filters.</p>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className={`${buttonClass} mt-4`}
-              >
-                Clear filters
-              </button>
-            </>
-          ) : (
-            <p>
-              No events indexed yet.{" "}
-              <Link
-                href="/contracts"
-                className="text-[var(--color-accent)] hover:underline"
-              >
-                Track a contract
-              </Link>{" "}
-              to start seeing events here.
-            </p>
-          )}
-        </div>
+        <EmptyState
+          variant={hasFilters ? "no-results" : "first-run"}
+          title={
+            hasFilters ? (
+              t("events.empty.noResults.title")
+            ) : (
+              <>
+                {t("events.empty.firstRun.title")}{" "}
+                <Link
+                  href="/contracts"
+                  className="text-[var(--color-accent)] hover:underline"
+                >
+                  {t("empty.trackContract")}
+                </Link>{" "}
+                {t("events.empty.firstRun.suffix")}
+              </>
+            )
+          }
+          action={
+            hasFilters
+              ? { label: t("empty.clearFilters"), onClick: clearFilters }
+              : undefined
+          }
+        />
       ) : (
         <div
           className={`overflow-hidden rounded-lg border border-[var(--color-border)] ${loading ? "opacity-60" : ""}`}
