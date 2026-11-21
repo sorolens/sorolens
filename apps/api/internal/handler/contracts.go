@@ -646,10 +646,6 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
-	if eventType != "" && !validEventTypes[eventType] {
-		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "type must be one of: contract, system, diagnostic")
-		return
-	}
 	from, hasFrom, err := parseLedgerParam(r, "from")
 	if err != nil {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())

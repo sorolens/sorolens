@@ -351,9 +351,8 @@ func TestQueryParameterValidationErrors(t *testing.T) {
 		{"bad invocation status v2", fmt.Sprintf("/api/v2/contracts/%s/invocations?status=BOGUS", contractID), "status must be one of: SUCCESS, FAILED, NOT_FOUND"},
 		{"bad invocation status global", "/api/v1/invocations?status=BOGUS", "status must be one of: SUCCESS, FAILED, NOT_FOUND"},
 
-		// Enum: event type
-		{"bad event type v1", fmt.Sprintf("/api/v1/contracts/%s/events?type=bogus", contractID), "type must be one of: contract, system, diagnostic"},
-		{"bad event type v2", fmt.Sprintf("/api/v2/contracts/%s/events?type=bogus", contractID), "type must be one of: contract, system, diagnostic"},
+		// Enum: event type (on global events feed)
+		{"bad event type global", "/api/v1/events?type=bogus", "type must be one of: contract, system, diagnostic"},
 
 		// Enum: storage durability & status
 		{"bad storage durability v1", fmt.Sprintf("/api/v1/contracts/%s/storage?durability=bogus", contractID), "durability must be one of: temporary, persistent, instance"},
