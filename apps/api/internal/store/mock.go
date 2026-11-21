@@ -1545,3 +1545,8 @@ func (m *MockStore) SearchFunctions(_ context.Context, query string, limit int) 
 	}
 	return matched, nil
 }
+
+// IncrementRollups is a no-op stub for the mock store (issue #788).
+func (m *MockStore) IncrementRollups(_ context.Context, _, _ string, _ time.Time, _, _, _ int) error {
+	return nil
+}

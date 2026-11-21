@@ -1011,3 +1011,43 @@ func (s *postgresStore) SearchFunctions(ctx context.Context, query string, limit
 
 	return matches, nil
 }
+
+// IncrementRollups increments pre-aggregated hourly and daily rollup buckets
+// for a contract window (issue #788). Both a per-contract row and a
+// network-wide aggregate row (contract_id = '') are upserted.
+func (s *postgresStore) IncrementRollups(ctx context.Context, network, contractID string, closedAt time.Time, events, invocations, failures int) error {
+	hour := closedAt.UTC().Truncate(time.Hour)
+	day := time.Date(closedAt.Year(), closedAt.Month(), closedAt.Day(), 0, 0, 0, 0, time.UTC)
+
+	hourUpsert := `
+		INSERT INTO events_rollup_hourly (network, contract_id, hour, event_count, invoke_count, fail_count)
+		VALUES ($1,$2,$3,$4,$5,$6)
+		ON CONFLICT (network, contract_id, hour) DO UPDATE
+		  SET event_count  = events_rollup_hourly.event_count  + EXCLUDED.event_count,
+		      invoke_count = events_rollup_hourly.invoke_count + EXCLUDED.invoke_count,
+		      fail_count   = events_rollup_hourly.fail_count   + EXCLUDED.fail_count`
+	dayUpsert := `
+		INSERT INTO events_rollup_daily (network, contract_id, day, event_count, invoke_count, fail_count)
+		VALUES ($1,$2,$3,$4,$5,$6)
+		ON CONFLICT (network, contract_id, day) DO UPDATE
+		  SET event_count  = events_rollup_daily.event_count  + EXCLUDED.event_count,
+		      invoke_count = events_rollup_daily.invoke_count + EXCLUDED.invoke_count,
+		      fail_count   = events_rollup_daily.fail_count   + EXCLUDED.fail_count`
+
+	batch := &pgx.Batch{}
+	// Per-contract rows.
+	batch.Queue(hourUpsert, network, contractID, hour, events, invocations, failures)
+	batch.Queue(dayUpsert, network, contractID, day, events, invocations, failures)
+	// Network-wide aggregate rows (contract_id = '').
+	batch.Queue(hourUpsert, network, "", hour, events, invocations, failures)
+	batch.Queue(dayUpsert, network, "", day, events, invocations, failures)
+
+	res := s.pool.SendBatch(ctx, batch)
+	defer res.Close()
+	for i := 0; i < 4; i++ {
+		if _, err := res.Exec(); err != nil {
+			return fmt.Errorf("increment rollup %d: %w", i, err)
+		}
+	}
+	return nil
+}
