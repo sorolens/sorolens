@@ -31,6 +31,9 @@ const NAV_HREFS = [
   "/live",
   "/contracts",
   "/events",
+  "/invocations",
+  "/compare",
+  "/watchlist",
   "/watchdog",
   "/watchdog/reports",
   "/integrations",
@@ -113,6 +116,27 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
                 {t("nav.events")}
+              </Link>
+              <Link
+                href="/invocations"
+                aria-current={active === "/invocations" ? "page" : undefined}
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                {t("nav.invocations")}
+              </Link>
+              <Link
+                href="/compare"
+                aria-current={active === "/compare" ? "page" : undefined}
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                {t("nav.compare")}
+              </Link>
+              <Link
+                href="/watchlist"
+                aria-current={active === "/watchlist" ? "page" : undefined}
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                {t("nav.watchlist")}
               </Link>
               <Link
                 href="/watchdog"
