@@ -27,6 +27,9 @@ import { VisualRuleBuilder } from "@/components/VisualRuleBuilder";
 import { useSessionUserId } from "@/lib/useSession";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
+import { EmptyState } from "@/components/EmptyState";
+import { errorMessage } from "@/components/ErrorState";
+import { useLocale } from "@/lib/i18n";
 
 const SEVERITIES: RuleSeverity[] = ["Info", "Warning", "Critical"];
 
@@ -40,6 +43,7 @@ const DEFAULT_RULE = "fee_per_invocation > 0.5 XLM for 5m";
  */
 export default function RulesPage() {
   const userId = useSessionUserId();
+  const { t } = useLocale();
   const [source, setSource] = useState(DEFAULT_RULE);
   const [mode, setMode] = useState<"visual" | "dsl">("visual");
   const [ruleTree, setRuleTree] = useState<VisualRuleTree>(() =>
@@ -55,6 +59,8 @@ export default function RulesPage() {
   const [previewing, setPreviewing] = useState(false);
 
   const [rules, setRules] = useState<AlertRule[]>([]);
+  // A failed list request must read as a failure, not as "no rules".
+  const [rulesError, setRulesError] = useState<string | null>(null);
   const [pendingDeleteRule, setPendingDeleteRule] = useState<AlertRule | null>(
     null
   );
@@ -66,11 +72,13 @@ export default function RulesPage() {
   const previewSeq = useRef(0);
 
   const loadRules = useCallback(async () => {
+    setRulesError(null);
     try {
       const data = await listRules();
       setRules(data.rules ?? []);
-    } catch {
+    } catch (err) {
       setRules([]);
+      setRulesError(errorMessage(err, "The rules request failed."));
     }
   }, []);
 
@@ -230,6 +238,7 @@ export default function RulesPage() {
                 Name
               </span>
               <input
+                id="rule-name-input"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full rounded border border-[var(--color-border)] bg-transparent px-2 py-1"
@@ -394,10 +403,24 @@ export default function RulesPage() {
       {/* ---- saved rules ---- */}
       <section>
         <h2 className="mb-3 text-lg font-semibold">Saved rules</h2>
-        {rules.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            No rules yet.
-          </p>
+        {rulesError ? (
+          <EmptyState
+            variant="error"
+            title={t("rules.error.title")}
+            message={rulesError}
+            onRetry={loadRules}
+          />
+        ) : rules.length === 0 ? (
+          <EmptyState
+            variant="first-run"
+            title={t("rules.empty.title")}
+            description={t("rules.empty.body")}
+            action={{
+              label: t("rules.empty.action"),
+              onClick: () =>
+                document.getElementById("rule-name-input")?.focus(),
+            }}
+          />
         ) : (
           <ul className="divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">
             {rules.map((rule) => (
