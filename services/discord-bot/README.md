@@ -51,7 +51,7 @@ Admin commands are registered with no default permissions, so only server admini
 | `/assign-issues add\|remove issues:836-850, 812` | Choose which issues members can pick. `clear` and `list` too.                                      |
 | `/assign-toggle on\|off`                         | Open or close applications.                                                                        |
 | `/assign-status`                                | Show the settings, released issues and who the bot gave which issue.                               |
-| `/assign-release issue:<n>`                     | Stop an issue counting toward someone's max (does not unassign it on GitHub).                      |
+| `/assign-release issues:<list>`                 | Free issues the bot gave out, e.g. `567, 647` (does not unassign them on GitHub). Stale ones are also freed by themselves when applications turn on or issues are added. |
 
 ## Issue self-assign (Drips Wave)
 

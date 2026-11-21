@@ -112,6 +112,14 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// rejections are audited too, and inside Recoverer so a panic is
 	// recorded as 500 before being recovered.
 	r.Use(middleware.Audit(h.Store, h.Logger, "/api/", "/admin"))
+	// Rate limiting is keyed by the verified API key when present and by the
+	// trusted-proxy client IP otherwise. It runs after Identity so the key
+	// is available, and before the route handlers so it can short-circuit.
+	r.Use(middleware.RateLimit(h.RedisClient, h.Store, middleware.RateLimitConfig{
+		TrustedProxies: h.TrustedProxies,
+		AnonymousLimit: h.RateLimitPerMinute,
+		Window:         h.RateLimitWindow,
+	}))
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(middleware.Metrics)
 
@@ -126,9 +134,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// compression decision, so limiter headers written later are unaffected).
 	r.Use(middleware.Compression)
 
-	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
 	r.Use(middleware.UsageMeter(h.RedisClient, h.UsageFlusher))
-
 	// Health (not rate-limited)
 	r.Get("/health", h.Health)
 	r.Get("/readyz", h.Readyz)
@@ -137,7 +143,6 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// rather than under /api/v1 so it stays reachable without a versioned client
 	// and without the v1 scope/role middleware.
 	r.Get("/api/version", h.Version)
-
 	// Prometheus metrics. It sits outside /api/v1 so it needs no API key, and
 	// the rate limiter skips it explicitly (see middleware.RateLimit) so a
 	// scrape is never throttled. A registry per router keeps tests that build

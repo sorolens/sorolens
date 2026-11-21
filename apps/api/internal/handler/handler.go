@@ -111,6 +111,11 @@ type Handler struct {
 	// TrustedProxySecret enables identity headers signed by a reverse proxy.
 	// Empty disables that identity source.
 	TrustedProxySecret string
+	// TrustedProxies are the proxy peers allowed to supply X-Forwarded-For.
+	TrustedProxies []string
+	// RateLimitPerMinute and RateLimitWindow configure anonymous rate limits.
+	RateLimitPerMinute int
+	RateLimitWindow    time.Duration
 	// RequestTimeout caps handling of every /api/v1 route except the SSE
 	// stream (issue #154). Zero means middleware.DefaultRequestTimeout.
 	RequestTimeout time.Duration
