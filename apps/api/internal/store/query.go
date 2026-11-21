@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sorolens/sorolens/apps/api/failurecategory"
 )
 
 // FullStore combines every store interface: all of them are implemented by
@@ -91,6 +92,10 @@ type InvocationFilters struct {
 	// date-range filter.
 	Since *time.Time
 	Until *time.Time
+	// FailureCategory restricts the listing to failed invocations of one
+	// category (issue #806). The handler validates it against
+	// failurecategory.All.
+	FailureCategory string
 }
 
 // StorageFilters holds optional query filters for listing storage entries.
@@ -121,6 +126,10 @@ type InvocationWindowStats struct {
 	P95Fee            float64
 	AvgCPU            float64
 	P95CPU            float64
+	// FailuresByCategory counts the window's classified failures per
+	// failurecategory value (issue #806). Every category is present, with
+	// zero when it has no failures.
+	FailuresByCategory map[string]int64
 }
 
 // ContractInvocationStats contains the fixed windows exposed by the contract
@@ -422,7 +431,9 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
-		       inserted_at
+		       inserted_at,
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, '')
 		FROM invocations
 		WHERE contract_id = $1
 		ORDER BY ledger DESC, tx_hash DESC
@@ -443,6 +454,7 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.FailureCategory, &inv.FailureCode,
 		); err != nil {
 			return nil, err
 		}
@@ -471,7 +483,9 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
-		       inserted_at
+		       inserted_at,
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, '')
 		FROM invocations
 		WHERE contract_id = $1
 		  AND ($2 = '' OR tx_hash > $2)
@@ -480,9 +494,10 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		  AND ($5 = '' OR function_name = $5)
 		  AND ($6 = 0   OR ledger >= $6)
 		  AND ($7 = 0   OR ledger <= $7)
+		  AND ($8 = ''  OR failure_category = $8)
 		ORDER BY ledger ASC, tx_hash ASC
-		LIMIT $8`,
-		contractID, cursor, f.Network, f.Status, f.FunctionName, f.From, f.To, limit+1,
+		LIMIT $9`,
+		contractID, cursor, f.Network, f.Status, f.FunctionName, f.From, f.To, f.FailureCategory, limit+1,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("list invocations: %w", err)
@@ -498,6 +513,7 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.FailureCategory, &inv.FailureCode,
 		); err != nil {
 			return nil, "", err
 		}
@@ -532,7 +548,9 @@ func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invoc
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
-		       inserted_at
+		       inserted_at,
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, '')
 		FROM invocations
 		WHERE tx_hash = $1`, txHash)
 
@@ -543,6 +561,7 @@ func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invoc
 		&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 		&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 		&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+		&inv.FailureCategory, &inv.FailureCode,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Invocation{}, ErrNotFound
@@ -571,6 +590,7 @@ func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID,
 		       COALESCE(i.ledger_write_byte, 0),
 		       COALESCE(i.application_order, 0),
 		       i.inserted_at,
+		       COALESCE(i.failure_category, ''), COALESCE(i.failure_code, ''),
 		       e.id, e.contract_id, e.network, e.ledger, e.ledger_closed_at, e.tx_hash, e.type,
 		       e.topic_xdr, e.value_xdr, e.topic_decoded, e.value_decoded,
 		       e.in_successful_call, e.inserted_at
@@ -602,6 +622,7 @@ func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID,
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.FailureCategory, &inv.FailureCode,
 			&evID, &evContractID, &evNetwork, &evLedger, &evLedgerClosedAt, &evTxHash, &evType,
 			&evTopicXDR, &evValueXDR, &evTopicDec, &evValDec,
 			&evInSuccessfulCall, &evInsertedAt,
@@ -735,7 +756,9 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
-		       inserted_at
+		       inserted_at,
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, '')
 		FROM invocations
 		WHERE ($1 = '' OR contract_id = $1)
 		  AND ($2 = '' OR network = $2)
@@ -746,10 +769,11 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 		  AND ($7::timestamptz IS NULL OR ledger_closed_at >= $7)
 		  AND ($8::timestamptz IS NULL OR ledger_closed_at <= $8)
 		  AND ($9 = 0   OR (ledger, tx_hash) < ($9, $10))
+		  AND ($11 = '' OR failure_category = $11)
 		ORDER BY ledger DESC, tx_hash DESC
-		LIMIT $11`,
+		LIMIT $12`,
 		f.ContractID, f.Network, f.Status, f.FunctionName, f.From, f.To,
-		f.Since, f.Until, cursorLedger, cursorTxHash, limit+1,
+		f.Since, f.Until, cursorLedger, cursorTxHash, f.FailureCategory, limit+1,
 	)
 	if err != nil {
 		return nil, 0, "", fmt.Errorf("list all invocations: %w", err)
@@ -765,6 +789,7 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.FailureCategory, &inv.FailureCode,
 		); err != nil {
 			return nil, 0, "", err
 		}
@@ -932,7 +957,67 @@ func (s *postgresStore) GetContractInvocationStats(ctx context.Context, contract
 	if err != nil {
 		return ContractInvocationStats{}, fmt.Errorf("contract invocation stats: %w", err)
 	}
-	return stats, err
+	if err := s.addFailuresByCategory(ctx, contractID, &stats); err != nil {
+		return ContractInvocationStats{}, err
+	}
+	return stats, nil
+}
+
+// addFailuresByCategory fills each window's per-category failure counts
+// (issue #806) over the same 30-day range GetContractInvocationStats scans.
+// Only classified rows carry a failure_category, so no status filter is
+// needed.
+func (s *postgresStore) addFailuresByCategory(ctx context.Context, contractID string, stats *ContractInvocationStats) error {
+	stats.Last24Hours.FailuresByCategory = NewFailureCounts()
+	stats.Last7Days.FailuresByCategory = NewFailureCounts()
+	stats.Last30Days.FailuresByCategory = NewFailureCounts()
+
+	rows, err := s.readDB(ctx).Query(ctx, `
+		SELECT failure_category,
+		       COUNT(*) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours'),
+		       COUNT(*) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days'),
+		       COUNT(*)
+		FROM invocations
+		WHERE contract_id = $1
+		  AND failure_category IS NOT NULL
+		  AND ledger_closed_at >= NOW() - INTERVAL '30 days'
+		  AND ledger_closed_at <= NOW()
+		GROUP BY failure_category`, contractID)
+	if err != nil {
+		return fmt.Errorf("contract failure categories: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cat string
+		var day, week, month int64
+		if err := rows.Scan(&cat, &day, &week, &month); err != nil {
+			return fmt.Errorf("scan contract failure categories: %w", err)
+		}
+		AddFailureCount(stats.Last24Hours.FailuresByCategory, cat, day)
+		AddFailureCount(stats.Last7Days.FailuresByCategory, cat, week)
+		AddFailureCount(stats.Last30Days.FailuresByCategory, cat, month)
+	}
+	return rows.Err()
+}
+
+// NewFailureCounts returns a per-category count map with every category set
+// to zero, so responses always list the full set.
+func NewFailureCounts() map[string]int64 {
+	m := make(map[string]int64, len(failurecategory.All()))
+	for _, c := range failurecategory.All() {
+		m[string(c)] = 0
+	}
+	return m
+}
+
+// AddFailureCount adds n to category in m. A stored value outside the known
+// set (for example one written by a newer indexer) is counted as "other" so
+// it is never dropped from the totals.
+func AddFailureCount(m map[string]int64, category string, n int64) {
+	if _, ok := failurecategory.Parse(category); !ok {
+		category = string(failurecategory.Other)
+	}
+	m[category] += n
 }
 
 // DailyAggregates queries the last `days` calendar days (oldest first),

@@ -93,6 +93,11 @@ cursors, Wasm upgrades, the Wasm cache, health scores, and anomaly alerts
 through `services/indexer/internal/pgstore`. Every batch insert ignores rows
 that already exist, so re-indexing a ledger window is safe.
 
+A `FAILED` invocation is stored with a failure category and its raw error code,
+decoded from the transaction result and the diagnostic events. The categories
+and how host errors map to them are described in
+[Failure categories](failure-categories.md).
+
 The store tests run when `POSTGRES_TEST_URL` points at a migrated database:
 
 ```bash

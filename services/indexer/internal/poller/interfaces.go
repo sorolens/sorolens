@@ -227,6 +227,12 @@ type Invocation struct {
 	MemByte         *int64
 	LedgerReadByte  *int64
 	LedgerWriteByte *int64
+
+	// FailureCategory and FailureCode classify a FAILED invocation by its
+	// host error (issue #806, see internal/failure). Both are empty for any
+	// other status and are then stored as NULL.
+	FailureCategory string
+	FailureCode     string
 }
 
 // SyncState mirrors store.SyncState.

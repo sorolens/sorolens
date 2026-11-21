@@ -673,6 +673,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             description: "Upper ledger bound (inclusive).",
             type: "integer",
           },
+          {
+            name: "failure_category",
+            in: "query",
+            required: false,
+            description:
+              "Show only failed invocations of this category (case-insensitive). Invocations indexed before failure classification existed have no category and never match. An unknown value returns 422.",
+            type: "string",
+          },
         ],
       },
     },
@@ -2678,6 +2686,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             required: false,
             description:
               "Inclusive upper bound on ledger_closed_at (RFC 3339).",
+            type: "string",
+          },
+          {
+            name: "failure_category",
+            in: "query",
+            required: false,
+            description:
+              "Show only failed invocations of this category (case-insensitive). Invocations indexed before failure classification existed have no category and never match. An unknown value returns 422.",
             type: "string",
           },
         ],
