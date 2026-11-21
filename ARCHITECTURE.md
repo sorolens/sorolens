@@ -587,6 +587,57 @@ user-defined type is `{"kind":"udt","name":"..."}`.
 
 ---
 
+#### `GET /api/v1/contracts/:id/changelog`
+
+Every Wasm hash the contract has run, oldest first, from the
+`contract_versions` table (issue #276). Public, like the other per-contract
+reads.
+
+**Response `200`:**
+
+```json
+[
+  {
+    "id": 1,
+    "contract_id": "CDLZFC3S...",
+    "wasm_hash": "a1b2c3d4...",
+    "first_seen_ledger": 100000,
+    "tx_hash": "e5f6...",
+    "recorded_at": "2026-07-01T10:05:00Z"
+  }
+]
+```
+
+`tx_hash` and `verified_source_ref` are omitted when unknown. A tracked
+contract with no recorded versions returns `[]`.
+
+**Responses:** `200`, `404 Not Found` (contract not tracked), `500`.
+
+---
+
+#### `GET /api/v1/contracts/:id/changelog/feed`
+
+The same history as an Atom 1.0 feed (`application/atom+xml`), one entry per
+Wasm hash, for feed readers. The feed's self link and entry links point back
+at the `/api/v1` changelog routes. A contract with no recorded versions gets a
+feed with no entries.
+
+**Responses:** `200`, `404 Not Found` (contract not tracked), `500`.
+
+---
+
+#### `GET /api/v1/contracts/:id/changelog/badge`
+
+A shields.io-style SVG badge (`image/svg+xml`) showing the first 8 characters
+of the latest Wasm hash, for embedding in a README. It is sent with
+`Cache-Control: no-cache, max-age=0` so embeds revalidate. A contract with no
+recorded versions, including one that is not tracked, gets an `unknown` badge
+instead of an error so the embedded image never breaks.
+
+**Responses:** `200`, `500`.
+
+---
+
 #### `POST /api/v1/contracts/:id/tags`
 
 Add a user-defined tag to a contract. Tags are free-form labels (e.g. `prod`,

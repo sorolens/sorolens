@@ -2826,6 +2826,54 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/contracts/{id}/changelog": {
+      get: {
+        operationId: "getContractChangelog",
+        summary: "Get a contract's Wasm hash changelog",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/changelog/feed": {
+      get: {
+        operationId: "getContractChangelogFeed",
+        summary: "Atom feed of a contract's Wasm hash changes",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/changelog/badge": {
+      get: {
+        operationId: "getContractChangelogBadge",
+        summary: "Get a Wasm hash badge SVG for a contract",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/contracts/{id}/spec": {
       get: {
         operationId: "getContractSpec",

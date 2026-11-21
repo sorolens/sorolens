@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sorolens/sorolens/apps/api/internal/changelog"
 	"github.com/sorolens/sorolens/apps/api/internal/graph"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/metrics"
@@ -351,6 +352,15 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/summary", h.ContractSummary)
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
+
+		// Wasm hash changelog (issue #276): the history as JSON, an Atom feed
+		// and an embeddable SVG badge. Public reads like the rest of the
+		// per-contract surface; the badge sets its own no-cache header so a
+		// README always shows the current hash.
+		cl := changelog.New(h.Store)
+		get("/contracts/{id}/changelog", cl.GetChangelog)
+		get("/contracts/{id}/changelog/feed", cl.GetFeed)
+		get("/contracts/{id}/changelog/badge", cl.GetBadge)
 
 		// Source verification (issue #263). Submitting source mutates the
 		// verification record, so it requires at least contributor role;

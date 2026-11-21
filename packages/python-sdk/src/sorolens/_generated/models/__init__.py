@@ -69,6 +69,7 @@ from .contract_validation_result import ContractValidationResult
 from .contract_verification import ContractVerification
 from .contract_verification_request import ContractVerificationRequest
 from .contract_verification_status import ContractVerificationStatus
+from .contract_version import ContractVersion
 from .create_alert_rule_body import CreateAlertRuleBody
 from .create_alert_rule_body_severity import CreateAlertRuleBodySeverity
 from .create_alert_subscription import CreateAlertSubscription
@@ -407,6 +408,7 @@ __all__ = (
     "ContractVerification",
     "ContractVerificationRequest",
     "ContractVerificationStatus",
+    "ContractVersion",
     "CreateAlertRuleBody",
     "CreateAlertRuleBodySeverity",
     "CreateAlertSubscription",
