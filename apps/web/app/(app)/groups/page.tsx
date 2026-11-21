@@ -7,6 +7,9 @@ import type { GroupSummary } from "@/lib/types";
 import { useSessionUserId } from "@/lib/useSession";
 import { StatCard } from "@/components/StatCard";
 import { CardSkeleton } from "@/components/Skeleton";
+import { EmptyState } from "@/components/EmptyState";
+import { errorMessage } from "@/components/ErrorState";
+import { useLocale } from "@/lib/i18n";
 
 function healthTone(score: number): "default" | "warning" | "danger" | "safe" {
   if (score >= 80) return "safe";
@@ -24,11 +27,14 @@ function formatHealth(score: number): string {
  */
 export default function GroupsPage() {
   const userId = useSessionUserId();
+  const { t } = useLocale();
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A failed list request must read as a failure, not as "no groups".
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -36,13 +42,13 @@ export default function GroupsPage() {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await listGroups(userId);
       setGroups(data.groups ?? []);
-    } catch {
-      // Backend not reachable yet: fall through to the empty state rather
-      // than showing an error the user cannot act on.
+    } catch (err) {
       setGroups([]);
+      setLoadError(errorMessage(err, "The groups request failed."));
     } finally {
       setLoading(false);
     }
@@ -131,25 +137,35 @@ export default function GroupsPage() {
         </div>
       )}
 
-      {!loading && groups.length === 0 && (
-        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
-          <p className="text-lg font-medium text-[var(--color-text-primary)]">
-            No groups yet
-          </p>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            Create a group above, then add contracts from the{" "}
-            <Link
-              href="/contracts"
-              className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
-            >
-              contracts page
-            </Link>
-            .
-          </p>
-        </div>
+      {!loading && loadError && (
+        <EmptyState
+          variant="error"
+          title={t("groups.error.title")}
+          message={loadError}
+          onRetry={load}
+        />
       )}
 
-      {!loading && groups.length > 0 && (
+      {!loading && !loadError && groups.length === 0 && (
+        <EmptyState
+          variant="first-run"
+          title={t("groups.empty.title")}
+          description={
+            <>
+              {t("groups.empty.bodyPrefix")}{" "}
+              <Link
+                href="/contracts"
+                className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
+              >
+                {t("groups.empty.bodyLink")}
+              </Link>
+              {t("groups.empty.bodySuffix")}
+            </>
+          }
+        />
+      )}
+
+      {!loading && !loadError && groups.length > 0 && (
         <ul className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {groups.map((group) => (
             <li
