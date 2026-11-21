@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -130,6 +131,15 @@ func (h *Handler) listAlertsFlat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput,
 			"network must be one of: testnet, mainnet, futurenet, standalone")
 		return
+	}
+	severity := strings.TrimSpace(q.Get("severity"))
+	if severity != "" {
+		canonical, ok := validAlertSeverities[strings.ToLower(severity)]
+		if !ok {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "severity must be one of: Info, Warning, Critical")
+			return
+		}
+		severity = canonical
 	}
 	alerts, next, err := h.Store.ListAlertsWithState(
 		r.Context(),
@@ -284,4 +294,3 @@ func (h *Handler) AlertCounts(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 }
-

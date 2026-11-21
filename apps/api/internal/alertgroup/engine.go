@@ -47,7 +47,7 @@ type Group struct {
 	LastSeen         time.Time
 	LastMessage      string
 	BackfillEligible bool
-	State            string     // open | acknowledged | snoozed | resolved
+	State            string // open | acknowledged | snoozed | resolved
 	SnoozedUntil     *time.Time
 }
 
