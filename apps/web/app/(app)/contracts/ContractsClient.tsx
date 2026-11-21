@@ -10,7 +10,9 @@ import type { Column } from "@sorolens/ui";
 import { LabelledId } from "@/components/LabelledId";
 import { useContracts } from "@/hooks/useContracts";
 import { useQueryState } from "@/hooks/useQueryState";
-import { ErrorState, errorMessage } from "@/components/ErrorState";
+import { errorMessage } from "@/components/ErrorState";
+import { EmptyState } from "@/components/EmptyState";
+import { useLocale } from "@/lib/i18n";
 import { ApiError, batchContracts } from "@/lib/api";
 import type { BatchContractsAction } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
@@ -392,6 +394,7 @@ export default function ContractsClient() {
   // Selected network from the header selector.
   const { network } = useNetwork();
   const userId = useSessionUserId();
+  const { t } = useLocale();
 
   // Still needed for the paste-to-add toast's navigation to the wizard.
   const router = useRouter();
@@ -945,9 +948,10 @@ export default function ContractsClient() {
 
         {/* Failed request: keeps any previously loaded rows visible below */}
         {loadFailed && (
-          <ErrorState
+          <EmptyState
+            variant="error"
             className="mb-4"
-            title="Couldn't load contracts."
+            title={t("contracts.error.title")}
             message={errorMessage(error, "The contracts request failed.")}
             onRetry={() => void mutate()}
             retrying={isValidating}
@@ -956,26 +960,28 @@ export default function ContractsClient() {
 
         {/* Empty state: only when the request succeeded */}
         {!loading && !loadFailed && sorted.length === 0 && (
-          <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-16 text-center border border-[var(--color-border)]">
-            <p className="text-lg font-medium text-[var(--color-text-primary)]">
-              {searchInput
-                ? "No contracts match your search"
-                : "No contracts tracked yet"}
-            </p>
-            {!searchInput && !tagFilter && (
-              <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                Use the CLI or API to start tracking a Soroban contract, or
-                click{" "}
-                <Link
-                  href="/contracts/new"
-                  className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
-                >
-                  run the tracking wizard
-                </Link>{" "}
-                to add one from here.
-              </p>
-            )}
-          </div>
+          <EmptyState
+            variant={searchInput ? "no-results" : "first-run"}
+            title={
+              searchInput
+                ? t("contracts.empty.noResults.title")
+                : t("contracts.empty.firstRun.title")
+            }
+            description={
+              !searchInput && !tagFilter ? (
+                <>
+                  {t("contracts.empty.firstRun.body")}{" "}
+                  <Link
+                    href="/contracts/new"
+                    className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
+                  >
+                    {t("contracts.empty.firstRun.action")}
+                  </Link>{" "}
+                  {t("contracts.empty.firstRun.bodySuffix")}
+                </>
+              ) : undefined
+            }
+          />
         )}
 
         {/* Data table */}
@@ -995,9 +1001,11 @@ export default function ContractsClient() {
             linkComponent={Link}
             rowHref={(c) => (isPendingRow(c) ? null : `/contracts/${c.id}`)}
             emptyState={
-              <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-12 text-center text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)]">
-                No contracts match your search.
-              </div>
+              <EmptyState
+                variant="no-results"
+                compact
+                title={t("contracts.empty.noResults.body")}
+              />
             }
           />
         )}
