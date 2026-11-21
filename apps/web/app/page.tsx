@@ -25,6 +25,14 @@ const features = [
   },
 ];
 
+// Pages that exist in the dashboard but have no card of their own below.
+const explore = [
+  { href: "/invocations", label: "Invocations" },
+  { href: "/compare", label: "Compare contracts" },
+  { href: "/watchlist", label: "Watchlist" },
+  { href: "/watchdog/reports", label: "Reports" },
+];
+
 const steps = [
   {
     n: "1",
@@ -117,6 +125,20 @@ export default function HomePage() {
                 View on GitHub
               </a>
             </div>
+            <nav
+              aria-label="Explore the dashboard"
+              className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm"
+            >
+              {explore.map((e) => (
+                <Link
+                  key={e.href}
+                  href={e.href}
+                  className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+                >
+                  {e.label}
+                </Link>
+              ))}
+            </nav>
           </div>
 
           {/* Live stats */}
