@@ -141,3 +141,14 @@ nav:
       - Web localization: i18n.md
       - Web performance budgets: performance.md
       - Mutation testing: mutation-testing.md
+  - Architecture Decision Records:
+      - adr/README.md
+      - Template: adr/0000-template.md
+      - 0001 Postgres partitioning: adr/0001-postgres-partitioning.md
+      - 0002 Cursor pagination: adr/0002-cursor-pagination.md
+      - 0003 Indexer sharding: adr/0003-indexer-sharding.md
+      - 0004 Cold storage: adr/0004-cold-storage.md
+      - 0005 API versioning: adr/0005-api-versioning.md
+      - 0006 SSE vs WebSocket: adr/0006-sse-vs-websocket.md
+      - 0007 Key scopes and roles: adr/0007-key-scopes-and-roles.md
+      - 0008 SDK generation: adr/0008-sdk-generation.md
