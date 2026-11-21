@@ -202,6 +202,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.Get("/audit", h.ListAuditEvents)
 	})
 
+	// Response cache for stats (issue #776)
+	cacheStats := middleware.Cache(h.Cache, middleware.CacheNamespaceStats, h.CacheTTL, h.Logger)
+
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
@@ -246,7 +249,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
 
 		// Stats
-		get("/stats/global", h.GlobalStats)
+		r.With(scope, cacheStats).Get("/stats/global", h.GlobalStats)
 
 		// Live dashboard feeds (#139): the newest events across all tracked
 		// contracts, and per-contract events-per-minute buckets for the
@@ -514,7 +517,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.Get("/exports/{id}/download", h.DownloadExport)
 
 		// Stats
-		get("/stats/global", h.V2GlobalStats)
+		r.With(scope, cacheStats).Get("/stats/global", h.V2GlobalStats)
 
 		// Contracts
 		r.With(scope).Post("/contracts/validate", h.V2ValidateContract)

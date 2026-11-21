@@ -4,6 +4,7 @@ import (
 	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -158,7 +159,7 @@ func (h *Handler) GetMonitoredContract(w http.ResponseWriter, r *http.Request) {
 // ListHealthChecks handles GET /api/v1/watchdog/contracts/{id}/health.
 func (h *Handler) ListHealthChecks(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	checks, err := h.Store.ListHealthChecks(r.Context(), id, intQuery(r, "limit", 100))
+	checks, err := h.Store.ListHealthChecks(r.Context(), id, pageLimitClamped(r, 100, 500))
 	if err != nil {
 		h.Logger.Error("list health checks", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list health checks")
@@ -180,7 +181,15 @@ func (h *Handler) ListHealthChecks(w http.ResponseWriter, r *http.Request) {
 // remain stable while new alerts arrive.
 func (h *Handler) ListWatchdogAlerts(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	severity := r.URL.Query().Get("severity")
+	severity := strings.TrimSpace(r.URL.Query().Get("severity"))
+	if severity != "" {
+		canonical, ok := validAlertSeverities[strings.ToLower(severity)]
+		if !ok {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "severity must be one of: Info, Warning, Critical")
+			return
+		}
+		severity = canonical
+	}
 	network, ok := networkParam(r)
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")

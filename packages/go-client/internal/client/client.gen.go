@@ -1792,6 +1792,8 @@ type V2EventList struct {
 
 // V2GlobalStats defines model for V2GlobalStats.
 type V2GlobalStats struct {
+	// Approximate True when large table counts are estimated rather than exact.
+	Approximate         *bool `json:"approximate,omitempty"`
 	TotalEvents         int64 `json:"total_events"`
 	TotalInvocations    int64 `json:"total_invocations"`
 	TotalStorageEntries int64 `json:"total_storage_entries"`
@@ -2429,6 +2431,7 @@ type ListContractStorageParamsStatus string
 
 // ListContractUpgradesParams defines parameters for ListContractUpgrades.
 type ListContractUpgradesParams struct {
+	// Limit Page size (default 50, clamped to 200).
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
@@ -19103,6 +19106,8 @@ type GetGlobalStatsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
+		// Approximate True when large table counts are estimated rather than exact.
+		Approximate         *bool `json:"approximate,omitempty"`
 		TotalEvents         int64 `json:"total_events"`
 		TotalInvocations    int64 `json:"total_invocations"`
 		TotalStorageEntries int64 `json:"total_storage_entries"`
@@ -27545,6 +27550,8 @@ func ParseGetGlobalStatsResponse(rsp *http.Response) (*GetGlobalStatsResponse, e
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
+			// Approximate True when large table counts are estimated rather than exact.
+			Approximate         *bool `json:"approximate,omitempty"`
 			TotalEvents         int64 `json:"total_events"`
 			TotalInvocations    int64 `json:"total_invocations"`
 			TotalStorageEntries int64 `json:"total_storage_entries"`

@@ -156,8 +156,10 @@ func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Con
 // ContractFilters may override it. The cursor is the last-seen contract ID,
 // and id is always appended as a stable tie-breaker.
 func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	// Only whitelisted values (see contractSortColumns) reach the ORDER BY
 	// clause, so the human-supplied sort parameter cannot inject SQL.
@@ -655,15 +657,80 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 // ---- global stats ---------------------------------------------------------
 
 // GetGlobalStats retrieves aggregated statistics about the tracked contracts, events, invocations, and storage entries.
+// It prefers pg_class.reltuples estimates for large tables (events, invocations, storage_entries) to avoid expensive
+// full-table scans, setting Approximate to true when estimates are used.
 func (s *postgresStore) GetGlobalStats(ctx context.Context) (GlobalStats, error) {
+	var g GlobalStats
+	var estEvents, estInvocations, estStorage int64
+
+	// Read tracked contracts count and pg_class reltuples estimates.
 	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT
-			(SELECT COUNT(*) FROM contracts)       AS tracked_contracts,
-			(SELECT COUNT(*) FROM events)          AS total_events,
-			(SELECT COUNT(*) FROM invocations)     AS total_invocations,
-			(SELECT COUNT(*) FROM storage_entries) AS total_storage_entries`)
-	var g GlobalStats
-	err := row.Scan(&g.TrackedContracts, &g.TotalEvents, &g.TotalInvocations, &g.TotalStorageEntries)
+			(SELECT COUNT(*) FROM contracts) AS tracked_contracts,
+			COALESCE((
+				SELECT SUM(GREATEST(c.reltuples, 0))::bigint
+				FROM pg_class c
+				JOIN pg_namespace n ON n.oid = c.relnamespace
+				WHERE n.nspname = current_schema()
+				  AND c.relkind = 'r'
+				  AND (c.relname = 'events' OR c.relname LIKE 'events_%')
+			), 0) AS est_events,
+			COALESCE((
+				SELECT GREATEST(c.reltuples, 0)::bigint
+				FROM pg_class c
+				JOIN pg_namespace n ON n.oid = c.relnamespace
+				WHERE n.nspname = current_schema()
+				  AND c.relkind = 'r'
+				  AND c.relname = 'invocations'
+			), 0) AS est_invocations,
+			COALESCE((
+				SELECT GREATEST(c.reltuples, 0)::bigint
+				FROM pg_class c
+				JOIN pg_namespace n ON n.oid = c.relnamespace
+				WHERE n.nspname = current_schema()
+				  AND c.relkind = 'r'
+				  AND c.relname = 'storage_entries'
+			), 0) AS est_storage_entries`)
+	if err := row.Scan(&g.TrackedContracts, &estEvents, &estInvocations, &estStorage); err != nil {
+		return g, err
+	}
+
+	// If all large tables have estimates, return them immediately without scanning tables.
+	if estEvents > 0 && estInvocations > 0 && estStorage > 0 {
+		g.TotalEvents = estEvents
+		g.TotalInvocations = estInvocations
+		g.TotalStorageEntries = estStorage
+		g.Approximate = true
+		return g, nil
+	}
+
+	// Fallback to exact counts for tables that have not yet been analyzed or have 0 estimated rows.
+	g.TotalEvents = estEvents
+	g.TotalInvocations = estInvocations
+	g.TotalStorageEntries = estStorage
+
+	var selects []string
+	if estEvents <= 0 {
+		selects = append(selects, "(SELECT COUNT(*) FROM events) AS total_events")
+	} else {
+		g.Approximate = true
+		selects = append(selects, fmt.Sprintf("%d::bigint AS total_events", estEvents))
+	}
+	if estInvocations <= 0 {
+		selects = append(selects, "(SELECT COUNT(*) FROM invocations) AS total_invocations")
+	} else {
+		g.Approximate = true
+		selects = append(selects, fmt.Sprintf("%d::bigint AS total_invocations", estInvocations))
+	}
+	if estStorage <= 0 {
+		selects = append(selects, "(SELECT COUNT(*) FROM storage_entries) AS total_storage_entries")
+	} else {
+		g.Approximate = true
+		selects = append(selects, fmt.Sprintf("%d::bigint AS total_storage_entries", estStorage))
+	}
+
+	err := s.readDB(ctx).QueryRow(ctx, fmt.Sprintf("SELECT %s", strings.Join(selects, ", "))).
+		Scan(&g.TotalEvents, &g.TotalInvocations, &g.TotalStorageEntries)
 	return g, err
 }
 
