@@ -19,27 +19,50 @@ builds:
         goarch: arm64
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
       - LICENSE
+      - src: ../docs/cli/man/*.1
+        dst: share/man/man1
+        strip_parent: true
 
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
 
-brews:
+sboms:
+  - artifacts: archive
+
+# Keyless cosign signature over checksums.txt, published as a Sigstore bundle
+# (checksums.txt.sigstore.json). Verifying it, then the checksums, verifies
+# every archive. See docs/verifying-releases.md.
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    output: true
+
+homebrew_casks:
   - name: sorolens
+    binaries:
+      - sorolens
     homepage: https://github.com/sorolens/sorolens
     description: "CLI for the Sorolens Soroban smart contract observability platform"
+    license: Apache-2.0
     repository:
       owner: sorolens
       name: homebrew-tap
-      # token not configured; set HOMEBREW_TAP_GITHUB_TOKEN in environment
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
 
 snapshot:
   version_template: "{{ .Tag }}-snapshot"

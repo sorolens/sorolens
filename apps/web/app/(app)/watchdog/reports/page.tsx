@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import {
   contractReportUrl,
   contractSLABadgeUrl,
@@ -503,14 +504,23 @@ export default function SLAReportsPage() {
               <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-primary)]">
                 Embed this month&apos;s badge
               </h2>
-              {/* A live preview: the URL is the deliverable, so show the result. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={badgeUrl}
-                alt={`SLA badge for ${selected.month}`}
-                height={20}
-                className="mb-3"
-              />
+              {/* A live preview: the URL is the deliverable, so show the
+                  result. next/image rejects an empty src, so the preview
+                  only renders once a contract is chosen. */}
+              {badgeUrl ? (
+                <Image
+                  src={badgeUrl}
+                  alt={`SLA badge for ${selected.month}`}
+                  width={120}
+                  height={20}
+                  unoptimized
+                  className="mb-3 h-5 w-auto"
+                />
+              ) : (
+                <p className="mb-3 text-xs text-[var(--color-text-secondary)]">
+                  Pick a contract to see its badge.
+                </p>
+              )}
               <label
                 htmlFor="sla-badge-snippet"
                 className="mb-1 block text-xs text-[var(--color-text-secondary)]"
@@ -522,7 +532,7 @@ export default function SLAReportsPage() {
                 readOnly
                 rows={2}
                 value={`![SLA](${badgeUrl})`}
-                className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-black/30 p-2 font-mono text-xs text-[var(--color-text-primary)]"
+                className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-2 font-mono text-xs text-[var(--color-text-primary)]"
               />
               <p className="mt-3 border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-text-secondary)]">
                 Exports are signed with HMAC-SHA256; the signature is returned

@@ -16,7 +16,22 @@ import (
 var ErrNotFound = errors.New("store: not found")
 
 type postgresStore struct {
-	pool *pgxpool.Pool
+	pool            *pgxpool.Pool
+	readPool        *pgxpool.Pool
+	replicaLagGuard *ReplicaLagGuard
+}
+
+func (s *postgresStore) readDB(ctx context.Context) *pgxpool.Pool {
+	if s.readPool == nil {
+		return s.pool
+	}
+	if IsPrimaryOnly(ctx) {
+		return s.pool
+	}
+	if s.replicaLagGuard != nil && !s.replicaLagGuard.IsHealthy() {
+		return s.pool
+	}
+	return s.readPool
 }
 
 func (s *postgresStore) UpsertLabel(ctx context.Context, label Label) error {
@@ -29,7 +44,7 @@ func (s *postgresStore) UpsertLabel(ctx context.Context, label Label) error {
 }
 
 func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query string) ([]Label, error) {
-	rows, err := s.pool.Query(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public FROM labels_workspace WHERE workspace_id = $1) labels WHERE label ILIKE '%' || $2 || '%' OR value ILIKE '%' || $2 || '%' ORDER BY label LIMIT 100`, workspaceID, query)
+	rows, err := s.readDB(ctx).Query(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public FROM labels_workspace WHERE workspace_id = $1) labels WHERE label ILIKE '%' || $2 || '%' OR value ILIKE '%' || $2 || '%' ORDER BY label LIMIT 100`, workspaceID, query)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +62,7 @@ func (s *postgresStore) ListLabels(ctx context.Context, workspaceID, query strin
 
 func (s *postgresStore) ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error) {
 	var label Label
-	err := s.pool.QueryRow(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public, 2 AS priority FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public, 1 AS priority FROM labels_workspace WHERE workspace_id = $1) labels WHERE lower(label) = lower($2) ORDER BY priority LIMIT 1`, workspaceID, query).Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public)
+	err := s.readDB(ctx).QueryRow(ctx, `SELECT label, value, workspace_id, public FROM (SELECT label, value, '' AS workspace_id, TRUE AS public, 2 AS priority FROM labels_public UNION ALL SELECT label, value, workspace_id, FALSE AS public, 1 AS priority FROM labels_workspace WHERE workspace_id = $1) labels WHERE lower(label) = lower($2) ORDER BY priority LIMIT 1`, workspaceID, query).Scan(&label.Label, &label.Value, &label.WorkspaceID, &label.Public)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Label{}, ErrNotFound
 	}
@@ -76,22 +91,71 @@ func (s *postgresStore) UpsertContract(ctx context.Context, c Contract) error {
 	return err
 }
 
+// UntrackContract stops indexing a contract by flipping its status to
+// "paused". The row and all indexed history are retained, and re-registering
+// the contract (UpsertContract) flips the status back to "pending", resuming
+// tracking. The poller only indexes contracts whose status is pending,
+// backfilling or active, so a paused contract is skipped on every pass.
+// Returns ErrNotFound when the contract does not exist; untracking an
+// already-paused contract is a no-op success.
+func (s *postgresStore) UntrackContract(ctx context.Context, contractID string) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE contracts SET status = 'paused' WHERE id = $1`, contractID)
+	if err != nil {
+		return fmt.Errorf("untrack contract: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // GetContract retrieves a contract by its ID. Returns ErrNotFound if no contract exists.
 func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Contract, error) {
-	row := s.pool.QueryRow(ctx, `
-		SELECT id, network, label, wasm_hash, created_at_ledger,
-		       backfill_complete_at, status, added_at, tracking_preset
-		FROM contracts WHERE id = $1`, contractID)
+	row := s.readDB(ctx).QueryRow(ctx, `
+		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+		       c.backfill_complete_at, c.status, c.added_at, c.tracking_preset,
+		       b.oldest_ledger, b.newest_ledger, b.next_ledger,
+		       b.started_at, b.updated_at, b.completed_at,
+		       t.asset_code, t.issuer, t.decimals, t.symbol, t.name
+		FROM contracts c
+		LEFT JOIN contract_backfills b ON b.contract_id = c.id
+		LEFT JOIN contract_tokens t ON t.contract_id = c.id
+		WHERE c.id = $1`, contractID)
 	var c Contract
+	var oldest, newest, next *int64
+	var startedAt, updatedAt, completedAt *time.Time
+	var assetCode, issuer, symbol, name *string
+	var decimals *int32
 	err := row.Scan(
 		&c.ID, &c.Network, &c.Label, &c.WasmHash, &c.CreatedAtLedger,
 		&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.TrackingPreset,
+		&oldest, &newest, &next, &startedAt, &updatedAt, &completedAt,
+		&assetCode, &issuer, &decimals, &symbol, &name,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Contract{}, ErrNotFound
 	}
 	if err != nil {
 		return c, err
+	}
+	if oldest != nil {
+		c.Backfill = &BackfillProgress{
+			OldestLedger: *oldest,
+			NewestLedger: *newest,
+			NextLedger:   *next,
+			StartedAt:    *startedAt,
+			UpdatedAt:    *updatedAt,
+			CompletedAt:  completedAt,
+		}
+	}
+	if assetCode != nil && decimals != nil {
+		c.Token = &TokenMetadata{
+			AssetCode: *assetCode,
+			Issuer:    derefString(issuer),
+			Decimals:  uint32(*decimals),
+			Symbol:    derefString(symbol),
+			Name:      derefString(name),
+		}
 	}
 	tags, err := s.ListContractTags(ctx, contractID)
 	if err != nil {
@@ -106,8 +170,10 @@ func (s *postgresStore) GetContract(ctx context.Context, contractID string) (Con
 // ContractFilters may override it. The cursor is the last-seen contract ID,
 // and id is always appended as a stable tie-breaker.
 func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	// Only whitelisted values (see contractSortColumns) reach the ORDER BY
 	// clause, so the human-supplied sort parameter cannot inject SQL.
@@ -121,9 +187,10 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 	}
 	// cursor is the last-seen contract ID (lexicographic order); id is always
 	// appended as a stable tie-breaker.
-	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
+	rows, err := s.readDB(ctx).Query(ctx, fmt.Sprintf(`
 		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
-		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at, c.tracking_preset
+		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at, c.tracking_preset,
+		       t.asset_code, t.issuer, t.decimals, t.symbol, t.name
 		FROM contracts c
 		LEFT JOIN (
 			SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
@@ -134,6 +201,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 			) activity_rows
 			GROUP BY contract_id
 		) activity ON activity.contract_id = c.id
+		LEFT JOIN contract_tokens t ON t.contract_id = c.id
 		WHERE ($1 = '' OR c.id > $1)
 		  AND ($2 = '' OR c.network = $2)
 		  AND ($3 = '' OR c.status = $3)
@@ -147,11 +215,23 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 	var out []Contract
 	for rows.Next() {
 		var c Contract
+		var assetCode, issuer, symbol, name *string
+		var decimals *int32
 		if err := rows.Scan(
 			&c.ID, &c.Network, &c.Label, &c.WasmHash, &c.CreatedAtLedger,
 			&c.BackfillCompleteAt, &c.Status, &c.AddedAt, &c.LastActivityAt, &c.TrackingPreset,
+			&assetCode, &issuer, &decimals, &symbol, &name,
 		); err != nil {
 			return nil, "", err
+		}
+		if assetCode != nil && decimals != nil {
+			c.Token = &TokenMetadata{
+				AssetCode: *assetCode,
+				Issuer:    derefString(issuer),
+				Decimals:  uint32(*decimals),
+				Symbol:    derefString(symbol),
+				Name:      derefString(name),
+			}
 		}
 		out = append(out, c)
 	}
@@ -188,6 +268,7 @@ func (s *postgresStore) ListContracts(ctx context.Context, cursor string, limit 
 // when a contract is untracked. The identifiers are hardcoded so they are safe
 // to interpolate; contract IDs are always bound as query parameters.
 var contractChildTables = []string{
+	"contract_tokens",
 	"events",
 	"invocations",
 	"storage_entries",
@@ -250,10 +331,22 @@ func networkOrDefault(network string) string {
 	return network
 }
 
-// BatchInsertEvents inserts multiple events in a single batch operation. It ignores duplicate events based on the primary key (id).
+// BatchInsertEvents inserts multiple events in a single batch operation and ignores duplicates.
 func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) error {
 	if len(events) == 0 {
 		return nil
+	}
+	months := make(map[[2]int]struct{})
+	for _, e := range events {
+		at := e.LedgerClosedAt.UTC()
+		month := [2]int{at.Year(), int(at.Month())}
+		if _, ok := months[month]; ok {
+			continue
+		}
+		if err := s.CreateMonthlyPartitionIfNotExists(ctx, month[0], month[1]); err != nil {
+			return fmt.Errorf("create events partition for %04d-%02d: %w", month[0], month[1], err)
+		}
+		months[month] = struct{}{}
 	}
 	batch := &pgx.Batch{}
 	for _, e := range events {
@@ -270,7 +363,7 @@ func (s *postgresStore) BatchInsertEvents(ctx context.Context, events []Event) e
 				 topic_xdr, value_xdr, topic_decoded, value_decoded,
 				 in_successful_call, inserted_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-			ON CONFLICT (id) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 			e.ID, e.ContractID, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
 			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
 			e.InSuccessfulCall, time.Now(),
@@ -433,7 +526,7 @@ func (s *postgresStore) UpsertStorageEntries(ctx context.Context, entries []Stor
 
 // GetSyncState retrieves the sync state for a given contract ID. If no sync state exists, it returns a default SyncState with the contract ID set.
 func (s *postgresStore) GetSyncState(ctx context.Context, contractID string) (SyncState, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT contract_id, last_ledger, last_run_at, error_message, updated_at
 		FROM sync_state WHERE contract_id = $1`, contractID)
 	var ss SyncState
@@ -463,7 +556,7 @@ func (s *postgresStore) UpsertSyncState(ctx context.Context, ss SyncState) error
 
 // GetIndexerCursor retrieves the last committed ledger for a network.
 func (s *postgresStore) GetIndexerCursor(ctx context.Context, network string) (uint32, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT ledger
 		FROM indexer_cursors
 		WHERE network = $1`, networkOrDefault(network))
@@ -517,7 +610,7 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 				 topic_xdr, value_xdr, topic_decoded, value_decoded,
 				 in_successful_call, inserted_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-			ON CONFLICT (id) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 			e.ID, e.ContractID, networkOrDefault(e.Network), e.Ledger, e.LedgerClosedAt, e.TxHash, e.Type,
 			topicJSON, e.ValueXDR, topicDecJSON, valDecJSON,
 			e.InSuccessfulCall, time.Now(),
@@ -593,15 +686,80 @@ func (s *postgresStore) BatchInsertWithCursor(ctx context.Context, network strin
 // ---- global stats ---------------------------------------------------------
 
 // GetGlobalStats retrieves aggregated statistics about the tracked contracts, events, invocations, and storage entries.
+// It prefers pg_class.reltuples estimates for large tables (events, invocations, storage_entries) to avoid expensive
+// full-table scans, setting Approximate to true when estimates are used.
 func (s *postgresStore) GetGlobalStats(ctx context.Context) (GlobalStats, error) {
-	row := s.pool.QueryRow(ctx, `
-		SELECT
-			(SELECT COUNT(*) FROM contracts)       AS tracked_contracts,
-			(SELECT COUNT(*) FROM events)          AS total_events,
-			(SELECT COUNT(*) FROM invocations)     AS total_invocations,
-			(SELECT COUNT(*) FROM storage_entries) AS total_storage_entries`)
 	var g GlobalStats
-	err := row.Scan(&g.TrackedContracts, &g.TotalEvents, &g.TotalInvocations, &g.TotalStorageEntries)
+	var estEvents, estInvocations, estStorage int64
+
+	// Read tracked contracts count and pg_class reltuples estimates.
+	row := s.readDB(ctx).QueryRow(ctx, `
+		SELECT
+			(SELECT COUNT(*) FROM contracts) AS tracked_contracts,
+			COALESCE((
+				SELECT SUM(GREATEST(c.reltuples, 0))::bigint
+				FROM pg_class c
+				JOIN pg_namespace n ON n.oid = c.relnamespace
+				WHERE n.nspname = current_schema()
+				  AND c.relkind = 'r'
+				  AND (c.relname = 'events' OR c.relname LIKE 'events_%')
+			), 0) AS est_events,
+			COALESCE((
+				SELECT GREATEST(c.reltuples, 0)::bigint
+				FROM pg_class c
+				JOIN pg_namespace n ON n.oid = c.relnamespace
+				WHERE n.nspname = current_schema()
+				  AND c.relkind = 'r'
+				  AND c.relname = 'invocations'
+			), 0) AS est_invocations,
+			COALESCE((
+				SELECT GREATEST(c.reltuples, 0)::bigint
+				FROM pg_class c
+				JOIN pg_namespace n ON n.oid = c.relnamespace
+				WHERE n.nspname = current_schema()
+				  AND c.relkind = 'r'
+				  AND c.relname = 'storage_entries'
+			), 0) AS est_storage_entries`)
+	if err := row.Scan(&g.TrackedContracts, &estEvents, &estInvocations, &estStorage); err != nil {
+		return g, err
+	}
+
+	// If all large tables have estimates, return them immediately without scanning tables.
+	if estEvents > 0 && estInvocations > 0 && estStorage > 0 {
+		g.TotalEvents = estEvents
+		g.TotalInvocations = estInvocations
+		g.TotalStorageEntries = estStorage
+		g.Approximate = true
+		return g, nil
+	}
+
+	// Fallback to exact counts for tables that have not yet been analyzed or have 0 estimated rows.
+	g.TotalEvents = estEvents
+	g.TotalInvocations = estInvocations
+	g.TotalStorageEntries = estStorage
+
+	var selects []string
+	if estEvents <= 0 {
+		selects = append(selects, "(SELECT COUNT(*) FROM events) AS total_events")
+	} else {
+		g.Approximate = true
+		selects = append(selects, fmt.Sprintf("%d::bigint AS total_events", estEvents))
+	}
+	if estInvocations <= 0 {
+		selects = append(selects, "(SELECT COUNT(*) FROM invocations) AS total_invocations")
+	} else {
+		g.Approximate = true
+		selects = append(selects, fmt.Sprintf("%d::bigint AS total_invocations", estInvocations))
+	}
+	if estStorage <= 0 {
+		selects = append(selects, "(SELECT COUNT(*) FROM storage_entries) AS total_storage_entries")
+	} else {
+		g.Approximate = true
+		selects = append(selects, fmt.Sprintf("%d::bigint AS total_storage_entries", estStorage))
+	}
+
+	err := s.readDB(ctx).QueryRow(ctx, fmt.Sprintf("SELECT %s", strings.Join(selects, ", "))).
+		Scan(&g.TotalEvents, &g.TotalInvocations, &g.TotalStorageEntries)
 	return g, err
 }
 
@@ -619,9 +777,28 @@ func (s *postgresStore) CreateMonthlyPartitionIfNotExists(ctx context.Context, y
 	return err
 }
 
+// MaintainPartitions ensures future partitions exist up to monthsAhead months ahead.
+func (s *postgresStore) MaintainPartitions(ctx context.Context, monthsAhead int) error {
+	if monthsAhead <= 0 {
+		monthsAhead = 6
+	}
+	_, err := s.pool.Exec(ctx, `SELECT maintain_events_partitions($1)`, monthsAhead)
+	return err
+}
+
+// ArchiveOldEvents archives events older than retentionDays into events_archive.
+func (s *postgresStore) ArchiveOldEvents(ctx context.Context, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, fmt.Errorf("retention days must be positive, got %d", retentionDays)
+	}
+	var moved int64
+	err := s.pool.QueryRow(ctx, `SELECT archive_old_events($1)`, retentionDays).Scan(&moved)
+	return moved, err
+}
+
 // GetPartitionStats returns information about all existing partitions of the events table.
 func (s *postgresStore) GetPartitionStats(ctx context.Context) ([]PartitionStats, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT
 			c.relname AS partition_name,
 			pg_total_relation_size(c.oid) AS table_size,
@@ -676,7 +853,7 @@ func (s *postgresStore) RemoveFromWatchlist(ctx context.Context, userID, contrac
 }
 
 func (s *postgresStore) ListWatchlist(ctx context.Context, userID string) ([]string, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT contract_id FROM watchlist_items
 		WHERE user_id = $1 ORDER BY added_at DESC`, userID)
 	if err != nil {
@@ -696,7 +873,7 @@ func (s *postgresStore) ListWatchlist(ctx context.Context, userID string) ([]str
 
 func (s *postgresStore) IsInWatchlist(ctx context.Context, userID, contractID string) (bool, error) {
 	var count int64
-	err := s.pool.QueryRow(ctx, `
+	err := s.readDB(ctx).QueryRow(ctx, `
 		SELECT COUNT(*) FROM watchlist_items
 		WHERE user_id = $1 AND contract_id = $2`,
 		userID, contractID,
@@ -722,7 +899,7 @@ func (s *postgresStore) RecordContractVersion(ctx context.Context, v ContractVer
 }
 
 func (s *postgresStore) ListContractVersions(ctx context.Context, contractID string) ([]ContractVersion, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT id, contract_id, wasm_hash, first_seen_ledger,
 		       COALESCE(tx_hash, ''), COALESCE(verified_source_ref, ''), recorded_at
 		FROM contract_versions
@@ -748,7 +925,7 @@ func (s *postgresStore) ListContractVersions(ctx context.Context, contractID str
 }
 
 func (s *postgresStore) GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT id, contract_id, wasm_hash, first_seen_ledger,
 		       COALESCE(tx_hash, ''), COALESCE(verified_source_ref, ''), recorded_at
 		FROM contract_versions
@@ -781,18 +958,29 @@ func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit
 	}
 
 	q := `
-		SELECT
-			id, network, label, wasm_hash, created_at_ledger, backfill_complete_at, status, added_at, last_activity_at
-		FROM contracts
-		WHERE id ILIKE $1 OR label ILIKE $1
-		ORDER BY added_at DESC
+		SELECT c.id, c.network, c.label, c.wasm_hash, c.created_at_ledger,
+		       c.backfill_complete_at, c.status, c.added_at, activity.last_activity_at,
+		       t.asset_code, t.issuer, t.decimals, t.symbol, t.name
+		FROM contracts c
+		LEFT JOIN (
+			SELECT contract_id, MAX(ledger_closed_at) AS last_activity_at
+			FROM (
+				SELECT contract_id, ledger_closed_at FROM events
+				UNION ALL
+				SELECT contract_id, ledger_closed_at FROM invocations
+			) activity_rows
+			GROUP BY contract_id
+		) activity ON activity.contract_id = c.id
+		LEFT JOIN contract_tokens t ON t.contract_id = c.id
+		WHERE c.id ILIKE $1 OR c.label ILIKE $1 OR t.asset_code ILIKE $1 OR t.symbol ILIKE $1
+		ORDER BY c.added_at DESC
 		LIMIT $2
 	`
 
 	// Add % wildcards for simple ILIKE search
 	searchPattern := "%" + query + "%"
 
-	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	rows, err := s.readDB(ctx).Query(ctx, q, searchPattern, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -801,12 +989,24 @@ func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit
 	var contracts []Contract
 	for rows.Next() {
 		var c Contract
+		var assetCode, issuer, symbol, name *string
+		var decimals *int32
 		if err := rows.Scan(
 			&c.ID, &c.Network, &c.Label, &c.WasmHash,
 			&c.CreatedAtLedger, &c.BackfillCompleteAt, &c.Status,
 			&c.AddedAt, &c.LastActivityAt,
+			&assetCode, &issuer, &decimals, &symbol, &name,
 		); err != nil {
 			return nil, err
+		}
+		if assetCode != nil && decimals != nil {
+			c.Token = &TokenMetadata{
+				AssetCode: *assetCode,
+				Issuer:    derefString(issuer),
+				Decimals:  uint32(*decimals),
+				Symbol:    derefString(symbol),
+				Name:      derefString(name),
+			}
 		}
 		contracts = append(contracts, c)
 	}
@@ -816,6 +1016,48 @@ func (s *postgresStore) SearchContracts(ctx context.Context, query string, limit
 	}
 
 	return contracts, nil
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func (s *postgresStore) UpsertContractToken(ctx context.Context, contractID string, m TokenMetadata) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO contract_tokens
+			(contract_id, asset_code, issuer, decimals, symbol, name, source, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'manual', NOW())
+		ON CONFLICT (contract_id) DO UPDATE SET
+			asset_code = EXCLUDED.asset_code,
+			issuer = EXCLUDED.issuer,
+			decimals = EXCLUDED.decimals,
+			symbol = EXCLUDED.symbol,
+			name = EXCLUDED.name,
+			source = 'manual',
+			updated_at = NOW()`,
+		contractID, m.AssetCode, m.Issuer, m.Decimals, m.Symbol, m.Name,
+	)
+	return err
+}
+
+func (s *postgresStore) GetContractToken(ctx context.Context, contractID string) (TokenMetadata, error) {
+	row := s.readDB(ctx).QueryRow(ctx, `
+		SELECT asset_code, issuer, decimals, symbol, name
+		FROM contract_tokens
+		WHERE contract_id = $1`, contractID)
+	var m TokenMetadata
+	var dec int32
+	if err := row.Scan(&m.AssetCode, &m.Issuer, &dec, &m.Symbol, &m.Name); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TokenMetadata{}, ErrNotFound
+		}
+		return TokenMetadata{}, err
+	}
+	m.Decimals = uint32(dec)
+	return m, nil
 }
 
 // SearchEvents implements store.Store.SearchEvents (issue #159). The inner
@@ -846,7 +1088,7 @@ func (s *postgresStore) SearchEvents(ctx context.Context, query string, limit in
 
 	searchPattern := "%" + query + "%"
 
-	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	rows, err := s.readDB(ctx).Query(ctx, q, searchPattern, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -900,7 +1142,7 @@ func (s *postgresStore) SearchFunctions(ctx context.Context, query string, limit
 
 	searchPattern := "%" + query + "%"
 
-	rows, err := s.pool.Query(ctx, q, searchPattern, limit)
+	rows, err := s.readDB(ctx).Query(ctx, q, searchPattern, limit)
 	if err != nil {
 		return nil, err
 	}

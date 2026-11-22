@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     openGraph: {
       title: `${title} — Sorolens`,
       description,
-      url: `https://sorolens.dev/contracts/${id}`,
+      url: `/contracts/${id}`,
     },
     alternates: {
       canonical: `/contracts/${id}`,

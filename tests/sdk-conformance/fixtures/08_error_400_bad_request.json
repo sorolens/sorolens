@@ -1,0 +1,24 @@
+{
+  "id": "08_error_400_bad_request",
+  "description": "400 Bad Request error envelope",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/contracts/invalid-id"
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "INVALID_ARGUMENT",
+        "message": "malformed contract id"
+      }
+    }
+  },
+  "expected": {
+    "status": 400,
+    "error_code": "INVALID_ARGUMENT"
+  }
+}

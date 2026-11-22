@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "API Playground — Sorolens",
     description: "Interactive API explorer for the Sorolens REST API.",
-    url: "https://sorolens.dev/playground",
+    url: "/playground",
   },
   alternates: {
     canonical: "/playground",

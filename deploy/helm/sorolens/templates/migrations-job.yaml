@@ -1,0 +1,82 @@
+{{- if .Values.migrations.enabled }}
+{{- $values := .Values.migrations }}
+{{- if not $values.image.repository }}
+{{- fail "migrations.image.repository is required when migrations.enabled is true (see docs/self-hosting/kubernetes.md)" }}
+{{- end }}
+{{- $secretName := include "sorolens.secretName" . }}
+{{- $secretKey := .Values.database.secretKeys.directDatabaseUrl }}
+{{- if not .Values.database.existingSecret }}
+{{- /*
+  Pre-install hooks run before the release's ordinary resources exist, so
+  the chart-managed connection Secret is not there yet on a first install.
+  The Job gets its own short-lived copy, created just before it.
+*/}}
+{{- $secretName = include "sorolens.componentName" (dict "root" . "component" "migrations") }}
+{{- $secretKey = "DATABASE_URL" }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  labels:
+    {{- include "sorolens.componentLabels" (dict "root" . "component" "migrations") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+type: Opaque
+stringData:
+  DATABASE_URL: {{ default .Values.database.url .Values.database.directUrl | quote }}
+---
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sorolens.componentName" (dict "root" . "component" "migrations") }}
+  labels:
+    {{- include "sorolens.componentLabels" (dict "root" . "component" "migrations") | nindent 4 }}
+  annotations:
+    # Runs before the new API on install and on every upgrade. A failed
+    # migration fails the release, so the old version keeps serving.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ $values.backoffLimit }}
+  activeDeadlineSeconds: {{ $values.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "sorolens.selectorLabels" (dict "root" . "component" "migrations") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrations
+          image: {{ include "sorolens.image" (dict "root" . "image" $values.image) | quote }}
+          imagePullPolicy: {{ $values.image.pullPolicy }}
+          command:
+            {{- toYaml $values.command | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            # Migrations bypass any connection pooler.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ $secretKey }}
+          resources:
+            {{- toYaml $values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

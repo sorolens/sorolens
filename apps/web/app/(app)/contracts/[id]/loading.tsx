@@ -6,7 +6,7 @@ import {
 
 export default function ContractDetailLoading() {
   return (
-    <div className="space-y-6" aria-label="Loading contract details">
+    <div className="space-y-6" aria-busy="true">
       <CardSkeleton />
       <div className="grid gap-4 md:grid-cols-2">
         <ChartSkeleton />

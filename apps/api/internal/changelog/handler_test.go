@@ -39,6 +39,16 @@ func (f *fakeStore) GetContract(_ context.Context, id string) (store.Contract, e
 	return store.Contract{}, store.ErrNotFound
 }
 
+func (f *fakeStore) UntrackContract(_ context.Context, id string) error {
+	for i, c := range f.contracts {
+		if c.ID == id {
+			f.contracts[i].Status = "paused"
+			return nil
+		}
+	}
+	return store.ErrNotFound
+}
+
 func (f *fakeStore) ListContracts(_ context.Context, _ string, _ int, _ store.ContractFilters) ([]store.Contract, string, error) {
 	return f.contracts, "", nil
 }
@@ -72,6 +82,10 @@ func (f *fakeStore) CreateNextMonthPartition(_ context.Context) error { return n
 func (f *fakeStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error {
 	return nil
 }
+
+func (f *fakeStore) MaintainPartitions(_ context.Context, _ int) error { return nil }
+
+func (f *fakeStore) ArchiveOldEvents(_ context.Context, _ int) (int64, error) { return 0, nil }
 
 func (f *fakeStore) GetIndexerCursor(_ context.Context, _ string) (uint32, error) {
 	return 0, nil

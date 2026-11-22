@@ -146,7 +146,7 @@ describe("fetchJson integration", () => {
   it("records a timestamp after a successful contracts fetch", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ contracts: [], cursor: null, has_more: false }),
+      json: async () => ({ contracts: [], next_cursor: "" }),
     });
 
     await listContracts();

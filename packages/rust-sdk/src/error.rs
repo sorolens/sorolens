@@ -30,6 +30,11 @@ pub enum Error {
     /// The API returned a non-success status code.
     #[error("sorolens api error: {0}")]
     Api(ApiError),
+
+    /// A paginated walk could not continue, for example because the API
+    /// returned a cursor the walk had already requested.
+    #[error("pagination error: {0}")]
+    Pagination(String),
 }
 
 impl Error {
@@ -109,9 +114,15 @@ pub(crate) fn parse_json<T: DeserializeOwned>(status: u16, body: &[u8]) -> Resul
     if !(200..300).contains(&status) {
         return Err(Error::Api(parse_api_error(status, body)));
     }
+
+    let body: &[u8] = if status == 204 && body.is_empty() {
+        b"null"
+    } else {
+        body
+    };
+
     serde_json::from_slice(body).map_err(Error::Json)
 }
-
 /// Builds an [`ApiError`] from a failed response, tolerating every error shape
 /// documented in `docs/openapi.yaml`.
 pub(crate) fn parse_api_error(status: u16, body: &[u8]) -> ApiError {

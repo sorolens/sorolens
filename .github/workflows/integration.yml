@@ -1,8 +1,6 @@
 name: Integration Tests
 
 on:
-  pull_request:
-    branches: [main]
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
@@ -28,6 +26,26 @@ jobs:
           go-version: "1.26"
           cache: false
 
-      - name: Run integration suite
+      - name: Run integration and fault injection suite
         working-directory: tests/integration
-        run: make integration-test
+        run: make integration-test && make fault-test
+
+      - name: Set up Python for fuzzer
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Schemathesis
+        run: pip install schemathesis
+
+      - name: Run OpenAPI contract fuzzing
+        run: |
+          chmod +x ./tests/fuzz/run_fuzzer.sh
+          ./tests/fuzz/run_fuzzer.sh
+
+      - name: Publish OpenAPI contract fuzzing report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-fuzz-report
+          path: tests/fuzz/reports/

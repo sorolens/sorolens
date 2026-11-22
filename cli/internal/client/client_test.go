@@ -179,8 +179,8 @@ func TestListInvocationsPathAndFilters(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		if got := r.URL.Query().Get("fn"); got != "transfer" {
-			t.Errorf("fn query param: got %q, want transfer", got)
+		if got := r.URL.Query().Get("function_name"); got != "transfer" {
+			t.Errorf("function_name query param: got %q, want transfer", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(client.InvocationsResponse{
@@ -517,5 +517,21 @@ func TestGetContractSnapshotExportHappyPath(t *testing.T) {
 	}
 	if len(got.Storage) != 1 {
 		t.Fatalf("Storage count: got %d, want 1", len(got.Storage))
+	}
+}
+
+func TestListContractsSendsNetworkFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("network"); got != "mainnet" {
+			t.Errorf("network query param: got %q, want mainnet", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(client.ContractsResponse{})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, 5*time.Second)
+	if _, err := c.ListContracts(context.Background(), client.ListContractsOpts{Network: "mainnet"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

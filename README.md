@@ -15,7 +15,7 @@ Real-time monitoring, alerting, and on-chain health checks for Soroban smart con
 
 ## The problem
 
-Soroban's public RPC retains events for 24 hours and transaction data for up to 7 days. There is no persistent index of what your contract did, what it cost, or which storage entries are close to expiring. The Stellar Lab contract explorer is excellent for point-in-time inspection but has no history, no API, and no way to know when a contract you depend on is unhealthy. Sorolens fills that gap.
+Soroban RPC nodes retain events and transaction data for a limited window, 7 days by default. There is no persistent index of what your contract did, what it cost, or which storage entries are close to expiring. The Stellar Lab contract explorer is excellent for point-in-time inspection but has no history, no API, and no way to know when a contract you depend on is unhealthy. Sorolens fills that gap.
 ---
 
 ## What it does
@@ -28,7 +28,7 @@ Soroban's public RPC retains events for 24 hours and transaction data for up to 
 - **Custom alert rules**: a small expression language lets each team encode its own SLOs without a code change — `fee_per_invocation > 0.5 XLM for 5m on network testnet`. Rules are validated on save, editable with syntax highlighting and a live preview in the dashboard, and evaluated by the indexer every pass. See [`docs/rule-language.md`](docs/rule-language.md).
 - **Multi-network**: track and query testnet, mainnet, and futurenet contracts side by side, with a network selector in the dashboard header and a `?network=` filter on every list endpoint.
 - **Snapshot / replay**: `GET /api/v1/contracts/:id/snapshot?ledger=N` replays a contract's storage state and last known event as of any ledger, with a ledger scrubber on the contract page for time-travel debugging.
-- **Scoped API keys**: per-key permissions (`read:contracts`, `write:contracts`, `read:watchdog`, `admin:*`) enforced by route metadata, so a monitoring bot can hold a read-only watchdog key.
+- **Scoped API keys**: per-key permissions (`read:contracts`, `write:contracts`, `read:watchdog`, `admin:*`) enforced by route metadata, so a monitoring bot can hold a read-only watchdog key. See [`docs/authentication.md`](docs/authentication.md) for the complete authentication guide, scopes, roles, and API key management.
 - **API playground**: an interactive `/playground` page to explore every endpoint, send requests, and copy them as curl.
 - **Build introspection**: `GET /api/version` returns the running API's `version`, `git_sha`, and `built_at` (injected at build time via `-ldflags`, falling back to `dev` locally). It is unauthenticated and does no database or Redis work, so deploy checks and uptime monitors can poll it cheaply.
 
@@ -37,7 +37,7 @@ Soroban's public RPC retains events for 24 hours and transaction data for up to 
 ### Prerequisites
 
 - Docker and Docker Compose
-- Go 1.23+
+- Go 1.26+
 - Node 22+ and pnpm 9+
 
 ### 1. Start local dependencies
@@ -56,12 +56,43 @@ The one-shot `migrate` service applies `apps/api/internal/db/migrations/*.up.sql
 
 ```bash
 # Register a contract (uses the local API)
-go run ./cmd/sorolens track CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC --network testnet
+go run ./cli track CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC --network testnet
 # Run one indexer cycle manually
-go run ./cmd/sorolens index --once
+go run ./services/indexer --mode once
 ```
 
 The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
+
+### Authenticating the CLI
+
+Commands that write to the API (`track`, `label`, `tui`, ...) authenticate
+with an API key. Provide it one of these ways, in precedence order:
+
+1. `--api-key` flag, accepted before or after the subcommand:
+   `sorolens --api-key <key> track <contract-id>`
+2. `SOROLENS_API_KEY` environment variable.
+3. `api_key` entry in `~/.sorolens.yml` — stored in plaintext, so prefer
+   one of the options above or a profile key.
+4. The active profile's stored key (`sorolens config profile add <name>
+   --api-key-stdin`), which lives in the OS keyring.
+
+`sorolens config show` reports whether a key is configured (masked, never
+printed). See [`docs/authentication.md`](docs/authentication.md) for scopes
+and key management, and [`docs/configuration.md`](docs/configuration.md) for
+every CLI option. The [CLI command reference](docs/cli/README.md) documents
+every command and flag.
+
+### 4. Optional: local metrics stack
+
+```bash
+docker compose --profile observability up -d
+./scripts/observability-smoke.sh
+```
+
+Prometheus (<http://localhost:9090>) and Grafana (<http://localhost:3001>) start with the
+`Sorolens Overview` dashboard and the alert rules already provisioned. Grafana's admin
+password is generated on first start; see
+[docs/observability.md](./docs/observability.md) for how to read it and what is scraped.
 
 The indexer processes contracts concurrently. Set `INDEXER_WORKERS` to tune
 the worker count; it defaults to `GOMAXPROCS`. Each contract is handled by one
@@ -150,6 +181,8 @@ The **watchdog contract** at `contracts/watchdog/` is the piece that makes Sorol
 
 The REST API is described by an OpenAPI 3.0 spec at [`docs/openapi.yaml`](docs/openapi.yaml). Load it into Swagger UI, Redoc or Postman, or generate a client from it (the Go client in `packages/go-client` is generated this way). Run `make openapi` after changing a route: it fails if any route is undocumented, lints the spec with Redocly, and regenerates the Go client.
 
+For full details on authentication, scopes, roles, and how to create or rotate API keys with curl examples, see the [Authentication and API Keys Guide](docs/authentication.md).
+
 ---
 
 ## Deployed contracts
@@ -209,7 +242,7 @@ Required environment variables:
 | `STELLAR_NETWORK`      | `testnet`, `mainnet`, or `futurenet`                                                                           |
 | `SOROBAN_RPC_URL`      | Soroban JSON-RPC endpoint                                                                                      |
 | `WATCHDOG_CONTRACT_ID` | Deployed watchdog contract address                                                                             |
-| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins (e.g. `https://sorolens-web-iota.vercel.app`); omit or set to `*` to allow all |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins (e.g. `https://sorolens.xyz`); omit or set to `*` to allow all |
 
 The API is healthy once `GET /health` returns `{"status":"ok"}`. `GET /readyz`
 additionally checks Postgres and Redis reachability.
@@ -224,7 +257,9 @@ deploy.
 
 ### Full Deployment Guide
 
-For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md).
+For end-to-end production deployment across managed cloud platforms (**Neon**, **Upstash**, **Vercel**), self-hosted **Docker Compose** stacks, complete environment variable reference, and **Stellar Mainnet** configuration, see the [Deployment Guide](docs/deployment.md). Every configuration option of each component is listed in the generated [configuration reference](docs/configuration.md).
+
+To run Sorolens on a Kubernetes cluster you already have, use the Helm chart: see [Self-hosting on Kubernetes](docs/self-hosting/kubernetes.md). Release images and CLI binaries are signed with cosign and carry SLSA provenance; [Verifying releases](docs/verifying-releases.md) has the commands to check them.
 
 ---
 
@@ -237,7 +272,7 @@ For step-by-step incident response, troubleshooting, and maintenance procedures,
 - **[Backup Restore](docs/runbook.md#3-backup-and-disaster-recovery-restore)**: Point-In-Time-Recovery (PITR) via WAL replay and logical restores (`scripts/restore.sh`, `scripts/backup.sh`).
 - **[Key Rotation](docs/runbook.md#4-key-and-secret-rotation)**: Zero-downtime rotation of API keys, webhook signing secrets, and server environment secrets.
 
-See also [`docs/metrics.md`](docs/metrics.md) for Prometheus metrics and alerting rules, [`docs/backups.md`](docs/backups.md) for backup configurations, and [`docs/indexer.md`](docs/indexer.md) for indexer options.
+See also [`docs/metrics.md`](docs/metrics.md) for Prometheus metrics and alerting rules, [`docs/backups.md`](docs/backups.md) for backup configurations, [`docs/indexer.md`](docs/indexer.md) for indexer options, and [`docs/hubble-import.md`](docs/hubble-import.md) for importing history older than the RPC window.
 
 ---
 
@@ -245,13 +280,13 @@ See also [`docs/metrics.md`](docs/metrics.md) for Prometheus metrics and alertin
 
 | Layer             | Technology                                                                                                                         |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| API               | Go 1.23, chi, pgx v5, deployed as Vercel serverless functions                                                                      |
-| Indexer           | Go 1.23, runs as a GitHub Actions scheduled workflow (5-minute cron)                                                               |
+| API               | Go 1.26, chi, pgx v5, deployed as Vercel serverless functions                                                                      |
+| Indexer           | Go 1.26, runs as a GitHub Actions scheduled workflow (5-minute cron)                                                               |
 | Database          | Postgres 16, hosted on Neon                                                                                                        |
 | Cache / locks     | Redis, hosted on Upstash                                                                                                           |
 | Dashboard         | Next.js 15, TypeScript, Tailwind CSS, deployed on Vercel                                                                           |
 | XDR decoder       | TypeScript package (`packages/xdr`), wraps `@stellar/stellar-sdk`                                                                  |
-| CLI               | Go 1.23, cobra                                                                                                                     |
+| CLI               | Go 1.26, cobra                                                                                                                     |
 | Go client         | Generated from [`docs/openapi.yaml`](docs/openapi.yaml) into `packages/go-client`                                                  |
 | Python client     | Generated from [`docs/openapi.yaml`](docs/openapi.yaml) into `packages/python-sdk` (sync + async, published to PyPI as `sorolens`) |
 | Fixture contract  | Rust (stable), Soroban SDK, deployed to Stellar testnet                                                                            |
@@ -281,7 +316,9 @@ sorolens/
   deploy/
     terraform/    Self-hosting Terraform modules (AWS; see docs/self-hosting/aws.md)
     pulumi/       Self-hosting Pulumi (TypeScript) components, mirroring terraform/
+    helm/         Helm chart for Kubernetes (see docs/self-hosting/kubernetes.md)
   docs/
+    authentication.md Authentication & API keys guide (scopes, roles, sessions, curl examples)
     deployment.md Deployment guide (Neon, Upstash, Vercel, Docker, Mainnet)
     runbook.md    Incident response & operations runbook (lag, DLQ, restore, key rotation)
     screenshots/  Screenshot placeholders

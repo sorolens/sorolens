@@ -1,0 +1,57 @@
+name: 'sorolens-check'
+description: 'Assert Soroban smart contract storage TTL and health thresholds in CI/CD pipelines'
+author: 'Sorolens'
+branding:
+  icon: 'shield-check'
+  color: 'blue'
+
+inputs:
+  contract-id:
+    description: 'Soroban contract address to check (e.g. C...)'
+    required: true
+  api-url:
+    description: 'Sorolens API base URL'
+    required: false
+    default: 'https://api.sorolens.xyz'
+  api-key:
+    description: 'Sorolens API key for authenticated API access'
+    required: false
+  min-ttl-ledgers:
+    description: 'Minimum remaining ledgers before a storage entry expires; fails if any entry is below this'
+    required: false
+    default: '0'
+  min-health-score:
+    description: 'Minimum composite health score (0-100); fails if contract score is below this'
+    required: false
+    default: '0'
+  current-ledger:
+    description: 'Current ledger sequence for calculating remaining TTL (optional; defaults to API synced ledger)'
+    required: false
+
+outputs:
+  status:
+    description: 'Result status: passed or failed'
+    value: ${{ steps.run-check.outputs.status }}
+  health-score:
+    description: 'Current composite health score of the contract (0-100)'
+    value: ${{ steps.run-check.outputs.health-score }}
+  min-ttl:
+    description: 'Minimum remaining TTL in ledgers among all storage entries'
+    value: ${{ steps.run-check.outputs.min-ttl }}
+  storage-count:
+    description: 'Number of storage entries checked'
+    value: ${{ steps.run-check.outputs.storage-count }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: run-check
+      shell: bash
+      env:
+        INPUT_CONTRACT_ID: ${{ inputs.contract-id }}
+        INPUT_API_URL: ${{ inputs.api-url }}
+        INPUT_API_KEY: ${{ inputs.api-key }}
+        INPUT_MIN_TTL_LEDGERS: ${{ inputs.min-ttl-ledgers }}
+        INPUT_MIN_HEALTH_SCORE: ${{ inputs.min-health-score }}
+        INPUT_CURRENT_LEDGER: ${{ inputs.current-ledger }}
+      run: node "${{ github.action_path }}/check.mjs"

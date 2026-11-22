@@ -1,13 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { DataTable, MonoId } from "@sorolens/ui";
 import type { Column } from "@sorolens/ui";
 import { listInvocations } from "@/lib/api";
 import type { Invocation } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
 import { TableSkeleton } from "@/components/Skeleton";
-import { ErrorState, errorMessage } from "@/components/ErrorState";
+import { EmptyState } from "@/components/EmptyState";
+import { errorMessage } from "@/components/ErrorState";
+import { useLocale } from "@/lib/i18n";
+import { useQueryState } from "@/hooks/useQueryState";
+import {
+  parseInvocationsUrlState,
+  serializeInvocationsUrlState,
+  type InvocationsUrlState,
+} from "@/lib/invocationsUrl";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -138,22 +153,70 @@ const COLUMNS: Column<Invocation>[] = [
 // Main page
 // ---------------------------------------------------------------------------
 
-export default function InvocationsPage() {
+function InvocationsPage() {
   const { network } = useNetwork();
+  const { t } = useLocale();
+
+  // Applied filters and the current page live in the URL (issue #618), so
+  // a filtered view survives reload and can be shared. The draft inputs are
+  // local until the form is submitted.
+  const [applied, setApplied] = useQueryState<InvocationsUrlState>({
+    parse: parseInvocationsUrlState,
+    serialize: serializeInvocationsUrlState,
+  });
+
+  const [draft, setDraft] = useState<Filters>({
+    contractId: applied.contractId,
+    fn: applied.fn,
+    since: applied.since,
+    until: applied.until,
+  });
+
+  // Keep the form fields in step with the applied filters when they change
+  // through the URL (back/forward, shared link), without clobbering a
+  // half-typed draft while the user pages through results.
+  const appliedFilterKey = `${applied.contractId}\u0000${applied.fn}\u0000${applied.since}\u0000${applied.until}`;
+  const prevFilterKey = useRef(appliedFilterKey);
+  useEffect(() => {
+    if (prevFilterKey.current !== appliedFilterKey) {
+      prevFilterKey.current = appliedFilterKey;
+      setDraft({
+        contractId: applied.contractId,
+        fn: applied.fn,
+        since: applied.since,
+        until: applied.until,
+      });
+    }
+  }, [appliedFilterKey, applied]);
+
+  const filters = useMemo(
+    () => ({
+      contractId: applied.contractId,
+      fn: applied.fn,
+      since: applied.since,
+      until: applied.until,
+    }),
+    [applied.contractId, applied.fn, applied.since, applied.until]
+  );
+  const cursor = applied.cursor || null;
 
   // Data state
   const [invocations, setInvocations] = useState<Invocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Pagination: stack of cursors, index 0 is the first page.
-  const [cursors, setCursors] = useState<(string | null)[]>([null]);
-  const [cursorIndex, setCursorIndex] = useState(0);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
 
-  // Filter inputs (draft) and the applied filter set the request uses.
-  const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  // The API paginates with forward-only opaque cursors, so "previous page"
+  // is a client-side stack of the cursors each visited page was loaded
+  // with. The URL holds the current cursor; the stack is session memory
+  // and collapses to the current page whenever the cursor arrives from
+  // the URL instead of our own pagination (reload, back, shared link).
+  const [cursors, setCursors] = useState<(string | null)[]>([cursor]);
+  useEffect(() => {
+    setCursors((stack) =>
+      stack[stack.length - 1] === cursor ? stack : [cursor]
+    );
+  }, [cursor]);
 
   // Sort state. The API returns newest first, which is the default order.
   const [sortColumn, setSortColumn] = useState("ledger_closed_at");
@@ -163,12 +226,12 @@ export default function InvocationsPage() {
   const loadSeq = useRef(0);
 
   const load = useCallback(
-    async (cursor: string | null) => {
+    async (cursorArg: string | null) => {
       const seq = ++loadSeq.current;
       setLoading(true);
       try {
         const data = await listInvocations({
-          cursor: cursor ?? undefined,
+          cursor: cursorArg ?? undefined,
           limit: PAGE_SIZE,
           contract_id: filters.contractId || undefined,
           fn: filters.fn || undefined,
@@ -195,55 +258,64 @@ export default function InvocationsPage() {
   );
 
   useEffect(() => {
-    load(cursors[cursorIndex]);
-  }, [load, cursors, cursorIndex]);
+    load(cursor);
+  }, [load, cursor]);
 
   // Reset to the first page when the global network selector changes.
   const prevNetwork = useRef(network);
   useEffect(() => {
-    if (prevNetwork.current !== network) {
-      prevNetwork.current = network;
-      setCursors([null]);
-      setCursorIndex(0);
-    }
-  }, [network]);
+    if (prevNetwork.current === network) return;
+    prevNetwork.current = network;
+    setApplied(
+      (prev) =>
+        prev.cursor === "" && prev.page === 1
+          ? prev
+          : { ...prev, cursor: "", page: 1 },
+      "replace"
+    );
+  }, [network, setApplied]);
 
   // ---------------------------------------------------------------------------
   // Handlers
   // ---------------------------------------------------------------------------
 
-  const resetToFirstPage = () => {
-    setCursors([null]);
-    setCursorIndex(0);
-  };
-
   const handleApply = (e: React.FormEvent) => {
     e.preventDefault();
-    setFilters({
+    setApplied({
       contractId: draft.contractId.trim(),
       fn: draft.fn.trim(),
       since: draft.since,
       until: draft.until,
+      cursor: "",
+      page: 1,
     });
-    resetToFirstPage();
+    setCursors([null]);
   };
 
   const handleClear = () => {
     setDraft(EMPTY_FILTERS);
-    setFilters(EMPTY_FILTERS);
-    resetToFirstPage();
+    setApplied((prev) => ({ ...prev, ...EMPTY_FILTERS, cursor: "", page: 1 }));
+    setCursors([null]);
   };
 
   const handleNext = () => {
     if (!nextCursor) return;
-    const newCursors = [...cursors.slice(0, cursorIndex + 1), nextCursor];
-    setCursors(newCursors);
-    setCursorIndex(cursorIndex + 1);
+    setApplied((prev) => ({
+      ...prev,
+      cursor: nextCursor,
+      page: prev.page + 1,
+    }));
+    setCursors((stack) => [...stack, nextCursor]);
   };
 
   const handlePrev = () => {
-    if (cursorIndex === 0) return;
-    setCursorIndex(cursorIndex - 1);
+    if (cursors.length <= 1) return;
+    setApplied((prev) => ({
+      ...prev,
+      cursor: cursors[cursors.length - 2] ?? "",
+      page: Math.max(1, prev.page - 1),
+    }));
+    setCursors((stack) => stack.slice(0, -1));
   };
 
   const handleSort = (col: string) => {
@@ -278,7 +350,7 @@ export default function InvocationsPage() {
   });
 
   const filtersActive = hasActiveFilters(filters);
-  const isFirstPage = cursorIndex === 0;
+  const isFirstPage = cursors.length <= 1;
   const isLastPage = !nextCursor;
 
   // ---------------------------------------------------------------------------
@@ -399,27 +471,34 @@ export default function InvocationsPage() {
 
       {/* Failed request */}
       {!loading && error && (
-        <ErrorState
-          title="Couldn't load invocations."
+        <EmptyState
+          variant="error"
+          title={t("invocations.error.title")}
           message={error}
-          onRetry={() => load(cursors[cursorIndex])}
+          onRetry={() => load(cursor)}
         />
       )}
 
       {/* Empty state */}
       {!loading && !error && sorted.length === 0 && (
-        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
-          <p className="text-lg font-medium text-[var(--color-text-primary)]">
-            {filtersActive
-              ? "No invocations match your filters"
-              : "No invocations indexed yet"}
-          </p>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            {filtersActive
-              ? "Try widening the date range or clearing the contract and function filters."
-              : "Invocations appear here once the indexer has traced activity for tracked contracts."}
-          </p>
-        </div>
+        <EmptyState
+          variant={filtersActive ? "no-results" : "first-run"}
+          title={
+            filtersActive
+              ? t("invocations.empty.noResults.title")
+              : t("invocations.empty.firstRun.title")
+          }
+          description={
+            filtersActive
+              ? t("invocations.empty.noResults.body")
+              : t("invocations.empty.firstRun.body")
+          }
+          action={
+            filtersActive
+              ? { label: t("empty.clearFilters"), onClick: handleClear }
+              : { label: t("empty.trackContract"), href: "/contracts" }
+          }
+        />
       )}
 
       {/* Data table */}
@@ -436,9 +515,11 @@ export default function InvocationsPage() {
             window.location.href = `/contracts/${inv.contract_id}`;
           }}
           emptyState={
-            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-12 text-center text-sm text-[var(--color-text-secondary)]">
-              No invocations match your filters.
-            </div>
+            <EmptyState
+              variant="no-results"
+              compact
+              title={t("invocations.empty.noResults.title")}
+            />
           }
         />
       )}
@@ -447,7 +528,7 @@ export default function InvocationsPage() {
       {!loading && invocations.length > 0 && (
         <div className="flex items-center justify-between">
           <span className="text-xs text-[var(--color-text-secondary)]">
-            Page {cursorIndex + 1}
+            Page {applied.page}
             {sortColumn !== "ledger_closed_at" && (
               <span className="ml-2 opacity-80">
                 (sorting applies to the current page)
@@ -479,5 +560,15 @@ export default function InvocationsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function InvocationsPageWithSuspense() {
+  // useSearchParams (inside useQueryState) requires a Suspense boundary for
+  // static rendering.
+  return (
+    <Suspense fallback={<TableSkeleton rows={PAGE_SIZE} />}>
+      <InvocationsPage />
+    </Suspense>
   );
 }

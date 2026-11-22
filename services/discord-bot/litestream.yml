@@ -1,0 +1,14 @@
+# Litestream replicates the SQLite link database to S3-compatible storage
+# (Cloudflare R2, Backblaze B2, AWS S3) so contributor links survive
+# redeploys on hosts without a persistent disk. See docker-entrypoint.sh.
+dbs:
+  - path: ${DATABASE_PATH}
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: ${LITESTREAM_PATH}
+        endpoint: ${LITESTREAM_ENDPOINT}
+        region: ${LITESTREAM_REGION}
+        force-path-style: true
+        # Credentials come from LITESTREAM_ACCESS_KEY_ID and
+        # LITESTREAM_SECRET_ACCESS_KEY.

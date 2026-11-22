@@ -4,17 +4,46 @@
  * The layout wraps every dashboard page, so asserting on it covers them all.
  */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The layout marks the active link from the current path; point it at a route
+// per test. The factory reads `route` lazily so hoisting is safe.
+const route = { pathname: "/dashboard" };
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => route.pathname,
+  useParams: () => ({}),
+  // CmdkSearch, rendered by the header, resolves a router on mount.
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
 
 vi.mock("next/link", () => ({
   default: ({
     children,
     href,
+    ...rest
   }: {
     children: React.ReactNode;
     href: string;
-  }) => <a href={href}>{children}</a>,
+  } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock("@/components/NetworkSelector", () => ({
@@ -25,8 +54,17 @@ vi.mock("@/components/ThemeToggle", () => ({
   ThemeToggle: () => <div data-testid="theme-toggle" />,
 }));
 
+// The header search is unrelated to the shell's landmarks; it also needs a
+// ThemeProvider, which this unit test deliberately does not mount.
+vi.mock("@/components/CmdkSearch", () => ({
+  CmdkSearch: () => <div data-testid="cmdk-search" />,
+}));
+
 describe("AppLayout", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    route.pathname = "/dashboard";
+    localStorage.clear();
+  });
 
   afterEach(() => {
     cleanup();
@@ -60,6 +98,81 @@ describe("AppLayout", () => {
     ).toBe("/status");
   });
 
+  it("links every dashboard page from the primary nav (issue #647)", async () => {
+    await renderLayout();
+
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    const expected: Record<string, string> = {
+      Invocations: "/invocations",
+      Compare: "/compare",
+      Watchlist: "/watchlist",
+      Reports: "/watchdog/reports",
+    };
+    for (const [name, href] of Object.entries(expected)) {
+      expect(within(nav).getByRole("link", { name })).toHaveAttribute(
+        "href",
+        href
+      );
+    }
+  });
+
+  it.each([
+    ["/invocations", "Invocations"],
+    ["/compare", "Compare"],
+    ["/watchlist", "Watchlist"],
+  ])("marks %s active on its own page", async (pathname, name) => {
+    route.pathname = pathname;
+    await renderLayout();
+
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).getByRole("link", { name })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(
+      within(nav).getByRole("link", { name: "Contracts" })
+    ).not.toHaveAttribute("aria-current");
+  });
+
+  it("renders one labelled primary nav and main landmark", async () => {
+    await renderLayout();
+
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeVisible();
+    const mains = screen.getAllByRole("main");
+    expect(mains).toHaveLength(1);
+    expect(mains[0]).toHaveAttribute("id", "main");
+  });
+
+  it("marks the active navigation link with aria-current", async () => {
+    route.pathname = "/contracts";
+    await renderLayout();
+
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(
+      within(nav).getByRole("link", { name: "Contracts" })
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      within(nav).getByRole("link", { name: "Events" })
+    ).not.toHaveAttribute("aria-current");
+    expect(
+      within(nav).getByRole("link", { name: "Dashboard" })
+    ).not.toHaveAttribute("aria-current");
+  });
+
+  it("marks only the longest matching section active", async () => {
+    route.pathname = "/watchdog/reports";
+    await renderLayout();
+
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).getByRole("link", { name: "Reports" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(
+      within(nav).getByRole("link", { name: "Watchdog" })
+    ).not.toHaveAttribute("aria-current");
+  });
+
   it("renders the footer after the page content", async () => {
     await renderLayout();
     const content = screen.getByText("page content");
@@ -76,6 +189,11 @@ describe("AppLayout", () => {
       target: { value: "es" },
     });
     expect(screen.getByRole("link", { name: "Contratos" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Invocaciones" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Comparar" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Lista de seguimiento" })
+    ).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Zona horaria"), {
       target: { value: "local" },

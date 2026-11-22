@@ -15,18 +15,11 @@ export default function EventsPage() {
   const [activeFilter, setActiveFilter] = useState("");
   const [paused, setPaused] = useState(false);
 
-  const {
-    events,
-    clearEvents,
-    droppedCount,
-    status,
-    isConnected,
-    isPolling,
-    lastEventAt,
-  } = useEventStream({
-    contractId: activeFilter || undefined,
-    enabled: !paused,
-  });
+  const { events, clearEvents, droppedCount, status, lastEventAt } =
+    useEventStream({
+      contractId: activeFilter || undefined,
+      enabled: !paused,
+    });
 
   const handleApplyFilter = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +33,39 @@ export default function EventsPage() {
     clearEvents();
   };
 
+  // Connection state UI: every StreamStatus is shown, including the
+  // disconnected state a paused or disabled stream actually reports, so the
+  // badge never claims "Connecting…" for a stream that is not connecting.
+  const badgeLabel = paused
+    ? "Paused"
+    : status === "connected"
+      ? "Live (SSE)"
+      : status === "polling"
+        ? "Live (Polling Fallback)"
+        : status === "connecting"
+          ? "Connecting…"
+          : "Disconnected";
+
+  const badgeTone = paused
+    ? "bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)]"
+    : status === "connected"
+      ? "bg-[var(--color-safe-bg)] text-[var(--color-safe)]"
+      : status === "polling"
+        ? "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]"
+        : status === "connecting"
+          ? "bg-[var(--color-info-bg)] text-[var(--color-info-text)]"
+          : "bg-[var(--color-danger-bg)]/40 text-[var(--color-danger-text)]";
+
+  const dotTone = paused
+    ? "bg-white/60"
+    : status === "connected"
+      ? "bg-[var(--color-safe)] animate-pulse"
+      : status === "polling"
+        ? "bg-[var(--color-warning)]"
+        : status === "connecting"
+          ? "bg-[var(--color-info)] animate-ping"
+          : "bg-[var(--color-danger)]";
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -47,34 +73,12 @@ export default function EventsPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">Live Events</h1>
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                paused
-                  ? "bg-white/10 text-[var(--color-text-secondary)]"
-                  : isConnected
-                    ? "bg-[var(--color-safe-bg)] text-[var(--color-safe-text)]"
-                    : isPolling
-                      ? "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]"
-                      : "bg-[var(--color-info-bg)] text-[var(--color-info-text)]"
-              }`}
+              role="status"
+              data-testid="live-stream-status"
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeTone}`}
             >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  paused
-                    ? "bg-white/60"
-                    : isConnected
-                      ? "bg-[var(--color-safe)] animate-pulse"
-                      : isPolling
-                        ? "bg-[var(--color-warning)]"
-                        : "bg-[var(--color-info)] animate-ping"
-                }`}
-              />
-              {paused
-                ? "Paused"
-                : isConnected
-                  ? "Live (SSE)"
-                  : isPolling
-                    ? "Live (Polling Fallback)"
-                    : "Connecting..."}
+              <span className={`h-1.5 w-1.5 rounded-full ${dotTone}`} />
+              {badgeLabel}
             </span>
           </div>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
@@ -128,12 +132,22 @@ export default function EventsPage() {
         <StatCard
           label="Stream Connection"
           value={
-            isConnected ? "Connected" : isPolling ? "Polling" : "Connecting"
+            status === "connected"
+              ? "Connected"
+              : status === "polling"
+                ? "Polling"
+                : status === "connecting"
+                  ? "Connecting"
+                  : "Disconnected"
           }
           subtext={
-            isConnected
+            status === "connected"
               ? "Server-Sent Events active"
-              : "HTTP polling fallback active"
+              : status === "polling"
+                ? "HTTP polling fallback active"
+                : status === "connecting"
+                  ? "Establishing the event stream…"
+                  : "The stream is not running"
           }
         />
         <StatCard

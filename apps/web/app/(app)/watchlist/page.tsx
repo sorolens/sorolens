@@ -5,14 +5,19 @@ import Link from "next/link";
 import { listWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/api";
 import type { WatchlistItem } from "@/lib/types";
 import { StarButton } from "@/components/StarButton";
-import { ErrorState, errorMessage } from "@/components/ErrorState";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { errorMessage } from "@/components/ErrorState";
+import { EmptyState } from "@/components/EmptyState";
 import { useSessionUserId } from "@/lib/useSession";
+import { useLocale } from "@/lib/i18n";
 
 export default function WatchlistPage() {
   const userId = useSessionUserId();
+  const { t } = useLocale();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -58,33 +63,35 @@ export default function WatchlistPage() {
       </div>
 
       {loading && (
-        <div className="space-y-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-16 rounded-lg bg-[var(--color-bg-card)] animate-pulse"
-            />
-          ))}
+        <div role="status" aria-busy="true" aria-label="Loading watchlist">
+          <span className="sr-only">Loading watchlist</span>
+          <div aria-hidden="true" className="space-y-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-16 rounded-lg bg-[var(--color-bg-card)] animate-pulse"
+              />
+            ))}
+          </div>
         </div>
       )}
 
       {!loading && error && (
-        <ErrorState
-          title="Couldn't load your watchlist."
+        <EmptyState
+          variant="error"
+          title={t("watchlist.error.title")}
           message={error}
           onRetry={load}
         />
       )}
 
       {!loading && !error && items.length === 0 && (
-        <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-16 text-center border border-[var(--color-border)]">
-          <p className="text-lg font-medium text-[var(--color-text-primary)]">
-            No bookmarks yet
-          </p>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            Star a contract on the Contracts page to add it to your watchlist.
-          </p>
-        </div>
+        <EmptyState
+          variant="first-run"
+          title={t("watchlist.empty.title")}
+          description={t("watchlist.empty.body")}
+          action={{ label: t("empty.browseContracts"), href: "/contracts" }}
+        />
       )}
 
       {!loading && !error && items.length > 0 && (
@@ -114,12 +121,19 @@ export default function WatchlistPage() {
                   <td className="px-4 py-3 tabular-nums text-[var(--color-text-secondary)]">
                     {new Date(item.added_at).toLocaleDateString()}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 flex items-center gap-2">
                     <StarButton
                       contractId={item.contract_id}
                       userId={userId}
                       initialInWatchlist
                     />
+                    <button
+                      type="button"
+                      onClick={() => setPendingRemoveId(item.contract_id)}
+                      className="text-xs text-[var(--color-danger-text)] hover:underline"
+                    >
+                      Remove
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -127,6 +141,21 @@ export default function WatchlistPage() {
           </table>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingRemoveId !== null}
+        title="Remove from watchlist"
+        description="Are you sure you want to remove this contract from your watchlist?"
+        confirmText="Remove"
+        isDestructive={true}
+        onConfirm={async () => {
+          if (pendingRemoveId) {
+            await handleToggle(pendingRemoveId, true);
+            setPendingRemoveId(null);
+          }
+        }}
+        onClose={() => setPendingRemoveId(null)}
+      />
     </div>
   );
 }

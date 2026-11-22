@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MonoId } from "@sorolens/ui";
 import {
   ApiError,
@@ -19,10 +20,10 @@ import {
 import { ensureSession, getUserId } from "@/lib/user";
 import { TableSkeleton } from "@/components/Skeleton";
 import { ContractPicker } from "@/components/ContractPicker";
+import { API_URL } from "@/lib/config";
 import type { AlertSubscription, ChannelType } from "@/lib/types";
 
 const STORAGE_KEY = "sorolens_user_id";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 const inputClass =
   "w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]";
@@ -69,6 +70,7 @@ export default function NotificationsPage() {
     message: string;
   } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async (uid: string) => {
     setLoading(true);
@@ -232,7 +234,14 @@ export default function NotificationsPage() {
         <p className="mt-2 max-w-2xl text-sm text-[var(--color-text-secondary)]">
           Send watchdog alerts for a contract to Slack, Discord, PagerDuty, or
           any webhook, formatted natively for each channel. Integration secrets
-          are stored server side and never shown again after you save them.
+          are stored server side and never shown again after you save them. See{" "}
+          <Link
+            href="/integrations"
+            className="text-[var(--color-accent)] underline underline-offset-2"
+          >
+            Integrations
+          </Link>{" "}
+          for deployment setup and test sends.
         </p>
       </div>
 
@@ -507,7 +516,7 @@ export default function NotificationsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(s.id)}
+                          onClick={() => setPendingDeleteId(s.id)}
                           disabled={deleting === s.id}
                           className="text-xs text-[var(--color-danger-text)] hover:underline disabled:opacity-50"
                         >
@@ -521,6 +530,22 @@ export default function NotificationsPage() {
             </table>
           </div>
         )}
+
+        <ConfirmDialog
+          isOpen={pendingDeleteId !== null}
+          title="Delete subscription"
+          description="Are you sure you want to delete this notification subscription? You will no longer receive alerts for this channel."
+          confirmText="Delete subscription"
+          isDestructive={true}
+          isLoading={deleting !== null}
+          onConfirm={async () => {
+            if (pendingDeleteId) {
+              await handleDelete(pendingDeleteId);
+              setPendingDeleteId(null);
+            }
+          }}
+          onClose={() => setPendingDeleteId(null)}
+        />
       </section>
 
       <section className="rounded-lg border border-[var(--color-border)] p-5 text-sm">
@@ -532,7 +557,7 @@ export default function NotificationsPage() {
           secret as <code>SLACK_SIGNING_SECRET</code> on the API so requests are
           verified.
         </p>
-        <code className="mt-3 block overflow-x-auto rounded bg-black/30 p-3 font-mono text-xs">
+        <code className="mt-3 block overflow-x-auto rounded bg-[var(--color-bg)] p-3 font-mono text-xs">
           {API_URL}/integrations/slack/commands
         </code>
       </section>

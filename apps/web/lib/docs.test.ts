@@ -28,8 +28,8 @@ describe("in-app documentation", () => {
     expect(renderDoc("not-a-real-page")).toBeUndefined();
   });
 
-  it("includes docs and about in the sitemap", () => {
-    const urls = sitemap().map((entry) => entry.url);
+  it("includes docs and about in the sitemap", async () => {
+    const urls = (await sitemap()).map((entry) => entry.url);
     for (const path of [
       "/docs",
       "/docs/getting-started",

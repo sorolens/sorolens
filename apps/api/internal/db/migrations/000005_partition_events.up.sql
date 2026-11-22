@@ -25,6 +25,7 @@ BEGIN
     CREATE TABLE events (
       id                 TEXT        NOT NULL,
       contract_id        TEXT        NOT NULL REFERENCES contracts (id),
+      network            TEXT        NOT NULL DEFAULT 'testnet',
       ledger             BIGINT      NOT NULL,
       ledger_closed_at   TIMESTAMPTZ NOT NULL,
       tx_hash            TEXT        NOT NULL,
@@ -38,13 +39,6 @@ BEGIN
       PRIMARY KEY (id, ledger_closed_at)
     ) PARTITION BY RANGE (ledger_closed_at);
 
-    -- Copy all existing data into the partitioned table.
-    INSERT INTO events
-      SELECT id, contract_id, ledger, ledger_closed_at, tx_hash, type,
-             topic_xdr, value_xdr, topic_decoded, value_decoded,
-             in_successful_call, inserted_at
-      FROM events_old;
-
     -- Create monthly partition for the current month.
     _start := date_trunc('month', NOW());
     _end   := date_trunc('month', NOW() + INTERVAL '1 month');
@@ -55,6 +49,33 @@ BEGIN
       'CREATE TABLE %I PARTITION OF events FOR VALUES FROM (%L) TO (%L)',
       _partition_name, _start, _end
     );
+
+    -- Backfill partitions for every month represented in the old table.
+    FOR _start IN
+      SELECT DISTINCT date_trunc('month', ledger_closed_at)
+      FROM events_old
+      ORDER BY 1
+    LOOP
+      _end := _start + INTERVAL '1 month';
+      _year := EXTRACT(YEAR FROM _start)::int;
+      _month := EXTRACT(MONTH FROM _start)::int;
+      _partition_name := format('events_%s_%s', _year, LPAD(_month::text, 2, '0'));
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_class WHERE relname = _partition_name AND relkind = 'r'
+      ) THEN
+        EXECUTE format(
+          'CREATE TABLE %I PARTITION OF events FOR VALUES FROM (%L) TO (%L)',
+          _partition_name, _start, _end
+        );
+      END IF;
+    END LOOP;
+
+    -- Copy all existing data once every represented month has a partition.
+    INSERT INTO events
+      SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+             topic_xdr, value_xdr, topic_decoded, value_decoded,
+             in_successful_call, inserted_at
+      FROM events_old;
 
     -- Create monthly partition for next month.
     _start := date_trunc('month', NOW() + INTERVAL '1 month');
@@ -67,15 +88,14 @@ BEGIN
       _partition_name, _start, _end
     );
 
-    -- Recreate the indexes on the partitioned table.
+    -- Drop the old table before recreating its indexes on the partitioned one.
+    DROP TABLE events_old;
+
     -- Indexes on the parent propagate to all partitions automatically.
-    -- We recreate them explicitly to ensure they match the originals.
     CREATE INDEX idx_events_contract_ledger ON events (contract_id, ledger DESC);
     CREATE INDEX idx_events_tx_hash ON events (tx_hash);
     CREATE INDEX idx_events_ledger_closed_at ON events (ledger_closed_at DESC);
-
-    -- Drop the old table.
-    DROP TABLE events_old;
+    CREATE INDEX idx_events_network_ledger ON events (network, ledger DESC);
 
   END IF;
 END $$;

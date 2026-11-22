@@ -59,12 +59,13 @@ import type {
   RuleCatalogResponse,
   RuleLibraryResponse,
   ResourceTrendResponse,
+  SearchResponse,
+  ContractUpgradeMarker,
 } from "./types";
 import type { ContractVersionEntry } from "@sorolens/ui";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
 import { sessionHeaders } from "./user";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import { API_URL } from "./config";
 
 export class ApiError extends Error {
   constructor(
@@ -148,6 +149,23 @@ export function getIndexerStatus(): Promise<IndexerStatusResponse> {
 export function listContractsAll(): Promise<ContractsListResponse> {
   return fetchJson<ContractsListResponse>(
     `${API_URL}/api/v1/contracts?limit=1000`
+  );
+}
+
+/**
+ * Search contracts by ID or label (`GET /api/v1/search`, issue #619).
+ * The response shape is `{ items: Contract[] }` exactly as declared in
+ * `docs/openapi.yaml`.
+ */
+export function searchContracts(
+  query: string,
+  params?: { limit?: number; network?: string }
+): Promise<SearchResponse> {
+  const search = new URLSearchParams({ q: query });
+  if (params?.limit) search.set("limit", String(params.limit));
+  if (params?.network) search.set("network", params.network);
+  return fetchJson<SearchResponse>(
+    `${API_URL}/api/v1/search?${search.toString()}`
   );
 }
 
@@ -463,10 +481,22 @@ export function getContractSnapshot(
 }
 
 export function getContractHealthScore(
-  id: string
+  id: string,
+  historyLimit?: number
 ): Promise<HealthScoreResponse> {
+  const query =
+    historyLimit === undefined ? "" : `?history_limit=${historyLimit}`;
+
   return fetchJson<HealthScoreResponse>(
-    `${API_URL}/api/v1/contracts/${id}/health-score`
+    `${API_URL}/api/v1/contracts/${id}/health-score${query}`
+  );
+}
+
+export function getContractUpgrades(
+  id: string
+): Promise<{ upgrades: ContractUpgradeMarker[] }> {
+  return fetchJson<{ upgrades: ContractUpgradeMarker[] }>(
+    `${API_URL}/api/v1/contracts/${encodeURIComponent(id)}/upgrades?limit=100`
   );
 }
 

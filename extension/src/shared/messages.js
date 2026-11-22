@@ -23,6 +23,8 @@ export const MESSAGE = {
   scanResult: "sorolens:scan-result",
   /** popup -> background: last scan reported for a tab. */
   getScan: "sorolens:get-scan",
+  /** popup -> background: clear the unread alert badge. */
+  markAlertsRead: "sorolens:mark-alerts-read",
   /** popup -> content script: contract IDs found on the tab. */
   getDetected: "sorolens:get-detected",
   /** background -> content script: re-scan the page (settings changed). */

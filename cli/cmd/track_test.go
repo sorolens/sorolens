@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -57,4 +60,27 @@ func TestRootCommand_WithTrack(t *testing.T) {
 
 	assert.Len(t, root.Commands(), 1)
 	assert.Equal(t, trackCmd, root.Commands()[0])
+}
+
+func TestTrackCommandErrorNon2xx(t *testing.T) {
+	contractID := "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]string{
+				"code":    "NOT_FOUND",
+				"message": "contract not found",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	rootCmd.SetArgs([]string{"track", contractID, "--api-url", srv.URL, "--no-color"})
+	_, err := captureOutput(t, func() error {
+		return rootCmd.Execute()
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
 }

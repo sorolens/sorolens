@@ -8,13 +8,13 @@
  * user provisioning step.
  */
 
+import { API_URL } from "./config";
+
 /** localStorage key holding the minted session. */
 export const SESSION_STORAGE_KEY = "sorolens_session";
 
 /** Legacy self-asserted identity key; removed once a session is minted. */
 const LEGACY_USER_STORAGE_KEY = "sorolens_user_id";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 export interface StoredSession {
   user_id: string;

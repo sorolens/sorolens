@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Verify every SDK exposes every operation declared in ``docs/openapi.yaml``.
 
-This is the guard described in issue #556: the three hand-maintained SDKs
-(``packages/rust-sdk``, the ``packages/python-sdk`` facade and
-``packages/go-client``) each expose only a slice of the REST surface, and
-nothing previously failed when a new OpenAPI operation was added without a
-matching SDK method.
+This is the guard described in issue #556: the hand-maintained SDKs
+(``packages/rust-sdk``, the ``packages/python-sdk`` facade, ``packages/go-client``,
+``packages/jvm-sdk`` and ``packages/typescript-sdk``) each expose only a slice of
+the REST surface, and nothing previously failed when a new OpenAPI operation was
+added without a matching SDK method.
 
 How coverage is decided
 ------------------------
@@ -18,6 +18,9 @@ symbol in the SDK's *public surface*:
   the generated layer (``client.py``).
 * **Go** — the exported ``func (c *Client{,WithResponses}) <Name>`` methods of
   the generated client.
+* **JVM** — the ``public`` methods of ``packages/jvm-sdk/src/main/java`` classes.
+* **TypeScript** — the methods of the ``SorolensClient`` class in
+  ``packages/typescript-sdk/src``.
 
 Operation ids are camelCase (``listContractEvents``) while the SDKs use their
 own casing (snake_case / PascalCase). We compare them after *canonicalising*
@@ -63,6 +66,12 @@ ENDPOINTS_BLOCK_RE = re.compile(r"endpoints!\s*\{(.*?)\n\}", re.S)
 RUST_FN_RE = re.compile(r"\bfn\s+([a-z0-9_]+)\s*\(")
 GO_METHOD_RE = re.compile(
     r"^func \(c \*(?:Client|ClientWithResponses)\) ([A-Za-z0-9_]+)\(", re.M
+)
+JVM_METHOD_RE = re.compile(
+    r"^\s*public (?:[A-Za-z0-9_<>,\.\[\] ]+) ([a-z][A-Za-z0-9_]*)\(", re.M
+)
+TS_METHOD_RE = re.compile(
+    r"^  (?:async )?(?:\*)?([a-zA-Z][A-Za-z0-9_]*)\s*(?:<[^>]*>)?\(", re.M
 )
 
 
@@ -138,10 +147,30 @@ def go_symbols() -> set[str]:
     return names
 
 
+def jvm_symbols() -> set[str]:
+    names: set[str] = set()
+    src = REPO_ROOT / "packages" / "jvm-sdk" / "src" / "main" / "java"
+    for path in sorted(src.rglob("*.java")):
+        for method in JVM_METHOD_RE.findall(path.read_text(encoding="utf-8")):
+            names.add(canonical(method))
+    return names
+
+
+def typescript_symbols() -> set[str]:
+    names: set[str] = set()
+    src = REPO_ROOT / "packages" / "typescript-sdk" / "src"
+    for path in sorted(src.rglob("*.ts")):
+        for method in TS_METHOD_RE.findall(path.read_text(encoding="utf-8")):
+            names.add(canonical(method))
+    return names
+
+
 SDKS = {
     "rust": rust_symbols,
     "python": python_symbols,
     "go": go_symbols,
+    "jvm": jvm_symbols,
+    "typescript": typescript_symbols,
 }
 
 

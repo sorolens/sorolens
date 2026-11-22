@@ -4,11 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useDebounce } from "use-debounce";
 import { DataTable, Toast } from "@sorolens/ui";
 import type { Column } from "@sorolens/ui";
 import { LabelledId } from "@/components/LabelledId";
 import { useContracts } from "@/hooks/useContracts";
-import { ErrorState, errorMessage } from "@/components/ErrorState";
+import { useQueryState } from "@/hooks/useQueryState";
+import { errorMessage } from "@/components/ErrorState";
+import { EmptyState } from "@/components/EmptyState";
+import { useLocale } from "@/lib/i18n";
 import { ApiError, batchContracts } from "@/lib/api";
 import type { BatchContractsAction } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
@@ -17,6 +21,11 @@ import type { ContractRow } from "@/lib/optimisticTrack";
 import { useSessionUserId } from "@/lib/useSession";
 import { TableSkeleton } from "@/components/Skeleton";
 import ImportContractsCsv from "@/components/ImportContractsCsv";
+import {
+  parseContractsUrlState,
+  serializeContractsUrlState,
+  type ContractsUrlState,
+} from "@/lib/contractsUrl";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -24,17 +33,18 @@ import ImportContractsCsv from "@/components/ImportContractsCsv";
 
 const PAGE_SIZE = 20;
 
-// Sort is stored in the URL (?sort=&dir=) so it is shareable (#175). Column
-// keys must match the backend's whitelist (id, label, network, status,
-// added_at).
-const SORT_PARAM = "sort";
-const DIR_PARAM = "dir";
-const DEFAULT_SORT_COLUMN = "added_at";
-const DEFAULT_SORT_DIRECTION = "desc" as const;
+// Sort, filters and pagination live in the URL (?sort=&dir=&q=&tag=&cursor=
+// &page=) so a view is shareable (#175 for sort, #618 for the rest). The
+// parse/serialize logic lives in lib/contractsUrl.ts.
 
 // Paste-to-add (#178): a Soroban contract id is 56 chars, starts with 'C', and
 // uses the base32 alphabet. Mirrors the tracking wizard's client-side check.
 const PASTE_CONTRACT_ID_RE = /^C[A-Z0-9]{55}$/;
+
+// The bulk "Compare" action (#607) links into /compare. The whole selection
+// travels in the URL; the compare page caps the view at four contracts and
+// tells the user about any extras, so the list does not drop ids silently.
+const MIN_COMPARE = 2;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -248,7 +258,7 @@ function TagModal({
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="payments"
-            className="w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+            className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
           />
         </div>
         <div className="flex gap-3 pt-1">
@@ -342,7 +352,7 @@ const COLUMNS: Column<ContractRow>[] = [
 /**
  * The base columns plus a Tags column whose chips feed the server-side tag
  * filter. Built per render rather than declared as a constant because the chips
- * need the click handler; the handler only calls `setTagFilter`, which is
+ * need the click handler; the handler only calls `applyTagFilter`, which is
  * stable, so `useMemo(..., [])` around the result stays correct.
  */
 function makeColumns(onTagClick: (tag: string) => void): Column<ContractRow>[] {
@@ -382,35 +392,94 @@ function makeColumns(onTagClick: (tag: string) => void): Column<ContractRow>[] {
 // Main Page
 // ---------------------------------------------------------------------------
 
-export default function ContractsClient({
-  initialSortColumn = DEFAULT_SORT_COLUMN,
-  initialSortDirection = DEFAULT_SORT_DIRECTION,
-}: {
-  initialSortColumn?: string;
-  initialSortDirection?: "asc" | "desc";
-}) {
+export default function ContractsClient() {
   // Selected network from the header selector.
   const { network } = useNetwork();
   const userId = useSessionUserId();
+  const { t } = useLocale();
 
-  // Sort state is derived from the URL and written back on change, so a
-  // sorted view is shareable via its query string (#175).
+  // Still needed for the paste-to-add toast's navigation to the wizard.
   const router = useRouter();
-  const [sortColumn, setSortColumn] = useState(initialSortColumn);
-  const [sortDirection, setSortDirection] = useState(initialSortDirection);
+
+  // The shareable list state (sort, filters, current page) lives in the
+  // URL. The server page seeds its SWR fallback from the same params, so
+  // the first render and the fallback agree.
+  const [applied, setApplied] = useQueryState<ContractsUrlState>({
+    parse: parseContractsUrlState,
+    serialize: serializeContractsUrlState,
+  });
+  const sortColumn = applied.sort;
+  const sortDirection = applied.dir;
+  const tagFilter = applied.tag;
+
+  // Free-text search filters the current page client-side. The input is
+  // local so typing stays instant; the URL catches up debounced (replace,
+  // so it does not spam history) to keep the view shareable.
+  const [searchInput, setSearchInput] = useState(applied.q);
+  const [debouncedSearchInput] = useDebounce(searchInput, 400);
   useEffect(() => {
-    setSortColumn(initialSortColumn);
-    setSortDirection(initialSortDirection);
-  }, [initialSortColumn, initialSortDirection]);
-  // Pagination state: stack of cursors, index 0 = first page
-  const [cursors, setCursors] = useState<(string | null)[]>([null]);
-  const [cursorIndex, setCursorIndex] = useState(0);
+    setApplied(
+      (prev) =>
+        prev.q === debouncedSearchInput
+          ? prev
+          : { ...prev, q: debouncedSearchInput },
+      "replace"
+    );
+  }, [debouncedSearchInput, setApplied]);
+  // When the q param arrives from the URL (reload, back/forward), the
+  // input follows it.
+  useEffect(() => {
+    setSearchInput(applied.q);
+  }, [applied.q]);
 
-  // Search state
-  const [search, setSearch] = useState("");
+  // Same treatment for the server-side tag filter: the input is local and
+  // debounced into the URL; chip clicks write through immediately.
+  const [tagInput, setTagInput] = useState(applied.tag);
+  const [debouncedTagInput] = useDebounce(tagInput, 400);
+  useEffect(() => {
+    setApplied(
+      (prev) =>
+        prev.tag === debouncedTagInput
+          ? prev
+          : { ...prev, tag: debouncedTagInput },
+      "replace"
+    );
+  }, [debouncedTagInput, setApplied]);
+  useEffect(() => {
+    setTagInput(applied.tag);
+  }, [applied.tag]);
 
-  // Tag filter state (server-side, combined with the network filter)
-  const [tagFilter, setTagFilter] = useState("");
+  const applyTagFilter = useCallback(
+    (tag: string) => {
+      setTagInput(tag);
+      // A new tag changes the result set, so pagination restarts in the
+      // same write rather than relying on the reset effect's second
+      // navigation.
+      setApplied(
+        (prev) =>
+          prev.tag === tag && prev.cursor === "" && prev.page === 1
+            ? prev
+            : { ...prev, tag, cursor: "", page: 1 },
+        "push"
+      );
+    },
+    [setApplied]
+  );
+
+  // Pagination: stack of cursors, index 0 = first page. The URL holds the
+  // current cursor; the stack is session memory and collapses to the
+  // current page whenever the cursor arrives from the URL instead of our
+  // own pagination (reload, back, shared link).
+  const [cursors, setCursors] = useState<(string | null)[]>([
+    applied.cursor || null,
+  ]);
+  useEffect(() => {
+    setCursors((stack) =>
+      stack[stack.length - 1] === (applied.cursor || null)
+        ? stack
+        : [applied.cursor || null]
+    );
+  }, [applied.cursor]);
 
   // CSV import state
   const [showImport, setShowImport] = useState(false);
@@ -484,7 +553,7 @@ export default function ContractsClient({
   // unreachable `error` is set and an error state with a retry replaces the
   // empty state, so an outage is never mistaken for "no contracts".
   const { data, error, isLoading, isValidating, mutate } = useContracts({
-    cursor: cursors[cursorIndex] ?? undefined,
+    cursor: applied.cursor || undefined,
     limit: PAGE_SIZE,
     network: networkFilter(network),
     tag: tagFilter || undefined,
@@ -493,54 +562,60 @@ export default function ContractsClient({
   });
 
   const contracts: ContractRow[] = data?.contracts ?? [];
-  const hasMore = data?.has_more ?? false;
+  const hasMore = Boolean(
+    (data?.next_cursor && data.next_cursor !== "") || data?.has_more
+  );
   const loading = isLoading;
   const loadFailed = !loading && Boolean(error);
 
-  // Reset to the first page when the network or tag filter changes. The ref
-  // guard keeps this from firing an extra fetch on mount; the filter also
-  // changes the SWR key, which triggers the fetch on its own.
-  const prevNetwork = useRef(network);
-  const prevTag = useRef(tagFilter);
+  // Reset to the first page when the network, tag filter or sort changes:
+  // an in-flight cursor was produced under the previous query and no
+  // longer points at the next page. The ref guard keeps this from firing
+  // on mount; the change itself also alters the SWR key, which triggers
+  // the fetch on its own.
+  const prevQueryKey = useRef(
+    `${network}|${tagFilter}|${sortColumn}:${sortDirection}`
+  );
   useEffect(() => {
-    const networkChanged = prevNetwork.current !== network;
-    const tagChanged = prevTag.current !== tagFilter;
-    if (networkChanged || tagChanged) {
-      prevNetwork.current = network;
-      prevTag.current = tagFilter;
-      setCursors([null]);
-      setCursorIndex(0);
-    }
-  }, [network, tagFilter]);
-
-  // Reset to the first page when the sort changes, because an in-flight
-  // cursor was produced in the previous order and no longer points at the
-  // next page under the new sort.
-  const prevSort = useRef(`${sortColumn}:${sortDirection}`);
-  useEffect(() => {
-    const key = `${sortColumn}:${sortDirection}`;
-    if (prevSort.current !== key) {
-      prevSort.current = key;
-      setCursors([null]);
-      setCursorIndex(0);
-    }
-  }, [sortColumn, sortDirection]);
+    const key = `${network}|${tagFilter}|${sortColumn}:${sortDirection}`;
+    if (prevQueryKey.current === key) return;
+    prevQueryKey.current = key;
+    setApplied(
+      (prev) =>
+        prev.cursor === "" && prev.page === 1
+          ? prev
+          : { ...prev, cursor: "", page: 1 },
+      "replace"
+    );
+    setCursors([null]);
+  }, [network, tagFilter, sortColumn, sortDirection, setApplied]);
 
   // ---------------------------------------------------------------------------
   // Pagination handlers
   // ---------------------------------------------------------------------------
 
   const handleNext = () => {
-    if (!hasMore || contracts.length === 0) return;
-    const nextCursor = contracts[contracts.length - 1].id;
-    const newCursors = [...cursors.slice(0, cursorIndex + 1), nextCursor];
-    setCursors(newCursors);
-    setCursorIndex(cursorIndex + 1);
+    if (!hasMore) return;
+    const nextCursor =
+      data?.next_cursor ||
+      (contracts.length > 0 ? contracts[contracts.length - 1].id : null);
+    if (!nextCursor) return;
+    setApplied((prev) => ({
+      ...prev,
+      cursor: nextCursor,
+      page: prev.page + 1,
+    }));
+    setCursors((stack) => [...stack, nextCursor]);
   };
 
   const handlePrev = () => {
-    if (cursorIndex === 0) return;
-    setCursorIndex(cursorIndex - 1);
+    if (cursors.length <= 1) return;
+    setApplied((prev) => ({
+      ...prev,
+      cursor: cursors[cursors.length - 2] ?? "",
+      page: Math.max(1, prev.page - 1),
+    }));
+    setCursors((stack) => stack.slice(0, -1));
   };
 
   // ---------------------------------------------------------------------------
@@ -548,19 +623,16 @@ export default function ContractsClient({
   // ---------------------------------------------------------------------------
 
   const handleSort = (col: string) => {
-    const params = new URLSearchParams(window.location.search);
-    if (col === sortColumn) {
-      const nextDirection = sortDirection === "asc" ? "desc" : "asc";
-      setSortDirection(nextDirection);
-      params.set(SORT_PARAM, col);
-      params.set(DIR_PARAM, nextDirection);
-    } else {
-      setSortColumn(col);
-      setSortDirection("asc");
-      params.set(SORT_PARAM, col);
-      params.set(DIR_PARAM, "asc");
-    }
-    router.replace(`?${params.toString()}`);
+    // Same column flips the direction; a new column starts ascending. The
+    // new sort lands in the URL (shareable, #175) and the reset effect
+    // above restarts pagination.
+    setApplied(
+      (prev) =>
+        col === prev.sort
+          ? { ...prev, dir: prev.dir === "asc" ? "desc" : "asc" }
+          : { ...prev, sort: col as ContractsUrlState["sort"], dir: "asc" },
+      "replace"
+    );
   };
 
   // ---------------------------------------------------------------------------
@@ -589,6 +661,12 @@ export default function ContractsClient({
   }, []);
 
   const clearSelection = useCallback(() => setSelected(new Set()), []);
+
+  // Bulk "Compare" entry point (#607): the selection travels in the shared
+  // /compare?ids= URL, which validates and renders it on first paint.
+  const compareHref = `/compare?ids=${encodeURIComponent(
+    Array.from(selected).join(",")
+  )}`;
 
   // runBulkAction calls the batch endpoint, then refreshes the current page and
   // clears the selection. Errors surface as a toast rather than being swallowed.
@@ -638,8 +716,8 @@ export default function ContractsClient({
   // ---------------------------------------------------------------------------
 
   const filtered = contracts.filter((c) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
+    if (!searchInput) return true;
+    const q = searchInput.toLowerCase();
     return (
       c.id.toLowerCase().includes(q) ||
       (c.label ?? "").toLowerCase().includes(q)
@@ -655,7 +733,7 @@ export default function ContractsClient({
     return sortDirection === "asc" ? cmp : -cmp;
   });
 
-  const isFirstPage = cursorIndex === 0;
+  const isFirstPage = cursors.length <= 1;
   const isLastPage = !hasMore;
 
   // ---------------------------------------------------------------------------
@@ -663,8 +741,14 @@ export default function ContractsClient({
   // ---------------------------------------------------------------------------
 
   const handleTrackSuccess = () => {
+    setApplied(
+      (prev) =>
+        prev.cursor === "" && prev.page === 1
+          ? prev
+          : { ...prev, cursor: "", page: 1 },
+      "replace"
+    );
     setCursors([null]);
-    setCursorIndex(0);
     // Revalidate the visible page so a newly tracked/imported contract shows
     // up even when we were already on page 1 (the SWR key does not change).
     void mutate();
@@ -703,7 +787,7 @@ export default function ContractsClient({
         />
       ),
     };
-    return [selectColumn, ...makeColumns((tag) => setTagFilter(tag))];
+    return [selectColumn, ...makeColumns((tag) => applyTagFilter(tag))];
   }, [allSelected, pageIds, selected, toggleAll, toggleRow]);
 
   // ---------------------------------------------------------------------------
@@ -783,8 +867,8 @@ export default function ContractsClient({
           <input
             id="contracts-search"
             type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search by alias or contract ID…"
             aria-label="Search contracts"
             className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
@@ -792,8 +876,8 @@ export default function ContractsClient({
           <input
             id="contracts-tag-filter"
             type="search"
-            value={tagFilter}
-            onChange={(e) => setTagFilter(e.target.value)}
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
             placeholder="Filter by tag…"
             aria-label="Filter contracts by tag"
             className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-4 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none sm:max-w-xs"
@@ -810,6 +894,25 @@ export default function ContractsClient({
               {selected.size} selected
             </span>
             <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+              {selected.size >= MIN_COMPARE ? (
+                <Link
+                  id="bulk-compare-btn"
+                  href={compareHref}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] hover:border-[var(--color-accent)]"
+                >
+                  Compare {selected.size} contracts
+                </Link>
+              ) : (
+                <button
+                  id="bulk-compare-btn"
+                  type="button"
+                  disabled
+                  title={`Select at least ${MIN_COMPARE} contracts to compare`}
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-secondary)] opacity-50"
+                >
+                  Compare
+                </button>
+              )}
               <button
                 id="bulk-tag-btn"
                 type="button"
@@ -847,9 +950,10 @@ export default function ContractsClient({
 
         {/* Failed request: keeps any previously loaded rows visible below */}
         {loadFailed && (
-          <ErrorState
+          <EmptyState
+            variant="error"
             className="mb-4"
-            title="Couldn't load contracts."
+            title={t("contracts.error.title")}
             message={errorMessage(error, "The contracts request failed.")}
             onRetry={() => void mutate()}
             retrying={isValidating}
@@ -858,26 +962,28 @@ export default function ContractsClient({
 
         {/* Empty state: only when the request succeeded */}
         {!loading && !loadFailed && sorted.length === 0 && (
-          <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-16 text-center border border-[var(--color-border)]">
-            <p className="text-lg font-medium text-[var(--color-text-primary)]">
-              {search
-                ? "No contracts match your search"
-                : "No contracts tracked yet"}
-            </p>
-            {!search && !tagFilter && (
-              <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                Use the CLI or API to start tracking a Soroban contract, or
-                click{" "}
-                <Link
-                  href="/contracts/new"
-                  className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
-                >
-                  run the tracking wizard
-                </Link>{" "}
-                to add one from here.
-              </p>
-            )}
-          </div>
+          <EmptyState
+            variant={searchInput ? "no-results" : "first-run"}
+            title={
+              searchInput
+                ? t("contracts.empty.noResults.title")
+                : t("contracts.empty.firstRun.title")
+            }
+            description={
+              !searchInput && !tagFilter ? (
+                <>
+                  {t("contracts.empty.firstRun.body")}{" "}
+                  <Link
+                    href="/contracts/new"
+                    className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
+                  >
+                    {t("contracts.empty.firstRun.action")}
+                  </Link>{" "}
+                  {t("contracts.empty.firstRun.bodySuffix")}
+                </>
+              ) : undefined
+            }
+          />
         )}
 
         {/* Data table */}
@@ -890,15 +996,18 @@ export default function ContractsClient({
             sortColumn={sortColumn}
             sortDirection={sortDirection}
             onSort={handleSort}
-            onRowClick={(c) => {
-              // The detail page doesn't exist until the API confirms it.
-              if (isPendingRow(c)) return;
-              window.location.href = `/contracts/${c.id}`;
-            }}
+            // A real link in the ID cell (issue #610) is keyboard reachable
+            // and announced by screen readers. Pending rows get no link: the
+            // detail page does not exist until the API confirms the contract.
+            linkColumnKey="id"
+            linkComponent={Link}
+            rowHref={(c) => (isPendingRow(c) ? null : `/contracts/${c.id}`)}
             emptyState={
-              <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-12 text-center text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)]">
-                No contracts match your search.
-              </div>
+              <EmptyState
+                variant="no-results"
+                compact
+                title={t("contracts.empty.noResults.body")}
+              />
             }
           />
         )}
@@ -907,7 +1016,7 @@ export default function ContractsClient({
         {!loading && contracts.length > 0 && (
           <div className="mt-4 flex items-center justify-between">
             <span className="text-xs text-[var(--color-text-secondary)]">
-              Page {cursorIndex + 1}
+              Page {applied.page}
             </span>
             <div className="flex gap-2">
               <button
@@ -933,17 +1042,6 @@ export default function ContractsClient({
             </div>
           </div>
         )}
-
-        {/* Shortcut link to contract detail (accessible) */}
-        <div className="sr-only">
-          {sorted
-            .filter((c) => !isPendingRow(c))
-            .map((c) => (
-              <Link key={c.id} href={`/contracts/${c.id}`}>
-                {c.label ?? c.id}
-              </Link>
-            ))}
-        </div>
       </div>
     </>
   );

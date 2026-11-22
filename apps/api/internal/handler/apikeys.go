@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -17,15 +18,17 @@ import (
 // ---- response types ---------------------------------------------------------
 
 type apiKeyResponse struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	KeyPrefix  string     `json:"key_prefix"`
-	Scopes     []string   `json:"scopes"`
-	UserID     *string    `json:"user_id"`
-	CreatedAt  time.Time  `json:"created_at"`
-	LastUsedAt *time.Time `json:"last_used_at"`
-	RevokedAt  *time.Time `json:"revoked_at"`
-	RotatedAt  *time.Time `json:"rotated_at"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	KeyPrefix    string     `json:"key_prefix"`
+	Scopes       []string   `json:"scopes"`
+	UserID       *string    `json:"user_id"`
+	CreatedAt    time.Time  `json:"created_at"`
+	LastUsedAt   *time.Time `json:"last_used_at"`
+	RevokedAt    *time.Time `json:"revoked_at"`
+	RotatedAt    *time.Time `json:"rotated_at"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	MonthlyQuota *int       `json:"monthly_quota,omitempty"`
 }
 
 // createAPIKeyResponse includes the plaintext token exactly once, at creation.
@@ -41,6 +44,10 @@ type createAPIKeyRequest struct {
 	// A bound key carries that user's identity; an unbound key only
 	// authenticates scopes.
 	UserID *string `json:"user_id,omitempty"`
+	// ExpiresAt sets an optional expiration time for the key.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// MonthlyQuota sets an optional monthly request quota for this key.
+	MonthlyQuota *int `json:"monthly_quota,omitempty"`
 }
 
 func apiKeyFromStore(k store.APIKey) apiKeyResponse {
@@ -49,15 +56,17 @@ func apiKeyFromStore(k store.APIKey) apiKeyResponse {
 		scopes = []string{}
 	}
 	return apiKeyResponse{
-		ID:         k.ID,
-		Name:       k.Name,
-		KeyPrefix:  k.KeyPrefix,
-		Scopes:     scopes,
-		UserID:     k.UserID,
-		CreatedAt:  k.CreatedAt,
-		LastUsedAt: k.LastUsedAt,
-		RevokedAt:  k.RevokedAt,
-		RotatedAt:  k.RotatedAt,
+		ID:           k.ID,
+		Name:         k.Name,
+		KeyPrefix:    k.KeyPrefix,
+		Scopes:       scopes,
+		UserID:       k.UserID,
+		CreatedAt:    k.CreatedAt,
+		LastUsedAt:   k.LastUsedAt,
+		RevokedAt:    k.RevokedAt,
+		RotatedAt:    k.RotatedAt,
+		ExpiresAt:    k.ExpiresAt,
+		MonthlyQuota: k.MonthlyQuota,
 	}
 }
 
@@ -104,6 +113,11 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.MonthlyQuota != nil && *req.MonthlyQuota < 0 {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "monthly_quota must be non-negative")
+		return
+	}
+
 	token, err := newAPIToken()
 	if err != nil {
 		h.Logger.Error("generate api key", "err", err)
@@ -111,13 +125,15 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key := store.APIKey{
-		ID:        newID(),
-		Name:      req.Name,
-		KeyPrefix: token[:11], // "sl_" + 8 chars
-		KeyHash:   store.HashKey(token),
-		Scopes:    req.Scopes,
-		CreatedAt: time.Now().UTC(),
-		UserID:    boundUser,
+		ID:           newID(),
+		Name:         req.Name,
+		KeyPrefix:    token[:11], // "sl_" + 8 chars
+		KeyHash:      store.HashKey(token),
+		Scopes:       req.Scopes,
+		CreatedAt:    time.Now().UTC(),
+		UserID:       boundUser,
+		ExpiresAt:    req.ExpiresAt,
+		MonthlyQuota: req.MonthlyQuota,
 	}
 	if err := h.Store.CreateAPIKey(r.Context(), key); err != nil {
 		if errors.Is(err, store.ErrInvalidScope) {
@@ -137,7 +153,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 
 // ListAPIKeys handles GET /api/v1/api-keys. Key material is never returned.
 func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -154,7 +170,7 @@ func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"api_keys":    resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 

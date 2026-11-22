@@ -19,6 +19,62 @@ type Contract struct {
 	// TrackingPreset is the preset type applied when the contract was tracked
 	// (e.g. "dex", "lending", "stablecoin"). Empty when no preset was selected.
 	TrackingPreset string
+	// Backfill is the saved position of the contract's new-contract backfill.
+	// GetContract fills it; it is nil until the indexer starts the backfill.
+	Backfill *BackfillProgress
+	// Token holds enriched token metadata when the contract is a Stellar Asset Contract.
+	Token *TokenMetadata
+}
+
+// TokenMetadata holds token metadata for Stellar Asset Contract (SAC) instances.
+type TokenMetadata struct {
+	AssetCode string `json:"asset_code"`
+	Issuer    string `json:"issuer"`
+	Decimals  uint32 `json:"decimals"`
+	Symbol    string `json:"symbol"`
+	Name      string `json:"name"`
+}
+
+// BackfillProgress is how far the indexer has walked a contract's backfill
+// range. The range is scanned from NewestLedger down to OldestLedger and
+// NextLedger is the newest ledger not scanned yet.
+type BackfillProgress struct {
+	OldestLedger int64
+	NewestLedger int64
+	NextLedger   int64
+	StartedAt    time.Time
+	UpdatedAt    time.Time
+	CompletedAt  *time.Time
+}
+
+// LedgersTotal is the size of the backfill range.
+func (b BackfillProgress) LedgersTotal() int64 {
+	if b.NewestLedger < b.OldestLedger {
+		return 0
+	}
+	return b.NewestLedger - b.OldestLedger + 1
+}
+
+// LedgersDone is how many ledgers of the range have been scanned.
+func (b BackfillProgress) LedgersDone() int64 {
+	done := b.NewestLedger - b.NextLedger
+	if done < 0 {
+		return 0
+	}
+	if total := b.LedgersTotal(); done > total {
+		return total
+	}
+	return done
+}
+
+// Percent is the scanned share of the range, rounded down to two decimals so
+// an unfinished backfill never reports 100.
+func (b BackfillProgress) Percent() float64 {
+	total := b.LedgersTotal()
+	if total == 0 {
+		return 100
+	}
+	return float64(b.LedgersDone()*10000/total) / 100
 }
 
 // Event is a single contract event indexed from the Soroban RPC.
@@ -57,6 +113,11 @@ type Invocation struct {
 	LedgerWriteByte    int64
 	ApplicationOrder   int
 	InsertedAt         time.Time
+	// FailureCategory and FailureCode classify a FAILED invocation by its
+	// host error (issue #806). Both are empty for other statuses and for rows
+	// indexed before classification existed.
+	FailureCategory string
+	FailureCode     string
 }
 
 // CallEdge is one parent -> child invocation edge of a transaction's
@@ -135,6 +196,7 @@ type GlobalStats struct {
 	TotalEvents         int64
 	TotalInvocations    int64
 	TotalStorageEntries int64
+	Approximate         bool
 }
 
 // AlertSubscription represents a webhook subscription for watchdog alerts.

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import Image from "next/image";
+import { ExtensionCallout } from "@/components/ExtensionCallout";
 import { LiveStats } from "@/components/LiveStats";
 
 export const revalidate = 60;
@@ -23,6 +25,14 @@ const features = [
   },
 ];
 
+// Pages that exist in the dashboard but have no card of their own below.
+const explore = [
+  { href: "/invocations", label: "Invocations" },
+  { href: "/compare", label: "Compare contracts" },
+  { href: "/watchlist", label: "Watchlist" },
+  { href: "/watchdog/reports", label: "Reports" },
+];
+
 const steps = [
   {
     n: "1",
@@ -45,13 +55,24 @@ export default function HomePage() {
   return (
     <div className="min-h-screen">
       {/* Top nav */}
-      <nav className="border-b border-[var(--color-border)]">
+      <nav
+        aria-label="Primary"
+        className="border-b border-[var(--color-border)]"
+      >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <Link
             href="/"
             className="flex items-center gap-2 text-xl font-bold tracking-tight"
           >
-            <img src="/logo.svg" alt="" className="h-7 w-7" aria-hidden />
+            <Image
+              src="/logo.svg"
+              alt=""
+              width={28}
+              height={28}
+              priority
+              className="h-7 w-7"
+              aria-hidden
+            />
             Sorolens
           </Link>
           <div className="flex items-center gap-4 text-sm">
@@ -84,90 +105,109 @@ export default function HomePage() {
         </div>
       </nav>
 
-      {/* Hero */}
-      <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl text-center">
-          <span className="mb-4 inline-block rounded-full border border-[var(--color-border)] px-3 py-1 text-xs uppercase tracking-wider text-[var(--color-text-secondary)]">
-            Soroban observability
-          </span>
-          <h1 className="mb-6 text-5xl font-bold leading-tight tracking-tight sm:text-6xl">
-            Real-time monitoring and on-chain health checks for Soroban
-            contracts.
-          </h1>
-          <p className="mb-8 text-lg text-[var(--color-text-secondary)]">
-            The only Stellar observability tool with a deployed Soroban{" "}
-            <em>watchdog</em> contract for proactive contract monitoring.
-            Events, invocations, storage TTLs, and health status: indexed,
-            queryable, and alertable.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href="/contracts"
-              className="rounded-lg bg-[var(--color-accent)] px-6 py-3 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity hover:opacity-90"
-            >
-              View Dashboard
-            </Link>
-            <a
-              href="https://github.com/sorolens/sorolens"
-              className="rounded-lg border border-[var(--color-border)] px-6 py-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)]"
-              rel="noopener noreferrer"
-            >
-              View on GitHub
-            </a>
-          </div>
-        </div>
-
-        {/* Live stats */}
-        <LiveStats className="mx-auto mt-16 max-w-4xl" />
-      </section>
-
-      {/* Features */}
-      <section className="border-t border-[var(--color-border)]">
-        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-          <div className="grid gap-6 sm:grid-cols-2">
-            {features.map((f) => (
-              <div
-                key={f.title}
-                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6"
+      <main id="main" tabIndex={-1}>
+        {/* Hero */}
+        <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <span className="mb-4 inline-block rounded-full border border-[var(--color-border)] px-3 py-1 text-xs uppercase tracking-wider text-[var(--color-text-secondary)]">
+              Soroban observability
+            </span>
+            <h1 className="mb-6 text-5xl font-bold leading-tight tracking-tight sm:text-6xl">
+              Real-time monitoring and on-chain health checks for Soroban
+              contracts.
+            </h1>
+            <p className="mb-8 text-lg text-[var(--color-text-secondary)]">
+              The only Stellar observability tool with a deployed Soroban{" "}
+              <em>watchdog</em> contract for proactive contract monitoring.
+              Events, invocations, storage TTLs, and health status: indexed,
+              queryable, and alertable.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href="/contracts"
+                className="rounded-lg bg-[var(--color-accent)] px-6 py-3 text-sm font-semibold text-[var(--color-bg-page)] transition-opacity hover:opacity-90"
               >
-                <div className="mb-2 flex items-center gap-2">
-                  <h3 className="text-lg font-semibold">{f.title}</h3>
-                  {f.badge && (
-                    <span className="rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-xs font-semibold text-[var(--color-bg-page)]">
-                      {f.badge}
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
-                  {f.body}
-                </p>
-              </div>
-            ))}
+                View Dashboard
+              </Link>
+              <a
+                href="https://github.com/sorolens/sorolens"
+                className="rounded-lg border border-[var(--color-border)] px-6 py-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)]"
+                rel="noopener noreferrer"
+              >
+                View on GitHub
+              </a>
+            </div>
+            <nav
+              aria-label="Explore the dashboard"
+              className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm"
+            >
+              {explore.map((e) => (
+                <Link
+                  key={e.href}
+                  href={e.href}
+                  className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+                >
+                  {e.label}
+                </Link>
+              ))}
+            </nav>
           </div>
-        </div>
-      </section>
 
-      {/* How it works */}
-      <section className="border-t border-[var(--color-border)]">
-        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-          <h2 className="mb-10 text-center text-3xl font-bold tracking-tight">
-            How it works
-          </h2>
-          <div className="grid gap-6 sm:grid-cols-3">
-            {steps.map((s) => (
-              <div key={s.n} className="text-center">
-                <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full border border-[var(--color-accent)] text-sm font-semibold text-[var(--color-accent)]">
-                  {s.n}
+          {/* Live stats */}
+          <LiveStats className="mx-auto mt-16 max-w-4xl" />
+
+          {/* Browser extension */}
+          <ExtensionCallout />
+        </section>
+
+        {/* Features */}
+        <section className="border-t border-[var(--color-border)]">
+          <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+            <div className="grid gap-6 sm:grid-cols-2">
+              {features.map((f) => (
+                <div
+                  key={f.title}
+                  className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6"
+                >
+                  <div className="mb-2 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">{f.title}</h3>
+                    {f.badge && (
+                      <span className="rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-xs font-semibold text-[var(--color-bg-page)]">
+                        {f.badge}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                    {f.body}
+                  </p>
                 </div>
-                <h3 className="mb-2 font-semibold">{s.title}</h3>
-                <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
-                  {s.body}
-                </p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+
+        {/* How it works */}
+        <section className="border-t border-[var(--color-border)]">
+          <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+            <h2 className="mb-10 text-center text-3xl font-bold tracking-tight">
+              How it works
+            </h2>
+            <div className="grid gap-6 sm:grid-cols-3">
+              {steps.map((s) => (
+                <div key={s.n} className="text-center">
+                  <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full border border-[var(--color-accent)] text-sm font-semibold text-[var(--color-accent)]">
+                    {s.n}
+                  </div>
+                  <h3 className="mb-2 font-semibold">{s.title}</h3>
+                  <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                    {s.body}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
 
       {/* Footer */}
       <footer className="border-t border-[var(--color-border)]">

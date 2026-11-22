@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -270,6 +272,97 @@ func TestGetEvents_MapsFieldsAndFollowsCursor(t *testing.T) {
 	}
 }
 
+// fullEventsPage returns a page of eventsPageLimit events whose IDs are
+// prefixed so each page's events can be told apart.
+func fullEventsPage(prefix string) []map[string]any {
+	events := make([]map[string]any, eventsPageLimit)
+	for i := range events {
+		events[i] = map[string]any{"id": fmt.Sprintf("%s-%d", prefix, i), "contractId": "CABC", "ledger": 150, "txHash": "tx"}
+	}
+	return events
+}
+
+func TestGetEvents_FetchesEveryPageOfWindow(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req := decodeReq(t, r)
+		var p getEventsParams
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			t.Fatalf("params: %v", err)
+		}
+		switch calls.Add(1) {
+		case 1:
+			writeResult(w, req.ID, map[string]any{"events": fullEventsPage("p1"), "latestLedger": 300, "cursor": "c1"})
+		case 2:
+			if p.Pagination.Cursor != "c1" {
+				t.Errorf("page 2 cursor = %q, want c1", p.Pagination.Cursor)
+			}
+			writeResult(w, req.ID, map[string]any{"events": fullEventsPage("p2"), "latestLedger": 300, "cursor": "c2"})
+		case 3:
+			if p.Pagination.Cursor != "c2" {
+				t.Errorf("page 3 cursor = %q, want c2", p.Pagination.Cursor)
+			}
+			writeResult(w, req.ID, map[string]any{
+				"events":       []map[string]any{{"id": "p3-0", "contractId": "CABC", "ledger": 199}},
+				"latestLedger": 300, "cursor": "c3",
+			})
+		default:
+			t.Errorf("unexpected page %d", calls.Load())
+		}
+	}))
+	defer srv.Close()
+
+	res, err := fastClient(srv.URL).GetEvents(context.Background(), 100, 200,
+		[]poller.EventFilter{{Type: "contract", ContractIDs: []string{"CABC"}}})
+	if err != nil {
+		t.Fatalf("GetEvents: %v", err)
+	}
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("made %d getEvents calls, want 3", got)
+	}
+	if len(res.Events) != 2*eventsPageLimit+1 {
+		t.Fatalf("got %d events, want %d", len(res.Events), 2*eventsPageLimit+1)
+	}
+	seen := make(map[string]bool, len(res.Events))
+	for _, e := range res.Events {
+		if seen[e.ID] {
+			t.Fatalf("duplicate event %q", e.ID)
+		}
+		seen[e.ID] = true
+	}
+	if !seen["p1-0"] || !seen["p2-0"] || !seen["p3-0"] {
+		t.Fatalf("events from every page must be returned")
+	}
+}
+
+func TestGetEvents_FailedPageFailsWholeWindow(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req := decodeReq(t, r)
+		if calls.Add(1) == 1 {
+			writeResult(w, req.ID, map[string]any{"events": fullEventsPage("p1"), "latestLedger": 300, "cursor": "c1"})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"jsonrpc": "2.0", "id": req.ID,
+			"error": map[string]any{"code": -32600, "message": "cursor expired"},
+		})
+	}))
+	defer srv.Close()
+
+	// A failure on a later page must surface as an error with no partial
+	// result, so the poller never advances sync_state past events it lost.
+	res, err := fastClient(srv.URL).GetEvents(context.Background(), 100, 200,
+		[]poller.EventFilter{{Type: "contract", ContractIDs: []string{"CABC"}}})
+	if err == nil {
+		t.Fatalf("GetEvents returned no error after a failed page")
+	}
+	if res != nil {
+		t.Fatalf("GetEvents returned a partial result %+v alongside the error", res)
+	}
+}
+
 func TestGetTransaction(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		req := decodeReq(t, r)
@@ -427,6 +520,45 @@ func TestContractInstanceLedgerKey_RejectsBadIDs(t *testing.T) {
 	for _, id := range []string{"", "nothex", "CAAA"} {
 		if _, err := ContractInstanceLedgerKey(id); err == nil {
 			t.Errorf("ContractInstanceLedgerKey(%q): want error", id)
+		}
+	}
+}
+
+// TestGetTransaction_DiagnosticEventsBothShapes replays the go-stellar-sdk
+// encoded fixture through both getTransaction layouts: the top-level
+// diagnosticEventsXdr array and the protocol 23 events.diagnosticEventsXdr
+// location (issue #504).
+func TestGetTransaction_DiagnosticEventsBothShapes(t *testing.T) {
+	raw, err := os.ReadFile("../callgraph/testdata/diagnostic_events.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var fixture map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req := decodeReq(t, r)
+		var p struct{ Hash string }
+		json.Unmarshal(req.Params, &p) //nolint:errcheck
+		key := map[string]string{
+			"legacy": "getTransaction",
+			"p23":    "getTransactionProtocol23",
+		}[p.Hash]
+		var body map[string]any
+		json.Unmarshal(fixture[key], &body) //nolint:errcheck
+		writeResult(w, req.ID, body)
+	}))
+	defer srv.Close()
+	c := fastClient(srv.URL)
+
+	for _, hash := range []string{"legacy", "p23"} {
+		tx, err := c.GetTransaction(context.Background(), hash)
+		if err != nil {
+			t.Fatalf("%s: GetTransaction: %v", hash, err)
+		}
+		if len(tx.DiagnosticEventsXDR) != 19 {
+			t.Fatalf("%s: diagnostic events = %d, want 19", hash, len(tx.DiagnosticEventsXDR))
 		}
 	}
 }

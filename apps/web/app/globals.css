@@ -21,6 +21,8 @@
   --color-bg-card: #ffffff;
   --color-surface: #ffffff;
   --color-bg: #f1f5f9;
+  --color-bg-base: #f1f5f9;
+  --color-bg-surface: #ffffff;
   --color-bg-hover: #e2e8f0;
   --color-border: #e2e8f0;
   --color-border-hover: #94a3b8;
@@ -106,6 +108,8 @@
   --color-bg-card: #1e1e2e;
   --color-surface: #1e1e2e;
   --color-bg: #181825;
+  --color-bg-base: #181825;
+  --color-bg-surface: #1e1e2e;
   --color-bg-hover: #313244;
   --color-border: #313244;
   --color-border-hover: #585b70;
@@ -268,4 +272,14 @@ textarea:focus-visible {
 .docs-content hr {
   border-color: var(--color-border);
   margin: 1.5rem 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
 }

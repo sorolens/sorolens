@@ -1,0 +1,134 @@
+# Prometheus alert rules for the Sorolens API and indexer.
+#
+# Load with:
+#
+#   rule_files:
+#     - /etc/prometheus/alerts.yml
+#
+# Validate with:
+#
+#   promtool check rules docs/alerts.yml
+#
+# The `job` label values below must match the scrape jobs in
+# docs/metrics.md#scrape-configuration. Thresholds assume Stellar closes a
+# ledger roughly every 5 seconds (100 ledgers ≈ 8 minutes, 1000 ≈ 83 minutes).
+groups:
+  - name: sorolens-api
+    interval: 30s
+    rules:
+      - alert: SorolensAPIDown
+        expr: up{job="sorolens-api"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sorolens API target {{ $labels.instance }} is down"
+          description: >-
+            Prometheus has failed to scrape the API for 5 minutes. Check the
+            process, its listen address, and METRICS_PORT/ingress rules.
+          runbook_url: "https://github.com/sorolens/sorolens/blob/main/docs/metrics.md#alerting"
+
+      - alert: SorolensAPIHighErrorRate
+        expr: |
+          sum by (job) (rate(sorolens_http_requests_total{status=~"5.."}[5m]))
+            /
+          clamp_min(sum by (job) (rate(sorolens_http_requests_total[5m])), 0.001)
+            > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of Sorolens API requests are 5xx"
+          description: >-
+            More than 5% of requests have failed with a 5xx status for
+            10 minutes. Inspect logs and the per-route breakdown on the
+            Sorolens Overview dashboard.
+          runbook_url: "https://github.com/sorolens/sorolens/blob/main/docs/metrics.md#alerting"
+
+      - alert: SorolensAPIHighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(sorolens_http_request_duration_seconds_bucket[5m]))
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sorolens API p95 latency is {{ $value | humanizeDuration }}"
+          description: >-
+            The 95th percentile request latency has exceeded 1s for 10
+            minutes. Check Postgres saturation and slow routes.
+          runbook_url: "https://github.com/sorolens/sorolens/blob/main/docs/metrics.md#alerting"
+
+      - alert: SorolensAPIDatabasePoolSaturated
+        expr: |
+          sorolens_db_pool_acquired_connections
+            /
+          clamp_min(sorolens_db_pool_max_connections, 1) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sorolens API Postgres pool is {{ $value | humanizePercentage }} full"
+          description: >-
+            More than 90% of the pgx pool connections have been checked out
+            for 10 minutes. Raise the pool ceiling or investigate slow queries.
+          runbook_url: "https://github.com/sorolens/sorolens/blob/main/docs/metrics.md#alerting"
+
+      - alert: SorolensAPIRateLimitRejections
+        expr: |
+          sum(rate(sorolens_api_ratelimit_requests_total{result="limited"}[5m]))
+            /
+          clamp_min(sum(rate(sorolens_api_ratelimit_requests_total[5m])), 0.001)
+            > 0.10
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "More than 10% of Sorolens API requests are rate limited"
+          description: >-
+            Sustained 429s usually mean a noisy client or an undersized limit.
+            Check the `tier` label to see whether anonymous or authenticated
+            callers dominate.
+          runbook_url: "https://github.com/sorolens/sorolens/blob/main/docs/metrics.md#alerting"
+
+  - name: sorolens-indexer
+    interval: 30s
+    rules:
+      - alert: SorolensIndexerLagging
+        expr: max by (network) (sorolens_indexer_lag_ledgers) > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sorolens indexer is {{ $value }} ledgers behind on {{ $labels.network }}"
+          description: >-
+            The indexer cursor has trailed the network head by more than 100
+            ledgers (about 8 minutes) for 10 minutes.
+          runbook_url: "https://github.com/sorolens/sorolens/blob/main/docs/metrics.md#alerting"
+
+      - alert: SorolensIndexerFarBehind
+        expr: max by (network) (sorolens_indexer_lag_ledgers) > 1000
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sorolens indexer is {{ $value }} ledgers behind on {{ $labels.network }}"
+          description: >-
+            The indexer cursor has trailed the network head by more than 1000
+            ledgers (about 83 minutes). Data served for this network is stale.
+          runbook_url: "https://github.com/sorolens/sorolens/blob/main/docs/metrics.md#alerting"
+
+      - alert: SorolensIndexerNotReporting
+        expr: absent(sorolens_indexer_lag_ledgers)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No Sorolens indexer metrics are being scraped"
+          description: >-
+            `sorolens_indexer_lag_ledgers` has been absent for 15 minutes.
+            The indexer only exposes metrics while a pass is running; in the
+            default cron deployment, alert only when you run continuous mode.
+          runbook_url: "https://github.com/sorolens/sorolens/blob/main/docs/metrics.md#alerting"

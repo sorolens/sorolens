@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getCompare, listContractsAll } from "@/lib/api";
+import { getCompareAllEntries } from "@/lib/compareAll";
 import type {
   CompareContractEntry,
   ContractSummary,
@@ -12,20 +13,29 @@ import { ContractSelector } from "./ContractSelector";
 import { CompareColumn } from "./CompareColumn";
 import { WindowSelector } from "@/components/WindowSelector";
 
-const COMPARE_WINDOWS: TimeWindow[] = ["24h", "7d", "30d"];
-
 interface CompareViewProps {
-  /** Contract IDs parsed from ?ids= on the server-rendered page. */
+  /** Valid contract IDs parsed from ?ids= on the server-rendered page. */
   initialIds: string[];
   initialWindow: TimeWindow;
+  /** ?ids= entries the server dropped as malformed (issue #607). */
+  droppedInvalid?: number;
+  /** Valid ?ids= entries dropped because more than 4 were supplied. */
+  truncatedExtra?: number;
 }
 
 /**
  * Client half of the /compare page. It owns the picker state, fetches the
  * unified comparison from GET /api/v1/compare in one round-trip, and mirrors
  * the selection into the URL with router.replace so the view is shareable.
+ * The "all" window is assembled client-side (lib/compareAll) because the API
+ * only aggregates 24h/7d/30d.
  */
-export function CompareView({ initialIds, initialWindow }: CompareViewProps) {
+export function CompareView({
+  initialIds,
+  initialWindow,
+  droppedInvalid = 0,
+  truncatedExtra = 0,
+}: CompareViewProps) {
   const router = useRouter();
   const [contracts, setContracts] = useState<ContractSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>(initialIds);
@@ -69,10 +79,16 @@ export function CompareView({ initialIds, initialWindow }: CompareViewProps) {
     }
     let cancelled = false;
     setLoading(true);
-    getCompare(selectedIds, timeWindow)
-      .then((data) => {
+    const comparison =
+      timeWindow === "all"
+        ? getCompareAllEntries(selectedIds)
+        : getCompare(selectedIds, timeWindow).then(
+            (data) => data.contracts ?? []
+          );
+    comparison
+      .then((entries) => {
         if (cancelled) return;
-        setEntries(data.contracts ?? []);
+        setEntries(entries);
         setError(null);
       })
       .catch((err: unknown) => {
@@ -105,12 +121,26 @@ export function CompareView({ initialIds, initialWindow }: CompareViewProps) {
             50% worse in red.
           </p>
         </div>
-        <WindowSelector
-          selected={timeWindow}
-          onChange={setTimeWindow}
-          options={COMPARE_WINDOWS}
-        />
+        {/* WindowSelector defaults to the full TimeWindow set: 24h/7d/30d/all. */}
+        <WindowSelector selected={timeWindow} onChange={setTimeWindow} />
       </div>
+
+      {(droppedInvalid > 0 || truncatedExtra > 0) && (
+        <div
+          role="status"
+          data-testid="compare-url-note"
+          className="rounded-lg border border-[var(--color-warning)] bg-[var(--color-bg-card)] px-4 py-3 text-sm text-[var(--color-warning)]"
+        >
+          {droppedInvalid > 0 &&
+            `${droppedInvalid} invalid contract ${
+              droppedInvalid === 1 ? "ID was" : "IDs were"
+            } ignored — contract IDs are 56 characters starting with "C". `}
+          {truncatedExtra > 0 &&
+            `A comparison holds 4 contracts, so ${truncatedExtra} more ${
+              truncatedExtra === 1 ? "was" : "were"
+            } dropped.`}
+        </div>
+      )}
 
       <ContractSelector
         selected={selectedIds}
@@ -129,13 +159,19 @@ export function CompareView({ initialIds, initialWindow }: CompareViewProps) {
       )}
 
       {loading && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-72 animate-pulse rounded-xl bg-[var(--color-border)]"
-            />
-          ))}
+        <div role="status" aria-busy="true" aria-label="Loading comparison">
+          <span className="sr-only">Loading comparison</span>
+          <div
+            aria-hidden="true"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="h-72 animate-pulse rounded-xl bg-[var(--color-border)]"
+              />
+            ))}
+          </div>
         </div>
       )}
 

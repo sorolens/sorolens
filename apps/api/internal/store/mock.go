@@ -20,6 +20,7 @@ type MockStore struct {
 	storageEntries        []StorageEntry
 	syncStates            map[string]SyncState
 	globalStats           GlobalStats
+	globalStatsSet        bool
 	monitored             map[string]MonitoredContract
 	healthChecks          []HealthCheck
 	alerts                []ContractAlert
@@ -30,6 +31,7 @@ type MockStore struct {
 	alertSubscriptions    []AlertSubscription
 	users                 map[string]User
 	healthScores          map[string]ContractHealthScore
+	healthScoreHistory    map[string]map[time.Time]HealthScoreSample
 	failedEvents          map[int64]FailedEvent
 	failedEventSeq        int64
 	indexerCursors        map[string]uint32
@@ -41,39 +43,49 @@ type MockStore struct {
 	contractTags          map[string]map[string]bool
 	wasmBinaries          map[string]ContractWasm
 	contractSpecs         map[string]ContractSpec
+	contractEventSchemas  map[string]map[string]ContractEventSchema
 	contractVerifications map[string]ContractVerification
 	alertRules            []AlertRule
 	contractNotes         map[string][]ContractNote
 	watchedAccounts       map[string]WatchedAccount
+	maintenanceWindows    map[int64]MaintenanceWindow
+	maintenanceWindowSeq  int64
+	contractTokens        map[string]TokenMetadata
+	*MockExportJobStore
 
 	// auditMu guards auditEvents: the audit middleware writes asynchronously.
-	auditMu     sync.Mutex
-	auditEvents []AuditEvent
+	auditMu      sync.Mutex
+	auditEvents  []AuditEvent
+	usageRecords []APIKeyUsageRecord
 
 	// Error injection
-	UpsertContractErr           error
-	GetContractErr              error
-	ListContractsErr            error
-	DeleteContractsErr          error
-	SetContractLabelErr         error
-	GetGlobalStatsErr           error
-	ListEventsErr               error
-	ListInvocationsErr          error
-	GetInvocationErr            error
-	GetCallEdgesErr             error
-	ListStorageErr              error
-	GetContractStatsErr         error
-	RecentEventsErr             error
-	RecentInvocationsErr        error
-	CreateAPIKeyErr             error
-	GetAPIKeyErr                error
-	UpsertUserErr               error
-	GetUserErr                  error
-	ListUpgradesErr             error
-	GetHealthScoreErr           error
-	RecordContractVersionErr    error
-	ListContractVersionsErr     error
-	GetLatestContractVersionErr error
+	UpsertContractErr                 error
+	GetContractErr                    error
+	UntrackContractErr                error
+	ListContractsErr                  error
+	DeleteContractsErr                error
+	SetContractLabelErr               error
+	GetGlobalStatsErr                 error
+	ListEventsErr                     error
+	ListInvocationsErr                error
+	GetInvocationErr                  error
+	GetInvocationWithEventsErr        error
+	GetCallEdgesErr                   error
+	ListStorageErr                    error
+	GetContractStatsErr               error
+	GetContractInvocationStatsErr     error
+	GetContractResourcePercentilesErr error
+	RecentEventsErr                   error
+	RecentInvocationsErr              error
+	CreateAPIKeyErr                   error
+	GetAPIKeyErr                      error
+	UpsertUserErr                     error
+	GetUserErr                        error
+	ListUpgradesErr                   error
+	GetHealthScoreErr                 error
+	RecordContractVersionErr          error
+	ListContractVersionsErr           error
+	GetLatestContractVersionErr       error
 
 	UpsertVerificationErr error
 	GetVerificationErr    error
@@ -117,17 +129,24 @@ func (m *MockStore) ListLabels(_ context.Context, workspaceID, query string) ([]
 			out = append(out, label)
 		}
 	}
+	// The postgres query orders by label.
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Label < out[j].Label })
+	if len(out) > 100 {
+		out = out[:100]
+	}
 	return out, nil
 }
 
 func (m *MockStore) ResolveLabel(_ context.Context, workspaceID, query string) (Label, error) {
+	// The postgres query gives workspace-scoped labels priority over public
+	// ones with the same name.
 	for _, label := range m.labels {
-		if label.Public && strings.EqualFold(label.Label, query) {
+		if !label.Public && label.WorkspaceID == workspaceID && strings.EqualFold(label.Label, query) {
 			return label, nil
 		}
 	}
 	for _, label := range m.labels {
-		if !label.Public && label.WorkspaceID == workspaceID && strings.EqualFold(label.Label, query) {
+		if label.Public && strings.EqualFold(label.Label, query) {
 			return label, nil
 		}
 	}
@@ -155,6 +174,8 @@ func NewMockStore() *MockStore {
 		failedEvents:          make(map[int64]FailedEvent),
 		labels:                make([]Label, 0),
 		watchedAccounts:       make(map[string]WatchedAccount),
+		contractTokens:        make(map[string]TokenMetadata),
+		MockExportJobStore:    NewMockExportJobStore(),
 	}
 }
 
@@ -168,6 +189,9 @@ func (m *MockStore) UpsertContract(_ context.Context, c Contract) error {
 		c.AddedAt = time.Now()
 	}
 	m.contracts[c.ID] = c
+	if c.Token != nil {
+		m.contractTokens[c.ID] = *c.Token
+	}
 	return nil
 }
 
@@ -180,7 +204,23 @@ func (m *MockStore) GetContract(_ context.Context, contractID string) (Contract,
 		return Contract{}, ErrNotFound
 	}
 	c.Tags = m.tagsFor(contractID)
+	if t, ok := m.contractTokens[contractID]; ok {
+		c.Token = &t
+	}
 	return c, nil
+}
+
+func (m *MockStore) UntrackContract(_ context.Context, contractID string) error {
+	if m.UntrackContractErr != nil {
+		return m.UntrackContractErr
+	}
+	c, ok := m.contracts[contractID]
+	if !ok {
+		return ErrNotFound
+	}
+	c.Status = "paused"
+	m.contracts[contractID] = c
+	return nil
 }
 
 func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {
@@ -189,6 +229,8 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []Contract
 	for _, c := range m.contracts {
@@ -205,6 +247,9 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 			continue
 		}
 		c.Tags = m.tagsFor(c.ID)
+		if t, ok := m.contractTokens[c.ID]; ok {
+			c.Token = &t
+		}
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -288,6 +333,7 @@ func (m *MockStore) DeleteContracts(_ context.Context, ids []string) (int64, err
 	for id := range removed {
 		delete(m.syncStates, id)
 		delete(m.healthScores, id)
+		delete(m.healthScoreHistory, id)
 		for _, items := range m.watchlist {
 			delete(items, id)
 		}
@@ -348,18 +394,49 @@ func (m *MockStore) GetGlobalStats(_ context.Context) (GlobalStats, error) {
 	if m.GetGlobalStatsErr != nil {
 		return GlobalStats{}, m.GetGlobalStatsErr
 	}
-	return m.globalStats, nil
+	if m.globalStatsSet {
+		return m.globalStats, nil
+	}
+	// Derive counts from the in-memory rows so the mock mirrors the
+	// postgres aggregate query instead of returning a bare stub.
+	return GlobalStats{
+		TrackedContracts:    int64(len(m.contracts)),
+		TotalEvents:         int64(len(m.events)),
+		TotalInvocations:    int64(len(m.invocations)),
+		TotalStorageEntries: int64(len(m.storageEntries)),
+	}, nil
 }
 
 // SetGlobalStats lets tests control what GetGlobalStats returns.
 func (m *MockStore) SetGlobalStats(gs GlobalStats) {
 	m.globalStats = gs
+	m.globalStatsSet = true
 }
 
 func (m *MockStore) CreateNextMonthPartition(_ context.Context) error { return nil }
 
 func (m *MockStore) CreateMonthlyPartitionIfNotExists(_ context.Context, _ int, _ int) error {
 	return nil
+}
+
+func (m *MockStore) MaintainPartitions(_ context.Context, _ int) error { return nil }
+
+func (m *MockStore) ArchiveOldEvents(_ context.Context, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, errors.New("retention days must be positive")
+	}
+	cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+	var remaining []Event
+	var moved int64
+	for _, e := range m.events {
+		if e.LedgerClosedAt.Before(cutoff) {
+			moved++
+		} else {
+			remaining = append(remaining, e)
+		}
+	}
+	m.events = remaining
+	return moved, nil
 }
 
 func (m *MockStore) GetIndexerCursor(_ context.Context, network string) (uint32, error) {
@@ -406,6 +483,8 @@ func (m *MockStore) ListEvents(_ context.Context, contractID, cursor string, lim
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []Event
 	for _, e := range m.events {
@@ -498,6 +577,8 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []Invocation
 	for _, inv := range m.invocations {
@@ -511,6 +592,9 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 			continue
 		}
 		if f.FunctionName != "" && inv.FunctionName != f.FunctionName {
+			continue
+		}
+		if f.FailureCategory != "" && inv.FailureCategory != f.FailureCategory {
 			continue
 		}
 		out = append(out, inv)
@@ -589,6 +673,37 @@ func (m *MockStore) GetInvocation(_ context.Context, txHash string) (Invocation,
 	return Invocation{}, ErrNotFound
 }
 
+// GetInvocationWithEvents returns the invocation for the given contract and tx hash,
+// along with any associated events emitted by that transaction.
+func (m *MockStore) GetInvocationWithEvents(_ context.Context, contractID, txHash string) (Invocation, []Event, error) {
+	if m.GetInvocationWithEventsErr != nil {
+		return Invocation{}, nil, m.GetInvocationWithEventsErr
+	}
+	var targetInv *Invocation
+	for _, inv := range m.invocations {
+		if inv.ContractID == contractID && strings.EqualFold(inv.TxHash, txHash) {
+			targetInv = &inv
+			break
+		}
+	}
+	if targetInv == nil {
+		return Invocation{}, nil, ErrNotFound
+	}
+	events := make([]Event, 0)
+	for _, e := range m.events {
+		if strings.EqualFold(e.TxHash, txHash) {
+			events = append(events, e)
+		}
+	}
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].Ledger != events[j].Ledger {
+			return events[i].Ledger < events[j].Ledger
+		}
+		return events[i].ID < events[j].ID
+	})
+	return *targetInv, events, nil
+}
+
 // GetCallEdges returns the call graph edges of a transaction, ordered by span id
 // so parents precede children.
 func (m *MockStore) GetCallEdges(_ context.Context, txHash string) ([]CallEdge, error) {
@@ -616,6 +731,8 @@ func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, c
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	out := make([]Invocation, 0, len(m.invocations))
 	for _, inv := range m.invocations {
@@ -641,6 +758,9 @@ func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, c
 			continue
 		}
 		if f.Until != nil && inv.LedgerClosedAt.After(*f.Until) {
+			continue
+		}
+		if f.FailureCategory != "" && inv.FailureCategory != f.FailureCategory {
 			continue
 		}
 		out = append(out, inv)
@@ -681,6 +801,8 @@ func (m *MockStore) ListStorageEntries(_ context.Context, contractID, cursor str
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []StorageEntry
 	for _, se := range m.storageEntries {
@@ -704,6 +826,75 @@ func (m *MockStore) ListStorageEntries(_ context.Context, contractID, cursor str
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+func (m *MockStore) GetContractInvocationStats(_ context.Context, contractID string) (ContractInvocationStats, error) {
+	if m.GetContractInvocationStatsErr != nil {
+		return ContractInvocationStats{}, m.GetContractInvocationStatsErr
+	}
+
+	now := time.Now()
+	cutoffs := []time.Time{now.Add(-24 * time.Hour), now.Add(-7 * 24 * time.Hour), now.Add(-30 * 24 * time.Hour)}
+	values := [3][]Invocation{}
+	for _, inv := range m.invocations {
+		if inv.ContractID != contractID || inv.LedgerClosedAt.Before(cutoffs[2]) || inv.LedgerClosedAt.After(now) {
+			continue
+		}
+		for i, cutoff := range cutoffs {
+			if !inv.LedgerClosedAt.Before(cutoff) {
+				values[i] = append(values[i], inv)
+			}
+		}
+	}
+	return ContractInvocationStats{
+		Last24Hours: invocationWindowStats(values[0]),
+		Last7Days:   invocationWindowStats(values[1]),
+		Last30Days:  invocationWindowStats(values[2]),
+	}, nil
+}
+
+func invocationWindowStats(invocations []Invocation) InvocationWindowStats {
+	stats := InvocationWindowStats{
+		InvocationCount:    int64(len(invocations)),
+		FailuresByCategory: NewFailureCounts(),
+	}
+	fees := make([]float64, 0, len(invocations))
+	cpus := make([]float64, 0, len(invocations))
+	for _, inv := range invocations {
+		if inv.Status != "SUCCESS" {
+			stats.FailedInvocations++
+		}
+		if inv.FailureCategory != "" {
+			AddFailureCount(stats.FailuresByCategory, inv.FailureCategory, 1)
+		}
+		fees = append(fees, float64(inv.ResourceFeeCharged))
+		cpus = append(cpus, float64(inv.CPUInsn))
+		stats.AvgFee += float64(inv.ResourceFeeCharged)
+		stats.AvgCPU += float64(inv.CPUInsn)
+	}
+	if stats.InvocationCount > 0 {
+		stats.FailureRate = float64(stats.FailedInvocations) / float64(stats.InvocationCount)
+		stats.AvgFee /= float64(stats.InvocationCount)
+		stats.AvgCPU /= float64(stats.InvocationCount)
+		stats.P95Fee = percentile95(fees)
+		stats.P95CPU = percentile95(cpus)
+	}
+	return stats
+}
+
+func percentile95(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sort.Float64s(values)
+	position := float64(len(values)-1) * 0.95
+	lower := int(position)
+	upper := lower + 1
+	if upper >= len(values) {
+		return values[lower]
+	}
+	fraction := position - float64(lower)
+	return values[lower] + (values[upper]-values[lower])*fraction
 }
 
 func (m *MockStore) GetContractStats(_ context.Context, contractID, window string) (ContractStats, error) {
@@ -964,7 +1155,7 @@ func (m *MockStore) GetAPIKeyByHash(_ context.Context, hash string) (APIKey, err
 		return APIKey{}, m.GetAPIKeyErr
 	}
 	for _, k := range m.apiKeys {
-		if k.KeyHash == hash && !k.Revoked() {
+		if k.KeyHash == hash && !k.Revoked() && !k.Expired(time.Now()) {
 			return k, nil
 		}
 	}
@@ -997,7 +1188,8 @@ func (m *MockStore) RotateAPIKey(_ context.Context, id, newHash, newPrefix strin
 }
 
 func (m *MockStore) ListAPIKeys(_ context.Context, cursor string, limit int) ([]APIKey, string, error) {
-	if limit <= 0 {
+	// Same page-size bounds as the postgres implementation.
+	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	var out []APIKey
@@ -1018,7 +1210,9 @@ func (m *MockStore) ListAPIKeys(_ context.Context, cursor string, limit int) ([]
 
 func (m *MockStore) RevokeAPIKey(_ context.Context, id string) error {
 	for i := range m.apiKeys {
-		if m.apiKeys[i].ID == id {
+		// A key that is already revoked is no longer found, matching the
+		// postgres UPDATE ... WHERE revoked_at IS NULL.
+		if m.apiKeys[i].ID == id && !m.apiKeys[i].Revoked() {
 			now := time.Now().UTC()
 			m.apiKeys[i].RevokedAt = &now
 			return nil
@@ -1149,6 +1343,9 @@ func (m *MockStore) RotateSigningSecret(_ context.Context, id, secret, hash stri
 func (m *MockStore) ListAll(_ context.Context) ([]AlertSubscription, error) {
 	out := make([]AlertSubscription, len(m.alertSubscriptions))
 	copy(out, m.alertSubscriptions)
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
 	return out, nil
 }
 
@@ -1348,12 +1545,24 @@ func (m *MockStore) SearchContracts(_ context.Context, query string, limit int) 
 	searchPattern := strings.ToLower(query)
 
 	for _, c := range m.contracts {
-		if strings.Contains(strings.ToLower(c.ID), searchPattern) || strings.Contains(strings.ToLower(c.Label), searchPattern) {
-			results = append(results, c)
-			if len(results) >= limit {
-				break
-			}
+		c.Tags = m.tagsFor(c.ID)
+		if t, ok := m.contractTokens[c.ID]; ok {
+			c.Token = &t
 		}
+		match := strings.Contains(strings.ToLower(c.ID), searchPattern) || strings.Contains(strings.ToLower(c.Label), searchPattern)
+		if !match && c.Token != nil {
+			match = strings.Contains(strings.ToLower(c.Token.AssetCode), searchPattern) || strings.Contains(strings.ToLower(c.Token.Symbol), searchPattern)
+		}
+		if match {
+			results = append(results, c)
+		}
+	}
+	// The postgres query orders by added_at DESC before applying the limit.
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].AddedAt.After(results[j].AddedAt)
+	})
+	if len(results) > limit {
+		results = results[:limit]
 	}
 
 	return results, nil
@@ -1429,3 +1638,26 @@ func (m *MockStore) SearchFunctions(_ context.Context, query string, limit int) 
 	}
 	return matched, nil
 }
+
+// ---- ContractTokenStore -----------------------------------------------------
+
+func (m *MockStore) UpsertContractToken(_ context.Context, contractID string, tok TokenMetadata) error {
+	if contractID == "" {
+		return errors.New("contract_id is required")
+	}
+	m.contractTokens[contractID] = tok
+	if c, ok := m.contracts[contractID]; ok {
+		c.Token = &tok
+		m.contracts[contractID] = c
+	}
+	return nil
+}
+
+func (m *MockStore) GetContractToken(_ context.Context, contractID string) (TokenMetadata, error) {
+	tok, ok := m.contractTokens[contractID]
+	if !ok {
+		return TokenMetadata{}, ErrNotFound
+	}
+	return tok, nil
+}
+

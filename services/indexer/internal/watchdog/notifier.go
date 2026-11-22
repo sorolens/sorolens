@@ -12,8 +12,11 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/sorolens/sorolens/services/indexer/internal/webhooksig"
 )
 
 // Notification channel types (alert_subscriptions.channel_type, issue #127).
@@ -44,6 +47,10 @@ type AlertSubscription struct {
 	ChannelType string
 	// RoutingKey is the PagerDuty integration key (pagerduty only).
 	RoutingKey string
+	// SigningSecret is the whsec_... key every delivery is signed with. It is
+	// never logged. A subscription without one is never delivered to, so an
+	// unsigned payload cannot be sent.
+	SigningSecret string
 }
 
 // explorerURL links an alert to the transaction that raised it.
@@ -461,6 +468,19 @@ func DispatchAlerts(ctx context.Context, alert Alert, subStore AlertSubscription
 		return
 	}
 
+	// Issue #789: Skip notifications for acknowledged, currently snoozed, or resolved alerts.
+	if alert.State == "acknowledged" || alert.State == "resolved" {
+		return
+	}
+	if alert.State == "snoozed" && alert.SnoozedUntil != nil && time.Now().UTC().Before(*alert.SnoozedUntil) {
+		return
+	}
+
+	// Issue #790: Skip notifications if suppressed by maintenance window.
+	if alert.MaintenanceWindowID != nil {
+		return
+	}
+
 	subs, err := subStore.ListByContract(ctx, alert.ContractID)
 	if err != nil {
 		logger.Error("dispatch alerts: list subscriptions", "err", err, "contract_id", alert.ContractID)
@@ -483,8 +503,20 @@ func deliver(ctx context.Context, sub AlertSubscription, alert Alert, logger *sl
 		logger.Error("dispatch alerts: format", "err", err, "subscription_id", sub.ID, "channel", sub.ChannelType)
 		return
 	}
+	if sub.SigningSecret == "" {
+		logger.Error("dispatch alerts: subscription has no signing secret; refusing to send an unsigned delivery",
+			"subscription_id", sub.ID, "channel", sub.ChannelType)
+		return
+	}
+
+	// Sign once, before the retry loop: a 5xx retry re-sends the same signed
+	// body and timestamp, so the receiver verifies both attempts identically.
+	timestamp := time.Now().Unix()
+	signatureHeader := webhooksig.SignatureHeaderValue(
+		timestamp, webhooksig.Sign(sub.SigningSecret, timestamp, body))
+
 	for attempt := 1; attempt <= 2; attempt++ {
-		status, err := post(ctx, url, body)
+		status, err := post(ctx, url, body, timestamp, signatureHeader)
 		switch {
 		case err != nil:
 			logger.Error("dispatch alerts: request failed", "err", err, "subscription_id", sub.ID, "attempt", attempt)
@@ -499,12 +531,14 @@ func deliver(ctx context.Context, sub AlertSubscription, alert Alert, logger *sl
 	}
 }
 
-func post(ctx context.Context, url string, body []byte) (int, error) {
+func post(ctx context.Context, url string, body []byte, timestamp int64, signatureHeader string) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(webhooksig.TimestampHeader, strconv.FormatInt(timestamp, 10))
+	req.Header.Set(webhooksig.SignatureHeader, signatureHeader)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return 0, err

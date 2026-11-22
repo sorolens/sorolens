@@ -161,6 +161,16 @@ vi.mock("@/components/ContractChangelogPanel", () => ({
 vi.mock("@/components/ContractForecastChart", () => ({
   ContractForecastChart: () => <div />,
 }));
+vi.mock("@/components/ContractTokensPanel", () => ({
+  ContractTokensPanel: () => <div data-testid="tokens-panel" />,
+}));
+const mockHasTokenActivity = vi.fn((id: string) => {
+  void id;
+  return Promise.resolve(false);
+});
+vi.mock("@/lib/tokens", () => ({
+  hasTokenActivity: (id: string) => mockHasTokenActivity(id),
+}));
 
 expect.extend(matchers);
 
@@ -210,6 +220,9 @@ async function retryButtonFor(title: string): Promise<HTMLElement> {
 describe("ContractDetailPage failure states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    if (typeof window !== "undefined" && window.location) {
+      window.location.hash = "";
+    }
     mockGetContract.mockResolvedValue(CONTRACT);
     mockGetContractStats.mockResolvedValue(STATS);
     mockGetActivitySeries.mockResolvedValue({ events: [], invocations: [] });
@@ -231,9 +244,72 @@ describe("ContractDetailPage failure states", () => {
     await renderPage();
 
     expect(await screen.findByText("My Contract")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Events" }));
     expect(await screen.findByText("evt-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Storage" }));
     expect(await screen.findByText("storage-1")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows the Tokens tab only for contracts with token activity", async () => {
+    await renderPage();
+    expect(await screen.findByText("My Contract")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Tokens" })).toBeNull();
+
+    cleanup();
+    mockHasTokenActivity.mockResolvedValueOnce(true);
+    await renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Tokens" }));
+    expect(await screen.findByTestId("tokens-panel")).toBeInTheDocument();
+  });
+
+  it("links to the comparison, pre-selected on this contract (#607)", async () => {
+    await renderPage();
+
+    // The test's next/link mock only forwards href/children, so query by role.
+    const link = await screen.findByRole("link", { name: "Compare" });
+    expect(link.getAttribute("href")).toBe(
+      `/compare?ids=${encodeURIComponent(ID)}`
+    );
+  });
+
+  it("renders tabs (Overview, Events, Invocations, Storage, Watchdog) with accessibility attributes", async () => {
+    await renderPage();
+
+    const tablist = await screen.findByRole("tablist", {
+      name: "Contract sections",
+    });
+    expect(tablist).toBeInTheDocument();
+
+    const overviewTab = screen.getByRole("tab", { name: "Overview" });
+    const eventsTab = screen.getByRole("tab", { name: "Events" });
+    const invocationsTab = screen.getByRole("tab", { name: "Invocations" });
+    const storageTab = screen.getByRole("tab", { name: "Storage" });
+    const watchdogTab = screen.getByRole("tab", { name: "Watchdog" });
+
+    expect(overviewTab).toHaveAttribute("aria-selected", "true");
+    expect(eventsTab).toHaveAttribute("aria-selected", "false");
+    expect(invocationsTab).toHaveAttribute("aria-selected", "false");
+    expect(storageTab).toHaveAttribute("aria-selected", "false");
+    expect(watchdogTab).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.click(invocationsTab);
+    expect(overviewTab).toHaveAttribute("aria-selected", "false");
+    expect(invocationsTab).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("links to Watchdog and Compare in header", async () => {
+    await renderPage();
+
+    const watchdogLink = await screen.findByRole("link", { name: "Watchdog" });
+    expect(watchdogLink.getAttribute("href")).toBe(
+      `/watchdog?contract=${encodeURIComponent(ID)}`
+    );
+
+    const compareLink = await screen.findByRole("link", { name: "Compare" });
+    expect(compareLink.getAttribute("href")).toBe(
+      `/compare?ids=${encodeURIComponent(ID)}`
+    );
   });
 
   it("shows a retryable error, not 'Contract not found', when the contract request fails", async () => {
@@ -298,6 +374,7 @@ describe("ContractDetailPage failure states", () => {
   it("shows an error instead of an empty events table when events fail, and retries", async () => {
     mockGetContractEvents.mockRejectedValueOnce(new Error("events down"));
     await renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Events" }));
 
     expect(
       await screen.findByText("Couldn't load events.")
@@ -313,6 +390,7 @@ describe("ContractDetailPage failure states", () => {
   it("shows an error instead of an empty storage panel when storage fails, and retries", async () => {
     mockGetContractStorage.mockRejectedValueOnce(new Error("storage down"));
     await renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Storage" }));
 
     expect(
       await screen.findByText("Couldn't load storage entries.")
@@ -331,6 +409,7 @@ describe("ContractDetailPage failure states", () => {
       .mockRejectedValueOnce(new Error("page 2 down"))
       .mockResolvedValueOnce({ events: [{ id: "evt-2" }], next_cursor: "" });
     await renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Events" }));
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Load more events" })
@@ -359,6 +438,7 @@ describe("ContractDetailPage failure states", () => {
         next_cursor: "",
       });
     await renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: "Storage" }));
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Load more storage" })

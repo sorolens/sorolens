@@ -72,6 +72,27 @@ type Invocation struct {
 	ApplicationOrder   int            `json:"application_order"`
 }
 
+// InvocationDetail mirrors GET /api/v1/contracts/{id}/invocations/{tx_hash}:
+// the invocation plus the events its transaction emitted.
+type InvocationDetail struct {
+	Invocation
+	Events []Event `json:"events"`
+}
+
+// InvocationTrace mirrors the parts of GET /api/v1/invocations/{tx_hash}/trace
+// the CLI needs. Root.ContractID is empty when the transaction has call edges
+// but no invocation row.
+type InvocationTrace struct {
+	TxHash  string `json:"tx_hash"`
+	Status  string `json:"status"`
+	Network string `json:"network"`
+	Ledger  uint32 `json:"ledger"`
+	Root    *struct {
+		ContractID   string `json:"contract_id"`
+		FunctionName string `json:"function_name"`
+	} `json:"root"`
+}
+
 // GlobalStats mirrors the API global stats response.
 type GlobalStats struct {
 	TrackedContracts    int64 `json:"tracked_contracts"`
@@ -198,6 +219,54 @@ type ContractSnapshot struct {
 	FirstTrackedLedger uint32         `json:"first_tracked_ledger"`
 	Storage            []StorageEntry `json:"storage"`
 	LastEvent          *Event         `json:"last_event"`
+}
+
+// CompareVolumePoint is one hourly event-volume bucket in a comparison.
+type CompareVolumePoint struct {
+	Timestamp string `json:"timestamp"` // RFC3339 UTC hour start
+	Count     int64  `json:"count"`
+}
+
+// CompareContractEntry is one contract's metrics from GET /api/v1/compare.
+type CompareContractEntry struct {
+	ID               string               `json:"id"`
+	Network          string               `json:"network"`
+	Label            string               `json:"label"`
+	Status           string               `json:"status"`
+	Tracked          bool                 `json:"tracked"`
+	HasData          bool                 `json:"has_data"`
+	EventCount       int64                `json:"event_count"`
+	InvocationCount  int64                `json:"invocation_count"`
+	AvgCPU           float64              `json:"avg_cpu"`
+	AvgFee           float64              `json:"avg_fee"`
+	HealthScore      *int32               `json:"health_score"`
+	LastSyncedLedger uint32               `json:"last_synced_ledger"`
+	EventVolume      []CompareVolumePoint `json:"event_volume"`
+	// Error is set when this contract's lookups failed while the rest of the
+	// comparison succeeded. One bad contract never fails the whole request.
+	Error string `json:"error,omitempty"`
+}
+
+// CompareResponse mirrors GET /api/v1/compare.
+type CompareResponse struct {
+	Window    string                 `json:"window"`
+	Contracts []CompareContractEntry `json:"contracts"`
+}
+
+// InvocationWindowStats aggregates invocation outcomes for one window.
+type InvocationWindowStats struct {
+	InvocationCount   int64   `json:"invocation_count"`
+	FailedInvocations int64   `json:"failed_invocations"`
+	FailureRate       float64 `json:"failure_rate"`
+	AvgFee            float64 `json:"avg_fee"`
+	P95Fee            float64 `json:"p95_fee"`
+	AvgCPU            float64 `json:"avg_cpu"`
+	P95CPU            float64 `json:"p95_cpu"`
+}
+
+// ContractInvocationStats mirrors GET /api/v1/contracts/{id}/invocations/stats.
+type ContractInvocationStats struct {
+	Windows map[string]InvocationWindowStats `json:"windows"`
 }
 
 // ContractSnapshotExport mirrors the portable contract snapshot export document.

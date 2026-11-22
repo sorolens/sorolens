@@ -73,6 +73,9 @@ describe("design tokens", () => {
     }
 
     for (const name of referenced) {
+      // Skip malformed fragments such as the literal "var(--color-" used in
+      // assertions about unstyled elements.
+      if (name.endsWith("-")) continue;
       if (!light.has(name)) missing.push(`${name} (light)`);
       if (!dark.has(name)) missing.push(`${name} (dark)`);
     }

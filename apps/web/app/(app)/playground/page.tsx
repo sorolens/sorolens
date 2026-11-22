@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { EndpointEntry, endpointsByTag } from "@/lib/openapi";
-import { loadSettings } from "@/lib/settings";
 import { useLocale } from "@/lib/i18n";
 import {
   buildCurl,
@@ -10,8 +9,7 @@ import {
   highlightJson,
   type ResponseState,
 } from "@/lib/playground";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import { API_URL } from "@/lib/config";
 
 export default function PlaygroundPage() {
   const { t } = useLocale();
@@ -28,11 +26,6 @@ export default function PlaygroundPage() {
   const [response, setResponse] = useState<ResponseState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-
-  useEffect(() => {
-    const savedApiKey = loadSettings().apiKey;
-    if (savedApiKey) setApiKey(savedApiKey);
-  }, []);
 
   const curl = buildCurl(
     selected.method,
@@ -202,7 +195,7 @@ export default function PlaygroundPage() {
                   }
                 }}
                 placeholder={p.description}
-                className="w-full rounded-md border border-[var(--color-border)] bg-black/30 px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+                className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
               />
             </div>
           ))}
@@ -221,7 +214,7 @@ export default function PlaygroundPage() {
                 onChange={(e) => setBody(e.target.value)}
                 rows={6}
                 spellCheck={false}
-                className="w-full rounded-md border border-[var(--color-border)] bg-black/30 px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
+                className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
               />
             </div>
           )}
@@ -240,7 +233,7 @@ export default function PlaygroundPage() {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={t("playground.pasteKey")}
-              className="w-full rounded-md border border-[var(--color-border)] bg-black/30 px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+              className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
             />
           </div>
 
@@ -270,7 +263,7 @@ export default function PlaygroundPage() {
             </div>
             <pre
               data-testid="curl-command"
-              className="overflow-x-auto rounded-md bg-black/30 p-3 font-mono text-[11px] leading-relaxed"
+              className="overflow-x-auto rounded-md bg-[var(--color-bg)] p-3 font-mono text-[11px] leading-relaxed"
             >
               {curl}
             </pre>

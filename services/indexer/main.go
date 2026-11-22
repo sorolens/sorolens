@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,10 +18,12 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/sorolens/sorolens/services/indexer/internal/coordinator"
 	"github.com/sorolens/sorolens/services/indexer/internal/expiryalert"
+	"github.com/sorolens/sorolens/services/indexer/internal/lock"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/pgstore"
 	"github.com/sorolens/sorolens/services/indexer/internal/poller"
 	"github.com/sorolens/sorolens/services/indexer/internal/rulesengine"
+	"github.com/sorolens/sorolens/services/indexer/internal/scval"
 	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
 )
 
@@ -32,18 +35,24 @@ func main() {
 		defer tp.Shutdown(context.Background())
 	}
 
-	mode := flag.String("mode", "once", "Run mode: once or continuous")
+	mode := flag.String("mode", "once", "Run mode: once, continuous, or import (history from Hubble; needs -tags hubble)")
 	maxDuration := flag.Duration("max-duration", 270*time.Second, "Maximum duration for a single pass (once mode)")
 	pollInterval := flag.Duration("poll-interval", 5*time.Minute, "Sleep between passes (continuous mode)")
 	ledgerWindow := flag.Uint("ledger-window", 120960, "Ledger window per getEvents call")
-	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics HTTP server (empty disables it)")
-	workers := envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))
+	backfillWindow := flag.Uint("backfill-window", uint(envInt("INDEXER_BACKFILL_WINDOW", int(poller.DefaultBackfillWindow))), "Ledgers scanned per new-contract backfill step")
+	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics, /healthz and /readyz HTTP server (empty disables it)")
+	redisURL := flag.String("redis-url", envString("REDIS_URL", "redis://localhost:6379"), "Redis URL for the run lock (empty disables locking, falls back to stub)")
+	// INDEXER_CONCURRENCY (or the older INDEXER_WORKERS) is how many contracts
+	// one pass indexes concurrently; defaults to the number of usable CPUs.
+	concurrency := flag.Int("concurrency", envInt("INDEXER_CONCURRENCY", envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))), "Bounded worker pool concurrency for contract processing")
+	workers := *concurrency
 	// Sharded topology (issue #272). The default role preserves the original
 	// single-process behaviour: index every contract in this process.
 	role := flag.String("role", envString("INDEXER_ROLE", "all"), "Role: all, coordinator, or worker")
 	shardCount := flag.Int("shard-count", envInt("INDEXER_SHARD_COUNT", coordinator.DefaultShardCount), "Number of shards contracts are spread across")
 	workerID := flag.String("worker-id", envString("INDEXER_WORKER_ID", ""), "Unique id for this process (required for coordinator and worker roles)")
-	shardStoreKind := flag.String("shard-store", envString("INDEXER_SHARD_STORE", ""), "Shard store backend: memory (single node only)")
+	shardStoreKind := flag.String("shard-store", envString("INDEXER_SHARD_STORE", ""), "Shard store backend: postgres (shared) or memory (single node only)")
+	importOpts := registerImportFlags(flag.CommandLine)
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -66,13 +75,18 @@ func main() {
 
 	cfg := poller.Config{
 		Workers:              workers,
+		Concurrency:          *concurrency,
 		LedgerWindow:         uint32(*ledgerWindow),
+		BackfillWindow:       uint32(*backfillWindow),
 		PollInterval:         *pollInterval,
 		MaxDuration:          *maxDuration,
 		AnomalyEnabled:       envBool("INDEXER_ANOMALY_ENABLED", false),
 		AnomalyLookbackHours: envInt("INDEXER_ANOMALY_LOOKBACK_HOURS", 168),
 		AnomalySigma:         envFloat("INDEXER_ANOMALY_SIGMA", 3),
 		AnomalyMinHistory:    envInt("INDEXER_ANOMALY_MIN_HISTORY", 12),
+		// On by default; set INDEXER_FN_CALL_FALLBACK=false to only trust
+		// diagnostic events for function names (issue #504).
+		DisableFnCallFallback: !envBool("INDEXER_FN_CALL_FALLBACK", true),
 	}
 
 	// Soroban RPC: one client per configured network (issue #499).
@@ -97,7 +111,33 @@ func main() {
 		os.Exit(1)
 	}
 	defer st.Close()
-	redis := &stubRedis{}
+
+	// Import mode (issue #511) copies one contract's history from Hubble and
+	// exits; it never starts the poller.
+	if *mode == "import" {
+		if err := runImport(context.Background(), importOpts, importStore{st}, rpcClients, newBigQueryReader, os.Stdout, log); err != nil {
+			log.Error("indexer: history import failed", "err", err)
+			st.Close()
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Redis: the run lock. A missing or unreachable Redis stops the indexer
+	// at startup so two runners can never process the same ledgers.
+	var redis poller.RedisClient = &stubRedis{}
+	var redisLock *lock.Lock
+	if *redisURL != "" {
+		rl, err := lock.New(*redisURL)
+		if err != nil {
+			log.Error("indexer: redis unavailable", "err", err)
+			os.Exit(1)
+		}
+		defer rl.Close()
+		redisLock = rl
+		redis = rl
+		log.Info("indexer: redis run lock connected", "url", *redisURL)
+	}
 
 	// Wire watchdog interceptor. pgstore does not implement the watchdog
 	// surface yet, so wdStore stays nil and the interceptor no-ops; the
@@ -107,6 +147,8 @@ func main() {
 	if ws, ok := storeAny.(watchdogStore); ok {
 		wdStore = ws
 	}
+	// WATCHDOG_ENABLED set to "true" makes the indexer record watchdog heartbeats
+	// for WATCHDOG_CONTRACT_ID while it polls.
 	watchdogEnabled := os.Getenv("WATCHDOG_ENABLED") == "true"
 	watchdogContractID := os.Getenv("WATCHDOG_CONTRACT_ID")
 
@@ -148,11 +190,15 @@ func main() {
 	}
 
 	// Prometheus metrics (issue #198): the indexer exposes per-network lag on
-	// /metrics. The server is best-effort — a bind failure is logged but does
-	// not stop indexing.
+	// /metrics, plus /healthz and /readyz for orchestrators. The server is
+	// best-effort — a bind failure is logged but does not stop indexing.
 	recorder := metrics.New()
 	p.SetMetrics(recorder)
-	metricsSrv := startMetricsServer(*metricsAddr, recorder.Handler(), log)
+	hc := &healthChecker{postgres: st.Pool()}
+	if redisLock != nil {
+		hc.redis = redisLock
+	}
+	metricsSrv := startMetricsServer(*metricsAddr, recorder.Handler(), hc, log)
 	defer func() {
 		if metricsSrv == nil {
 			return
@@ -207,7 +253,7 @@ func main() {
 		}
 
 	case "coordinator", "worker":
-		shardStore, err := buildShardStore(*shardStoreKind)
+		shardStore, err := buildShardStore(*shardStoreKind, st)
 		if err != nil {
 			log.Error("indexer: shard store unavailable", "role", *role, "err", err)
 			os.Exit(1)
@@ -264,7 +310,7 @@ func decodeWatchdogValue(valueXDR string) map[string]any {
 	if valueXDR == "" {
 		return out
 	}
-	sc, err := decodeScVal(valueXDR)
+	sc, err := scval.Decode(valueXDR)
 	if err != nil {
 		return out
 	}
@@ -356,14 +402,47 @@ func (w *watchdogInterceptor) GetEvents(ctx context.Context, start, end uint32, 
 
 // ---- stub adapters ---------------------------------------------------------
 
-// stubRedis always grants the advisory lock. Redis-backed locking is not
-// wired yet, so run a single indexer per contract set.
+// stubRedis always grants the advisory lock. Used when REDIS_URL is unset so
+// a single indexer can run without Redis.
 type stubRedis struct{}
 
 func (r *stubRedis) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
 	return true, nil
 }
-func (r *stubRedis) Del(ctx context.Context, key string) error { return nil }
+func (r *stubRedis) Del(ctx context.Context, key, expectedValue string) error { return nil }
+func (r *stubRedis) Renew(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error) {
+	return true, nil
+}
+
+// pinger is the dependency surface the health checks need. Both *lock.Lock
+// (Redis) and *pgxpool.Pool (Postgres) satisfy it.
+type pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// healthChecker reports dependency state for /healthz and /readyz.
+// A service is healthy when both Redis (when configured) and Postgres respond
+// to a ping.
+type healthChecker struct {
+	redis    pinger // nil when locking is disabled (stub)
+	postgres pinger
+}
+
+// check pings Redis and Postgres and returns a combined error if either is
+// unreachable. It is best-effort: one failing dependency is reported but the
+// other is still checked.
+func (h *healthChecker) check(ctx context.Context) error {
+	var errs []error
+	if h.redis != nil {
+		if err := h.redis.Ping(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("redis: %w", err))
+		}
+	}
+	if err := h.postgres.Ping(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("postgres: %w", err))
+	}
+	return errors.Join(errs...)
+}
 
 // reportPanic reports a recovered panic to Sentry (a no-op when Sentry was
 // not initialized), flushes, then re-panics so the process still crashes and
@@ -378,28 +457,61 @@ func reportPanic() {
 	}
 }
 
-// startMetricsServer serves the Prometheus /metrics endpoint on addr and
-// returns the server so the caller can shut it down. It returns nil when addr
-// is empty, which disables the endpoint. Startup errors are logged rather than
-// fatal so a port clash never takes the indexer down.
-func startMetricsServer(addr string, h http.Handler, log *slog.Logger) *http.Server {
+// startMetricsServer serves Prometheus /metrics plus /healthz and /readyz on
+// addr and returns the server so the caller can shut it down. It returns nil
+// when addr is empty, which disables the endpoint. Startup errors are logged
+// rather than fatal so a port clash never takes the indexer down.
+func startMetricsServer(addr string, h http.Handler, hc *healthChecker, log *slog.Logger) *http.Server {
 	if addr == "" {
 		return nil
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", h)
+	mux.HandleFunc("/healthz", hc.serveHealthz)
+	mux.HandleFunc("/readyz", hc.serveReadyz)
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
-		log.Info("indexer metrics listening", "addr", addr, "path", "/metrics")
+		log.Info("indexer metrics listening", "addr", addr,
+			"paths", []string{"/metrics", "/healthz", "/readyz"})
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("indexer metrics server", "addr", addr, "err", err)
 		}
 	}()
 	return srv
+}
+
+// healthResponse is the JSON body served by /healthz and /readyz. Error is
+// omitted on success; encoding/json escapes it, so dependency error text with
+// quotes, backslashes or newlines still produces a valid JSON document.
+type healthResponse struct {
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+func (h *healthChecker) serveHealthz(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	status := http.StatusOK
+	resp := healthResponse{Status: "ok"}
+	if err := h.check(ctx); err != nil {
+		status = http.StatusServiceUnavailable
+		resp = healthResponse{Status: "fail", Error: err.Error()}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func (h *healthChecker) serveReadyz(w http.ResponseWriter, r *http.Request) {
+	// readyz uses the same dependency checks as healthz: when the indexer can
+	// reach Redis and Postgres it is ready to serve traffic.
+	h.serveHealthz(w, r)
 }
 
 // envString reads a string env var with a default.
@@ -465,20 +577,23 @@ func envDuration(key string, def time.Duration) time.Duration {
 
 // buildShardStore resolves the store the coordinator and workers share.
 //
-// Only the in-memory backend is wired today. It keeps the shard table inside
-// one process, which is enough to exercise the topology on a single node but is
-// NOT safe for replicas: each process would hold its own table and believe it
-// owned every shard. Real horizontal scaling needs a coordinator.Store backed
-// by Postgres; the schema it must write is
-// apps/api/internal/db/migrations/000030_indexer_shards.up.sql. It fails fast
-// rather than silently degrading to per-process ownership.
-func buildShardStore(kind string) (coordinator.Store, error) {
+// postgres is the multi-replica backend: every process reads and writes the
+// indexer_shards / indexer_workers tables in the database the indexer already
+// uses, and leadership is a session-scoped advisory lock (see
+// docs/indexer-sharding.md). memory keeps the shard table inside one process,
+// which is enough to exercise the topology on a single node but is NOT safe for
+// replicas: each process would hold its own table and believe it owned every
+// shard. Anything else fails fast rather than silently degrading to
+// per-process ownership.
+func buildShardStore(kind string, st *pgstore.Store) (coordinator.Store, error) {
 	switch kind {
+	case "postgres":
+		return pgstore.NewCoordinatorStore(st.Pool()), nil
 	case "memory":
 		return coordinator.NewMemStore(), nil
 	default:
 		return nil, fmt.Errorf(
-			"set --shard-store=memory for a single-node run; multi-replica sharding requires a shared coordinator.Store (see docs/indexer-sharding.md), got %q",
+			"set --shard-store=postgres for a shared deployment or --shard-store=memory for a single-node run (see docs/indexer-sharding.md), got %q",
 			kind,
 		)
 	}

@@ -226,10 +226,10 @@ func TestDispatchDeliversEachChannel(t *testing.T) {
 	defer srv.Close()
 
 	subs := fakeSubStore{subs: []AlertSubscription{
-		{ID: "w", ChannelType: ChannelWebhook, WebhookURL: srv.URL + "/webhook", SeverityFilter: "Critical"},
-		{ID: "s", ChannelType: ChannelSlack, WebhookURL: srv.URL + "/slack", SeverityFilter: "Critical"},
-		{ID: "d", ChannelType: ChannelDiscord, WebhookURL: srv.URL + "/discord", SeverityFilter: "Critical"},
-		{ID: "p", ChannelType: ChannelPagerDuty, WebhookURL: srv.URL + "/pagerduty", RoutingKey: "k", SeverityFilter: "Critical"},
+		{ID: "w", ChannelType: ChannelWebhook, WebhookURL: srv.URL + "/webhook", SeverityFilter: "Critical", SigningSecret: "whsec_test_w"},
+		{ID: "s", ChannelType: ChannelSlack, WebhookURL: srv.URL + "/slack", SeverityFilter: "Critical", SigningSecret: "whsec_test_s"},
+		{ID: "d", ChannelType: ChannelDiscord, WebhookURL: srv.URL + "/discord", SeverityFilter: "Critical", SigningSecret: "whsec_test_d"},
+		{ID: "p", ChannelType: ChannelPagerDuty, WebhookURL: srv.URL + "/pagerduty", RoutingKey: "k", SeverityFilter: "Critical", SigningSecret: "whsec_test_p"},
 	}}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError + 4}))
 	DispatchAlerts(context.Background(), criticalAlert(), subs, logger)
@@ -275,10 +275,65 @@ func TestDispatchSkipsNonCritical(t *testing.T) {
 	defer srv.Close()
 	a := criticalAlert()
 	a.Severity = "Warning"
-	DispatchAlerts(context.Background(), a, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Warning"}}},
+	DispatchAlerts(context.Background(), a, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Warning", SigningSecret: "whsec_test_w"}}},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	time.Sleep(50 * time.Millisecond)
 	if called {
 		t.Fatal("non-critical alerts must not be dispatched")
+	}
+}
+
+func TestDispatchSkipsAcknowledgedAndSnoozed(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
+	defer srv.Close()
+
+	// Acknowledged
+	aAck := criticalAlert()
+	aAck.State = "acknowledged"
+	DispatchAlerts(context.Background(), aAck, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Critical", SigningSecret: "whsec_test_w"}}},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	time.Sleep(50 * time.Millisecond)
+	if called {
+		t.Fatal("acknowledged alert must not be dispatched")
+	}
+
+	// Snoozed (future)
+	future := time.Now().Add(1 * time.Hour)
+	aSnz := criticalAlert()
+	aSnz.State = "snoozed"
+	aSnz.SnoozedUntil = &future
+	DispatchAlerts(context.Background(), aSnz, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Critical", SigningSecret: "whsec_test_w"}}},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	time.Sleep(50 * time.Millisecond)
+	if called {
+		t.Fatal("snoozed alert must not be dispatched")
+	}
+
+	// Resolved
+	aRes := criticalAlert()
+	aRes.State = "resolved"
+	DispatchAlerts(context.Background(), aRes, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Critical", SigningSecret: "whsec_test_w"}}},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	time.Sleep(50 * time.Millisecond)
+	if called {
+		t.Fatal("resolved alert must not be dispatched")
+	}
+}
+
+func TestDispatchSkipsMaintenanceWindow(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
+	defer srv.Close()
+
+	winID := int64(42)
+	aMaint := criticalAlert()
+	aMaint.MaintenanceWindowID = &winID
+
+	DispatchAlerts(context.Background(), aMaint, fakeSubStore{subs: []AlertSubscription{{ID: "w", WebhookURL: srv.URL, SeverityFilter: "Critical", SigningSecret: "whsec_test_w"}}},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	time.Sleep(50 * time.Millisecond)
+	if called {
+		t.Fatal("alert inside maintenance window must not be dispatched")
 	}
 }

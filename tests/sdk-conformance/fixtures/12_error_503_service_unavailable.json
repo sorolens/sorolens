@@ -1,0 +1,24 @@
+{
+  "id": "12_error_503_service_unavailable",
+  "description": "503 Service Unavailable downstream failure",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/stats/activity"
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "UNAVAILABLE",
+        "message": "service temporarily unavailable"
+      }
+    }
+  },
+  "expected": {
+    "status": 503,
+    "error_code": "UNAVAILABLE"
+  }
+}

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     title: "Contracts — Sorolens",
     description:
       "Browse, search, and track Soroban smart contracts indexed by Sorolens.",
-    url: "https://sorolens.dev/contracts",
+    url: "/contracts",
   },
   alternates: {
     canonical: "/contracts",

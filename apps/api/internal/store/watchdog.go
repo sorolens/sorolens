@@ -37,14 +37,37 @@ type HealthCheck struct {
 	Timestamp  time.Time
 }
 
-// ContractAlert is a single alert emitted for a monitored contract.
+// Alert lifecycle state constants (issue #789).
+const (
+	AlertStateOpen         = "open"
+	AlertStateAcknowledged = "acknowledged"
+	AlertStateSnoozed      = "snoozed"
+	AlertStateResolved     = "resolved"
+)
+
+var (
+	ErrInvalidTransition = errors.New("store: invalid alert state transition")
+	ErrAlertNotFound      = errors.New("store: alert not found")
+)
+
+// ContractAlert is a single alert emitted for a monitored contract with lifecycle state.
 type ContractAlert struct {
-	ContractID string
-	Severity   string // Info | Warning | Critical
-	Message    string
-	Ledger     int64
-	TxHash     string
-	Timestamp  time.Time
+	ID                  int64
+	ContractID          string
+	Severity            string // Info | Warning | Critical
+	Message             string
+	Ledger              int64
+	TxHash              string
+	Timestamp           time.Time
+	State               string // open | acknowledged | snoozed | resolved
+	AcknowledgedAt      *time.Time
+	AcknowledgedBy      string
+	SnoozedUntil        *time.Time
+	SnoozedAt           *time.Time
+	SnoozedBy           string
+	ResolvedAt          *time.Time
+	ResolvedBy          string
+	MaintenanceWindowID *int64
 }
 
 // WatchdogStats is the summary shown on the watchdog dashboard.
@@ -112,6 +135,11 @@ type WatchdogStore interface {
 	GetMonitoredContract(ctx context.Context, contractID string) (MonitoredContract, error)
 	ListHealthChecks(ctx context.Context, contractID string, limit int) ([]HealthCheck, error)
 	ListAlerts(ctx context.Context, contractID, severity, network, cursor string, limit int) ([]ContractAlert, string, error)
+	ListAlertsWithState(ctx context.Context, contractID, severity, network, state, cursor string, limit int) ([]ContractAlert, string, error)
+	AcknowledgeAlert(ctx context.Context, id int64, user string) (ContractAlert, error)
+	SnoozeAlert(ctx context.Context, id int64, duration time.Duration, user string) (ContractAlert, error)
+	ResolveAlert(ctx context.Context, id int64, user string) (ContractAlert, error)
+	GetAlertCountsByState(ctx context.Context, contractID, network string) (map[string]int64, error)
 	GetWatchdogStats(ctx context.Context, network string) (WatchdogStats, error)
 
 	// GetContractUptime computes the uptime percentage for the given contract
@@ -158,11 +186,19 @@ func (s *postgresStore) InsertHealthCheck(ctx context.Context, h HealthCheck) er
 }
 
 func (s *postgresStore) InsertContractAlert(ctx context.Context, a ContractAlert) error {
+	st := a.State
+	if st == "" {
+		st = AlertStateOpen
+	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO contract_alerts (contract_id, severity, message, ledger, tx_hash, timestamp)
-		VALUES ($1,$2,$3,$4,$5,$6)
+		INSERT INTO contract_alerts (
+			contract_id, severity, message, ledger, tx_hash, timestamp,
+			state, maintenance_window_id
+		)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		ON CONFLICT (tx_hash, contract_id) DO NOTHING`,
 		a.ContractID, a.Severity, a.Message, a.Ledger, a.TxHash, a.Timestamp,
+		st, a.MaintenanceWindowID,
 	)
 	return err
 }
@@ -246,20 +282,50 @@ func (s *postgresStore) ListHealthChecks(ctx context.Context, contractID string,
 	return out, rows.Err()
 }
 
-// ListAlerts returns one page of the alerts feed, newest first. The
-// optional cursor ("" for the first page) is a (timestamp, contract_id)
-// keyset pair; rows strictly older than the pair are returned, so paging
-// stays stable when new alerts arrive between requests (issue #150).
-//
-// The returned cursor points at the last row of this page and is empty when
-// the feed is exhausted. An undecodable cursor yields ErrInvalidCursor.
+type scannableRow interface {
+	Scan(dest ...any) error
+}
+
+func scanContractAlertRow(row scannableRow, a *ContractAlert) error {
+	var ackBy, snzBy, resBy *string
+	err := row.Scan(
+		&a.ID, &a.ContractID, &a.Severity, &a.Message, &a.Ledger, &a.TxHash, &a.Timestamp,
+		&a.State, &a.AcknowledgedAt, &ackBy, &a.SnoozedUntil, &a.SnoozedAt, &snzBy,
+		&a.ResolvedAt, &resBy, &a.MaintenanceWindowID,
+	)
+	if err != nil {
+		return err
+	}
+	if ackBy != nil {
+		a.AcknowledgedBy = *ackBy
+	}
+	if snzBy != nil {
+		a.SnoozedBy = *snzBy
+	}
+	if resBy != nil {
+		a.ResolvedBy = *resBy
+	}
+	// Snooze expiration: if snoozed_until is in the past, effectively open
+	if a.State == AlertStateSnoozed && a.SnoozedUntil != nil && a.SnoozedUntil.Before(time.Now().UTC()) {
+		a.State = AlertStateOpen
+	}
+	return nil
+}
+
+// ListAlerts delegates to ListAlertsWithState with an empty state filter.
 func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, network, cursor string, limit int) ([]ContractAlert, string, error) {
+	return s.ListAlertsWithState(ctx, contractID, severity, network, "", cursor, limit)
+}
+
+// ListAlertsWithState returns one page of the alerts feed, newest first, with optional state filtering.
+func (s *postgresStore) ListAlertsWithState(ctx context.Context, contractID, severity, network, state, cursor string, limit int) ([]ContractAlert, string, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	var cursorTS time.Time
 	var cursorID string
-	if cursor != "" {
+	hasCursor := cursor != ""
+	if hasCursor {
 		ts, id, err := decodeAlertsCursor(cursor)
 		if err != nil {
 			return nil, "", err
@@ -267,16 +333,19 @@ func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, ne
 		cursorTS, cursorID = ts, id
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT a.contract_id, a.severity, a.message, a.ledger, a.tx_hash, a.timestamp
+		SELECT a.id, a.contract_id, a.severity, a.message, a.ledger, a.tx_hash, a.timestamp,
+		       a.state, a.acknowledged_at, a.acknowledged_by, a.snoozed_until, a.snoozed_at, a.snoozed_by,
+		       a.resolved_at, a.resolved_by, a.maintenance_window_id
 		FROM contract_alerts a
 		JOIN monitored_contracts m ON m.contract_id = a.contract_id
 		WHERE ($1 = '' OR a.contract_id = $1)
 		  AND ($2 = '' OR a.severity = $2)
 		  AND ($3 = '' OR m.network = $3)
-		  AND ($4 = '' OR (a.timestamp, a.contract_id) < ($4::timestamptz, $5))
+		  AND ($4 = '' OR a.state = $4)
+		  AND (NOT $5 OR (a.timestamp, a.contract_id) < ($6::timestamptz, $7))
 		ORDER BY a.timestamp DESC, a.contract_id DESC
-		LIMIT $6`, contractID, severity, network,
-		cursorTS.Format(time.RFC3339Nano), cursorID, limit+1)
+		LIMIT $8`, contractID, severity, network, state,
+		hasCursor, cursorTS, cursorID, limit+1)
 	if err != nil {
 		return nil, "", fmt.Errorf("list alerts: %w", err)
 	}
@@ -285,7 +354,7 @@ func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, ne
 	var out []ContractAlert
 	for rows.Next() {
 		var a ContractAlert
-		if err := rows.Scan(&a.ContractID, &a.Severity, &a.Message, &a.Ledger, &a.TxHash, &a.Timestamp); err != nil {
+		if err := scanContractAlertRow(rows, &a); err != nil {
 			return nil, "", err
 		}
 		out = append(out, a)
@@ -299,6 +368,141 @@ func (s *postgresStore) ListAlerts(ctx context.Context, contractID, severity, ne
 		out = out[:limit]
 	}
 	return out, next, nil
+}
+
+func (s *postgresStore) AcknowledgeAlert(ctx context.Context, id int64, user string) (ContractAlert, error) {
+	var a ContractAlert
+	row := s.pool.QueryRow(ctx, `
+		SELECT a.id, a.contract_id, a.severity, a.message, a.ledger, a.tx_hash, a.timestamp,
+		       a.state, a.acknowledged_at, a.acknowledged_by, a.snoozed_until, a.snoozed_at, a.snoozed_by,
+		       a.resolved_at, a.resolved_by, a.maintenance_window_id
+		FROM contract_alerts a
+		WHERE a.id = $1`, id)
+	err := scanContractAlertRow(row, &a)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ContractAlert{}, ErrAlertNotFound
+	} else if err != nil {
+		return ContractAlert{}, err
+	}
+
+	if a.State == AlertStateResolved {
+		return ContractAlert{}, fmt.Errorf("%w: cannot acknowledge an already resolved alert", ErrInvalidTransition)
+	}
+
+	now := time.Now().UTC()
+	updateRow := s.pool.QueryRow(ctx, `
+		UPDATE contract_alerts
+		SET state = $2, acknowledged_at = $3, acknowledged_by = $4
+		WHERE id = $1
+		RETURNING id, contract_id, severity, message, ledger, tx_hash, timestamp,
+		          state, acknowledged_at, acknowledged_by, snoozed_until, snoozed_at, snoozed_by,
+		          resolved_at, resolved_by, maintenance_window_id`,
+		id, AlertStateAcknowledged, now, user)
+	err = scanContractAlertRow(updateRow, &a)
+	return a, err
+}
+
+func (s *postgresStore) SnoozeAlert(ctx context.Context, id int64, duration time.Duration, user string) (ContractAlert, error) {
+	if duration <= 0 {
+		return ContractAlert{}, fmt.Errorf("%w: snooze duration must be positive", ErrInvalidTransition)
+	}
+	var a ContractAlert
+	row := s.pool.QueryRow(ctx, `
+		SELECT a.id, a.contract_id, a.severity, a.message, a.ledger, a.tx_hash, a.timestamp,
+		       a.state, a.acknowledged_at, a.acknowledged_by, a.snoozed_until, a.snoozed_at, a.snoozed_by,
+		       a.resolved_at, a.resolved_by, a.maintenance_window_id
+		FROM contract_alerts a
+		WHERE a.id = $1`, id)
+	err := scanContractAlertRow(row, &a)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ContractAlert{}, ErrAlertNotFound
+	} else if err != nil {
+		return ContractAlert{}, err
+	}
+
+	if a.State == AlertStateResolved {
+		return ContractAlert{}, fmt.Errorf("%w: cannot snooze an already resolved alert", ErrInvalidTransition)
+	}
+
+	now := time.Now().UTC()
+	until := now.Add(duration)
+	updateRow := s.pool.QueryRow(ctx, `
+		UPDATE contract_alerts
+		SET state = $2, snoozed_at = $3, snoozed_by = $4, snoozed_until = $5
+		WHERE id = $1
+		RETURNING id, contract_id, severity, message, ledger, tx_hash, timestamp,
+		          state, acknowledged_at, acknowledged_by, snoozed_until, snoozed_at, snoozed_by,
+		          resolved_at, resolved_by, maintenance_window_id`,
+		id, AlertStateSnoozed, now, user, until)
+	err = scanContractAlertRow(updateRow, &a)
+	return a, err
+}
+
+func (s *postgresStore) ResolveAlert(ctx context.Context, id int64, user string) (ContractAlert, error) {
+	var a ContractAlert
+	row := s.pool.QueryRow(ctx, `
+		SELECT a.id, a.contract_id, a.severity, a.message, a.ledger, a.tx_hash, a.timestamp,
+		       a.state, a.acknowledged_at, a.acknowledged_by, a.snoozed_until, a.snoozed_at, a.snoozed_by,
+		       a.resolved_at, a.resolved_by, a.maintenance_window_id
+		FROM contract_alerts a
+		WHERE a.id = $1`, id)
+	err := scanContractAlertRow(row, &a)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ContractAlert{}, ErrAlertNotFound
+	} else if err != nil {
+		return ContractAlert{}, err
+	}
+
+	if a.State == AlertStateResolved {
+		return ContractAlert{}, fmt.Errorf("%w: alert is already resolved", ErrInvalidTransition)
+	}
+
+	now := time.Now().UTC()
+	updateRow := s.pool.QueryRow(ctx, `
+		UPDATE contract_alerts
+		SET state = $2, resolved_at = $3, resolved_by = $4
+		WHERE id = $1
+		RETURNING id, contract_id, severity, message, ledger, tx_hash, timestamp,
+		          state, acknowledged_at, acknowledged_by, snoozed_until, snoozed_at, snoozed_by,
+		          resolved_at, resolved_by, maintenance_window_id`,
+		id, AlertStateResolved, now, user)
+	err = scanContractAlertRow(updateRow, &a)
+	return a, err
+}
+
+func (s *postgresStore) GetAlertCountsByState(ctx context.Context, contractID, network string) (map[string]int64, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			CASE
+				WHEN a.state = 'snoozed' AND a.snoozed_until IS NOT NULL AND a.snoozed_until <= NOW() THEN 'open'
+				ELSE a.state
+			END AS effective_state,
+			COUNT(*)
+		FROM contract_alerts a
+		JOIN monitored_contracts m ON m.contract_id = a.contract_id
+		WHERE ($1 = '' OR a.contract_id = $1)
+		  AND ($2 = '' OR m.network = $2)
+		GROUP BY effective_state`, contractID, network)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := map[string]int64{
+		AlertStateOpen:         0,
+		AlertStateAcknowledged: 0,
+		AlertStateSnoozed:      0,
+		AlertStateResolved:     0,
+	}
+	for rows.Next() {
+		var st string
+		var cnt int64
+		if err := rows.Scan(&st, &cnt); err != nil {
+			return nil, err
+		}
+		counts[st] = cnt
+	}
+	return counts, rows.Err()
 }
 
 func (s *postgresStore) GetWatchdogStats(ctx context.Context, network string) (WatchdogStats, error) {

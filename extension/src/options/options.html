@@ -34,7 +34,8 @@
             />
           </label>
           <p class="hint">
-            Create one in the dashboard (Admin → API keys). A key with
+            Create one in the dashboard under <strong>Settings → Browser
+            extension</strong> (or Settings → API keys). A key with
             <code>write:contracts</code> lets the extension register contracts
             that are not indexed yet; read-only keys still work for status and
             watchlists. Stored on this device only (<code>storage.local</code>),
@@ -59,10 +60,12 @@
             />
           </label>
           <p class="hint">
-            The watchlist endpoints key on this identity. To share a watchlist
-            with the dashboard, copy <code>sorolens_user_id</code> from
-            <code>localStorage</code> on the Sorolens web app. Leave empty to
-            generate a new one.
+            Leave this empty unless an operator told you to set it. Since issue
+            #518 the API ignores a bare <code>X-User-ID</code> header, so copying
+            an ID out of the dashboard no longer shares a watchlist. The key
+            above is the credential: a key bound to a user acts as that user, and
+            an empty field here simply gets a generated ID that is sent along and
+            ignored.
           </p>
         </fieldset>
 
@@ -90,6 +93,34 @@
             <input id="show-inline-buttons" type="checkbox" />
             <span>Show inline buttons on explorer pages</span>
           </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Notifications</legend>
+          <label class="checkbox">
+            <input id="notifications-enabled" type="checkbox" />
+            <span>Show browser notifications for new alerts</span>
+          </label>
+          <p class="hint">
+            While this is on, the extension checks your watchlist every five
+            minutes in the background, updates the toolbar badge and raises one
+            notification per new alert. Polling backs off automatically when the
+            API is unavailable or rate-limits the extension.
+          </p>
+          <div class="severity-options">
+            <label class="checkbox">
+              <input id="notify-critical" type="checkbox" />
+              <span>Critical</span>
+            </label>
+            <label class="checkbox">
+              <input id="notify-warning" type="checkbox" />
+              <span>Warning</span>
+            </label>
+            <label class="checkbox">
+              <input id="notify-info" type="checkbox" />
+              <span>Info</span>
+            </label>
+          </div>
         </fieldset>
 
         <div class="actions">

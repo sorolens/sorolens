@@ -151,6 +151,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/admin/audit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List audit events (admin role only)
+     * @description Structured trail of every state-changing API request, newest first. Only a SHA-256 hash of each request body is stored, never the body.
+     */
+    get: operations["listAuditEventsRoot"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/admin/audit": {
     parameters: {
       query?: never;
@@ -180,6 +200,58 @@ export interface paths {
     };
     /** Global index statistics */
     get: operations["getGlobalStats"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/exports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Create an asynchronous export job */
+    post: operations["createExportJob"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/exports/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get export job status and progress */
+    get: operations["getExportJob"];
+    put?: never;
+    post?: never;
+    /** Delete an export job */
+    delete: operations["deleteExportJob"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/exports/{id}/download": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Download completed export file */
+    get: operations["downloadExport"];
     put?: never;
     post?: never;
     delete?: never;
@@ -234,7 +306,17 @@ export interface paths {
     get: operations["getContract"];
     put?: never;
     post?: never;
-    delete?: never;
+    /**
+     * Untrack one contract
+     * @description Stops tracking a contract. Untracking is a soft delete: the contract
+     *     status flips to "paused" while the row and all indexed history are
+     *     retained, and the indexer stops polling it. Re-registering the
+     *     contract resumes tracking. Deleting a contract that is already paused
+     *     is a no-op; deleting one that was never registered returns 404. This
+     *     differs from the batch "untrack" action, which permanently deletes
+     *     the contracts and their indexed data.
+     */
+    delete: operations["deleteContract"];
     options?: never;
     head?: never;
     patch?: never;
@@ -385,6 +467,40 @@ export interface paths {
     };
     /** List contract invocations */
     get: operations["listContractInvocations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/contracts/{id}/invocations/stats": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Aggregate invocation outcomes and resource usage for a contract */
+    get: operations["getContractInvocationStats"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/contracts/{id}/invocations/{tx_hash}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get contract invocation details with associated events */
+    get: operations["getContractInvocation"];
     put?: never;
     post?: never;
     delete?: never;
@@ -556,6 +672,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/me/api-keys": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List the signed-in user's API keys
+     * @description Self-service counterpart to `/api/v1/api-keys` (issue #613). Requires a
+     *     workspace session token; only keys bound to that user are returned and
+     *     key material is never included.
+     */
+    get: operations["listMyApiKeys"];
+    put?: never;
+    /**
+     * Create an API key for the signed-in user
+     * @description Creates a key bound to the workspace session's user. The plaintext key
+     *     is returned once. `admin:*` cannot be granted here.
+     */
+    post: operations["createMyApiKey"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/api-keys/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke one of the signed-in user's API keys */
+    delete: operations["revokeMyApiKey"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/api-keys": {
     parameters: {
       query?: never;
@@ -603,6 +763,28 @@ export interface paths {
     put?: never;
     /** Rotate an API key */
     post: operations["rotateApiKey"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/usage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get API key usage metrics and quota status
+     * @description Returns aggregated request counts, endpoint group breakdowns, daily timeline,
+     *     and monthly quota usage for the caller's API key, or for any key if requested
+     *     by an admin (issue #792).
+     */
+    get: operations["getApiKeyUsage"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1016,6 +1198,58 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v2/exports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Create an asynchronous export job */
+    post: operations["createExportJobV2"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/exports/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get export job status and progress */
+    get: operations["getExportJobV2"];
+    put?: never;
+    post?: never;
+    /** Delete an export job */
+    delete: operations["deleteExportJobV2"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/exports/{id}/download": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Download completed export file */
+    get: operations["downloadExportV2"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v2/contracts": {
     parameters: {
       query?: never;
@@ -1062,7 +1296,13 @@ export interface paths {
     get: operations["v2GetContract"];
     put?: never;
     post?: never;
-    delete?: never;
+    /**
+     * Untrack one contract
+     * @description Stops tracking a contract. Same semantics as DELETE /api/v1/contracts/{id}:
+     *     the contract status flips to "paused" while the row and all indexed history
+     *     are retained, and the indexer stops polling it.
+     */
+    delete: operations["v2DeleteContract"];
     options?: never;
     head?: never;
     patch?: never;
@@ -1258,6 +1498,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v2/contracts/{id}/event-schemas": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Inferred and declared event schemas for a contract (v2)
+     * @description Returns inferred event schemas observed from indexed events emitted by the contract, complemented by any declared SEP-48 interface specs.
+     */
+    get: operations["v2ContractEventSchemas"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v2/watchlist": {
     parameters: {
       query?: never;
@@ -1412,6 +1672,75 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v2/integrations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List notification integrations (v2 passthrough) */
+    get: operations["v2ListIntegrations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/integrations/{id}/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Send a test message through an integration (v2 passthrough) */
+    post: operations["v2TestIntegration"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/me/api-keys": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the signed-in user's API keys (v2 passthrough) */
+    get: operations["v2ListMyApiKeys"];
+    put?: never;
+    /** Create an API key for the signed-in user (v2 passthrough) */
+    post: operations["v2CreateMyApiKey"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/me/api-keys/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke one of the signed-in user's API keys (v2 passthrough) */
+    delete: operations["v2RevokeMyApiKey"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v2/api-keys": {
     parameters: {
       query?: never;
@@ -1459,6 +1788,23 @@ export interface paths {
     put?: never;
     /** Rotate an API key (admin) */
     post: operations["v2RotateAPIKey"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/usage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get API key usage metrics and quota status (v2 passthrough) */
+    get: operations["v2GetApiKeyUsage"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1994,6 +2340,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/contracts/{id}/event-schemas": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get inferred and declared event schemas for a contract
+     * @description Returns inferred event schemas observed from indexed events emitted by the contract, complemented by any declared SEP-48 interface specs.
+     */
+    get: operations["getContractEventSchemas"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/contracts/{id}/wasm": {
     parameters: {
       query?: never;
@@ -2112,6 +2478,51 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/integrations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List notification integrations
+     * @description Returns the catalog of notification integrations (Slack, Discord,
+     *     Telegram) with setup instructions and whether this deployment is
+     *     configured to deliver to each one (issue #612).
+     */
+    get: operations["listIntegrations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/integrations/{id}/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Send a test message through an integration
+     * @description Sends a real test message through the integration's configured channel
+     *     so users can verify their setup end to end (issue #612). Returns 409
+     *     when the integration is not configured and 502 when the remote endpoint
+     *     rejects the message.
+     */
+    post: operations["testIntegration"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/alerts": {
     parameters: {
       query?: never;
@@ -2129,6 +2540,129 @@ export interface paths {
     put?: never;
     post?: never;
     delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/alerts/counts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get alert counts broken down by state
+     * @description Returns counts of open, acknowledged, snoozed, and resolved alerts.
+     */
+    get: operations["getAlertCounts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/alerts/{id}/ack": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Acknowledge an alert
+     * @description Transitions an alert from open or snoozed to acknowledged.
+     */
+    post: operations["acknowledgeAlert"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/alerts/{id}/snooze": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Snooze an alert
+     * @description Snoozes an alert for a specified duration, suppressing notifications until the snooze expires.
+     */
+    post: operations["snoozeAlert"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/alerts/{id}/resolve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resolve an alert
+     * @description Marks an alert as resolved.
+     */
+    post: operations["resolveAlert"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/maintenance-windows": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List maintenance windows
+     * @description Returns scheduled maintenance windows, optionally filtered by scope or target ID.
+     */
+    get: operations["listMaintenanceWindows"];
+    put?: never;
+    /**
+     * Create a maintenance window
+     * @description Creates a new maintenance window during which alert notifications are suppressed.
+     */
+    post: operations["createMaintenanceWindow"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/maintenance-windows/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a maintenance window by ID */
+    get: operations["getMaintenanceWindow"];
+    /** Update a maintenance window */
+    put: operations["updateMaintenanceWindow"];
+    post?: never;
+    /** Delete a maintenance window */
+    delete: operations["deleteMaintenanceWindow"];
     options?: never;
     head?: never;
     patch?: never;
@@ -2384,6 +2918,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description A notification integration surfaced on the web Integrations page (issue */
+    Integration: {
+      /** @enum {string} */
+      id: "slack" | "discord" | "telegram";
+      name: string;
+      description: string;
+      /** Format: uri */
+      install_url: string;
+      setup_steps: string[];
+      /** @description Whether this deployment has the environment variables needed to deliver through the integration. */
+      configured: boolean;
+    };
     ContractNote: {
       /** Format: uuid */
       id: string;
@@ -2480,6 +3026,57 @@ export interface components {
       added_at: string;
       /** @description User-defined tags, sorted ascending. Always present; empty when the contract has no tags. */
       tags: string[];
+      backfill?: components["schemas"]["ContractBackfill"];
+      token?: components["schemas"]["TokenMetadata"];
+    };
+    /** @description Enriched metadata for Stellar Asset Contracts (SAC) or tokens. */
+    TokenMetadata: {
+      /** @description Stellar asset code (e.g. USDC or native). */
+      asset_code: string;
+      /** @description Stellar asset issuer account ID (or empty for native). */
+      issuer: string;
+      /**
+       * Format: int32
+       * @description Number of decimal places (SAC deterministically uses 7).
+       */
+      decimals: number;
+      /** @description Token symbol. */
+      symbol: string;
+      /** @description Token name or asset identifier. */
+      name: string;
+    };
+    /** @description Progress of the new-contract backfill, returned by the contract detail endpoint once the indexer has started it. Ledgers are scanned from newest_ledger down to oldest_ledger, and a restarted indexer resumes at next_ledger. */
+    ContractBackfill: {
+      /**
+       * Format: int64
+       * @description Oldest ledger the backfill will reach.
+       */
+      oldest_ledger: number;
+      /**
+       * Format: int64
+       * @description Chain head when the backfill started.
+       */
+      newest_ledger: number;
+      /**
+       * Format: int64
+       * @description Newest ledger not scanned yet. Below oldest_ledger once finished.
+       */
+      next_ledger: number;
+      /** Format: int64 */
+      ledgers_total: number;
+      /** Format: int64 */
+      ledgers_done: number;
+      /**
+       * Format: double
+       * @description Scanned share of the range, from 0 to 100.
+       */
+      percent: number;
+      /** Format: date-time */
+      started_at: string;
+      /** Format: date-time */
+      updated_at: string;
+      /** Format: date-time */
+      completed_at: string | null;
     };
     ContractTagRequest: {
       /** @description Tag label. Trimmed and lowercased before storage. */
@@ -2556,6 +3153,41 @@ export interface components {
       /** Format: int64 */
       ledger_write_byte: number;
       application_order: number;
+      failure_category?: components["schemas"]["FailureCategory"];
+      /**
+       * @description Raw error behind failure_category, kept for every failed invocation: the host error as "Error(<Type>, <Code>)" (for example "Error(Contract, #4)" or "Error(Budget, ExceededLimit)"), else the operation result code ("INVOKE_HOST_FUNCTION_TRAPPED") or transaction result code ("txSOROBAN_INVALID"), or "UNKNOWN" when nothing could be decoded. Unknown enum values are kept as numbers, for example "Error(#12, #3)". Omitted with failure_category.
+       * @example Error(Contract, #4)
+       */
+      failure_code?: string;
+    };
+    /**
+     * @description Why a failed invocation failed, derived from the Soroban host error and the InvokeHostFunction result code (see docs/failure-categories.md). Set only on FAILED invocations; omitted for every other status and for invocations indexed before classification existed. budget_exceeded: the invocation ran out of declared resources (host error type Budget, or result RESOURCE_LIMIT_EXCEEDED / INSUFFICIENT_REFUNDABLE_FEE). contract_error: the contract returned its own error code (type Contract). auth_failure: authorization failed (type Auth). storage: a ledger entry was missing or archived (type Storage, or result ENTRY_ARCHIVED). wasm_trap: the contract's Wasm trapped (type WasmVm). other: anything else, including unknown or undecodable errors; failure_code keeps the raw value.
+     * @enum {string}
+     */
+    FailureCategory:
+      | "budget_exceeded"
+      | "contract_error"
+      | "auth_failure"
+      | "storage"
+      | "wasm_trap"
+      | "other";
+    /** @description Classified failures per FailureCategory. Every category is present, with 0 when it has none. */
+    FailureCountsByCategory: {
+      /** Format: int64 */
+      budget_exceeded: number;
+      /** Format: int64 */
+      contract_error: number;
+      /** Format: int64 */
+      auth_failure: number;
+      /** Format: int64 */
+      storage: number;
+      /** Format: int64 */
+      wasm_trap: number;
+      /** Format: int64 */
+      other: number;
+    };
+    InvocationDetail: components["schemas"]["Invocation"] & {
+      events: components["schemas"]["Event"][];
     };
     StorageEntry: {
       contract_id: string;
@@ -2587,6 +3219,46 @@ export interface components {
       /** Format: int64 */
       window_invocation_count: number;
       window_duration: string;
+      resource_percentiles?: components["schemas"]["ResourcePercentiles"];
+    };
+    PercentileValues: {
+      /** Format: double */
+      p50: number;
+      /** Format: double */
+      p95: number;
+      /** Format: double */
+      p99: number;
+    };
+    /** @description Per-invocation resource usage percentiles over the requested window. Returned by the contract stats endpoint; every value is 0 when the window has no invocations. */
+    ResourcePercentiles: {
+      cpu_insn: components["schemas"]["PercentileValues"];
+      mem_byte: components["schemas"]["PercentileValues"];
+      fee: components["schemas"]["PercentileValues"];
+    };
+    ContractInvocationStats: {
+      windows: {
+        "24h": components["schemas"]["InvocationWindowStats"];
+        "7d": components["schemas"]["InvocationWindowStats"];
+        "30d": components["schemas"]["InvocationWindowStats"];
+      };
+    };
+    /** @description Fees are measured in stroops, CPU in instructions, and failure_rate is a ratio from 0 to 1. failures_by_category counts classified failures; failed invocations indexed before classification existed count toward failed_invocations only, so the categories can sum to less. */
+    InvocationWindowStats: {
+      /** Format: int64 */
+      invocation_count: number;
+      /** Format: int64 */
+      failed_invocations: number;
+      /** Format: double */
+      failure_rate: number;
+      /** Format: double */
+      avg_fee: number;
+      /** Format: double */
+      p95_fee: number;
+      /** Format: double */
+      avg_cpu: number;
+      /** Format: double */
+      p95_cpu: number;
+      failures_by_category: components["schemas"]["FailureCountsByCategory"];
     };
     ForecastPoint: {
       /** Format: date */
@@ -2642,6 +3314,54 @@ export interface components {
        * @description When the key's secret was last rotated in place.
        */
       rotated_at?: string | null;
+      /**
+       * Format: date-time
+       * @description When the key expires, or null if it does not expire.
+       */
+      expires_at?: string | null;
+      /** @description Monthly request quota, or null if unmetered. */
+      monthly_quota?: number | null;
+    };
+    UsageTimelinePoint: {
+      /** @example 2026-11-20 */
+      date: string;
+      /**
+       * Format: int64
+       * @example 125
+       */
+      total_requests: number;
+      by_group: {
+        [key: string]: number;
+      };
+    };
+    KeyUsageSummary: {
+      /** @example key_01h7... */
+      key_id: string;
+      /** Format: date-time */
+      from: string;
+      /** Format: date-time */
+      to: string;
+      /**
+       * Format: int64
+       * @example 1540
+       */
+      total_requests: number;
+      by_group: {
+        [key: string]: number;
+      };
+      timeline: components["schemas"]["UsageTimelinePoint"][];
+      /** @example 50000 */
+      monthly_quota?: number | null;
+      /**
+       * Format: int64
+       * @example 1540
+       */
+      month_used: number;
+      /**
+       * Format: int64
+       * @example 48460
+       */
+      month_remaining?: number | null;
     };
     ReportSubscription: {
       id: string;
@@ -2710,6 +3430,8 @@ export interface components {
       critical_alerts: number;
     };
     ContractAlert: {
+      /** Format: int64 */
+      id?: number;
       contract_id: string;
       /** @enum {string} */
       severity: "Info" | "Warning" | "Critical";
@@ -2719,6 +3441,80 @@ export interface components {
       tx_hash: string;
       /** Format: date-time */
       timestamp: string;
+      /** @enum {string} */
+      state?: "open" | "acknowledged" | "snoozed" | "resolved";
+      /** Format: date-time */
+      acknowledged_at?: string | null;
+      acknowledged_by?: string;
+      /** Format: date-time */
+      snoozed_until?: string | null;
+      /** Format: date-time */
+      snoozed_at?: string | null;
+      snoozed_by?: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
+      resolved_by?: string;
+      /** Format: int64 */
+      maintenance_window_id?: number | null;
+    };
+    MaintenanceWindow: {
+      /** Format: int64 */
+      id: number;
+      name: string;
+      /** @enum {string} */
+      scope: "global" | "contract" | "group";
+      target_id?: string;
+      /** Format: date-time */
+      start_time: string;
+      /** Format: date-time */
+      end_time: string;
+      timezone: string;
+      /** @enum {string} */
+      recurrence: "none" | "daily" | "weekly";
+      suppress_notifications: boolean;
+      created_by?: string;
+      /** Format: date-time */
+      created_at?: string;
+      /** Format: date-time */
+      updated_at?: string;
+    };
+    CreateMaintenanceWindowRequest: {
+      name: string;
+      /**
+       * @default global
+       * @enum {string}
+       */
+      scope: "global" | "contract" | "group";
+      target_id?: string;
+      /** Format: date-time */
+      start_time: string;
+      /** Format: date-time */
+      end_time: string;
+      /** @default UTC */
+      timezone: string;
+      /**
+       * @default none
+       * @enum {string}
+       */
+      recurrence: "none" | "daily" | "weekly";
+      /** @default true */
+      suppress_notifications: boolean;
+    };
+    UpdateMaintenanceWindowRequest: {
+      name: string;
+      /** Format: date-time */
+      start_time: string;
+      /** Format: date-time */
+      end_time: string;
+      /** @default UTC */
+      timezone: string;
+      /**
+       * @default none
+       * @enum {string}
+       */
+      recurrence: "none" | "daily" | "weekly";
+      /** @default true */
+      suppress_notifications: boolean;
     };
     MonitoredContract: {
       contract_id: string;
@@ -2783,6 +3579,8 @@ export interface components {
       status: string;
       /** Format: date-time */
       added_at: string;
+      backfill?: components["schemas"]["ContractBackfill"];
+      token?: components["schemas"]["TokenMetadata"];
     };
     V2Event: {
       id: string;
@@ -2871,6 +3669,8 @@ export interface components {
       total_invocations: number;
       /** Format: int64 */
       total_storage_entries: number;
+      /** @description True when large table counts are estimated rather than exact. */
+      approximate?: boolean;
     };
     V2ContractRate: {
       contract_id: string;
@@ -3224,6 +4024,12 @@ export interface components {
       };
       /** Format: date-time */
       computed_at: string;
+      /** @description Recorded hourly snapshots, oldest first. Included when history_limit is requested. */
+      history?: {
+        /** Format: date-time */
+        computed_at: string;
+        score: number;
+      }[];
     };
     ContractSummary: {
       contract_id: string;
@@ -3251,6 +4057,30 @@ export interface components {
             count: number;
           }[]
         | null;
+    };
+    ContractEventSchemasResponse: {
+      contract_id: string;
+      event_schemas: components["schemas"]["ContractEventSchema"][];
+      /** @description Declared SEP-48 interface spec if available. */
+      declared_spec?: Record<string, never>;
+    };
+    ContractEventSchema: {
+      contract_id: string;
+      event_name: string;
+      topic_arity: number;
+      topic_types: string[];
+      value_shape: string;
+      observed_shapes: components["schemas"]["ObservedShape"][];
+      first_seen_ledger: number;
+      last_seen_ledger: number;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    ObservedShape: {
+      topic_arity: number;
+      topic_types: string[];
+      value_type: string;
+      count: number;
     };
     ContractSpec: {
       contract_id: string;
@@ -3305,6 +4135,13 @@ export interface components {
       avg_cpu: number;
       avg_fee: number;
       health_score?: number | null;
+      /** @description Latest component scores. Omitted when health has not yet been computed. */
+      health_components?: {
+        uptime: number;
+        error_rate: number;
+        performance: number;
+        storage_ttl: number;
+      };
       /** Format: int64 */
       last_synced_ledger: number;
       event_volume: {
@@ -3549,6 +4386,8 @@ export interface components {
     Limit: number;
     /** @description Network filter; empty means all networks. */
     NetworkParam: "testnet" | "mainnet" | "futurenet" | "standalone";
+    /** @description Show only failed invocations of this category (case-insensitive). Invocations indexed before failure classification existed have no category and never match. An unknown value returns 422. */
+    FailureCategoryParam: components["schemas"]["FailureCategory"];
     /** @description Show only contracts carrying this tag. */
     TagParam: string;
     /** @description Tag to remove. */
@@ -3858,10 +4697,71 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  listAuditEventsRoot: {
+    parameters: {
+      query?: {
+        /**
+         * @description Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+         * @example 2026-09-01T00:00:00Z
+         */
+        from?: string;
+        /**
+         * @description Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).
+         * @example 2026-09-02T00:00:00Z
+         */
+        to?: string;
+        /**
+         * @deprecated
+         * @description Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.
+         */
+        since?: string;
+        /** @description Page size (default 50, clamped to 200). */
+        limit?: components["parameters"]["Limit"];
+        /** @description Opaque cursor from next_cursor of the previous page. */
+        cursor?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page of audit events */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            events: components["schemas"]["AuditEvent"][];
+            /** @description Opaque cursor for the next page; empty when no more pages. */
+            next_cursor: string;
+          };
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   listAuditEvents: {
     parameters: {
       query?: {
-        /** @description Only events at or after this RFC 3339 timestamp. */
+        /**
+         * @description Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+         * @example 2026-09-01T00:00:00Z
+         */
+        from?: string;
+        /**
+         * @description Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).
+         * @example 2026-09-02T00:00:00Z
+         */
+        to?: string;
+        /**
+         * @deprecated
+         * @description Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.
+         */
         since?: string;
         /** @description Page size (default 50, clamped to 200). */
         limit?: components["parameters"]["Limit"];
@@ -3905,6 +4805,7 @@ export interface operations {
       /** @description Global counts across all tracked contracts */
       200: {
         headers: {
+          "X-Cache": components["headers"]["XCache"];
           [name: string]: unknown;
         };
         content: {
@@ -3917,11 +4818,132 @@ export interface operations {
             total_invocations: number;
             /** Format: int64 */
             total_storage_entries: number;
+            /** @description True when large table counts are estimated rather than exact. */
+            approximate?: boolean;
           };
         };
       };
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
+    };
+  };
+  createExportJob: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @enum {string} */
+          type: "events" | "snapshot";
+          /** @enum {string} */
+          format: "csv" | "ndjson";
+          filters?: Record<string, never>;
+        };
+      };
+    };
+    responses: {
+      /** @description Export job accepted */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      429: components["responses"]["RateLimited"];
+    };
+  };
+  getExportJob: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Export job details */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Export job not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  deleteExportJob: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Export job deleted */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Export job not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  downloadExport: {
+    parameters: {
+      query: {
+        token: string;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Export file stream */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden or invalid token */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Download link expired */
+      410: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
     };
   };
   listContracts: {
@@ -4053,6 +5075,31 @@ export interface operations {
           "application/json": components["schemas"]["Contract"];
         };
       };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  deleteContract: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Contract untracked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
@@ -4331,6 +5378,8 @@ export interface operations {
         from?: number;
         /** @description Upper ledger bound (inclusive). */
         to?: number;
+        /** @description Show only failed invocations of this category (case-insensitive). Invocations indexed before failure classification existed have no category and never match. An unknown value returns 422. */
+        failure_category?: components["parameters"]["FailureCategoryParam"];
       };
       header?: never;
       path: {
@@ -4354,6 +5403,57 @@ export interface operations {
         };
       };
       422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getContractInvocationStats: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Invocation statistics for the last 24 hours, 7 days, and 30 days */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ContractInvocationStats"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getContractInvocation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+        /** @description Hex-encoded transaction hash. */
+        tx_hash: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Invocation details with associated events */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["InvocationDetail"];
+        };
+      };
+      404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -4627,6 +5727,87 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  listMyApiKeys: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The user's active API keys */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            api_keys: components["schemas"]["APIKey"][];
+            next_cursor: string;
+          };
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  createMyApiKey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          name: string;
+          /** @description Defaults to read:contracts when omitted. */
+          scopes?: ("read:contracts" | "write:contracts" | "read:watchdog")[];
+        };
+      };
+    };
+    responses: {
+      /** @description Key created; the plaintext key is returned once. */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIKey"] & {
+            key: string;
+          };
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  revokeMyApiKey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Key revoked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   listApiKeys: {
     parameters: {
       query?: {
@@ -4677,6 +5858,11 @@ export interface operations {
           scopes: (
             "read:contracts" | "write:contracts" | "read:watchdog" | "admin:*"
           )[];
+          /**
+           * Format: date-time
+           * @description Optional expiry timestamp. Expired keys are rejected by authentication.
+           */
+          expires_at?: string;
         };
       };
     };
@@ -4779,6 +5965,39 @@ export interface operations {
       401: components["responses"]["Unauthorized"];
       403: components["responses"]["ForbiddenScope"];
       404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getApiKeyUsage: {
+    parameters: {
+      query?: {
+        /** @description API key ID to query. Required when calling with user/session auth; optional when authenticating with an API key (defaults to calling key). Querying another key requires admin:* scope. */
+        key_id?: string;
+        /** @description Start of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to 30 days ago. */
+        from?: string;
+        /** @description End of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to now. */
+        to?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Aggregated usage statistics and quota tracking. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["KeyUsageSummary"];
+        };
+      };
+      400: components["responses"]["InvalidInput"];
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenScope"];
+      404: components["responses"]["NotFound"];
+      429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -5604,6 +6823,7 @@ export interface operations {
       /** @description Global statistics */
       200: {
         headers: {
+          "X-Cache": components["headers"]["XCache"];
           [name: string]: unknown;
         };
         content: {
@@ -5662,6 +6882,125 @@ export interface operations {
       };
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
+    };
+  };
+  createExportJobV2: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @enum {string} */
+          type: "events" | "snapshot";
+          /** @enum {string} */
+          format: "csv" | "ndjson";
+          filters?: Record<string, never>;
+        };
+      };
+    };
+    responses: {
+      /** @description Export job accepted */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      429: components["responses"]["RateLimited"];
+    };
+  };
+  getExportJobV2: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Export job details */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Export job not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  deleteExportJobV2: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Export job deleted */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Export job not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  downloadExportV2: {
+    parameters: {
+      query: {
+        token: string;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Export file stream */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden or invalid token */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Download link expired */
+      410: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
     };
   };
   v2ListContracts: {
@@ -5776,6 +7115,32 @@ export interface operations {
           "application/json": components["schemas"]["V2Contract"];
         };
       };
+      404: components["responses"]["Error"];
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  v2DeleteContract: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Contract untracked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
       404: components["responses"]["Error"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
@@ -6121,6 +7486,39 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  v2ContractEventSchemas: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The contract event schemas */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ContractEventSchemasResponse"];
+        };
+      };
+      /** @description Contract not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
   v2ListWatchlist: {
     parameters: {
       query?: never;
@@ -6389,6 +7787,136 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  v2ListIntegrations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Integration catalog */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            integrations: components["schemas"]["Integration"][];
+          };
+        };
+      };
+    };
+  };
+  v2TestIntegration: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: "slack" | "discord" | "telegram";
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Test message delivered */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      404: components["responses"]["NotFound"];
+      /** @description Integration is not configured */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Test message delivery failed */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  v2ListMyApiKeys: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The user's active API keys */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            api_keys: components["schemas"]["APIKey"][];
+            next_cursor: string;
+          };
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+    };
+  };
+  v2CreateMyApiKey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          name: string;
+          scopes?: string[];
+        };
+      };
+    };
+    responses: {
+      /** @description Key created; the plaintext key is returned once. */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+      422: components["responses"]["InvalidInput"];
+    };
+  };
+  v2RevokeMyApiKey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Key revoked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+      404: components["responses"]["NotFound"];
+    };
+  };
   v2ListAPIKeys: {
     parameters: {
       query?: never;
@@ -6509,6 +8037,36 @@ export interface operations {
           };
         };
       };
+      429: components["responses"]["RateLimited"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  v2GetApiKeyUsage: {
+    parameters: {
+      query?: {
+        key_id?: string;
+        from?: string;
+        to?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Aggregated usage statistics and quota tracking. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["KeyUsageSummary"];
+        };
+      };
+      400: components["responses"]["InvalidInput"];
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenScope"];
+      404: components["responses"]["NotFound"];
       429: components["responses"]["RateLimited"];
       500: components["responses"]["InternalError"];
     };
@@ -6860,9 +8418,25 @@ export interface operations {
         type?: "contract" | "system" | "diagnostic";
         /** @description Network filter; empty means all networks. */
         network?: components["parameters"]["NetworkParam"];
-        /** @description Inclusive lower bound on ledger_closed_at (RFC 3339). */
+        /**
+         * @description Inclusive lower bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+         * @example 2026-09-01T00:00:00Z
+         */
+        from?: string;
+        /**
+         * @description Inclusive upper bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `until` if both are sent.
+         * @example 2026-09-02T00:00:00Z
+         */
+        to?: string;
+        /**
+         * @deprecated
+         * @description Deprecated alias for `from`. Inclusive lower bound on ledger_closed_at (RFC 3339).
+         */
         since?: string;
-        /** @description Inclusive upper bound on ledger_closed_at (RFC 3339). */
+        /**
+         * @deprecated
+         * @description Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).
+         */
         until?: string;
       };
       header?: never;
@@ -6910,6 +8484,8 @@ export interface operations {
         since?: string;
         /** @description Inclusive upper bound on ledger_closed_at (RFC 3339). */
         until?: string;
+        /** @description Show only failed invocations of this category (case-insensitive). Invocations indexed before failure classification existed have no category and never match. An unknown value returns 422. */
+        failure_category?: components["parameters"]["FailureCategoryParam"];
       };
       header?: never;
       path?: never;
@@ -6991,6 +8567,7 @@ export interface operations {
   listContractUpgrades: {
     parameters: {
       query?: {
+        /** @description Page size (default 50, clamped to 200). */
         limit?: number;
       };
       header?: never;
@@ -7019,7 +8596,10 @@ export interface operations {
   };
   getContractHealthScore: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Maximum number of recorded hourly snapshots to return, oldest first. Omit to skip history. */
+        history_limit?: number;
+      };
       header?: never;
       path: {
         /** @description Contract ID (starts with C). */
@@ -7047,6 +8627,7 @@ export interface operations {
           "application/json": components["schemas"]["Error"];
         };
       };
+      422: components["responses"]["InvalidInput"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -7131,6 +8712,39 @@ export interface operations {
         };
       };
       /** @description Contract not found, or its interface spec has not been parsed yet. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getContractEventSchemas: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The contract event schemas */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ContractEventSchemasResponse"];
+        };
+      };
+      /** @description Contract not found */
       404: {
         headers: {
           [name: string]: unknown;
@@ -7330,6 +8944,79 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  listIntegrations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Integration catalog */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            integrations: components["schemas"]["Integration"][];
+          };
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  testIntegration: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: "slack" | "discord" | "telegram";
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Test message delivered */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            detail?: string;
+          };
+        };
+      };
+      404: components["responses"]["NotFound"];
+      /** @description Integration is not configured */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            error: string;
+          };
+        };
+      };
+      /** @description Test message delivery failed */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            error: string;
+          };
+        };
+      };
+    };
+  };
   listAlerts: {
     parameters: {
       query?: {
@@ -7367,6 +9054,299 @@ export interface operations {
           };
         };
       };
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getAlertCounts: {
+    parameters: {
+      query?: {
+        /** @description Optional contract ID filter. */
+        contract_id?: string;
+        /** @description Network filter; empty means all networks. */
+        network?: components["parameters"]["NetworkParam"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Counts of alerts by state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            counts: {
+              open?: number;
+              acknowledged?: number;
+              snoozed?: number;
+              resolved?: number;
+            };
+          };
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  acknowledgeAlert: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Alert ID */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Updated alert */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ContractAlert"];
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      404: components["responses"]["NotFound"];
+      /** @description Invalid state transition */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  snoozeAlert: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Alert ID */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @example 2h */
+          duration?: string;
+          /** @example 7200 */
+          duration_seconds?: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Updated alert */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ContractAlert"];
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      404: components["responses"]["NotFound"];
+      /** @description Invalid state transition */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  resolveAlert: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Alert ID */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Updated alert */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ContractAlert"];
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      404: components["responses"]["NotFound"];
+      /** @description Invalid state transition */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listMaintenanceWindows: {
+    parameters: {
+      query?: {
+        /** @description Scope filter */
+        scope?: "global" | "contract" | "group";
+        /** @description Target ID filter */
+        target_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of maintenance windows */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            maintenance_windows: components["schemas"]["MaintenanceWindow"][];
+          };
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  createMaintenanceWindow: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateMaintenanceWindowRequest"];
+      };
+    };
+    responses: {
+      /** @description Maintenance window created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MaintenanceWindow"];
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getMaintenanceWindow: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Maintenance window ID */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Maintenance window details */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MaintenanceWindow"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  updateMaintenanceWindow: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Maintenance window ID */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateMaintenanceWindowRequest"];
+      };
+    };
+    responses: {
+      /** @description Updated maintenance window */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MaintenanceWindow"];
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  deleteMaintenanceWindow: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Maintenance window ID */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Maintenance window deleted */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      404: components["responses"]["NotFound"];
       422: components["responses"]["InvalidInput"];
       500: components["responses"]["InternalError"];
     };

@@ -35,3 +35,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+
+# Docs site (mkdocs.yml)
+/site/
+/.venv-docs/

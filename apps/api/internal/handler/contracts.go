@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"encoding/base64"
+	"github.com/sorolens/sorolens/apps/api/internal/cursor"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sorolens/sorolens/apps/api/failurecategory"
 	"github.com/sorolens/sorolens/apps/api/internal/forecast"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
@@ -32,6 +33,63 @@ type contractResponse struct {
 	// TrackingPreset is the preset type applied when the contract was tracked
 	// (e.g. "dex", "lending", "stablecoin"). Empty when no preset was selected.
 	TrackingPreset string `json:"tracking_preset,omitempty"`
+	// Backfill reports new-contract backfill progress on the detail endpoint.
+	// It is absent until the indexer has started the backfill.
+	Backfill *contractBackfillResponse `json:"backfill,omitempty"`
+	// Token is enriched token metadata for Stellar Asset Contracts (SAC) or tokens.
+	Token *tokenMetadataResponse `json:"token,omitempty"`
+}
+
+type tokenMetadataResponse struct {
+	AssetCode string `json:"asset_code"`
+	Issuer    string `json:"issuer"`
+	Decimals  uint32 `json:"decimals"`
+	Symbol    string `json:"symbol"`
+	Name      string `json:"name"`
+}
+
+func tokenMetadataFromStore(t *store.TokenMetadata) *tokenMetadataResponse {
+	if t == nil {
+		return nil
+	}
+	return &tokenMetadataResponse{
+		AssetCode: t.AssetCode,
+		Issuer:    t.Issuer,
+		Decimals:  t.Decimals,
+		Symbol:    t.Symbol,
+		Name:      t.Name,
+	}
+}
+
+// contractBackfillResponse is the progress of a contract's backfill, which the
+// indexer scans from newest_ledger down to oldest_ledger.
+type contractBackfillResponse struct {
+	OldestLedger int64      `json:"oldest_ledger"`
+	NewestLedger int64      `json:"newest_ledger"`
+	NextLedger   int64      `json:"next_ledger"`
+	LedgersTotal int64      `json:"ledgers_total"`
+	LedgersDone  int64      `json:"ledgers_done"`
+	Percent      float64    `json:"percent"`
+	StartedAt    time.Time  `json:"started_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	CompletedAt  *time.Time `json:"completed_at"`
+}
+
+func contractBackfillFromStore(b *store.BackfillProgress) *contractBackfillResponse {
+	if b == nil {
+		return nil
+	}
+	return &contractBackfillResponse{
+		OldestLedger: b.OldestLedger,
+		NewestLedger: b.NewestLedger,
+		NextLedger:   b.NextLedger,
+		LedgersTotal: b.LedgersTotal(),
+		LedgersDone:  b.LedgersDone(),
+		Percent:      b.Percent(),
+		StartedAt:    b.StartedAt,
+		UpdatedAt:    b.UpdatedAt,
+		CompletedAt:  b.CompletedAt,
+	}
 }
 
 type contractTagsResponse struct {
@@ -53,6 +111,8 @@ type contractListResponse struct {
 	// TrackingPreset is the preset type applied when the contract was tracked.
 	// Empty when no preset was selected.
 	TrackingPreset string `json:"tracking_preset,omitempty"`
+	// Token is enriched token metadata for Stellar Asset Contracts (SAC) or tokens.
+	Token *tokenMetadataResponse `json:"token,omitempty"`
 }
 
 type eventResponse struct {
@@ -70,23 +130,42 @@ type eventResponse struct {
 	InSuccessfulCall bool      `json:"in_successful_call"`
 }
 
+type ResourceUtilisation struct {
+	CPUInstructionsRatio float64 `json:"cpu_instructions_ratio"`
+	MemoryBytesRatio     float64 `json:"memory_bytes_ratio"`
+	LedgerReadByteRatio  float64 `json:"ledger_read_byte_ratio"`
+	LedgerWriteByteRatio float64 `json:"ledger_write_byte_ratio"`
+	MaxRatio             float64 `json:"max_ratio"`
+	NearLimit            bool    `json:"near_limit"`
+}
+
 type invocationResponse struct {
-	TxHash             string         `json:"tx_hash"`
-	ContractID         string         `json:"contract_id"`
-	Network            string         `json:"network"`
-	Ledger             uint32         `json:"ledger"`
-	LedgerClosedAt     time.Time      `json:"ledger_closed_at"`
-	Status             string         `json:"status"`
-	FunctionName       string         `json:"function_name"`
-	ArgsDecoded        map[string]any `json:"args_decoded"`
-	ResultDecoded      any            `json:"result_decoded"`
-	ResultXDR          string         `json:"result_xdr"`
-	ResourceFeeCharged int64          `json:"resource_fee_charged"`
-	CPUInsn            int64          `json:"cpu_insn"`
-	MemByte            int64          `json:"mem_byte"`
-	LedgerReadByte     int64          `json:"ledger_read_byte"`
-	LedgerWriteByte    int64          `json:"ledger_write_byte"`
-	ApplicationOrder   int            `json:"application_order"`
+	TxHash             string               `json:"tx_hash"`
+	ContractID         string               `json:"contract_id"`
+	Network            string               `json:"network"`
+	Ledger             uint32               `json:"ledger"`
+	LedgerClosedAt     time.Time            `json:"ledger_closed_at"`
+	Status             string               `json:"status"`
+	FunctionName       string               `json:"function_name"`
+	ArgsDecoded        map[string]any       `json:"args_decoded"`
+	ResultDecoded      any                  `json:"result_decoded"`
+	ResultXDR          string               `json:"result_xdr"`
+	ResourceFeeCharged int64                `json:"resource_fee_charged"`
+	CPUInsn            int64                `json:"cpu_insn"`
+	MemByte            int64                `json:"mem_byte"`
+	LedgerReadByte     int64                `json:"ledger_read_byte"`
+	LedgerWriteByte    int64                `json:"ledger_write_byte"`
+	ApplicationOrder   int                  `json:"application_order"`
+	Utilisation        *ResourceUtilisation `json:"utilisation,omitempty"`
+	// FailureCategory and FailureCode are set only on classified FAILED
+	// invocations (issue #806) and omitted otherwise.
+	FailureCategory string `json:"failure_category,omitempty"`
+	FailureCode     string `json:"failure_code,omitempty"`
+}
+
+type invocationDetailResponse struct {
+	invocationResponse
+	Events []eventResponse `json:"events"`
 }
 
 type storageEntryResponse struct {
@@ -113,24 +192,113 @@ type contractStatsResponse struct {
 	WindowDuration        string `json:"window_duration"`
 }
 
-// ---- helpers ----------------------------------------------------------------
-
-func encodeCursor(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	return base64.StdEncoding.EncodeToString([]byte(raw))
+type invocationWindowStatsResponse struct {
+	InvocationCount   int64   `json:"invocation_count"`
+	FailedInvocations int64   `json:"failed_invocations"`
+	FailureRate       float64 `json:"failure_rate"`
+	AvgFee            float64 `json:"avg_fee"`
+	P95Fee            float64 `json:"p95_fee"`
+	AvgCPU            float64 `json:"avg_cpu"`
+	P95CPU            float64 `json:"p95_cpu"`
+	// FailuresByCategory lists every failure category, zero included
+	// (issue #806).
+	FailuresByCategory map[string]int64 `json:"failures_by_category"`
 }
 
-func decodeCursor(encoded string) (string, bool) {
-	if encoded == "" {
+type contractInvocationStatsResponse struct {
+	Windows map[string]invocationWindowStatsResponse `json:"windows"`
+}
+
+// ---- helpers ----------------------------------------------------------------
+
+// MaxPageSize is the upper bound on page sizes for list endpoints (issue #776).
+// Limits exceeding MaxPageSize are clamped to this value to prevent unbounded queries.
+const MaxPageSize = 200
+
+// DefaultPageSize is the default number of items returned by paginated list endpoints when ?limit is omitted.
+const DefaultPageSize = 50
+
+var validContractStatuses = map[string]bool{
+	"pending":     true,
+	"active":      true,
+	"backfilling": true,
+	"error":       true,
+	"paused":      true,
+}
+
+var validInvocationStatuses = map[string]bool{
+	"SUCCESS":   true,
+	"FAILED":    true,
+	"NOT_FOUND": true,
+}
+
+// failureCategoryParam parses the optional ?failure_category filter (issue
+// #806). Matching is case-insensitive, like ?status. ok is false for a value
+// outside failurecategory.All.
+func failureCategoryParam(r *http.Request) (string, bool) {
+	v := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("failure_category")))
+	if v == "" {
 		return "", true
 	}
-	b, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return "", false
+	c, ok := failurecategory.Parse(v)
+	return string(c), ok
+}
+
+// failureCategoryError is the 422 message for an invalid ?failure_category.
+func failureCategoryError() string {
+	names := make([]string, 0, len(failurecategory.All()))
+	for _, c := range failurecategory.All() {
+		names = append(names, string(c))
 	}
-	return string(b), true
+	return "failure_category must be one of: " + strings.Join(names, ", ")
+}
+
+var validDurabilities = map[string]bool{
+	"temporary":  true,
+	"persistent": true,
+	"instance":   true,
+}
+
+var validStorageStatuses = map[string]bool{
+	"live":     true,
+	"archived": true,
+	"deleted":  true,
+}
+
+var validAlertSeverities = map[string]string{
+	"info":     "Info",
+	"warning":  "Warning",
+	"critical": "Critical",
+}
+
+// pageLimit reads the ?limit query parameter with def as the default,
+// clamping to MaxPageSize.
+func pageLimit(r *http.Request, def int) int {
+	return pageLimitClamped(r, def, MaxPageSize)
+}
+
+// pageLimitClamped reads the ?limit query parameter with def as the default,
+// clamping to max.
+func pageLimitClamped(r *http.Request, def, max int) int {
+	n := intQuery(r, "limit", def)
+	if max > 0 && n > max {
+		return max
+	}
+	return n
+}
+
+// parseLedgerParam reads an optional positive integer query parameter representing
+// a ledger sequence. It returns ok=true when present and valid, or an error if malformed.
+func parseLedgerParam(r *http.Request, key string) (uint32, bool, error) {
+	v := strings.TrimSpace(r.URL.Query().Get(key))
+	if v == "" {
+		return 0, false, nil
+	}
+	n, err := strconv.ParseUint(v, 10, 32)
+	if err != nil || n < 1 {
+		return 0, true, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return uint32(n), true, nil
 }
 
 func intQuery(r *http.Request, key string, def int) int {
@@ -199,6 +367,8 @@ func contractFromStore(c store.Contract) contractResponse {
 		AddedAt:            c.AddedAt,
 		Tags:               tags,
 		TrackingPreset:     c.TrackingPreset,
+		Backfill:           contractBackfillFromStore(c.Backfill),
+		Token:              tokenMetadataFromStore(c.Token),
 	}
 }
 
@@ -217,6 +387,7 @@ func contractListFromStore(c store.Contract) contractListResponse {
 		LastActivityAt: c.LastActivityAt,
 		Tags:           tags,
 		TrackingPreset: c.TrackingPreset,
+		Token:          tokenMetadataFromStore(c.Token),
 	}
 }
 
@@ -234,6 +405,39 @@ func eventFromStore(e store.Event) eventResponse {
 		TopicDecoded:     e.TopicDecoded,
 		ValueDecoded:     e.ValueDecoded,
 		InSuccessfulCall: e.InSuccessfulCall,
+	}
+}
+
+func computeInvocationUtilisation(cpu, mem, read, write int64) *ResourceUtilisation {
+	const (
+		maxCPU   = 100000000.0
+		maxMem   = 41943040.0
+		maxRead  = 200000.0
+		maxWrite = 100000.0
+	)
+	cpuRatio := float64(cpu) / maxCPU
+	memRatio := float64(mem) / maxMem
+	readRatio := float64(read) / maxRead
+	writeRatio := float64(write) / maxWrite
+
+	maxRatio := cpuRatio
+	if memRatio > maxRatio {
+		maxRatio = memRatio
+	}
+	if readRatio > maxRatio {
+		maxRatio = readRatio
+	}
+	if writeRatio > maxRatio {
+		maxRatio = writeRatio
+	}
+
+	return &ResourceUtilisation{
+		CPUInstructionsRatio: cpuRatio,
+		MemoryBytesRatio:     memRatio,
+		LedgerReadByteRatio:  readRatio,
+		LedgerWriteByteRatio: writeRatio,
+		MaxRatio:             maxRatio,
+		NearLimit:            maxRatio >= 0.85,
 	}
 }
 
@@ -255,6 +459,9 @@ func invocationFromStore(inv store.Invocation) invocationResponse {
 		LedgerReadByte:     inv.LedgerReadByte,
 		LedgerWriteByte:    inv.LedgerWriteByte,
 		ApplicationOrder:   inv.ApplicationOrder,
+		Utilisation:        computeInvocationUtilisation(inv.CPUInsn, inv.MemByte, inv.LedgerReadByte, inv.LedgerWriteByte),
+		FailureCategory:    inv.FailureCategory,
+		FailureCode:        inv.FailureCode,
 	}
 }
 
@@ -369,7 +576,7 @@ func (h *Handler) RegisterContract(w http.ResponseWriter, r *http.Request) {
 // Query params: cursor, limit, network (testnet|mainnet|futurenet), status,
 // sort (id|label|network|status|added_at), dir (asc|desc).
 func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -384,7 +591,12 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "sort must be one of: id, label, network, status, added_at; dir must be asc or desc")
 		return
 	}
-	limit := intQuery(r, "limit", 50)
+	status := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+	if status != "" && !validContractStatuses[status] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: pending, active, backfilling, error, paused")
+		return
+	}
+	limit := pageLimit(r, DefaultPageSize)
 	tag := normalizeTag(r.URL.Query().Get("tag"))
 	if tag != "" && !validTag(tag) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, invalidTagMessage)
@@ -392,7 +604,7 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 	}
 	f := store.ContractFilters{
 		Network: network,
-		Status:  r.URL.Query().Get("status"),
+		Status:  status,
 		Tag:     tag,
 		Sort:    sort,
 		SortDir: dir,
@@ -411,7 +623,7 @@ func (h *Handler) ListContracts(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"contracts":   resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 
@@ -429,6 +641,28 @@ func (h *Handler) GetContract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, contractFromStore(c))
+}
+
+// DeleteContract handles DELETE /api/v1/contracts/{id}.
+//
+// Untracking is a soft delete by policy: the contract status flips to
+// "paused" while the row and all indexed history are retained. The indexer
+// only polls contracts whose status is pending, backfilling or active, so a
+// paused contract stops being indexed. Re-registering the contract flips the
+// status back to "pending" and resumes tracking. Deleting a contract that is
+// already paused is a no-op success; deleting one that was never registered
+// returns 404.
+func (h *Handler) DeleteContract(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := h.Store.UntrackContract(r.Context(), id); errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "contract not found")
+		return
+	} else if err != nil {
+		h.Logger.Error("untrack contract", "err", err, "contract_id", id)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to untrack contract")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // AddContractTag handles POST /api/v1/contracts/{id}/tags.
@@ -503,7 +737,7 @@ func (h *Handler) RemoveContractTag(w http.ResponseWriter, r *http.Request) {
 // ListEvents handles GET /api/v1/contracts/{id}/events.
 func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -511,6 +745,21 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	network, ok := networkParam(r)
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
+		return
+	}
+	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
+	from, hasFrom, err := parseLedgerParam(r, "from")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	to, hasTo, err := parseLedgerParam(r, "to")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	if hasFrom && hasTo && from > to {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must not exceed to")
 		return
 	}
 	var inSuccess *bool
@@ -521,17 +770,21 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		} else if param == "false" {
 			v := false
 			inSuccess = &v
+		} else {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "in_successful_call must be true or false")
+			return
 		}
 	}
+	limit := pageLimit(r, DefaultPageSize)
 	f := store.EventFilters{
-		Type:             r.URL.Query().Get("type"),
+		Type:             eventType,
 		Network:          network,
 		Topic:            strings.TrimSpace(r.URL.Query().Get("topic")),
-		From:             uint32Query(r, "from"),
-		To:               uint32Query(r, "to"),
+		From:             from,
+		To:               to,
 		InSuccessfulCall: inSuccess,
 	}
-	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	events, nextRaw, err := h.Store.ListEvents(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list events", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list events")
@@ -545,7 +798,7 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	// Postgres path uses; archive-backed pages are not cursor-paginated, so
 	// next_cursor stays empty.
 	if len(events) == 0 && h.Cold != nil && f.From > 0 && rawCursor == "" {
-		archived, coldErr := h.Cold.Events(r.Context(), contractID, f.From, f.To, intQuery(r, "limit", 50))
+		archived, coldErr := h.Cold.Events(r.Context(), contractID, f.From, f.To, limit)
 		if coldErr != nil {
 			h.Logger.Error("list archived events", "err", coldErr, "contract_id", contractID)
 		} else if len(archived) > 0 {
@@ -559,14 +812,14 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"events":      resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 
 // ListInvocations handles GET /api/v1/contracts/{id}/invocations.
 func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -576,14 +829,44 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
-	f := store.InvocationFilters{
-		Status:       r.URL.Query().Get("status"),
-		FunctionName: r.URL.Query().Get("function_name"),
-		Network:      network,
-		From:         uint32Query(r, "from"),
-		To:           uint32Query(r, "to"),
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status != "" {
+		statusUpper := strings.ToUpper(status)
+		if !validInvocationStatuses[statusUpper] {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: SUCCESS, FAILED, NOT_FOUND")
+			return
+		}
+		status = statusUpper
 	}
-	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	from, hasFrom, err := parseLedgerParam(r, "from")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	to, hasTo, err := parseLedgerParam(r, "to")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	if hasFrom && hasTo && from > to {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must not exceed to")
+		return
+	}
+	failureCategory, ok := failureCategoryParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, failureCategoryError())
+		return
+	}
+	limit := pageLimit(r, DefaultPageSize)
+	f := store.InvocationFilters{
+		Status:          status,
+		FunctionName:    r.URL.Query().Get("function_name"),
+		Network:         network,
+		From:            from,
+		To:              to,
+		FailureCategory: failureCategory,
+	}
+	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list invocations", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list invocations")
@@ -595,29 +878,84 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"invocations": resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 
-// ---- global invocations -----------------------------------------------------
+// ContractInvocationStats handles GET /api/v1/contracts/{id}/invocations/stats.
+func (h *Handler) ContractInvocationStats(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	stats, err := h.Store.GetContractInvocationStats(r.Context(), contractID)
+	if err != nil {
+		h.Logger.Error("get contract invocation stats", "err", err, "contract_id", contractID)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch invocation stats")
+		return
+	}
 
-// parseInvocationCursor decodes the raw (already base64-decoded) global
-// invocation cursor "<ledger>:<tx_hash>" into its keyset components. An empty
-// cursor means "start at the newest invocation".
-func parseInvocationCursor(raw string) (uint32, string, bool) {
-	if raw == "" {
-		return 0, "", true
-	}
-	ledgerStr, txHash, found := strings.Cut(raw, ":")
-	if !found || txHash == "" {
-		return 0, "", false
-	}
-	n, err := strconv.ParseUint(ledgerStr, 10, 32)
-	if err != nil || n == 0 {
-		return 0, "", false
-	}
-	return uint32(n), txHash, true
+	writeJSON(w, http.StatusOK, contractInvocationStatsResponse{
+		Windows: map[string]invocationWindowStatsResponse{
+			"24h": invocationWindowStatsFromStore(stats.Last24Hours),
+			"7d":  invocationWindowStatsFromStore(stats.Last7Days),
+			"30d": invocationWindowStatsFromStore(stats.Last30Days),
+		},
+	})
 }
+
+func invocationWindowStatsFromStore(stats store.InvocationWindowStats) invocationWindowStatsResponse {
+	return invocationWindowStatsResponse{
+		InvocationCount:    stats.InvocationCount,
+		FailedInvocations:  stats.FailedInvocations,
+		FailureRate:        stats.FailureRate,
+		AvgFee:             stats.AvgFee,
+		P95Fee:             stats.P95Fee,
+		AvgCPU:             stats.AvgCPU,
+		P95CPU:             stats.P95CPU,
+		FailuresByCategory: failuresByCategory(stats.FailuresByCategory),
+	}
+}
+
+// failuresByCategory returns counts for every category, filling zeros for any
+// a store left out.
+func failuresByCategory(in map[string]int64) map[string]int64 {
+	out := store.NewFailureCounts()
+	for cat, n := range in {
+		store.AddFailureCount(out, cat, n)
+	}
+	return out
+}
+
+// GetInvocation handles GET /api/v1/contracts/{id}/invocations/{tx_hash}.
+func (h *Handler) GetInvocation(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	txHash := chi.URLParam(r, "tx_hash")
+
+	inv, events, err := h.Store.GetInvocationWithEvents(r.Context(), contractID, txHash)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "invocation not found")
+		return
+	}
+	if err != nil {
+		h.Logger.Error("get invocation", "err", err, "contract_id", contractID, "tx_hash", txHash)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to get invocation")
+		return
+	}
+
+	respEvents := make([]eventResponse, len(events))
+	for i, e := range events {
+		respEvents[i] = eventFromStore(e)
+	}
+	writeJSON(w, http.StatusOK, invocationDetailResponse{
+		invocationResponse: invocationFromStore(inv),
+		Events:             respEvents,
+	})
+}
+
+// GetContractInvocation aliases GetInvocation for compatibility with OpenAPI operation naming.
+func (h *Handler) GetContractInvocation(w http.ResponseWriter, r *http.Request) {
+	h.GetInvocation(w, r)
+}
+
+// ---- global invocations -----------------------------------------------------
 
 // timeParam parses an inclusive date or RFC3339 bound. A plain date is expanded
 // to the start (or, when endOfDay is set, the end) of that UTC day so that
@@ -648,12 +986,12 @@ func timeParam(r *http.Request, key string, endOfDay bool) (*time.Time, bool) {
 // (ledger bounds), and since/until (inclusive date or RFC3339 bounds on
 // ledger_closed_at).
 func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
 	}
-	cursorLedger, cursorTxHash, ok := parseInvocationCursor(rawCursor)
+	cursorLedger, cursorTxHash, ok := cursor.ParseInvocation(rawCursor)
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -673,19 +1011,54 @@ func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "until must be an RFC3339 timestamp or YYYY-MM-DD date")
 		return
 	}
+	if since != nil && until != nil && until.Before(*since) {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "until must be after since")
+		return
+	}
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status != "" {
+		statusUpper := strings.ToUpper(status)
+		if !validInvocationStatuses[statusUpper] {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: SUCCESS, FAILED, NOT_FOUND")
+			return
+		}
+		status = statusUpper
+	}
+	from, hasFrom, err := parseLedgerParam(r, "from")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	to, hasTo, err := parseLedgerParam(r, "to")
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+	if hasFrom && hasTo && from > to {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must not exceed to")
+		return
+	}
 
+	failureCategory, ok := failureCategoryParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, failureCategoryError())
+		return
+	}
+
+	limit := pageLimit(r, DefaultPageSize)
 	f := store.InvocationFilters{
-		ContractID:   strings.TrimSpace(r.URL.Query().Get("contract_id")),
-		Status:       r.URL.Query().Get("status"),
-		FunctionName: r.URL.Query().Get("fn"),
-		Network:      network,
-		From:         uint32Query(r, "from"),
-		To:           uint32Query(r, "to"),
-		Since:        since,
-		Until:        until,
+		ContractID:      strings.TrimSpace(r.URL.Query().Get("contract_id")),
+		Status:          status,
+		FunctionName:    r.URL.Query().Get("fn"),
+		Network:         network,
+		From:            from,
+		To:              to,
+		Since:           since,
+		Until:           until,
+		FailureCategory: failureCategory,
 	}
 	invs, nextLedger, nextTxHash, err := h.Store.ListAllInvocations(
-		r.Context(), cursorLedger, cursorTxHash, intQuery(r, "limit", 50), f,
+		r.Context(), cursorLedger, cursorTxHash, limit, f,
 	)
 	if err != nil {
 		h.Logger.Error("list all invocations", "err", err)
@@ -703,14 +1076,14 @@ func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"invocations": resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 
 // ListStorageEntries handles GET /api/v1/contracts/{id}/storage.
 func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	rawCursor, ok := decodeCursor(r.URL.Query().Get("cursor"))
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
 	if !ok {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
 		return
@@ -720,12 +1093,23 @@ func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "network must be one of: testnet, mainnet, futurenet, standalone")
 		return
 	}
+	durability := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("durability")))
+	if durability != "" && !validDurabilities[durability] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "durability must be one of: temporary, persistent, instance")
+		return
+	}
+	status := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+	if status != "" && !validStorageStatuses[status] {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "status must be one of: live, archived, deleted")
+		return
+	}
+	limit := pageLimit(r, DefaultPageSize)
 	f := store.StorageFilters{
-		Durability: r.URL.Query().Get("durability"),
-		Status:     r.URL.Query().Get("status"),
+		Durability: durability,
+		Status:     status,
 		Network:    network,
 	}
-	entries, nextRaw, err := h.Store.ListStorageEntries(r.Context(), contractID, rawCursor, intQuery(r, "limit", 50), f)
+	entries, nextRaw, err := h.Store.ListStorageEntries(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
 		h.Logger.Error("list storage entries", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list storage entries")
@@ -737,7 +1121,7 @@ func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"storage":     resp,
-		"next_cursor": encodeCursor(nextRaw),
+		"next_cursor": cursor.Encode(nextRaw),
 	})
 }
 
@@ -798,14 +1182,23 @@ func (h *Handler) ContractStats(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch stats")
 		return
 	}
-	writeJSON(w, http.StatusOK, contractStatsResponse{
-		EventCount:            cs.EventCount,
-		InvocationCount:       cs.InvocationCount,
-		StorageCount:          cs.StorageCount,
-		LastSyncedLedger:      cs.LastSyncedLedger,
-		WindowEventCount:      cs.WindowEventCount,
-		WindowInvocationCount: cs.WindowInvocationCount,
-		WindowDuration:        cs.WindowDuration,
+	percentiles, err := h.Store.GetContractResourcePercentiles(r.Context(), contractID, window)
+	if err != nil {
+		h.Logger.Error("get contract resource percentiles", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch stats")
+		return
+	}
+	writeJSON(w, http.StatusOK, contractStatsDetailResponse{
+		contractStatsResponse: contractStatsResponse{
+			EventCount:            cs.EventCount,
+			InvocationCount:       cs.InvocationCount,
+			StorageCount:          cs.StorageCount,
+			LastSyncedLedger:      cs.LastSyncedLedger,
+			WindowEventCount:      cs.WindowEventCount,
+			WindowInvocationCount: cs.WindowInvocationCount,
+			WindowDuration:        cs.WindowDuration,
+		},
+		ResourcePercentiles: resourcePercentilesFromStore(percentiles),
 	})
 }
 
@@ -1015,7 +1408,7 @@ func (h *Handler) StreamEvents(w http.ResponseWriter, r *http.Request) {
 // or label (issue #159).
 func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
-	limit := intQuery(r, "limit", 10)
+	limit := pageLimitClamped(r, 10, MaxPageSize)
 
 	contracts, err := h.Store.SearchContracts(r.Context(), q, limit)
 	if err != nil {
@@ -1036,6 +1429,7 @@ func (h *Handler) SearchContracts(w http.ResponseWriter, r *http.Request) {
 			Status:             c.Status,
 			AddedAt:            c.AddedAt,
 			TrackingPreset:     c.TrackingPreset,
+			Token:              tokenMetadataFromStore(c.Token),
 		}
 	}
 

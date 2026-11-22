@@ -13,6 +13,7 @@
  */
 
 import type {
+  AutocompleteInteraction,
   ChatInputCommandInteraction,
   Client,
   Interaction,
@@ -22,6 +23,7 @@ import {
   apiKeyStore,
   getApiKey,
   getByDiscord,
+  getByGithub,
   listLinks,
   unlink,
   upsertLink,
@@ -35,11 +37,15 @@ import {
   SorolensApi,
   isValidContractId,
   type ApiCredentials,
+  type ContractSearchResult,
 } from "./api.js";
-import { alertsEmbed, statusEmbed, watchlistEmbed } from "./embeds.js";
+import { alertsEmbed, shortId, statusEmbed, watchlistEmbed } from "./embeds.js";
 import { describeRetry, SlidingWindowRateLimiter } from "./ratelimit.js";
 import { ensureUserApiKey, revokeUserApiKey } from "./apikey.js";
 import type { Config } from "./config.js";
+import { ASSIGN_COMMANDS, handleAssignCommand } from "./assign-discord.js";
+import { COMMUNITY_COMMANDS, handleCommunityCommand } from "./community-discord.js";
+import { SUBSCRIPTION_COMMANDS, handleSubscriptionCommand } from "./subscriptions-discord.js";
 
 // Re-exported from command-definitions.ts so callers that only import
 // commands.ts still get the definitions; the split lets the register
@@ -53,6 +59,123 @@ interface CommandContext {
   tiers: Tiers;
 }
 
+const CONTRACT_AUTOCOMPLETE_COMMANDS = new Set([
+  "status",
+  "alerts",
+  "watch",
+  "unwatch",
+  "subscribe",
+  "unsubscribe",
+]);
+const AUTOCOMPLETE_LIMIT = 25;
+const AUTOCOMPLETE_CACHE_TTL_MS = 5_000;
+
+export interface ContractAutocompleteChoice {
+  name: string;
+  value: string;
+}
+
+/** Convert API search results to Discord choices without exposing full IDs. */
+export function contractAutocompleteChoices(
+  results: readonly ContractSearchResult[]
+): ContractAutocompleteChoice[] {
+  const seen = new Set<string>();
+  return results
+    .filter((result) => {
+      if (!result.id || seen.has(result.id)) return false;
+      seen.add(result.id);
+      return true;
+    })
+    .slice(0, AUTOCOMPLETE_LIMIT)
+    .map((result) => {
+      const label = result.label?.trim();
+      const id = shortId(result.id);
+      const suffix = label ? ` (${id})` : "";
+      const maxLabelLength = 100 - suffix.length;
+      const displayLabel = label
+        ? label.length > maxLabelLength
+          ? `${label.slice(0, maxLabelLength - 1)}…`
+          : label
+        : id;
+      return {
+        name: `${displayLabel}${suffix}`,
+        value: result.id,
+      };
+    });
+}
+
+interface AutocompleteCacheEntry {
+  expiresAt: number;
+  choices?: ContractAutocompleteChoice[];
+  pending?: Promise<ContractAutocompleteChoice[]>;
+}
+
+/**
+ * Build the autocomplete responder. Discord already debounces typing events;
+ * this short cache also coalesces identical in-flight requests and avoids
+ * repeatedly searching while a user moves through a query.
+ */
+export function createContractAutocompleteHandler(
+  api: Pick<SorolensApi, "searchContracts">
+) {
+  const cache = new Map<string, AutocompleteCacheEntry>();
+
+  async function choicesFor(
+    query: string
+  ): Promise<ContractAutocompleteChoice[]> {
+    const key = query.toLowerCase();
+    const now = Date.now();
+    const cached = cache.get(key);
+    if (cached && cached.expiresAt > now) {
+      if (cached.choices) return cached.choices;
+      if (cached.pending) return cached.pending;
+    }
+
+    const pending = Promise.resolve()
+      .then(() => api.searchContracts(query, AUTOCOMPLETE_LIMIT))
+      .then(contractAutocompleteChoices);
+    cache.set(key, { expiresAt: now + AUTOCOMPLETE_CACHE_TTL_MS, pending });
+
+    try {
+      const choices = await pending;
+      if (cache.get(key)?.pending === pending) {
+        cache.set(key, {
+          expiresAt: Date.now() + AUTOCOMPLETE_CACHE_TTL_MS,
+          choices,
+        });
+      }
+      return choices;
+    } catch {
+      // Do not cache failures: the next keystroke should be able to recover.
+      if (cache.get(key)?.pending === pending) cache.delete(key);
+      return [];
+    }
+  }
+
+  return async function handleAutocomplete(
+    interaction: AutocompleteInteraction
+  ): Promise<void> {
+    const focused = interaction.options.getFocused(true);
+    const optionName = typeof focused === "string" ? "" : focused.name;
+    if (
+      !CONTRACT_AUTOCOMPLETE_COMMANDS.has(interaction.commandName) ||
+      optionName !== "contract"
+    ) {
+      await interaction.respond([]);
+      return;
+    }
+
+    const rawQuery = interaction.options.getFocused();
+    const query = String(rawQuery).trim();
+    if (!query) {
+      await interaction.respond([]);
+      return;
+    }
+
+    await interaction.respond(await choicesFor(query));
+  };
+}
+
 export function registerHandlers(client: Client, ctx: CommandContext) {
   const api = new SorolensApi({
     baseUrl: ctx.config.sorolensApiBaseUrl,
@@ -61,8 +184,22 @@ export function registerHandlers(client: Client, ctx: CommandContext) {
   const limiter = new SlidingWindowRateLimiter(
     ctx.config.commandRateLimitPerMinute
   );
+  const handleAutocomplete = createContractAutocompleteHandler(api);
 
   client.on("interactionCreate", async (interaction: Interaction) => {
+    if (interaction.isAutocomplete()) {
+      try {
+        await handleAutocomplete(interaction);
+      } catch (err) {
+        console.warn("autocomplete failed:", err);
+        try {
+          await interaction.respond([]);
+        } catch {
+          // The interaction may have expired while the API was unavailable.
+        }
+      }
+      return;
+    }
     if (!interaction.isChatInputCommand()) return;
     try {
       await handle(interaction, ctx, api, limiter);
@@ -96,17 +233,30 @@ async function handle(
   api: SorolensApi,
   limiter: SlidingWindowRateLimiter
 ) {
+  if (ASSIGN_COMMANDS.has(interaction.commandName)) {
+    return handleAssignCommand(interaction, ctx.config);
+  }
+  if (COMMUNITY_COMMANDS.has(interaction.commandName)) {
+    return handleCommunityCommand(interaction, ctx.config);
+  }
+  if (SUBSCRIPTION_COMMANDS.has(interaction.commandName)) {
+    return handleSubscriptionCommand(interaction, ctx.config);
+  }
   switch (interaction.commandName) {
     case "connect":
       return handleConnect(interaction, ctx);
     case "link":
       return handleLink(interaction, ctx, api);
+    case "admin-unlink":
+      return handleAdminUnlink(interaction, api);
     case "unlink":
       return handleUnlink(interaction, api);
     case "whoami":
       return handleWhoAmI(interaction);
     case "mypr":
       return handleMyPR(interaction, ctx);
+    case "contributions":
+      return handleContributions(interaction, ctx);
     case "members":
       return handleMembers(interaction, ctx);
     case "status":
@@ -187,6 +337,61 @@ async function handleLink(
   });
 }
 
+/**
+ * Resolve which link `/admin-unlink` targets: exactly one of a Discord user
+ * or a GitHub login. Returns an error message instead when that fails.
+ */
+export function resolveUnlinkTarget(
+  userId: string | null,
+  github: string | null,
+  lookup: {
+    byDiscord: (id: string) => Link | null;
+    byGithub: (login: string) => Link | null;
+  }
+): { link: Link } | { error: string } {
+  const login = github?.trim() || null;
+  if ((userId && login) || (!userId && !login)) {
+    return { error: "Provide exactly one of `user` or `github`." };
+  }
+  const link = userId ? lookup.byDiscord(userId) : lookup.byGithub(login!);
+  if (!link) {
+    return {
+      error: userId
+        ? "That member has no GitHub link."
+        : `No member is linked to GitHub \`${login}\`.`,
+    };
+  }
+  return { link };
+}
+
+async function handleAdminUnlink(
+  interaction: ChatInputCommandInteraction,
+  api: SorolensApi
+) {
+  const target = resolveUnlinkTarget(
+    interaction.options.getUser("user")?.id ?? null,
+    interaction.options.getString("github"),
+    { byDiscord: getByDiscord, byGithub: getByGithub }
+  );
+  if ("error" in target) {
+    await interaction.reply({ content: target.error, flags: 64 });
+    return;
+  }
+  const { discordId, githubLogin } = target.link;
+  await revokeUserApiKey(apiKeyStore, api, discordId);
+  unlink(discordId);
+  console.log(
+    `admin-unlink: ${interaction.user.id} removed link ${discordId} -> ${githubLogin}`
+  );
+  await interaction.reply({
+    content:
+      `Removed the link <@${discordId}> → GitHub \`${githubLogin}\`. ` +
+      "Their roles and any assigned issues were left as they are. They can link again with `/connect`.",
+    flags: 64,
+    allowedMentions: { parse: [] },
+  });
+}
+
 async function handleUnlink(
   interaction: ChatInputCommandInteraction,
   api: SorolensApi
@@ -236,6 +441,53 @@ async function handleMyPR(
   const tier = tierFor(count, ctx.tiers);
   await interaction.editReply({
     content: `\`${link.githubLogin}\` has **${count}** merged PR${count === 1 ? "" : "s"} in ${ctx.config.githubRepo}. Current tier: **${tier}**.`,
+  });
+}
+
+async function handleContributions(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext
+) {
+  const user = interaction.options.getUser("user");
+  const github = interaction.options.getString("github")?.trim();
+
+  if ((user && github) || (!user && !github)) {
+    await interaction.reply({
+      content: "Provide exactly one of `user` or `github`.",
+      flags: 64,
+    });
+    return;
+  }
+
+  let login: string;
+  if (user) {
+    const link = getByDiscord(user.id);
+    if (!link) {
+      await interaction.reply({
+        content: `${user.tag} has not linked a GitHub account.`,
+        flags: 64,
+      });
+      return;
+    }
+    login = link.githubLogin;
+  } else {
+    // GitHub logins are alphanumeric with single hyphens, max 39 chars.
+    // Validating also keeps the value safe to embed in a search query.
+    if (!/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(github!)) {
+      await interaction.reply({
+        content: "That is not a valid GitHub username.",
+        flags: 64,
+      });
+      return;
+    }
+    login = github!;
+  }
+
+  await interaction.deferReply({ flags: 64 });
+  const count = await countMergedPRs(login, ctx.config.githubRepo);
+  const tier = tierFor(count, ctx.tiers);
+  await interaction.editReply({
+    content: `\`${login}\` has **${count}** merged PR${count === 1 ? "" : "s"} in ${ctx.config.githubRepo}. Tier: **${tier}**.`,
   });
 }
 

@@ -1,4 +1,11 @@
 import type { operations } from "./api.types.generated";
+export interface TokenMetadata {
+  asset_code: string;
+  issuer: string;
+  decimals: number;
+  symbol: string;
+  name: string;
+}
 
 export interface Contract {
   id: string;
@@ -9,6 +16,7 @@ export interface Contract {
   created_at_ledger: number;
   backfill_complete_at: string | null;
   tags: string[];
+  token?: TokenMetadata | null;
 }
 
 export interface ContractDetail extends Contract {
@@ -92,6 +100,20 @@ export interface StorageResponse {
   next_cursor: string;
 }
 
+/** p50/p95/p99 of one per-invocation resource metric. */
+export interface PercentileValues {
+  p50: number;
+  p95: number;
+  p99: number;
+}
+
+/** Resource usage percentiles over the requested stats window (issue #329). */
+export interface ResourcePercentiles {
+  cpu_insn: PercentileValues;
+  mem_byte: PercentileValues;
+  fee: PercentileValues;
+}
+
 /** Documented shape of GET /api/v1/contracts/{id}/stats. */
 export interface ContractStats {
   event_count: number;
@@ -101,17 +123,12 @@ export interface ContractStats {
   window_event_count: number;
   window_invocation_count: number;
   window_duration: string;
+  resource_percentiles?: ResourcePercentiles;
 }
 
 export interface VolumePoint {
   date: string;
   ledger: number;
-  count: number;
-}
-
-/** One hour bucket of invocation frequency (issue #185). */
-export interface InvocationFrequencyPoint {
-  hour: string; // "HH:00" UTC hour start
   count: number;
 }
 
@@ -180,12 +197,34 @@ export interface ContractSummary {
   last_activity_at: string | null;
   /** User-defined tags. Absent on optimistic rows built before a response. */
   tags?: string[];
+  token?: TokenMetadata | null;
 }
 
 export interface ContractsListResponse {
   contracts: ContractSummary[];
-  cursor: string | null;
-  has_more: boolean;
+  /** Opaque cursor for the next page; empty on the last page. */
+  next_cursor: string;
+  cursor?: string | null;
+  has_more?: boolean;
+}
+
+/** One contract as returned by GET /api/v1/search (OpenAPI `Contract`, issue #619). */
+export interface SearchContract {
+  id: string;
+  network: string;
+  label: string | null;
+  status: string;
+  wasm_hash: string | null;
+  created_at_ledger: number;
+  backfill_complete_at: string | null;
+  added_at: string;
+  tags: string[] | null;
+  token?: TokenMetadata | null;
+}
+
+/** Response of GET /api/v1/search: `{ "items": [...] }` per docs/openapi.yaml. */
+export interface SearchResponse {
+  items: SearchContract[];
 }
 
 /** Body of POST /api/v1/contracts/:id/tags — the contract's full tag list. */
@@ -387,6 +426,12 @@ export interface HealthScoreResponse {
     storage_ttl: number;
   };
   computed_at: string;
+  history?: { computed_at: string; score: number }[];
+}
+
+export interface ContractUpgradeMarker {
+  ledger: number;
+  at: string;
 }
 
 export interface ContractSnapshot {
@@ -411,6 +456,7 @@ export interface GlobalStats {
   total_events: number;
   total_invocations: number;
   total_storage_entries: number;
+  approximate?: boolean;
 }
 
 // ---- live dashboard (#139) --------------------------------------------------
@@ -473,10 +519,16 @@ export interface CompareContractEntry {
   has_data: boolean;
   event_count: number;
   invocation_count: number;
-  avg_cpu: number;
-  avg_fee: number;
+  /**
+   * Window averages. Null when the selected window has no lifetime source
+   * (the "all" comparison, issue #607): they render as "—" instead of a
+   * misleading zero. The API always sends numbers for 24h/7d/30d.
+   */
+  avg_cpu: number | null;
+  avg_fee: number | null;
   /** Cached composite health score, or null when not computed yet. */
   health_score: number | null;
+  health_components?: HealthScoreResponse["components"];
   last_synced_ledger: number;
   event_volume: CompareVolumePoint[];
   /** Set when this contract's lookups failed while others succeeded. */

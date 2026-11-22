@@ -53,6 +53,7 @@ func main() {
 		logger.Error("parse config", "err", err)
 		os.Exit(1)
 	}
+	cfg.DatabasePool.Apply(poolCfg)
 	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
 	if err != nil {
@@ -64,6 +65,31 @@ func main() {
 	// Export the live pool on every /metrics endpoint: the snapshot is read
 	// lazily on each scrape, so no background sampler is needed.
 	metrics.SetPool(func() metrics.PoolStat { return pool.Stat() })
+
+	fullStore := store.NewFullStore(pool)
+	if cfg.DatabaseReadURL != "" {
+		readPoolCfg, err := pgxpool.ParseConfig(cfg.DatabaseReadURL)
+		if err != nil {
+			logger.Error("parse replica pool config", "err", err)
+			os.Exit(1)
+		}
+		cfg.DatabasePool.Apply(readPoolCfg)
+		readPoolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
+		readPool, err := pgxpool.NewWithConfig(context.Background(), readPoolCfg)
+		if err != nil {
+			logger.Error("replica postgres connect", "err", err)
+			os.Exit(1)
+		}
+		defer readPool.Close()
+
+		lagGuard := store.NewReplicaLagGuard(cfg.ReplicaLagThreshold, store.NewPostgresLagSampler(readPool))
+		metrics.SetReplicaPool(func() metrics.PoolStat { return readPool.Stat() })
+		metrics.SetReplicaLag(func() time.Duration {
+			_, _, _ = lagGuard.CheckLag(context.Background())
+			return lagGuard.CurrentLag()
+		})
+		fullStore = store.NewStoreWithReplica(pool, readPool, lagGuard)
+	}
 
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -83,7 +109,7 @@ func main() {
 	})
 
 	h := &handler.Handler{
-		Store:       store.NewFullStore(pool),
+		Store:       fullStore,
 		DB:          &dbPinger{pool: pool},
 		Redis:       &redisPinger{client: redisClient},
 		RedisClient: &realRedisClient{client: redisClient},
@@ -95,8 +121,12 @@ func main() {
 		SlackSigningSecret: cfg.SlackSigningSecret,
 		SessionSigner:      middleware.NewSessionSigner(identitySigningKey(cfg, logger), cfg.IdentitySessionTTL),
 		TrustedProxySecret: cfg.TrustedIdentityProxySecret,
+		TrustedProxies:     cfg.TrustedProxies,
+		RateLimitPerMinute: cfg.RateLimitPerMinute,
+		RateLimitWindow:    cfg.RateLimitWindow,
 		RequestTimeout:     cfg.RequestTimeout,
 		StreamTimeout:      cfg.StreamTimeout,
+		RequireAuth:        cfg.RequireAuth,
 		GraphQL: graph.Options{
 			ComplexityLimit: cfg.GraphQLComplexityLimit,
 			PersistedOnly:   cfg.GraphQLPersistedOnly,
@@ -118,6 +148,8 @@ func main() {
 		Addr:        fmt.Sprintf(":%s", cfg.Port),
 		Handler:     router.New(h, maxBodyBytes),
 		ReadTimeout: 15 * time.Second,
+		// Reject slow HTTP headers before they can occupy a connection.
+		ReadHeaderTimeout: 5 * time.Second,
 		// WriteTimeout starts before the handler's own timer, so it must
 		// outlast API_REQUEST_TIMEOUT or the 503 is cut off mid-write and the
 		// client sees a dropped connection. The SSE route extends its own
@@ -140,11 +172,12 @@ func main() {
 	var metricsSrv *http.Server
 	if cfg.MetricsPort != "" {
 		metricsSrv = &http.Server{
-			Addr:         fmt.Sprintf(":%s", cfg.MetricsPort),
-			Handler:      metrics.NewAdminMux(),
-			ReadTimeout:  15 * time.Second,
-			WriteTimeout: 30 * time.Second,
-			IdleTimeout:  60 * time.Second,
+			Addr:              fmt.Sprintf(":%s", cfg.MetricsPort),
+			Handler:           metrics.NewAdminMux(),
+			ReadTimeout:       15 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       60 * time.Second,
 		}
 	}
 
@@ -241,4 +274,8 @@ func (r *realRedisClient) Incr(ctx context.Context, key string) (int64, error) {
 }
 func (r *realRedisClient) Expire(ctx context.Context, key string, expiration time.Duration) (bool, error) {
 	return r.client.Expire(ctx, key, expiration).Result()
+}
+
+func (r *realRedisClient) Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error) {
+	return r.client.Eval(ctx, script, keys, args...).Result()
 }

@@ -37,17 +37,37 @@ vi.mock("next/link", () => ({
 }));
 
 // ── Mock next/navigation ────────────────────────────────────────────────────
-// router.replace() updates the shared search params, so the component re-reads
-// the new sort state on the next render just as a real navigation would.
+// router.replace()/push() apply the target URL to the shared search params,
+// so the component re-reads the new state on the next render just as a real
+// navigation would. A test can simulate Back by reverting the params and
+// re-rendering.
 const nav = vi.hoisted(() => {
-  const replace = vi.fn();
-  const push = vi.fn();
-  return { replace, push };
+  const searchParams = new URLSearchParams();
+  const applyTo = (url: string) => {
+    const queryIndex = url.indexOf("?");
+    const qs = queryIndex >= 0 ? url.slice(queryIndex + 1) : "";
+    for (const key of Array.from(searchParams.keys())) searchParams.delete(key);
+    for (const [key, value] of new URLSearchParams(qs)) {
+      searchParams.set(key, value);
+    }
+  };
+  const replace = vi.fn((url: string) => applyTo(url));
+  const push = vi.fn((url: string) => applyTo(url));
+  return { replace, push, searchParams };
 });
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: nav.replace, push: nav.push }),
+  useRouter: () => ({ replace: nav.replace, push: nav.push, back: vi.fn() }),
+  useSearchParams: () => nav.searchParams,
+  usePathname: () => "/contracts",
 }));
+
+function resetQuery() {
+  for (const key of Array.from(nav.searchParams.keys()))
+    nav.searchParams.delete(key);
+  nav.replace.mockClear();
+  nav.push.mockClear();
+}
 
 // ── Mock @sorolens/ui so we don't need the built dist ───────────────────────
 // Toast mirrors the real component's a11y contract (packages/ui/src/Toast.tsx):
@@ -218,6 +238,7 @@ function rowTexts(): string[] {
 describe("ContractsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetQuery();
     mockBatchContracts.mockResolvedValue({
       action: "untrack",
       requested: 1,
@@ -232,17 +253,13 @@ describe("ContractsPage", () => {
 
   afterEach(() => {
     cleanup();
+    resetQuery();
   });
 
   // Helper: dynamic import so mocks are in place before module loads.
   // Each render mounts a fresh SWR cache so tests stay independent, and
   // deduping is disabled so a revalidation is observable immediately.
-  async function renderPage(
-    props: {
-      initialSortColumn?: string;
-      initialSortDirection?: "asc" | "desc";
-    } = {}
-  ) {
+  async function renderPage() {
     const { default: ContractsClient } =
       await import("@/app/(app)/contracts/ContractsClient");
     return render(
@@ -255,7 +272,7 @@ describe("ContractsPage", () => {
           shouldRetryOnError: false,
         }}
       >
-        <ContractsClient {...props} />
+        <ContractsClient />
       </SWRConfig>
     );
   }
@@ -417,6 +434,34 @@ describe("ContractsPage", () => {
         .checked
     ).toBe(true);
     expect(screen.getByText(/2 selected/i)).toBeDefined();
+  });
+
+  // ── Compare entry point (#607) ───────────────────────────────────────────
+
+  it("links a two-contract selection to the shared /compare URL", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    // One selected: the Compare action is visible but inert.
+    selectRow(CONTRACT_A.id);
+    const inert = document.getElementById(
+      "bulk-compare-btn"
+    ) as HTMLButtonElement;
+    expect(inert.tagName).toBe("BUTTON");
+    expect(inert.disabled).toBe(true);
+
+    // Two selected: it becomes a real link carrying the whole selection.
+    selectRow(CONTRACT_B.id);
+    const link = document.getElementById(
+      "bulk-compare-btn"
+    ) as HTMLAnchorElement;
+    expect(link.tagName).toBe("A");
+    const href = decodeURIComponent(link.getAttribute("href") ?? "");
+    expect(href.startsWith("/compare?ids=")).toBe(true);
+    const ids = href.replace("/compare?ids=", "").split(",");
+    expect(ids).toContain(CONTRACT_A.id);
+    expect(ids).toContain(CONTRACT_B.id);
+    expect(ids).toHaveLength(2);
   });
 
   it("untracks selected contracts after confirmation and refreshes the list", async () => {
@@ -629,7 +674,9 @@ describe("ContractsPage", () => {
       )
     );
     // …and the active sort is written to the URL so the view is shareable.
-    expect(nav.replace).toHaveBeenCalledWith("?sort=label&dir=asc");
+    expect(nav.replace).toHaveBeenCalledWith("/contracts?sort=label&dir=asc", {
+      scroll: false,
+    });
     // The visual indicator is rendered for the active sort column.
     expect(screen.getByText("▲")).toBeDefined();
   });
@@ -642,22 +689,29 @@ describe("ContractsPage", () => {
     // First click on the default column (added_at, desc) flips to asc.
     fireEvent.click(screen.getByTestId("col-added_at"));
     await waitFor(() =>
-      expect(nav.replace).toHaveBeenCalledWith("?sort=added_at&dir=asc")
+      expect(nav.replace).toHaveBeenCalledWith(
+        "/contracts?sort=added_at&dir=asc",
+        {
+          scroll: false,
+        }
+      )
     );
 
-    // Second click flips back to desc.
+    // Second click flips back to desc — the default sort state, so the
+    // URL drops both params and parses back to added_at/desc.
     fireEvent.click(screen.getByTestId("col-added_at"));
     await waitFor(() =>
-      expect(nav.replace).toHaveBeenCalledWith("?sort=added_at&dir=desc")
+      expect(nav.replace).toHaveBeenCalledWith("/contracts", {
+        scroll: false,
+      })
     );
     expect(screen.getByText("▼")).toBeDefined();
   });
 
   it("initializes the sort from the URL on load", async () => {
-    await renderPage({
-      initialSortColumn: "status",
-      initialSortDirection: "asc",
-    });
+    nav.searchParams.set("sort", "status");
+    nav.searchParams.set("dir", "asc");
+    await renderPage();
     await waitFor(() => screen.getByTestId("data-table"));
 
     // The first request already carries the URL sort params.
@@ -753,5 +807,96 @@ describe("ContractsPage", () => {
       await screen.findByText("No contracts tracked yet")
     ).toBeInTheDocument();
     expect(screen.queryByText("Couldn't load contracts.")).toBeNull();
+  });
+
+  // ── URL-synced state (issue #618) ─────────────────────────────────────────
+
+  it("restores the tag filter and page from the URL on first render", async () => {
+    nav.searchParams.set("tag", "defi");
+    nav.searchParams.set("cursor", "cur-4");
+    nav.searchParams.set("page", "3");
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(mockListContracts).toHaveBeenCalledWith(
+        expect.objectContaining({ tag: "defi", cursor: "cur-4", limit: 20 })
+      );
+    });
+    expect(screen.getByText("Page 3")).toBeInTheDocument();
+    expect(document.getElementById("contracts-tag-filter")).toHaveValue("defi");
+  });
+
+  it("pushes the cursor and page number when paging forward", async () => {
+    mockListContracts.mockResolvedValue({
+      contracts: [CONTRACT_A, CONTRACT_B],
+      next_cursor: "cur-2",
+      has_more: true,
+    });
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    fireEvent.click(document.getElementById("contracts-next-page")!);
+    await waitFor(() => {
+      expect(mockListContracts).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cursor: "cur-2" })
+      );
+    });
+    expect(nav.push).toHaveBeenLastCalledWith(
+      "/contracts?cursor=cur-2&page=2",
+      {
+        scroll: false,
+      }
+    );
+  });
+
+  it("writes the debounced search text into the URL with replace", async () => {
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+
+    fireEvent.change(document.getElementById("contracts-search")!, {
+      target: { value: "My Contract" },
+    });
+
+    // Filtering is immediate, the URL catches up debounced (400ms).
+    expect(screen.getAllByTestId("data-table-row")).toHaveLength(1);
+    expect(nav.replace).not.toHaveBeenCalledWith("/contracts?q=My+Contract", {
+      scroll: false,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(nav.replace).toHaveBeenCalledWith("/contracts?q=My+Contract", {
+      scroll: false,
+    });
+  });
+
+  it("pushes a tag chip click into the URL and resets pagination", async () => {
+    mockListContracts.mockResolvedValue({
+      contracts: [{ ...CONTRACT_A, tags: ["prod"] }, CONTRACT_B],
+      next_cursor: "cur-2",
+      has_more: true,
+    });
+    await renderPage();
+    await waitFor(() => screen.getByTestId("data-table"));
+    fireEvent.click(document.getElementById("contracts-next-page")!);
+    await waitFor(() =>
+      expect(nav.push).toHaveBeenCalledWith("/contracts?cursor=cur-2&page=2", {
+        scroll: false,
+      })
+    );
+
+    fireEvent.click(screen.getByText("prod"));
+
+    // The tag lands in the URL and pagination restarts, all in one write.
+    await waitFor(() => {
+      expect(nav.push).toHaveBeenLastCalledWith("/contracts?tag=prod", {
+        scroll: false,
+      });
+    });
+    await waitFor(() => {
+      expect(mockListContracts).toHaveBeenLastCalledWith(
+        expect.objectContaining({ tag: "prod", cursor: undefined })
+      );
+    });
   });
 });

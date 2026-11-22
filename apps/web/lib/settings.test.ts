@@ -4,10 +4,8 @@ import {
   DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
   clearSettings,
-  generateApiKey,
   isValidEmail,
   loadSettings,
-  maskApiKey,
   saveSettings,
   type UserSettings,
 } from "./settings";
@@ -34,7 +32,7 @@ function memoryStorage(): Storage {
 describe("isValidEmail", () => {
   it("accepts ordinary addresses", () => {
     expect(isValidEmail("dev@example.com")).toBe(true);
-    expect(isValidEmail("first.last+tag@sorolens.dev")).toBe(true);
+    expect(isValidEmail("first.last+tag@sorolens.xyz")).toBe(true);
   });
 
   it("rejects malformed addresses", () => {
@@ -44,36 +42,6 @@ describe("isValidEmail", () => {
     expect(isValidEmail("@example.com")).toBe(false);
     expect(isValidEmail("has space@example.com")).toBe(false);
     expect(isValidEmail("trailing@example.")).toBe(false);
-  });
-});
-
-describe("generateApiKey", () => {
-  it("returns a prefixed hex token of fixed length", () => {
-    const key = generateApiKey();
-    expect(key.startsWith("sl_live_")).toBe(true);
-    expect(key.slice("sl_live_".length)).toMatch(/^[0-9a-f]{48}$/);
-  });
-
-  it("does not repeat between calls", () => {
-    expect(generateApiKey()).not.toBe(generateApiKey());
-  });
-});
-
-describe("maskApiKey", () => {
-  it("keeps a recognisable prefix and suffix", () => {
-    const key = "sl_live_00112233445566778899aabbccddeeff00112233445566";
-    const masked = maskApiKey(key);
-    expect(masked.startsWith("sl_live_")).toBe(true);
-    expect(masked.endsWith(key.slice(-4))).toBe(true);
-    expect(masked).not.toBe(key);
-  });
-
-  it("returns an empty string when there is no key", () => {
-    expect(maskApiKey(null)).toBe("");
-  });
-
-  it("fully hides a short value", () => {
-    expect(maskApiKey("short")).toBe("•••••");
   });
 });
 
@@ -94,8 +62,6 @@ describe("loadSettings / saveSettings", () => {
           weekly_digest: true,
         },
       },
-      apiKey: "sl_live_abc",
-      apiKeyCreatedAt: "2026-09-25T00:00:00.000Z",
     };
 
     expect(saveSettings(settings, storage)).toBe(true);
@@ -118,7 +84,22 @@ describe("loadSettings / saveSettings", () => {
     expect(loaded.notifications.channels).toEqual(
       DEFAULT_SETTINGS.notifications.channels
     );
-    expect(loaded.apiKey).toBeNull();
+  });
+
+  it("drops a legacy plaintext apiKey from an older blob", () => {
+    const storage = memoryStorage();
+    storage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        defaultNetwork: "mainnet",
+        apiKey: "sl_live_fabricated",
+        apiKeyCreatedAt: "2026-09-25T00:00:00.000Z",
+      })
+    );
+
+    const loaded = loadSettings(storage) as unknown as Record<string, unknown>;
+    expect(loaded.apiKey).toBeUndefined();
+    expect(loaded.apiKeyCreatedAt).toBeUndefined();
   });
 
   it("falls back to defaults when the stored blob is corrupt", () => {
@@ -132,5 +113,59 @@ describe("loadSettings / saveSettings", () => {
     saveSettings(DEFAULT_SETTINGS, storage);
     clearSettings(storage);
     expect(storage.getItem(SETTINGS_STORAGE_KEY)).toBeNull();
+  });
+});
+
+describe("unavailable storage", () => {
+  /** A Storage whose reads fail, as when the browser blocks site data. */
+  function throwingStorage(): Storage {
+    const storage = memoryStorage();
+    return {
+      ...storage,
+      getItem: () => {
+        throw new Error("Storage is blocked");
+      },
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => {
+        throw new Error("Storage is blocked");
+      },
+    } as Storage;
+  }
+
+  it("loadSettings falls back to defaults when a read throws", () => {
+    expect(loadSettings(throwingStorage())).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("saveSettings reports failure when a write throws", () => {
+    expect(saveSettings(DEFAULT_SETTINGS, throwingStorage())).toBe(false);
+  });
+
+  it("clearSettings swallows a failing removal", () => {
+    expect(() => clearSettings(throwingStorage())).not.toThrow();
+  });
+
+  it("all helpers fall back safely when localStorage itself throws", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage"
+    );
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("Access is denied for this document");
+      },
+    });
+
+    try {
+      expect(loadSettings()).toEqual(DEFAULT_SETTINGS);
+      expect(saveSettings(DEFAULT_SETTINGS)).toBe(false);
+      expect(() => clearSettings()).not.toThrow();
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(globalThis, "localStorage", descriptor);
+      }
+    }
   });
 });

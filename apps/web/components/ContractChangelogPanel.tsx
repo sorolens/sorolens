@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { ContractChangelog, CopyButton } from "@sorolens/ui";
 import type { ContractVersionEntry } from "@sorolens/ui";
 import {
@@ -65,7 +66,11 @@ export function ContractChangelogPanel({
   return (
     <div className="space-y-4">
       {state.status === "loading" && (
-        <p className="text-sm text-[var(--color-text-secondary)]" role="status">
+        <p
+          role="status"
+          aria-busy="true"
+          className="text-sm text-[var(--color-text-secondary)]"
+        >
           Loading changelog…
         </p>
       )}
@@ -100,8 +105,15 @@ export function ContractChangelogPanel({
           rel="noopener noreferrer"
           aria-label="Wasm hash badge"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element -- external SVG badge */}
-          <img src={badgeUrl} alt="Wasm hash badge" height={20} />
+          {/* The badge is a live external SVG served by the API. */}
+          <Image
+            src={badgeUrl}
+            alt="Wasm hash badge"
+            width={120}
+            height={20}
+            unoptimized
+            className="h-5 w-auto"
+          />
         </a>
         <CopyButton text={badgeMarkdown} label="Copy badge Markdown" />
       </div>

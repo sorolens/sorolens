@@ -7,9 +7,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/sorolens/sorolens/cli/internal/client"
 	"github.com/sorolens/sorolens/cli/internal/format"
+	"github.com/spf13/cobra"
 )
 
 var eventsTailCmd = &cobra.Command{
@@ -42,7 +42,7 @@ func runEventsTail(cmd *cobra.Command, _ []string) error {
 		_ = os.Setenv("NO_COLOR", "1")
 	}
 
-	c := client.New(globalConfig.APIURL, 0)
+	c := newClient(0)
 
 	// Ctrl-C / SIGTERM cancel the stream context so the SSE connection closes
 	// cleanly instead of the process being killed mid-frame.

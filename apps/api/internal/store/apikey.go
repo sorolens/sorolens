@@ -37,16 +37,24 @@ type APIKey struct {
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 	RevokedAt  *time.Time
+	ExpiresAt  *time.Time
 	// UserID binds the key to a user when non-nil. The key then carries that
 	// user's identity (issue #518). Unbound keys authenticate scopes only.
 	UserID *string
 	// RotatedAt is when the key's secret was last regenerated in place,
 	// or nil if it has never been rotated.
 	RotatedAt *time.Time
+	// MonthlyQuota is the optional hard quota on monthly requests (issue #792).
+	MonthlyQuota *int
 }
 
 // Revoked reports whether the key has been revoked.
 func (k APIKey) Revoked() bool { return k.RevokedAt != nil }
+
+// Expired reports whether the key has expired relative to now.
+func (k APIKey) Expired(now time.Time) bool {
+	return k.ExpiresAt != nil && !now.Before(*k.ExpiresAt)
+}
 
 // HasScope reports whether the key grants the required scope. admin:*
 // always grants access; a trailing ":*" wildcard grants every scope in

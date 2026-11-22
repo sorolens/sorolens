@@ -70,6 +70,11 @@ export const config = {
   // Per-user slash command budget (sliding window of 60s).
   commandRateLimitPerMinute: intOpt("COMMAND_RATE_LIMIT_PER_MINUTE", 10),
 
+  // Alert routing & watchdog subscriptions
+  alertRateLimitPerMinute: intOpt("ALERT_RATE_LIMIT_PER_MINUTE", 5),
+  alertPollIntervalSeconds: intOpt("ALERT_POLL_INTERVAL_SECONDS", 0),
+  alertWebhookSecret: optional("ALERT_WEBHOOK_SECRET", ""),
+
   // HTTP server
   port: intOpt("PORT", 8080),
 

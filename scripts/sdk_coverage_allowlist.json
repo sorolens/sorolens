@@ -11,6 +11,7 @@
           "v2AdminListKeys",
           "v2AdminRevokeKey",
           "v2AdminRotateKey",
+          "v2ContractEventSchemas",
           "v2ContractForecast",
           "v2ContractGraph",
           "v2ContractSnapshot",
@@ -35,6 +36,7 @@
           "v2LiveActivity",
           "v2RecentEvents",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2RemoveFromWatchlist",
           "v2RevokeAPIKey",
           "v2RotateAPIKey",
@@ -47,15 +49,10 @@
       {
         "reason": "Scoped/admin API-key management is a control-plane concern not yet exposed by this SDK.",
         "operations": [
-          "createApiKey",
           "createApiKeyAdmin",
-          "getApiKey",
           "getApiKeyAdmin",
-          "listApiKeys",
           "listApiKeysAdmin",
-          "revokeApiKey",
           "revokeApiKeyAdmin",
-          "rotateApiKey",
           "rotateApiKeyAdmin"
         ]
       },
@@ -68,7 +65,6 @@
           "deleteAlertSubscription",
           "listAlertRules",
           "listAlertSubscriptions",
-          "listAlerts",
           "previewAlertRule",
           "setAlertRuleEnabled",
           "validateAlertRule"
@@ -77,18 +73,12 @@
       {
         "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
         "operations": [
-          "createReportSubscription",
-          "deleteReportSubscription",
+          "getContractEventSchemas",
           "getContractGraph",
           "getContractHealthScore",
-          "getContractReport",
-          "getContractReportHistory",
-          "getContractSLABadge",
           "getContractSpec",
           "getContractSummary",
-          "getContractUptime",
-          "listReportSubscriptions",
-          "unsubscribeReport"
+          "getContractUptime"
         ]
       },
       {
@@ -165,6 +155,7 @@
         "operations": [
           "listAllEvents",
           "listAuditEvents",
+          "listAuditEventsRoot",
           "listFailedEvents",
           "recentEvents",
           "requeueFailedEvent",
@@ -173,8 +164,10 @@
         ]
       },
       {
-        "reason": "Cross-contract invocation listing and invocation trace are not part of this SDK's scope yet.",
+        "reason": "Invocation details, aggregate statistics, listing and tracing are not part of this SDK's scope yet.",
         "operations": [
+          "getContractInvocation",
+          "getContractInvocationStats",
           "getInvocationTrace",
           "listAllInvocations"
         ]
@@ -193,8 +186,58 @@
         "reason": "Not part of this SDK's implemented surface yet.",
         "operations": [
           "batchContracts",
+          "deleteContract",
           "compareContracts",
           "listRuleLibrary"
+        ]
+      },
+      {
+        "reason": "Self-service API keys and the integrations catalog (issues #612, #613) are web-app surfaces and are not part of this SDK's implemented surface yet.",
+        "operations": [
+          "createMyApiKey",
+          "listIntegrations",
+          "listMyApiKeys",
+          "revokeMyApiKey",
+          "testIntegration",
+          "v2CreateMyApiKey",
+          "v2ListIntegrations",
+          "v2ListMyApiKeys",
+          "v2RevokeMyApiKey",
+          "v2TestIntegration"
+        ]
+      },
+      {
+        "reason": "Async export jobs (issue #785) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "createExportJob",
+          "createExportJobV2",
+          "deleteExportJob",
+          "deleteExportJobV2",
+          "downloadExport",
+          "downloadExportV2",
+          "getExportJob",
+          "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
         ]
       }
     ],
@@ -208,6 +251,7 @@
           "v2AdminListKeys",
           "v2AdminRevokeKey",
           "v2AdminRotateKey",
+          "v2ContractEventSchemas",
           "v2ContractForecast",
           "v2ContractGraph",
           "v2ContractSnapshot",
@@ -232,6 +276,7 @@
           "v2LiveActivity",
           "v2RecentEvents",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2RemoveFromWatchlist",
           "v2RevokeAPIKey",
           "v2RotateAPIKey",
@@ -254,32 +299,19 @@
         "reason": "Alert rules and alert subscriptions are surfaced through the webhooks/notifications product, not this SDK yet.",
         "operations": [
           "createAlertRule",
-          "createAlertSubscription",
           "deleteAlertRule",
-          "deleteAlertSubscription",
           "listAlertRules",
-          "listAlertSubscriptions",
-          "listAlerts",
           "previewAlertRule",
           "setAlertRuleEnabled",
           "validateAlertRule"
         ]
       },
       {
-        "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
+        "reason": "Event schema, contract spec, and uptime endpoints are not yet exposed by this SDK.",
         "operations": [
-          "createReportSubscription",
-          "deleteReportSubscription",
-          "getContractGraph",
-          "getContractHealthScore",
-          "getContractReport",
-          "getContractReportHistory",
-          "getContractSLABadge",
+          "getContractEventSchemas",
           "getContractSpec",
-          "getContractSummary",
-          "getContractUptime",
-          "listReportSubscriptions",
-          "unsubscribeReport"
+          "getContractUptime"
         ]
       },
       {
@@ -352,16 +384,17 @@
         "operations": [
           "listAllEvents",
           "listAuditEvents",
-          "listFailedEvents",
+          "listAuditEventsRoot",
           "recentEvents",
-          "requeueFailedEvent",
           "streamAllEvents",
           "subscribeEventsWS"
         ]
       },
       {
-        "reason": "Cross-contract invocation listing and invocation trace are not part of this SDK's scope yet.",
+        "reason": "Invocation details, aggregate statistics, listing and tracing are not part of this SDK's scope yet.",
         "operations": [
+          "getContractInvocation",
+          "getContractInvocationStats",
           "getInvocationTrace",
           "listAllInvocations"
         ]
@@ -371,7 +404,6 @@
         "operations": [
           "getContractVerification",
           "getContractWasm",
-          "listContractUpgrades",
           "validateContract",
           "verifyContractSource"
         ]
@@ -380,8 +412,57 @@
         "reason": "Not part of this SDK's implemented surface yet.",
         "operations": [
           "batchContracts",
-          "compareContracts",
+          "deleteContract",
           "listRuleLibrary"
+        ]
+      },
+      {
+        "reason": "Self-service API keys and the integrations catalog (issues #612, #613) are web-app surfaces and are not part of this SDK's implemented surface yet.",
+        "operations": [
+          "createMyApiKey",
+          "listIntegrations",
+          "listMyApiKeys",
+          "revokeMyApiKey",
+          "testIntegration",
+          "v2CreateMyApiKey",
+          "v2ListIntegrations",
+          "v2ListMyApiKeys",
+          "v2RevokeMyApiKey",
+          "v2TestIntegration"
+        ]
+      },
+      {
+        "reason": "Async export jobs (issue #785) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "createExportJob",
+          "createExportJobV2",
+          "deleteExportJob",
+          "deleteExportJobV2",
+          "downloadExport",
+          "downloadExportV2",
+          "getExportJob",
+          "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
         ]
       }
     ],
@@ -390,6 +471,398 @@
         "reason": "Integration endpoints (GraphQL, Slack, live activity, metrics, version, health probe alias, subscription signing secrets) are wired for the web app, not the SDK surface.",
         "operations": [
           "slackCommand"
+        ]
+      }
+    ],
+    "jvm": [
+      {
+        "reason": "The JVM and TypeScript clients ship the core read surface (contracts, events, invocations, global and per-contract stats) first. Remaining operations are tracked as follow-up SDK work.",
+        "operations": [
+          "getInvocationTrace",
+          "getSubscriptionSigningSecret",
+          "rotateSubscriptionSigningSecret",
+          "health",
+          "readyz",
+          "graphql",
+          "listWatchedAccounts",
+          "addWatchedAccount",
+          "deleteWatchedAccount",
+          "listAuditEvents",
+          "listAuditEventsRoot",
+          "registerContract",
+          "batchContracts",
+          "deleteContract",
+          "addContractTag",
+          "removeContractTag",
+          "listContractNotes",
+          "createContractNote",
+          "updateContractNote",
+          "deleteContractNote",
+          "exportContractEventsCSV",
+          "getContractInvocationStats",
+          "getContractInvocation",
+          "listContractStorage",
+          "getContractForecast",
+          "getContractSnapshot",
+          "verifyContractSource",
+          "getContractVerification",
+          "streamContractEvents",
+          "listApiKeys",
+          "createApiKey",
+          "getApiKey",
+          "revokeApiKey",
+          "rotateApiKey",
+          "listApiKeysAdmin",
+          "createApiKeyAdmin",
+          "getApiKeyAdmin",
+          "revokeApiKeyAdmin",
+          "rotateApiKeyAdmin",
+          "listWatchlist",
+          "addToWatchlist",
+          "removeFromWatchlist",
+          "getWatchlistStatus",
+          "listGroups",
+          "createGroup",
+          "getGroup",
+          "updateGroup",
+          "deleteGroup",
+          "addGroupContract",
+          "removeGroupContract",
+          "removeGroupContractByPath",
+          "getGroupStats",
+          "getWatchdogStats",
+          "listWatchdogAlerts",
+          "listMonitoredContracts",
+          "getMonitoredContract",
+          "listContractHealthChecks",
+          "listContractAlerts",
+          "recentEvents",
+          "liveActivity",
+          "validateContract",
+          "v2GlobalStats",
+          "v2LiveActivity",
+          "v2RecentEvents",
+          "v2ListContracts",
+          "v2RegisterContract",
+          "v2DeleteContract",
+          "v2ValidateContract",
+          "v2GetContract",
+          "v2ListEvents",
+          "v2ListInvocations",
+          "v2ListStorageEntries",
+          "v2ContractStats",
+          "v2ListContractUpgrades",
+          "v2GetContractHealthScore",
+          "v2ContractForecast",
+          "v2ContractSnapshot",
+          "v2StreamEvents",
+          "v2ContractGraph",
+          "v2ListWatchlist",
+          "v2AddToWatchlist",
+          "v2RemoveFromWatchlist",
+          "v2WatchlistStatus",
+          "v2WatchdogStats",
+          "v2ListWatchdogAlerts",
+          "v2ListMonitoredContracts",
+          "v2GetMonitoredContract",
+          "v2ListHealthChecks",
+          "v2ListContractAlerts",
+          "v2ListAPIKeys",
+          "v2CreateAPIKey",
+          "v2GetAPIKey",
+          "v2RevokeAPIKey",
+          "v2RotateAPIKey",
+          "v2AdminListKeys",
+          "v2AdminCreateKey",
+          "v2AdminGetKey",
+          "v2AdminRevokeKey",
+          "v2AdminRotateKey",
+          "listFailedEvents",
+          "requeueFailedEvent",
+          "apiHealth",
+          "createSession",
+          "getVersion",
+          "getMetrics",
+          "slackCommand",
+          "listAllEvents",
+          "listAllInvocations",
+          "compareContracts",
+          "exportContractSnapshot",
+          "listContractUpgrades",
+          "getContractHealthScore",
+          "getContractSummary",
+          "getContractGraph",
+          "getContractSpec",
+          "getContractWasm",
+          "streamAllEvents",
+          "subscribeEventsWS",
+          "getContractUptime",
+          "listAlertSubscriptions",
+          "createAlertSubscription",
+          "deleteAlertSubscription",
+          "listAlerts",
+          "createReportSubscription",
+          "listReportSubscriptions",
+          "deleteReportSubscription",
+          "unsubscribeReport",
+          "getContractReport",
+          "getContractReportHistory",
+          "getContractSLABadge",
+          "listAlertRules",
+          "createAlertRule",
+          "validateAlertRule",
+          "previewAlertRule",
+          "listRuleMetrics",
+          "listRuleLibrary",
+          "setAlertRuleEnabled",
+          "deleteAlertRule",
+          "getContractEventSchemas",
+          "v2ContractEventSchemas"
+        ]
+      },
+      {
+        "reason": "Self-service API keys and the integrations catalog (issues #612, #613) are not part of this SDK's implemented surface yet.",
+        "operations": [
+          "createMyApiKey",
+          "listIntegrations",
+          "listMyApiKeys",
+          "revokeMyApiKey",
+          "testIntegration",
+          "v2CreateMyApiKey",
+          "v2ListIntegrations",
+          "v2ListMyApiKeys",
+          "v2RevokeMyApiKey",
+          "v2TestIntegration"
+        ]
+      },
+      {
+        "reason": "Async export jobs (issue #785) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "createExportJob",
+          "createExportJobV2",
+          "deleteExportJob",
+          "deleteExportJobV2",
+          "downloadExport",
+          "downloadExportV2",
+          "getExportJob",
+          "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
+        ]
+      }
+    ],
+    "typescript": [
+      {
+        "reason": "The JVM and TypeScript clients ship the core read surface (contracts, events, invocations, global and per-contract stats) first. Remaining operations are tracked as follow-up SDK work.",
+        "operations": [
+          "getInvocationTrace",
+          "getSubscriptionSigningSecret",
+          "rotateSubscriptionSigningSecret",
+          "health",
+          "readyz",
+          "graphql",
+          "listWatchedAccounts",
+          "addWatchedAccount",
+          "deleteWatchedAccount",
+          "listAuditEvents",
+          "listAuditEventsRoot",
+          "registerContract",
+          "batchContracts",
+          "deleteContract",
+          "addContractTag",
+          "removeContractTag",
+          "listContractNotes",
+          "createContractNote",
+          "updateContractNote",
+          "deleteContractNote",
+          "exportContractEventsCSV",
+          "getContractInvocationStats",
+          "getContractInvocation",
+          "listContractStorage",
+          "getContractForecast",
+          "getContractSnapshot",
+          "verifyContractSource",
+          "getContractVerification",
+          "streamContractEvents",
+          "listApiKeys",
+          "createApiKey",
+          "getApiKey",
+          "revokeApiKey",
+          "rotateApiKey",
+          "listApiKeysAdmin",
+          "createApiKeyAdmin",
+          "getApiKeyAdmin",
+          "revokeApiKeyAdmin",
+          "rotateApiKeyAdmin",
+          "listWatchlist",
+          "addToWatchlist",
+          "removeFromWatchlist",
+          "getWatchlistStatus",
+          "listGroups",
+          "createGroup",
+          "getGroup",
+          "updateGroup",
+          "deleteGroup",
+          "addGroupContract",
+          "removeGroupContract",
+          "removeGroupContractByPath",
+          "getGroupStats",
+          "getWatchdogStats",
+          "listWatchdogAlerts",
+          "listMonitoredContracts",
+          "getMonitoredContract",
+          "listContractHealthChecks",
+          "listContractAlerts",
+          "recentEvents",
+          "liveActivity",
+          "validateContract",
+          "v2GlobalStats",
+          "v2LiveActivity",
+          "v2RecentEvents",
+          "v2ListContracts",
+          "v2RegisterContract",
+          "v2DeleteContract",
+          "v2ValidateContract",
+          "v2GetContract",
+          "v2ListEvents",
+          "v2ListInvocations",
+          "v2ListStorageEntries",
+          "v2ContractStats",
+          "v2ListContractUpgrades",
+          "v2GetContractHealthScore",
+          "v2ContractForecast",
+          "v2ContractSnapshot",
+          "v2StreamEvents",
+          "v2ContractGraph",
+          "v2ListWatchlist",
+          "v2AddToWatchlist",
+          "v2RemoveFromWatchlist",
+          "v2WatchlistStatus",
+          "v2WatchdogStats",
+          "v2ListWatchdogAlerts",
+          "v2ListMonitoredContracts",
+          "v2GetMonitoredContract",
+          "v2ListHealthChecks",
+          "v2ListContractAlerts",
+          "v2ListAPIKeys",
+          "v2CreateAPIKey",
+          "v2GetAPIKey",
+          "v2RevokeAPIKey",
+          "v2RotateAPIKey",
+          "v2AdminListKeys",
+          "v2AdminCreateKey",
+          "v2AdminGetKey",
+          "v2AdminRevokeKey",
+          "v2AdminRotateKey",
+          "listFailedEvents",
+          "requeueFailedEvent",
+          "apiHealth",
+          "createSession",
+          "getVersion",
+          "getMetrics",
+          "slackCommand",
+          "listAllEvents",
+          "listAllInvocations",
+          "compareContracts",
+          "exportContractSnapshot",
+          "listContractUpgrades",
+          "getContractHealthScore",
+          "getContractSummary",
+          "getContractGraph",
+          "getContractSpec",
+          "getContractWasm",
+          "streamAllEvents",
+          "subscribeEventsWS",
+          "getContractUptime",
+          "listAlertSubscriptions",
+          "createAlertSubscription",
+          "deleteAlertSubscription",
+          "listAlerts",
+          "createReportSubscription",
+          "listReportSubscriptions",
+          "deleteReportSubscription",
+          "unsubscribeReport",
+          "getContractReport",
+          "getContractReportHistory",
+          "getContractSLABadge",
+          "listAlertRules",
+          "createAlertRule",
+          "validateAlertRule",
+          "previewAlertRule",
+          "listRuleMetrics",
+          "listRuleLibrary",
+          "setAlertRuleEnabled",
+          "deleteAlertRule",
+          "getContractEventSchemas",
+          "v2ContractEventSchemas"
+        ]
+      },
+      {
+        "reason": "Self-service API keys and the integrations catalog (issues #612, #613) are not part of this SDK's implemented surface yet.",
+        "operations": [
+          "createMyApiKey",
+          "listIntegrations",
+          "listMyApiKeys",
+          "revokeMyApiKey",
+          "testIntegration",
+          "v2CreateMyApiKey",
+          "v2ListIntegrations",
+          "v2ListMyApiKeys",
+          "v2RevokeMyApiKey",
+          "v2TestIntegration"
+        ]
+      },
+      {
+        "reason": "Async export jobs (issue #785) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "createExportJob",
+          "createExportJobV2",
+          "deleteExportJob",
+          "deleteExportJobV2",
+          "downloadExport",
+          "downloadExportV2",
+          "getExportJob",
+          "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
         ]
       }
     ]

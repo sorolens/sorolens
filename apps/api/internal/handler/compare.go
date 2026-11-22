@@ -33,6 +33,7 @@ type compareContractEntry struct {
 	AvgCPU           float64              `json:"avg_cpu"`
 	AvgFee           float64              `json:"avg_fee"`
 	HealthScore      *int32               `json:"health_score"`
+	HealthComponents *healthComponents    `json:"health_components,omitempty"`
 	LastSyncedLedger uint32               `json:"last_synced_ledger"`
 	EventVolume      []compareVolumePoint `json:"event_volume"`
 	// Error is set when one contract's lookups failed while the rest of the
@@ -186,16 +187,16 @@ func (h *Handler) compareOne(ctx context.Context, id, window string, hours int) 
 
 	switch hs, err := h.Store.GetContractHealthScore(ctx, id); {
 	case err == nil:
-		score := hs.Score
-		e.HealthScore = &score
+		health := contractHealthScoreFromStore(hs)
+		e.HealthScore = &health.Score
+		e.HealthComponents = &health.Components
 	case errors.Is(err, store.ErrNotFound):
-		// Indexer has not computed a score yet; leave it null.
+		// The indexer has not computed a score yet.
 	default:
 		h.Logger.Error("compare health score", "err", err, "contract_id", id)
 		e.Error = "failed to load health score"
 		return e
 	}
-
 	e.HasData = e.Tracked && (e.EventCount > 0 || e.InvocationCount > 0 || e.HealthScore != nil)
 	return e
 }

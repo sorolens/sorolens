@@ -8,6 +8,13 @@ on:
   pull_request:
     types: [closed]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: discord-live-updates-${{ github.head_ref }}
+  cancel-in-progress: true
+
 jobs:
   announce:
     if: github.event.pull_request.merged == true
@@ -22,7 +29,7 @@ jobs:
             const body = (pr.body || '') + ' ' + pr.title;
             // Match: Closes #123, Fixes #123, Resolves #123, close #123, etc.
             const re = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi;
-            const nums = [...new Set([...body.matchAll(re)].map(m => m[1]))];
+            const nums = [...new Set([...body.matchAll(re)]).map(m => m[1])];
             core.setOutput('numbers', nums.join(','));
             core.setOutput('has_closed', nums.length > 0 ? 'true' : 'false');
 
@@ -74,7 +81,7 @@ jobs:
           python - <<'PY'
           import json, os, urllib.request
 
-          items  = json.loads(os.environ["ITEMS_JSON"])
+          items  = json.loads(os.environ[["ITEMS_JSON"]])
           author = os.environ["PR_AUTHOR"]
           pr_url = os.environ["PR_URL"]
           pr_no  = os.environ["PR_NUMBER"]
@@ -89,7 +96,7 @@ jobs:
               title = it["title"]
               tier  = it["tier"]
               pts   = it.get("points")
-              pts_suffix = " - {}pts".format(pts) if pts else ""
+              pts_suffix = "- {}pts".format(pts) if pts else ""
               return "• [#{}]({}) - {} ({}{})".format(n, url, title, tier, pts_suffix)
 
           issue_lines = [format_item(it) for it in items]
@@ -119,8 +126,7 @@ jobs:
                   "Content-Type": "application/json",
                   # Discord's Cloudflare filter 403s the default Python-urllib UA.
                   "User-Agent": "sorolens-live-updates-bot (github.com/sorolens/sorolens, 1.0)",
-              },
-          )
+              })
           try:
               with urllib.request.urlopen(req) as r:
                   print("discord:", r.status)

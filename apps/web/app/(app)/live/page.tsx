@@ -161,6 +161,8 @@ export default function LivePage() {
             {loading && events.length === 0 ? (
               <p
                 data-testid="ticker-loading"
+                role="status"
+                aria-busy="true"
                 className="px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]"
               >
                 Loading events…

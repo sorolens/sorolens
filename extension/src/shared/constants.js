@@ -42,6 +42,7 @@ export const PATHS = {
 export const LOCAL_KEYS = {
   apiKey: "sorolens.apiKey",
   statusCache: "sorolens.statusCache",
+  alertState: "sorolens.alertState",
 };
 
 /** `storage.sync` keys. Non-secret preferences only. */
@@ -51,10 +52,9 @@ export const SYNC_KEYS = {
   userId: "sorolens.userId",
   showInlineButtons: "sorolens.showInlineButtons",
   trackWatchlist: "sorolens.trackWatchlist",
+  notificationsEnabled: "sorolens.notificationsEnabled",
+  notifySeverities: "sorolens.notifySeverities",
 };
-
-/** Where the dashboard keeps the identity it sends as `X-User-ID`. */
-export const DASHBOARD_USER_ID_STORAGE_KEY = "sorolens_user_id";
 
 /** How long a cached tracking status stays fresh, and how many we keep. */
 export const STATUS_CACHE_TTL_MS = 60_000;
@@ -77,5 +77,23 @@ export const BADGE = {
   /** Cyan from the dashboard logo (apps/web/public/logo.svg). */
   color: "#06B6D4",
 };
+
+/** Alert severities as the API spells them (docs/openapi.yaml). */
+export const ALERT_SEVERITIES = ["Critical", "Warning", "Info"];
+
+/** Background alert polling (#837). */
+export const ALERTS = {
+  /** Alarm period when everything is healthy. */
+  pollMinutes: 5,
+  /** Maximum alerts fetched per poll (API caps the feed at 500). */
+  fetchLimit: 100,
+  /** De-duplication memory; oldest keys are dropped beyond this. */
+  seenLimit: 500,
+  /** Upper bound for exponential backoff after repeated failures. */
+  maxBackoffMinutes: 60,
+};
+
+/** Dashboard origin opened by alert notifications. */
+export const DEFAULT_WEB_URL = "https://sorolens.xyz";
 
 export const PRODUCT_NAME = "Sorolens";

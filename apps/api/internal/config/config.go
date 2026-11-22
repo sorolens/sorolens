@@ -16,6 +16,8 @@
 // COLD_STORAGE_BUCKET is optional: leaving it empty disables the cold tier.
 // SENTRY_ENVIRONMENT (production), REQUEST_MAX_BODY_BYTES (1048576 bytes = 1 MiB),
 // API_CACHE_TTL (30s), API_REQUEST_TIMEOUT (30s), API_STREAM_TIMEOUT (5m).
+// DB_MAX_CONNS (20), DB_MIN_CONNS (2), DB_MAX_CONN_LIFETIME (1h),
+// DB_MAX_CONN_IDLE_TIME (30m).
 // Optional with no default: SENTRY_DSN. Error reporting is disabled entirely
 // when it is unset.
 //
@@ -33,16 +35,94 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // DefaultRequestMaxBodyBytes is the default largest request body the API will
 // read: 1 MiB. It keeps an unbounded body read from exhausting process memory.
 const DefaultRequestMaxBodyBytes int64 = 1 << 20
 
+const (
+	// These defaults keep the API responsive without allowing one process to
+	// consume an unreasonable share of a small Postgres instance.
+	DefaultDBMaxConns        int32 = 20
+	DefaultDBMinConns        int32 = 2
+	DefaultDBMaxConnLifetime       = time.Hour
+	DefaultDBMaxConnIdleTime       = 30 * time.Minute
+)
+
+// PoolSettings controls the API's pgx connection pool. The values are read
+// from DB_MAX_CONNS, DB_MIN_CONNS, DB_MAX_CONN_LIFETIME, and
+// DB_MAX_CONN_IDLE_TIME.
+type PoolSettings struct {
+	MaxConns        int32
+	MinConns        int32
+	MaxConnLifetime time.Duration
+	MaxConnIdleTime time.Duration
+}
+
+// Apply copies the settings into a pgxpool configuration before the pool is
+// opened.
+func (s PoolSettings) Apply(cfg *pgxpool.Config) {
+	cfg.MaxConns = s.MaxConns
+	cfg.MinConns = s.MinConns
+	cfg.MaxConnLifetime = s.MaxConnLifetime
+	cfg.MaxConnIdleTime = s.MaxConnIdleTime
+}
+
+// PoolSettingsFromEnv reads the API pool settings, applying safe defaults.
+func PoolSettingsFromEnv() (PoolSettings, error) {
+	maxConns, err := int32Env("DB_MAX_CONNS", DefaultDBMaxConns, 1)
+	if err != nil {
+		return PoolSettings{}, err
+	}
+	minConns, err := int32Env("DB_MIN_CONNS", DefaultDBMinConns, 0)
+	if err != nil {
+		return PoolSettings{}, err
+	}
+	if minConns > maxConns {
+		return PoolSettings{}, fmt.Errorf(
+			"DB_MIN_CONNS: %d cannot exceed DB_MAX_CONNS: %d",
+			minConns,
+			maxConns,
+		)
+	}
+
+	maxLifetime, err := durationEnv(
+		"DB_MAX_CONN_LIFETIME",
+		DefaultDBMaxConnLifetime,
+	)
+	if err != nil {
+		return PoolSettings{}, err
+	}
+	maxIdleTime, err := durationEnv(
+		"DB_MAX_CONN_IDLE_TIME",
+		DefaultDBMaxConnIdleTime,
+	)
+	if err != nil {
+		return PoolSettings{}, err
+	}
+
+	return PoolSettings{
+		MaxConns:        maxConns,
+		MinConns:        minConns,
+		MaxConnLifetime: maxLifetime,
+		MaxConnIdleTime: maxIdleTime,
+	}, nil
+}
+
 // Config holds all runtime configuration for the API.
 type Config struct {
 	// DatabaseURL is the pooled Postgres connection string used by the API.
 	DatabaseURL string
+	// DatabaseReadURL is the optional Postgres replica connection string.
+	DatabaseReadURL string
+	// ReplicaLagThreshold is the maximum tolerable replication lag before
+	// falling back to the primary database. Defaults to 10s.
+	ReplicaLagThreshold time.Duration
+	// DatabasePool contains the API's pgx pool limits and recycling settings.
+	DatabasePool PoolSettings
 	// DirectDatabaseURL is the non-pooled connection string used for migrations.
 	DirectDatabaseURL string
 	// RedisURL is the Redis connection string used for caching and advisory locks.
@@ -130,14 +210,30 @@ type Config struct {
 	// GraphQLPersistedOnly restricts /graphql to the embedded persisted
 	// queries (GRAPHQL_PERSISTED_ONLY).
 	GraphQLPersistedOnly bool
+	// RequireAuth enforces authentication across all endpoints except health
+	// checks when set to true (API_REQUIRE_AUTH).
+	RequireAuth bool
+	// TrustedProxies lists proxy peers allowed to supply X-Forwarded-For.
+	TrustedProxies []string
+	// RateLimitPerMinute is the default anonymous request budget.
+	RateLimitPerMinute int
+	// RateLimitWindow is the sliding window used by the rate limiter.
+	RateLimitWindow time.Duration
 }
 
 // Load reads configuration from environment variables and returns an error
 // that lists every missing required variable so the process fails fast with a
 // single, actionable message.
 func Load() (*Config, error) {
+	databasePool, err := PoolSettingsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		DatabaseReadURL:      os.Getenv("DATABASE_READ_URL"),
+		DatabasePool:         databasePool,
 		DirectDatabaseURL:    os.Getenv("DIRECT_DATABASE_URL"),
 		RedisURL:             os.Getenv("REDIS_URL"),
 		SorobanRPCURL:        getEnvDefault("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org"),
@@ -153,6 +249,7 @@ func Load() (*Config, error) {
 		SentryEnvironment:          getEnvDefault("SENTRY_ENVIRONMENT", "production"),
 		SlackSigningSecret:         os.Getenv("SLACK_SIGNING_SECRET"),
 	}
+	cfg.TrustedProxies = splitCommaSeparated(os.Getenv("TRUSTED_PROXIES"))
 
 	sessionTTLStr := getEnvDefault("IDENTITY_SESSION_TTL", "720h")
 	sessionTTL, err := time.ParseDuration(sessionTTLStr)
@@ -167,6 +264,14 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("INDEXER_POLL_INTERVAL: invalid duration %q: %w", pollStr, err)
 	}
 	cfg.IndexerPollInterval = poll
+
+	// DATABASE_REPLICA_LAG_THRESHOLD is the maximum replication lag permitted before queries fall back to the primary database.
+	replicaLagStr := getEnvDefault("DATABASE_REPLICA_LAG_THRESHOLD", "10s")
+	replicaLag, err := time.ParseDuration(replicaLagStr)
+	if err != nil || replicaLag <= 0 {
+		return nil, fmt.Errorf("DATABASE_REPLICA_LAG_THRESHOLD: invalid duration %q (must be > 0)", replicaLagStr)
+	}
+	cfg.ReplicaLagThreshold = replicaLag
 
 	windowStr := getEnvDefault("INDEXER_LEDGER_WINDOW", "120960")
 	window, err := strconv.Atoi(windowStr)
@@ -196,12 +301,20 @@ func Load() (*Config, error) {
 		}
 		cfg.GraphQLPersistedOnly = b
 	}
+	if v := os.Getenv("API_REQUIRE_AUTH"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, fmt.Errorf("API_REQUIRE_AUTH: invalid boolean %q: %w", v, err)
+		}
+		cfg.RequireAuth = b
+	}
 
 	cfg.VerifyBuildCommand = strings.Fields(getEnvDefault("VERIFY_BUILD_COMMAND", "stellar contract build"))
 	if len(cfg.VerifyBuildCommand) == 0 {
 		return nil, fmt.Errorf("VERIFY_BUILD_COMMAND: must contain at least one argument")
 	}
 
+	// VERIFY_TIMEOUT bounds a single contract verification build (Go duration).
 	verifyTimeoutStr := getEnvDefault("VERIFY_TIMEOUT", "10m")
 	verifyTimeout, err := time.ParseDuration(verifyTimeoutStr)
 	if err != nil {
@@ -246,6 +359,16 @@ func Load() (*Config, error) {
 	}
 	cfg.StreamTimeout = streamTimeout
 
+	rateLimitRaw := getEnvDefault("RATE_LIMIT_PER_MINUTE", "60")
+	cfg.RateLimitPerMinute, err = strconv.Atoi(rateLimitRaw)
+	if err != nil || cfg.RateLimitPerMinute < 1 {
+		return nil, fmt.Errorf("RATE_LIMIT_PER_MINUTE: invalid positive integer %q", rateLimitRaw)
+	}
+	cfg.RateLimitWindow, err = durationEnv("RATE_LIMIT_WINDOW", time.Minute)
+	if err != nil || cfg.RateLimitWindow <= 0 {
+		return nil, fmt.Errorf("RATE_LIMIT_WINDOW: invalid positive duration")
+	}
+
 	var missing []string
 	if cfg.DatabaseURL == "" {
 		missing = append(missing, "DATABASE_URL")
@@ -258,6 +381,16 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func splitCommaSeparated(value string) []string {
+	var values []string
+	for _, part := range strings.Split(value, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			values = append(values, part)
+		}
+	}
+	return values
 }
 
 // MaxBodyBytesFromEnv resolves the request body size limit from
@@ -281,4 +414,22 @@ func getEnvDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func int32Env(key string, def int32, min int32) (int32, error) {
+	raw := getEnvDefault(key, strconv.FormatInt(int64(def), 10))
+	n, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil || int32(n) < min {
+		return 0, fmt.Errorf("%s: invalid integer %q (must be >= %d)", key, raw, min)
+	}
+	return int32(n), nil
+}
+
+func durationEnv(key string, def time.Duration) (time.Duration, error) {
+	raw := getEnvDefault(key, def.String())
+	d, err := time.ParseDuration(raw)
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("%s: invalid duration %q (must be >= 0)", key, raw)
+	}
+	return d, nil
 }

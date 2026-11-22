@@ -116,6 +116,7 @@ export function ContractForecastChart({ contractId }: Props) {
         <p
           className="flex h-64 items-center justify-center text-sm text-[var(--color-text-secondary)]"
           role="status"
+          aria-busy="true"
         >
           Loading forecast…
         </p>

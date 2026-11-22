@@ -9,11 +9,13 @@ on:
       - ".github/workflows/python-sdk.yml"
     tags:
       - "python-sdk-v*"
-  pull_request:
-    paths:
-      - "packages/python-sdk/**"
-      - "docs/openapi.yaml"
-      - ".github/workflows/python-sdk.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-sdk-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -26,6 +28,7 @@ jobs:
     defaults:
       run:
         working-directory: packages/python-sdk
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,6 +42,12 @@ jobs:
         run: ruff check src tests
       - name: Pytest
         run: pytest
+      - name: Run examples (offline)
+        run: |
+          for example in examples/*.py; do
+            echo "==> $example"
+            python "$example"
+          done
 
   generated-client:
     name: Generated client up-to-date

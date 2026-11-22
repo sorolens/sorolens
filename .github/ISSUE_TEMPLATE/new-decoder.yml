@@ -1,0 +1,58 @@
+name: New decoder type
+description: Propose and track the addition of a new decoder type to Sorolens
+title: "feat(decoder): add <name> decoder"
+labels: ["decoder", "enhancement"]
+bodies:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for proposing a new decoder type! Please fill in the details below so maintainers can review the proposal.
+  - type: input
+    id: decoder-name
+    attributes:
+      label: Decoder name
+      description: The name of the new decoder type (e.g., transfer, invoke, events).
+      placeholder: transfer
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe what the decoder does and what input it consumes.
+      placeholder: This decoder parses XDR topic data for ...
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example input and output
+      description: Provide an example raw payload and the expected decoded result.
+      placeholder: |
+        Input: <add example payload>
+        Output: <add expected decoded result>
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Links to specifications, SDKs, or documentation that describe this decoder type.
+      placeholder: |
+        - https://...
+        - https://...
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have read CONTRIBUTING.md and ARCHITECTURE.md
+          required: true
+        - label: I am willing to open a pull request for this decoder
+          required: false
+  - type: markdown
+    attributes:
+      value: |
+        See [CONTRIBUTING.md](https://github.com/sorolens/sorolens/blob/main/CONTRIBUTING.md) and [MAINTAINER.md](https://github.com/sorolens/sorolens/blob/main/MAINTAINER.md) for the contribution and review process.

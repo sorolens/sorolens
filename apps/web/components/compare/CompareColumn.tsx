@@ -1,5 +1,5 @@
 "use client";
-
+import { HEALTH_COMPONENTS } from "@/lib/healthScore";
 import type { CompareContractEntry } from "@/lib/types";
 import {
   COMPARE_METRICS,
@@ -133,6 +133,31 @@ export function CompareColumn({ entry, entries }: CompareColumnProps) {
           );
         })}
       </dl>
+      <section className="border-t border-[var(--color-border)] pt-3">
+        <h4 className="text-sm font-medium">Health score components</h4>
+        {entry.health_components ? (
+          <dl className="mt-2 space-y-1 text-xs">
+            {HEALTH_COMPONENTS.map(({ key, label, weight }) => {
+              const value = entry.health_components?.[key];
+
+              return (
+                <div key={key} className="flex justify-between gap-2">
+                  <dt>{label}</dt>
+                  <dd>
+                    {typeof value === "number" && Number.isFinite(value)
+                      ? `${Number(((value * weight) / 100).toFixed(2))} of ${weight} points`
+                      : "Unavailable"}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        ) : (
+          <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
+            Health score components unavailable.
+          </p>
+        )}
+      </section>
     </div>
   );
 }

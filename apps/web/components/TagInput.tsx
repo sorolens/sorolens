@@ -100,7 +100,7 @@ export function TagInput({
           aria-label="Add tag"
           autoComplete="off"
           spellCheck={false}
-          className="min-w-[8rem] flex-1 rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-1.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+          className="min-w-[8rem] flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
         />
       </div>
       {message && (

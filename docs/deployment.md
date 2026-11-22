@@ -1,6 +1,6 @@
 # SoroLens Deployment Guide
 
-This guide covers production deployment strategies for SoroLens across managed cloud providers (**Neon**, **Upstash**, **Vercel**) and **self-hosted Docker** environments, including full configuration for **Stellar Mainnet** as outlined in [`ROADMAP.md`](../ROADMAP.md).
+This guide covers production deployment strategies for SoroLens across managed cloud providers (**Neon**, **Upstash**, **Vercel**) and **self-hosted Docker** environments, including full configuration for **Stellar Mainnet** as outlined in [`ROADMAP.md`](https://github.com/sorolens/sorolens/blob/main/ROADMAP.md).
 
 ---
 
@@ -66,7 +66,7 @@ A production SoroLens deployment consists of four distinct operational layers:
 
 Before starting, ensure you have:
 - [Docker Engine](https://docs.docker.com/engine/install/) 24+ and [Docker Compose](https://docs.docker.com/compose/) v2.20+ (for self-hosting).
-- [Go](https://go.dev/) 1.23+ and [Node.js](https://nodejs.org/) 22+ with [pnpm](https://pnpm.io/) 9+ (for local builds and migration CLI).
+- [Go](https://go.dev/) 1.26+ and [Node.js](https://nodejs.org/) 22+ with [pnpm](https://pnpm.io/) 9+ (for local builds and migration CLI).
 - Accounts on [Neon](https://neon.tech), [Upstash](https://upstash.com), and [Vercel](https://vercel.com) (if using managed services).
 - A Stellar Soroban RPC endpoint for your target network (Mainnet or Testnet).
 
@@ -108,6 +108,7 @@ postgres://user:pass@ep-cool-cloud-123456.us-east-1.aws.neon.tech/sorolens?sslmo
 ### Applying Migrations
 
 The repository maintains an ordered sequence of migrations under `apps/api/internal/db/migrations/*.up.sql`.
+New migrations must follow the [zero-downtime migration policy](migrations.md), which CI enforces.
 
 To apply all migrations to your Neon database from your local machine:
 
@@ -181,7 +182,7 @@ The dashboard is built on Next.js 15 and deploys to Vercel with zero extra infra
    - **Output Directory**: `.next`
 4. Configure Environment Variables in Vercel:
    - `NEXT_PUBLIC_API_URL`: The public URL of your deployed SoroLens API (e.g. `https://api.sorolens.example.com` or your Docker/Railway URL).
-   - `NEXT_PUBLIC_SITE_URL`: The public domain of the dashboard (e.g. `https://sorolens.example.com`).
+   - `NEXT_PUBLIC_APP_URL`: The public origin of the dashboard (e.g. `https://sorolens.example.com`). It is the single source for `metadataBase`, `robots.txt` and `sitemap.xml`; unset, those fall back to `https://sorolens.xyz` (issue #761).
    - `NEXT_PUBLIC_PWA_ENABLED`: Set to `true` if Progressive Web App service workers are desired.
 5. Click **Deploy**.
 
@@ -219,11 +220,11 @@ For complete control without serverless execution timeouts or cold starts, self-
 
 ### Production Stack Topology
 
-The repository provides [`docker-compose.prod.yml`](../docker-compose.prod.yml), which orchestrates:
+The repository provides [`docker-compose.prod.yml`](https://github.com/sorolens/sorolens/blob/main/docker-compose.prod.yml), which orchestrates:
 1. `postgres`: PostgreSQL 16 on port 5432 with persistent volume `sorolens_postgres_data`.
 2. `redis`: Redis 7 on port 6379 with persistent volume `sorolens_redis_data` and AOF persistence enabled.
 3. `migrate`: One-shot migration container that applies all `apps/api/internal/db/migrations/*.up.sql` scripts and exits before the API boots.
-4. `api`: Production-optimized Go binary built using [`apps/api/Dockerfile`](../apps/api/Dockerfile) (~20MB distroless non-root image).
+4. `api`: Production-optimized Go binary built using [`apps/api/Dockerfile`](https://github.com/sorolens/sorolens/blob/main/apps/api/Dockerfile) (~20MB distroless non-root image).
 
 ```
                       docker-compose.prod.yml
@@ -248,7 +249,7 @@ The repository provides [`docker-compose.prod.yml`](../docker-compose.prod.yml),
 
 #### Step 1: Create a Production Environment File
 
-Create `.env.prod` based on [`.env.example`](../.env.example):
+Create `.env.prod` based on [`.env.example`](https://github.com/sorolens/sorolens/blob/main/.env.example):
 
 ```bash
 # --- Infrastructure ---
@@ -276,7 +277,7 @@ INITIAL_ADMIN_GITHUB_ID=your_github_numeric_id
 
 #### Step 2: Build Images from Monorepo Root
 
-Build the production API image using the multi-stage [`apps/api/Dockerfile`](../apps/api/Dockerfile):
+Build the production API image using the multi-stage [`apps/api/Dockerfile`](https://github.com/sorolens/sorolens/blob/main/apps/api/Dockerfile):
 
 ```bash
 docker build \
@@ -288,7 +289,7 @@ docker build \
   .
 ```
 
-Build the Indexer worker image using [`services/indexer/Dockerfile`](../services/indexer/Dockerfile):
+Build the Indexer worker image using [`services/indexer/Dockerfile`](https://github.com/sorolens/sorolens/blob/main/services/indexer/Dockerfile):
 
 ```bash
 docker build \
@@ -388,7 +389,7 @@ The Stellar mainnet operates with distinct network identifiers, RPC requirements
 
 - **Watchdog Contract**:
   - Testnet Watchdog: `CACXRL67WL5KRD6HKWGYADHEUF6RQOCODUN26UQE7MGFZEMIR7PAX6R7`
-  - Mainnet Watchdog: Marked *TBA — not deployed yet* in [`README.md`](../README.md#mainnet). Leave `WATCHDOG_CONTRACT_ID=` empty when operating exclusively on Mainnet until the official on-chain contract address is published.
+  - Mainnet Watchdog: Marked *TBA — not deployed yet* in [`README.md`](https://github.com/sorolens/sorolens/blob/main/README.md#mainnet). Leave `WATCHDOG_CONTRACT_ID=` empty when operating exclusively on Mainnet until the official on-chain contract address is published.
 - **Contract Registration**:
   Use the CLI to track a mainnet contract once deployed:
   ```bash
@@ -401,12 +402,18 @@ The Stellar mainnet operates with distinct network identifiers, RPC requirements
 
 This reference covers all environment variables parsed across `apps/api`, `services/indexer`, `apps/web`, and `cli/`.
 
+The complete, generated list of every option with its default and description is [`docs/configuration.md`](configuration.md); CI keeps it in sync with the code.
+
 ### API and Global Variables
 
 | Variable | Component | Required? | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `DATABASE_URL` | API / Indexer | **Yes** | — | PostgreSQL connection string (pooled for API, unpooled for direct). |
 | `DIRECT_DATABASE_URL` | API / Migrate | Optional | — | Non-pooled connection string used for schema migrations. |
+| `DB_MAX_CONNS` | API | Optional | `20` | Maximum number of connections in the API pgx pool. |
+| `DB_MIN_CONNS` | API | Optional | `2` | Minimum number of connections retained by the API pgx pool. Must not exceed `DB_MAX_CONNS`. |
+| `DB_MAX_CONN_LIFETIME` | API | Optional | `1h` | Maximum age of an API pgx connection before it is recycled. Set `0` to disable the age limit. |
+| `DB_MAX_CONN_IDLE_TIME` | API | Optional | `30m` | Maximum idle time before an API pgx connection is recycled. Set `0` to disable the idle limit. |
 | `REDIS_URL` | API / Indexer | **Yes** | — | Redis connection string (`redis://...` or `rediss://...` for TLS). |
 | `PORT` | API | Optional | `8080` | HTTP listen port for the API server. |
 | `METRICS_PORT` | API | Optional | — | Dedicated private admin port for `GET /metrics`. |
@@ -442,6 +449,10 @@ This reference covers all environment variables parsed across `apps/api`, `servi
 | `SMTP_USER` / `SMTP_PASS` | API | Optional | — | Credentials for SMTP authentication. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`| API / Indexer | Optional | — | OpenTelemetry collector endpoint. |
 
+The API and its optional dedicated metrics listener reject incomplete HTTP
+request headers after 5 seconds (`ReadHeaderTimeout`) to limit slow-header
+connection attacks.
+
 ---
 
 ### Indexer Variables
@@ -456,7 +467,9 @@ This reference covers all environment variables parsed across `apps/api`, `servi
 | `INDEXER_WORKERS` | Indexer | Optional | `GOMAXPROCS` | Number of concurrent contract indexing worker routines. |
 | `INDEXER_POLL_INTERVAL` | Indexer | Optional | `5m` | Sleep interval between passes in continuous mode. |
 | `INDEXER_LEDGER_WINDOW` | Indexer | Optional | `120960` | Backfill window size in ledgers (~7 days). |
+| `INDEXER_BACKFILL_WINDOW` | Indexer | Optional | `10000` | Ledgers scanned per step of a new contract's resumable backfill. |
 | `INDEXER_MAX_DURATION` | Indexer | Optional | `270s` | Maximum execution time per pass in `once` mode. |
+| `INDEXER_FN_CALL_FALLBACK` | Indexer | Optional | `true` | Derive an invocation's function name from `fn_call` topics in contract events when the RPC returns no diagnostic events. |
 | `INDEXER_METRICS_ADDR` | Indexer | Optional | `:9100` | Address for Prometheus `/metrics` HTTP server. |
 | `INDEXER_ROLE` | Indexer | Optional | `all` | Sharding role: `all`, `coordinator`, or `worker`. |
 | `INDEXER_SHARD_COUNT` | Indexer | Optional | `64` | Total number of virtual shards for contracts. |
@@ -475,14 +488,14 @@ This reference covers all environment variables parsed across `apps/api`, `servi
 | Variable | Component | Required? | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `NEXT_PUBLIC_API_URL` | Web | Optional | `http://localhost:8080` | Browser URL pointing to the SoroLens REST API. |
-| `NEXT_PUBLIC_SITE_URL` | Web | Optional | `http://localhost:3000` | Public base domain of the web application. |
+| `NEXT_PUBLIC_APP_URL` | Web | Optional | `https://sorolens.xyz` | Canonical public origin: metadataBase, `robots.txt` and `sitemap.xml`. |
 | `NEXT_PUBLIC_PWA_ENABLED` | Web | Optional | `false` | Enable service workers for mobile Progressive Web App. |
 | `NEXT_PUBLIC_SENTRY_DSN` | Web | Optional | — | Sentry DSN for frontend exception tracking. |
 | `NEXT_PUBLIC_PLAUSIBLE_DOMAIN`| Web | Optional | — | Domain name for privacy-preserving Plausible Analytics. |
 | `INDEXER_METRICS_URL` | Web | Optional | — | Backend URL for `/status` page to scrape indexer metrics. |
 | `VAPID_PUBLIC_KEY` | Web | Optional | — | Web Push public key for browser push notifications. |
 | `VAPID_PRIVATE_KEY` | Web | Optional | — | Web Push private key (server-side only). |
-| `VAPID_SUBJECT` | Web | Optional | `mailto:admin@sorolens.dev` | Subject mailto/URI for VAPID JWT tokens. |
+| `VAPID_SUBJECT` | Web | Optional | `mailto:admin@sorolens.xyz` | Subject mailto/URI for VAPID JWT tokens. |
 | `PUSH_INTERNAL_SECRET` | Web | Optional | — | Secret token guarding internal push subscription API. |
 
 ---

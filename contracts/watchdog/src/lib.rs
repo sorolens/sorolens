@@ -8,8 +8,8 @@
 //! here and materialises them into the dashboard.
 
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error,
-    symbol_short, Address, Env, String, Symbol, Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address,
+    Env, String, Symbol, Vec,
 };
 
 // ---------------------------------------------------------------------------
@@ -63,6 +63,33 @@ pub struct Registration {
     pub check_interval: u64,
 }
 
+/// On-chain monitoring policy for one monitored contract (issue #813).
+///
+/// Fixed-size on purpose: three integers and an address, so storage cost is
+/// constant and an oversized policy cannot be expressed.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MonitoringPolicy {
+    /// Alerts per monitoring window at which the contract is considered
+    /// degraded (warning severity). Must be at least 1.
+    pub warning_threshold: u32,
+    /// Alerts per monitoring window at which the contract is considered
+    /// critical. Must be >= `warning_threshold`.
+    pub critical_threshold: u32,
+    /// Expected seconds between status reports. 1..=`MAX_POLICY_INTERVAL`.
+    pub expected_interval: u64,
+    /// Operator the policy belongs to (informational; writes are admin-only).
+    pub owner: Address,
+}
+
+/// A policy to store for one contract in a batch call.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PolicyEntry {
+    pub contract_id: Address,
+    pub policy: MonitoringPolicy,
+}
+
 /// Outcome of a single registration within a batch.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -82,6 +109,7 @@ enum DataKey {
     Alerts(Address), // Vec<Alert> by contract id
     Paused,          // bool: emergency stop flag; absent means not paused
     PendingAdmin,    // Address: nominated next admin awaiting acceptance
+    Policy(Address), // MonitoringPolicy by contract id (persistent)
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +122,11 @@ enum DataKey {
 pub enum Error {
     /// The admin has paused the contract; state-changing calls are rejected.
     ContractPaused = 1,
+    /// The policy failed validation (zero or inverted thresholds, or an
+    /// interval outside the allowed range).
+    InvalidPolicy = 2,
+    /// A policy batch was empty or larger than `MAX_BATCH_SIZE`.
+    BatchSizeInvalid = 3,
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +198,16 @@ pub struct AdminTransferCancelled {
     pub pending_admin: Address,
 }
 
+/// A monitoring policy was stored or replaced by the admin.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PolicyUpdated {
+    #[topic]
+    pub contract_id: Address,
+    pub policy: MonitoringPolicy,
+    pub timestamp: u64,
+}
+
 // ---------------------------------------------------------------------------
 // Contract
 // ---------------------------------------------------------------------------
@@ -174,6 +217,9 @@ pub struct WatchdogContract;
 
 const MAX_ALERTS_PER_CONTRACT: u32 = 100;
 const MAX_BATCH_SIZE: u32 = 20;
+/// Upper bounds for policy values (one year in seconds; 1M alerts per window).
+const MAX_POLICY_INTERVAL: u64 = 31_536_000;
+const MAX_POLICY_THRESHOLD: u32 = 1_000_000;
 
 // TTL management (issue #573). Every entry this contract writes is durable
 // state: losing the admin, registry, health record or alert history means the
@@ -300,6 +346,9 @@ impl WatchdogContract {
         env.storage()
             .persistent()
             .remove(&DataKey::Alerts(contract_id.clone()));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Policy(contract_id.clone()));
 
         let registry: Vec<Address> = env
             .storage()
@@ -519,6 +568,58 @@ impl WatchdogContract {
         .publish(&env);
     }
 
+    // ---- monitoring policies (issue #813) ----------------------------------
+
+    /// Store or replace the monitoring policy of a registered contract.
+    /// Admin only; the policy is validated and its TTL extended.
+    pub fn set_policy(env: Env, admin: Address, contract_id: Address, policy: MonitoringPolicy) {
+        Self::ensure_not_paused(&env);
+        admin.require_auth();
+        Self::require_admin_only(&env, &admin);
+        Self::store_policy(&env, &contract_id, &policy);
+        Self::bump_instance_ttl(&env);
+    }
+
+    /// Store policies for up to `MAX_BATCH_SIZE` contracts atomically: one
+    /// invalid entry aborts the whole call.
+    pub fn set_policies_batch(env: Env, admin: Address, entries: Vec<PolicyEntry>) {
+        Self::ensure_not_paused(&env);
+        admin.require_auth();
+        Self::require_admin_only(&env, &admin);
+        if entries.is_empty() || entries.len() > MAX_BATCH_SIZE {
+            panic_with_error!(&env, Error::BatchSizeInvalid);
+        }
+        for entry in entries.iter() {
+            Self::store_policy(&env, &entry.contract_id, &entry.policy);
+        }
+        Self::bump_instance_ttl(&env);
+    }
+
+    /// Read the policy of a contract, or `None` when none was set.
+    pub fn get_policy(env: Env, contract_id: Address) -> Option<MonitoringPolicy> {
+        let key = DataKey::Policy(contract_id);
+        let policy = env.storage().persistent().get(&key);
+        Self::bump_persistent_ttl(&env, &key);
+        Self::bump_instance_ttl(&env);
+        policy
+    }
+
+    /// Read policies for several contracts (at most `MAX_BATCH_SIZE`), in
+    /// request order; `None` for contracts without a policy.
+    pub fn get_policies_batch(
+        env: Env,
+        contract_ids: Vec<Address>,
+    ) -> Vec<Option<MonitoringPolicy>> {
+        if contract_ids.len() > MAX_BATCH_SIZE {
+            panic_with_error!(&env, Error::BatchSizeInvalid);
+        }
+        let mut out: Vec<Option<MonitoringPolicy>> = Vec::new(&env);
+        for id in contract_ids.iter() {
+            out.push_back(Self::get_policy(env.clone(), id));
+        }
+        out
+    }
+
     // ---- read-only queries -------------------------------------------------
 
     pub fn get_status(env: Env, contract_id: Address) -> ContractHealth {
@@ -547,10 +648,7 @@ impl WatchdogContract {
             for i in start..core::cmp::min(start + limit, total) {
                 if let Some(id) = registry.get(i) {
                     let key = DataKey::Health(id.clone());
-                    if let Some(record) = env
-                        .storage()
-                        .persistent()
-                        .get::<_, ContractHealth>(&key)
+                    if let Some(record) = env.storage().persistent().get::<_, ContractHealth>(&key)
                     {
                         Self::bump_persistent_ttl(&env, &key);
                         page.push_back(record);
@@ -672,6 +770,33 @@ impl WatchdogContract {
                 .persistent()
                 .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
         }
+    }
+
+    fn store_policy(env: &Env, contract_id: &Address, policy: &MonitoringPolicy) {
+        if policy.warning_threshold == 0
+            || policy.warning_threshold > policy.critical_threshold
+            || policy.critical_threshold > MAX_POLICY_THRESHOLD
+            || policy.expected_interval == 0
+            || policy.expected_interval > MAX_POLICY_INTERVAL
+        {
+            panic_with_error!(env, Error::InvalidPolicy);
+        }
+        if !env
+            .storage()
+            .persistent()
+            .has(&DataKey::Health(contract_id.clone()))
+        {
+            panic!("contract not registered");
+        }
+        let key = DataKey::Policy(contract_id.clone());
+        env.storage().persistent().set(&key, policy);
+        Self::bump_persistent_ttl(env, &key);
+        PolicyUpdated {
+            contract_id: contract_id.clone(),
+            policy: policy.clone(),
+            timestamp: env.ledger().timestamp(),
+        }
+        .publish(env);
     }
 
     fn ensure_not_paused(env: &Env) {
@@ -1643,5 +1768,180 @@ mod test {
         assert_eq!(client.get_alerts(&monitored).len(), 1);
         client.deregister_contract(&owner, &monitored);
         assert_eq!(client.get_monitored_count(), 0);
+    }
+
+    fn policy(_env: &Env, owner: &Address) -> MonitoringPolicy {
+        MonitoringPolicy {
+            warning_threshold: 3,
+            critical_threshold: 10,
+            expected_interval: 300,
+            owner: owner.clone(),
+        }
+    }
+
+    #[test]
+    fn admin_sets_and_reads_policy_with_event() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        assert_eq!(client.get_policy(&monitored), None);
+
+        let p = policy(&env, &owner);
+        client.set_policy(&admin, &monitored, &p);
+        assert_eq!(
+            soroban_sdk::testutils::Events::all(&env.events())
+                .events()
+                .len(),
+            1
+        );
+        assert_eq!(client.get_policy(&monitored), Some(p.clone()));
+
+        let mut updated = p.clone();
+        updated.critical_threshold = 20;
+        client.set_policy(&admin, &monitored, &updated);
+        assert_eq!(client.get_policy(&monitored), Some(updated));
+    }
+
+    #[test]
+    fn set_policy_requires_admin_auth() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        let p = policy(&env, &owner);
+        // Not the admin, even though auth is mocked.
+        assert!(client.try_set_policy(&owner, &monitored, &p).is_err());
+
+        // Admin address without a signature is rejected.
+        let env2 = Env::default();
+        let id = env2.register(WatchdogContract {}, ());
+        let c2 = WatchdogContractClient::new(&env2, &id);
+        let admin2 = Address::generate(&env2);
+        env2.mock_all_auths();
+        c2.initialize(&admin2);
+        let o2 = Address::generate(&env2);
+        let m2 = Address::generate(&env2);
+        c2.register_contract(&o2, &m2, &symbol_short!("svc"), &60u64);
+        env2.set_auths(&[]);
+        assert!(c2
+            .try_set_policy(&admin2, &m2, &policy(&env2, &o2))
+            .is_err());
+    }
+
+    #[test]
+    fn invalid_policies_are_rejected() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+
+        let mut bad = policy(&env, &owner);
+        bad.warning_threshold = 0;
+        assert!(client.try_set_policy(&admin, &monitored, &bad).is_err());
+        let mut bad = policy(&env, &owner);
+        bad.warning_threshold = 11;
+        assert!(client.try_set_policy(&admin, &monitored, &bad).is_err());
+        let mut bad = policy(&env, &owner);
+        bad.critical_threshold = MAX_POLICY_THRESHOLD + 1;
+        assert!(client.try_set_policy(&admin, &monitored, &bad).is_err());
+        let mut bad = policy(&env, &owner);
+        bad.expected_interval = 0;
+        assert!(client.try_set_policy(&admin, &monitored, &bad).is_err());
+        let mut bad = policy(&env, &owner);
+        bad.expected_interval = MAX_POLICY_INTERVAL + 1;
+        assert!(client.try_set_policy(&admin, &monitored, &bad).is_err());
+        assert_eq!(client.get_policy(&monitored), None);
+    }
+
+    #[test]
+    fn set_policy_requires_registered_contract() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let unknown = Address::generate(&env);
+        assert!(client
+            .try_set_policy(&admin, &unknown, &policy(&env, &owner))
+            .is_err());
+    }
+
+    #[test]
+    fn batch_policies_are_atomic_and_bounded() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let a = Address::generate(&env);
+        let b = Address::generate(&env);
+        client.register_contract(&owner, &a, &symbol_short!("a"), &60u64);
+        client.register_contract(&owner, &b, &symbol_short!("b"), &60u64);
+
+        let mut entries: Vec<PolicyEntry> = Vec::new(&env);
+        entries.push_back(PolicyEntry {
+            contract_id: a.clone(),
+            policy: policy(&env, &owner),
+        });
+        entries.push_back(PolicyEntry {
+            contract_id: b.clone(),
+            policy: policy(&env, &owner),
+        });
+        client.set_policies_batch(&admin, &entries);
+        let got = client.get_policies_batch(&Vec::from_array(&env, [a.clone(), b.clone()]));
+        assert_eq!(got.len(), 2);
+        assert_eq!(got.get(0).unwrap(), Some(policy(&env, &owner)));
+
+        // One invalid entry rolls the whole batch back.
+        let c = Address::generate(&env);
+        client.register_contract(&owner, &c, &symbol_short!("c"), &60u64);
+        let mut bad = policy(&env, &owner);
+        bad.expected_interval = 0;
+        let mut entries: Vec<PolicyEntry> = Vec::new(&env);
+        entries.push_back(PolicyEntry {
+            contract_id: c.clone(),
+            policy: policy(&env, &owner),
+        });
+        entries.push_back(PolicyEntry {
+            contract_id: a.clone(),
+            policy: bad,
+        });
+        assert!(client.try_set_policies_batch(&admin, &entries).is_err());
+        assert_eq!(client.get_policy(&c), None);
+
+        // Empty and oversized batches are rejected.
+        assert!(client
+            .try_set_policies_batch(&admin, &Vec::new(&env))
+            .is_err());
+        let mut big: Vec<PolicyEntry> = Vec::new(&env);
+        for _ in 0..(MAX_BATCH_SIZE + 1) {
+            big.push_back(PolicyEntry {
+                contract_id: a.clone(),
+                policy: policy(&env, &owner),
+            });
+        }
+        assert!(client.try_set_policies_batch(&admin, &big).is_err());
+    }
+
+    #[test]
+    fn policy_ttl_is_extended_and_removed_on_deregister() {
+        let env = Env::default();
+        let (admin, client) = setup(&env);
+        let owner = Address::generate(&env);
+        let monitored = Address::generate(&env);
+        client.register_contract(&owner, &monitored, &symbol_short!("svc"), &60u64);
+        client.set_policy(&admin, &monitored, &policy(&env, &owner));
+
+        env.ledger().with_mut(|li| {
+            li.sequence_number = TTL_EXTEND_TO - TTL_THRESHOLD + 1;
+        });
+        assert!(client.get_policy(&monitored).is_some());
+        env.ledger().with_mut(|li| {
+            li.sequence_number += TTL_EXTEND_TO / 2;
+        });
+        assert!(client.get_policy(&monitored).is_some());
+
+        client.deregister_contract(&owner, &monitored);
+        assert_eq!(client.get_policy(&monitored), None);
     }
 }

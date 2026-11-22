@@ -1,0 +1,18 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "worker/index.ts",
+    "app/**/{page,layout,loading,error,not-found,route,template,default,opengraph-image,robots,sitemap}.{js,jsx,ts,tsx}"
+  ],
+  "project": [
+    "app/**/*.{ts,tsx}",
+    "components/**/*.{ts,tsx}",
+    "hooks/**/*.{ts,tsx}",
+    "lib/**/*.{ts,tsx}",
+    "worker/**/*.{ts,tsx}",
+    "!**/*.test.{ts,tsx}"
+  ],
+  "vitest": false,
+  "playwright": false,
+  "ignoreExportsUsedInFile": true
+}

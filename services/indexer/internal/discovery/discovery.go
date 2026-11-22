@@ -32,6 +32,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Network passphrases used to derive contract IDs.
@@ -76,6 +77,8 @@ const (
 	opInvokeHostFunction   = 24
 	hostFnCreateContract   = 1
 	hostFnCreateContractV2 = 3
+	contractExecutableWasm = 0
+	contractExecutableStellarAsset = 1
 	preimageFromAddress    = 0
 	preimageFromAsset      = 1
 	scAddressAccount       = 0
@@ -94,6 +97,15 @@ const (
 	maxExtraSigners        = 2
 )
 
+// SACMetadata holds token metadata for Stellar Asset Contracts.
+type SACMetadata struct {
+	AssetCode string
+	Issuer    string
+	Decimals  uint32
+	Symbol    string
+	Name      string
+}
+
 // Deployment is one contract creation found in a transaction.
 type Deployment struct {
 	// ContractID is the deployed contract's strkey (C...).
@@ -104,6 +116,10 @@ type Deployment struct {
 	// Deployer is the address in a from-address preimage (G... or C...), or
 	// empty for a Stellar Asset Contract created from an asset.
 	Deployer string
+	// IsSAC indicates whether the deployed contract is a Stellar Asset Contract.
+	IsSAC bool
+	// SAC is the enriched token metadata when the deployment is a SAC instance.
+	SAC *SACMetadata
 }
 
 var errMalformed = errors.New("discovery: malformed XDR")
@@ -152,16 +168,28 @@ func Deployments(envelopeXDR, passphrase string) ([]Deployment, error) {
 	}
 
 	start := d.off
-	deployer := d.contractIDPreimage()
+	deployer, sacMeta := d.contractIDPreimage()
 	if d.err != nil {
 		return nil, d.err
 	}
 	preimage := d.b[start:d.off]
 
+	execType := d.contractExecutable()
+	if d.err != nil {
+		return nil, d.err
+	}
+
+	isSAC := execType == contractExecutableStellarAsset
+	if isSAC && sacMeta == nil {
+		sacMeta = &SACMetadata{Decimals: 7}
+	}
+
 	return []Deployment{{
 		ContractID: contractID(passphrase, preimage),
 		Source:     encodeStrkey(strkeyVersionAccount, source),
 		Deployer:   deployer,
+		IsSAC:      isSAC,
+		SAC:        sacMeta,
 	}}, nil
 }
 
@@ -343,21 +371,38 @@ func (d *decoder) memo() {
 }
 
 // contractIDPreimage reads a ContractIDPreimage and returns the deployer
-// address strkey for from-address preimages ("" for from-asset).
-func (d *decoder) contractIDPreimage() string {
+// address strkey for from-address preimages ("" for from-asset) and any
+// SAC metadata derived from asset preimages.
+func (d *decoder) contractIDPreimage() (string, *SACMetadata) {
 	switch d.u32() {
 	case preimageFromAddress:
 		addr := d.scAddress()
 		d.skip(32) // salt
-		return addr
+		return addr, nil
 	case preimageFromAsset:
-		d.asset()
-		return ""
+		meta := d.asset()
+		return "", meta
 	}
 	if d.err == nil {
 		d.err = errMalformed
 	}
-	return ""
+	return "", nil
+}
+
+// contractExecutable reads a ContractExecutable and returns its discriminant.
+func (d *decoder) contractExecutable() uint32 {
+	t := d.u32()
+	switch t {
+	case contractExecutableWasm:
+		d.skip(32)
+	case contractExecutableStellarAsset:
+		// void
+	default:
+		if d.err == nil {
+			d.err = errMalformed
+		}
+	}
+	return t
 }
 
 func (d *decoder) scAddress() string {
@@ -383,18 +428,50 @@ func (d *decoder) scAddress() string {
 	return ""
 }
 
-func (d *decoder) asset() {
+func (d *decoder) asset() *SACMetadata {
 	switch d.u32() {
 	case assetNative:
+		return &SACMetadata{
+			AssetCode: "native",
+			Issuer:    "",
+			Decimals:  7,
+			Symbol:    "native",
+			Name:      "native",
+		}
 	case assetCreditAlphanum4:
-		d.skip(4)
-		d.accountID()
+		raw := d.take(4)
+		key := d.accountID()
+		if d.err != nil {
+			return nil
+		}
+		code := strings.TrimRight(string(raw), "\x00")
+		issuer := encodeStrkey(strkeyVersionAccount, key)
+		return &SACMetadata{
+			AssetCode: code,
+			Issuer:    issuer,
+			Decimals:  7,
+			Symbol:    code,
+			Name:      code,
+		}
 	case assetCreditAlphanum12:
-		d.skip(12)
-		d.accountID()
+		raw := d.take(12)
+		key := d.accountID()
+		if d.err != nil {
+			return nil
+		}
+		code := strings.TrimRight(string(raw), "\x00")
+		issuer := encodeStrkey(strkeyVersionAccount, key)
+		return &SACMetadata{
+			AssetCode: code,
+			Issuer:    issuer,
+			Decimals:  7,
+			Symbol:    code,
+			Name:      code,
+		}
 	default:
 		if d.err == nil {
 			d.err = errMalformed
 		}
+		return nil
 	}
 }

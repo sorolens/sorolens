@@ -39,7 +39,7 @@ type Config struct {
 	// Frequency is "daily" or "weekly".
 	Frequency string
 	// BaseURL is the public API origin, used to build the unsubscribe link,
-	// e.g. "https://sorolens.dev".
+	// e.g. "https://sorolens.xyz".
 	BaseURL string
 	// SigningKey signs the one-click unsubscribe token. When empty the token
 	// is the bare subscription id (matches the handler's unsigned mode).

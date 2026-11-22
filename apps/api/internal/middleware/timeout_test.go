@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // TestTimeout_SlowHandlerGets503 is the issue #154 acceptance test: a
@@ -183,11 +185,13 @@ func TestStreamTimeout_KeepsFlusherAndCancelsAtDeadline(t *testing.T) {
 }
 
 // TestStreamTimeout_OutlivesServerWriteTimeout runs a real server whose
-// WriteTimeout is shorter than the stream budget, through Logger (the
-// production chain). Without the write-deadline extension, or without
+// WriteTimeout is shorter than the stream budget and exercises the API's
+// global middleware chain. Without the write-deadline extension, or without
 // statusRecorder forwarding Flush/Unwrap, the second frame never arrives.
 func TestStreamTimeout_OutlivesServerWriteTimeout(t *testing.T) {
+	handlerDone := make(chan struct{})
 	stream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
 		f, ok := w.(http.Flusher)
 		if !ok {
 			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -206,13 +210,24 @@ func TestStreamTimeout_OutlivesServerWriteTimeout(t *testing.T) {
 		<-r.Context().Done()
 	})
 
-	srv := httptest.NewUnstartedServer(Logger(discardLogger())(StreamTimeout(400 * time.Millisecond)(stream)))
+	r := chi.NewRouter()
+	r.Use(RequestID)
+	r.Use(Sentry)
+	r.Use(Recoverer(discardLogger()))
+	r.Use(BodyLimit(1 << 20))
+	r.Use(Logger(discardLogger()))
+	r.Use(Metrics)
+	r.Use(ETag)
+	r.Use(Compression)
+	r.Handle("/api/v1/stream/events", StreamTimeout(400*time.Millisecond)(stream))
+
+	srv := httptest.NewUnstartedServer(r)
 	srv.Config.WriteTimeout = 50 * time.Millisecond
 	srv.Start()
 	defer srv.Close()
 
-	start := time.Now()
-	resp, err := http.Get(srv.URL)
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(srv.URL + "/api/v1/stream/events")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,19 +236,33 @@ func TestStreamTimeout_OutlivesServerWriteTimeout(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 
-	var frames []string
-	sc := bufio.NewScanner(resp.Body)
-	for sc.Scan() {
-		if line := sc.Text(); strings.HasPrefix(line, "data: ") {
-			frames = append(frames, strings.TrimPrefix(line, "data: "))
+	reader := bufio.NewReader(resp.Body)
+	readFrame := func() string {
+		t.Helper()
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				t.Fatalf("read SSE frame: %v", err)
+			}
+			if strings.HasPrefix(line, "data: ") {
+				return strings.TrimSpace(strings.TrimPrefix(line, "data: "))
+			}
 		}
 	}
-	elapsed := time.Since(start)
-
-	if len(frames) != 2 || frames[1] != "second" {
-		t.Fatalf("frames = %v, want [first second]; the stream was cut early", frames)
+	if got := readFrame(); got != "first" {
+		t.Fatalf("first frame = %q, want first", got)
 	}
-	if elapsed > 2*time.Second {
-		t.Errorf("stream stayed open %v; StreamTimeout did not end it", elapsed)
+	select {
+	case <-handlerDone:
+		t.Fatal("handler returned before the first flushed frame reached the client")
+	default:
+	}
+	if got := readFrame(); got != "second" {
+		t.Fatalf("second frame = %q, want second", got)
+	}
+	select {
+	case <-handlerDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream handler did not return after StreamTimeout")
 	}
 }

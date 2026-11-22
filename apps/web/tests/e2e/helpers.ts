@@ -26,7 +26,36 @@ type Handler = (
 
 /** Overridable per-endpoint handlers, matched by pathname substring. */
 export function defaultHandlers(): Record<string, Handler> {
+  // Self-service API keys (#613) are stateful within one test: create adds a
+  // key, delete removes it, and list returns what is left.
+  const myKeys: Record<string, unknown>[] = [];
   return {
+    "me/api-keys": (route) => {
+      const method = route.request().method();
+      const path = new URL(route.request().url()).pathname;
+      if (method === "POST") {
+        const key = {
+          id: `key_${myKeys.length + 1}`,
+          name: "Dashboard key",
+          key_prefix: "sl_e2eabc",
+          scopes: ["read:contracts"],
+          user_id: "user_e2e",
+          created_at: new Date().toISOString(),
+          last_used_at: null,
+          revoked_at: null,
+          rotated_at: null,
+        };
+        myKeys.unshift(key);
+        return { status: 201, body: { ...key, key: "sl_e2e_plaintext_token" } };
+      }
+      if (method === "DELETE") {
+        const id = path.split("/").pop();
+        const index = myKeys.findIndex((key) => key.id === id);
+        if (index >= 0) myKeys.splice(index, 1);
+        return { status: 204, body: null };
+      }
+      return { status: 200, body: { api_keys: myKeys, next_cursor: "" } };
+    },
     // Workspace session mint (issue #518). The dashboard sends the returned
     // token as a bearer credential on identity-scoped calls.
     "api/v1/auth/session": () => ({
@@ -37,6 +66,46 @@ export function defaultHandlers(): Record<string, Handler> {
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       },
     }),
+    // Integrations catalog and test send (#612).
+    "api/v1/integrations": (route) => {
+      if (route.request().method() === "POST") {
+        return {
+          status: 200,
+          body: { ok: true, detail: "test message delivered" },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          integrations: [
+            {
+              id: "slack",
+              name: "Slack",
+              description: "Post watchdog alerts into Slack.",
+              install_url: "https://api.slack.com/apps",
+              setup_steps: ["Create the app", "Set SLACK_WEBHOOK_URL"],
+              configured: true,
+            },
+            {
+              id: "discord",
+              name: "Discord",
+              description: "Relay watchdog alerts to Discord.",
+              install_url: "https://discord.com/developers/applications",
+              setup_steps: ["Invite the bot"],
+              configured: false,
+            },
+            {
+              id: "telegram",
+              name: "Telegram",
+              description: "Deliver alerts to a Telegram chat.",
+              install_url: "https://t.me/BotFather",
+              setup_steps: ["Create a bot with @BotFather"],
+              configured: false,
+            },
+          ],
+        },
+      };
+    },
     "watchdog/contracts/": defaultContract,
     "watchdog/contracts": () => ({
       status: 200,
@@ -93,7 +162,7 @@ export function defaultHandlers(): Record<string, Handler> {
       }
       return {
         status: 200,
-        body: { contracts: [contractSummary()], cursor: null, has_more: false },
+        body: { contracts: [contractSummary()], next_cursor: "" },
       };
     },
     "stats/global": () => ({
@@ -165,9 +234,15 @@ export async function mockApi(
   overrides: Record<string, Handler> = {}
 ): Promise<void> {
   const handlers = { ...defaultHandlers(), ...overrides };
+  // A test's own handlers win over the defaults, even when a broader default
+  // key (such as "contracts/") also matches the path.
+  const keys = [
+    ...Object.keys(overrides),
+    ...Object.keys(handlers).filter((k) => !(k in overrides)),
+  ];
   await page.route("**/api/v1/**", (route) => {
     const path = new URL(route.request().url()).pathname;
-    const key = Object.keys(handlers).find((k) => path.includes(k));
+    const key = keys.find((k) => path.includes(k));
     if (!key) {
       return route.fulfill({
         status: 404,
@@ -270,6 +345,30 @@ export function watchdogDetailHandlers(
       }
       return { status: 200, body: monitoredContract() };
     },
+  };
+}
+
+/** One saved bookmark row (GET /api/v1/watchlist). */
+export function watchlistItem(overrides: Record<string, unknown> = {}) {
+  return {
+    contract_id: CONTRACT_ID,
+    added_at: "2026-07-02T12:00:00Z",
+    ...overrides,
+  };
+}
+
+/** One alert-channel subscription (GET/POST /watchdog/subscriptions). */
+export function alertSubscription(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "sub_1",
+    contract_id: CONTRACT_ID,
+    channel_type: "slack",
+    webhook_url: "https://hooks.slack.com/services/T000/B000/xyz",
+    has_routing_key: false,
+    severity_filter: "Critical",
+    created_at: "2026-07-02T12:00:00Z",
+    updated_at: "2026-07-02T12:00:00Z",
+    ...overrides,
   };
 }
 

@@ -119,6 +119,64 @@ describe("Breadcrumbs", () => {
     expect(links[1]).toHaveAttribute("aria-current", "page");
   });
 
+  it("renders readable labels for invocations, settings, notifications, reports and live", () => {
+    const cases = [
+      { segment: "invocations", label: "Invocations" },
+      { segment: "settings", label: "Settings" },
+      { segment: "notifications", label: "Notifications" },
+      { segment: "reports", label: "Reports" },
+      { segment: "live", label: "Live" },
+    ];
+
+    for (const { segment, label } of cases) {
+      route.pathname = `/${segment}`;
+      route.params = {};
+      const { unmount } = render(<Breadcrumbs />);
+
+      const nav = screen.getByRole("navigation", { name: "Breadcrumb" });
+      const links = within(nav).getAllByRole("link");
+      expect(links).toHaveLength(2);
+
+      expect(links[0]).toHaveTextContent("Home");
+      expect(links[0]).toHaveAttribute("href", "/");
+
+      expect(links[1]).toHaveTextContent(label);
+      expect(links[1]).toHaveAttribute("href", `/${segment}`);
+      expect(links[1]).toHaveAttribute("aria-current", "page");
+
+      unmount();
+    }
+  });
+
+  it("renders readable labels for the new sections on nested routes", () => {
+    const cases = [
+      { segment: "invocations", label: "Invocations" },
+      { segment: "settings", label: "Settings" },
+      { segment: "notifications", label: "Notifications" },
+      { segment: "reports", label: "Reports" },
+      { segment: "live", label: "Live" },
+    ];
+
+    for (const { segment, label } of cases) {
+      route.pathname = `/${segment}/42`;
+      route.params = { id: "42" };
+      const { unmount } = render(<Breadcrumbs />);
+
+      const nav = screen.getByRole("navigation", { name: "Breadcrumb" });
+      const links = within(nav).getAllByRole("link");
+      expect(links).toHaveLength(3);
+
+      expect(links[1]).toHaveTextContent(label);
+      expect(links[1]).toHaveAttribute("href", `/${segment}`);
+
+      expect(links[2]).toHaveTextContent("42");
+      expect(links[2]).toHaveAttribute("href", `/${segment}/42`);
+      expect(links[2]).toHaveAttribute("aria-current", "page");
+
+      unmount();
+    }
+  });
+
   it("renders nothing on the dashboard root", () => {
     route.pathname = "/";
     const { container } = render(<Breadcrumbs />);

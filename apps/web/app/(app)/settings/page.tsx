@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiKeySection } from "@/components/settings/ApiKeySection";
+import { ExtensionSection } from "@/components/settings/ExtensionSection";
+import { IdentitySection } from "@/components/settings/IdentitySection";
+import { KeyboardShortcutsSection } from "@/components/settings/KeyboardShortcutsSection";
 import { NetworkSection } from "@/components/settings/NetworkSection";
 import { NotificationsSection } from "@/components/settings/NotificationsSection";
 import type { SaveState } from "@/components/settings/SettingsCard";
@@ -15,7 +18,7 @@ import {
   type UserSettings,
 } from "@/lib/settings";
 
-type SectionId = "theme" | "network" | "notifications" | "apiKey";
+type SectionId = "theme" | "network" | "notifications";
 
 /**
  * `/settings` — one place to configure theme, default network, notification
@@ -62,10 +65,6 @@ export default function SettingsPage() {
       ? "Enter a valid email address, or leave it blank to turn email notifications off."
       : null;
 
-  const apiKeyDirty =
-    draft.apiKey !== saved.apiKey ||
-    draft.apiKeyCreatedAt !== saved.apiKeyCreatedAt;
-
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">
@@ -73,7 +72,8 @@ export default function SettingsPage() {
       </h1>
       <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
         Configure how Sorolens looks, which network it defaults to, and how it
-        reaches you. Preferences are stored in this browser.
+        reaches you. Preferences are stored in this browser; API keys are issued
+        and revoked by the API.
       </p>
 
       <div className="mt-6 space-y-6">
@@ -119,27 +119,29 @@ export default function SettingsPage() {
               }}
             />
 
-            <ApiKeySection
-              apiKey={draft.apiKey}
-              apiKeyCreatedAt={draft.apiKeyCreatedAt}
-              dirty={apiKeyDirty}
-              status={status.apiKey ?? "idle"}
-              onChange={(apiKey, apiKeyCreatedAt) =>
-                setDraft((current) => ({ ...current, apiKey, apiKeyCreatedAt }))
-              }
-              onSave={() => commit(draft, "apiKey")}
-            />
+            <KeyboardShortcutsSection />
+
+            <IdentitySection />
+
+            <ExtensionSection />
+
+            <ApiKeySection />
           </>
         ) : (
           // Placeholder while stored preferences load; never a flash of the
           // default values, which would be wrong for a returning user.
-          Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={index}
-              data-testid="settings-loading"
-              className="h-48 animate-pulse rounded-lg bg-[var(--color-bg-card)]"
-            />
-          ))
+          <div role="status" aria-busy="true" aria-label="Loading settings">
+            <span className="sr-only">Loading settings</span>
+            <div aria-hidden="true" className="space-y-6">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  data-testid="settings-loading"
+                  className="h-48 animate-pulse rounded-lg bg-[var(--color-bg-card)]"
+                />
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

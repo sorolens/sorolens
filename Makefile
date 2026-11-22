@@ -11,6 +11,7 @@ OAPI_CODEGEN_GO := go1.26.0
 OAPI_CODEGEN := $(CURDIR)/.bin/oapi-codegen
 OAPI_SPEC    := docs/openapi.yaml
 CLIENT_DIR   := packages/go-client
+PROMETHEUS_IMAGE := prom/prometheus:v3.1.0
 
 # Build metadata for GET /api/version. Override on the command line, e.g.
 #   make build VERSION=1.2.3
@@ -21,7 +22,9 @@ BUILT_AT  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 API_BUILDINFO := github.com/sorolens/sorolens/apps/api/internal/buildinfo
 API_LDFLAGS   := -ldflags "-X $(API_BUILDINFO).Version=$(VERSION) -X $(API_BUILDINFO).GitSHA=$(GIT_SHA) -X $(API_BUILDINFO).BuiltAt=$(BUILT_AT)"
 
-.PHONY: up down logs psql migrate-up migrate-down migrate-version migrate-force migrate-new migrate-check test lint dev api build client-go openapi lint-openapi
+.PHONY: up down logs psql migrate-up migrate-down migrate-version migrate-force migrate-new migrate-check config-docs docs-cli test lint dev api build client-go openapi lint-openapi
+.PHONY: observability-up observability-down observability-check observability-smoke
+.PHONY: docs-install docs-serve docs-build
 
 ## up: start all Docker services in the background
 up:
@@ -113,12 +116,22 @@ migrate-new:
 migrate-check:
 	cd apps/api && go test -count=1 -run TestMigration ./internal/db
 
+## config-docs: regenerate docs/configuration.md from the code that reads each option
+config-docs:
+	cd apps/api && go run ./cmd/configdoc -o ../../docs/configuration.md
+
+## docs-cli: regenerate CLI Markdown reference and man pages from the Cobra command tree
+docs-cli:
+	cd cli && go run ./cmd/docgen
+
 ## test: run all Go and TypeScript tests
 test:
 	cd apps/api && go test -race ./...
 	cd services/indexer && go test -race ./...
 	cd cli && go test -race ./...
+	cd $(CLIENT_DIR) && go test -race ./...
 	pnpm test
+	cargo test --workspace
 
 ## openapi: check docs/openapi.yaml covers every live API route, lint it,
 ## and regenerate the Go client from it. The spec is hand-maintained; the
@@ -145,14 +158,39 @@ lint-openapi:
 
 ## lint: run golangci-lint and pnpm lint across the monorepo
 lint:
-	cd apps/api && golangci-lint run ./... || true
-	cd services/indexer && golangci-lint run ./... || true
-	cd cli && golangci-lint run ./... || true
+	cd apps/api && golangci-lint run ./...
+	cd services/indexer && golangci-lint run ./...
+	cd cli && golangci-lint run ./...
+	cd $(CLIENT_DIR) && golangci-lint run ./...
 	pnpm lint
 
 ## dev: start the Next.js dev server (and any other parallel dev scripts)
 dev:
 	pnpm dev
+
+## observability-up: start Prometheus + Grafana with dashboards and alerts provisioned
+observability-up:
+	docker compose --profile observability up -d
+
+## observability-down: stop Prometheus + Grafana (the data volumes are kept)
+observability-down:
+	docker compose --profile observability down
+
+## observability-check: validate the compose file, Prometheus config and rules,
+## and the dashboard JSON without starting the stack
+observability-check:
+	docker compose --profile observability config -q
+	docker run --rm -v "$(CURDIR)/observability/prometheus:/etc/prometheus:ro" \
+		--entrypoint promtool $(PROMETHEUS_IMAGE) check config /etc/prometheus/prometheus.yml
+	@if command -v python3 >/dev/null 2>&1; then \
+		python3 -m json.tool "$(CURDIR)/observability/grafana/dashboards/sorolens-overview.json" >/dev/null; \
+	else \
+		echo "python3 unavailable; skipped dashboard JSON check"; \
+	fi
+
+## observability-smoke: verify the running stack, its rules and scrape targets
+observability-smoke:
+	./scripts/observability-smoke.sh
 
 ## api: run the Go API against the Docker services, using the .env.example defaults
 api:
@@ -169,3 +207,16 @@ build:
 	cd cli && go build ./...
 	cd $(CLIENT_DIR) && go build ./...
 	pnpm build
+
+# ── Documentation site (mkdocs.yml, see docs/contributing/docs.md) ───────────
+DOCS_VENV ?= .venv-docs
+
+docs-install:
+	python3 -m venv $(DOCS_VENV)
+	$(DOCS_VENV)/bin/pip install -r docs/requirements.txt -e packages/python-sdk
+
+docs-serve:
+	$(DOCS_VENV)/bin/mkdocs serve
+
+docs-build:
+	$(DOCS_VENV)/bin/mkdocs build --strict

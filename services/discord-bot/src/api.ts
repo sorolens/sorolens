@@ -44,6 +44,12 @@ export interface ContractAlert {
   timestamp: string;
 }
 
+/** The fields needed to display a contract in an autocomplete choice. */
+export interface ContractSearchResult {
+  id: string;
+  label: string | null;
+}
+
 /** Per-request credentials. The API key wins over the client default. */
 export interface ApiCredentials {
   apiKey?: string;
@@ -115,6 +121,28 @@ export class SorolensApi {
       wasmHash: body.wasm_hash ?? null,
       addedAt: body.added_at ?? "",
     };
+  }
+
+  /** `GET /api/v1/search` — contracts matching an ID or label. */
+  async searchContracts(
+    query: string,
+    limit = 25,
+    creds: ApiCredentials = {}
+  ): Promise<ContractSearchResult[]> {
+    const capped = Math.min(Math.max(Math.floor(limit), 1), 25);
+    const body = await this.request<{
+      items?: Array<{ id?: string; label?: string | null }>;
+    }>(
+      "GET",
+      `/api/v1/search?q=${encodeURIComponent(query)}&limit=${capped}`,
+      creds
+    );
+    return (body.items ?? [])
+      .map((item) => ({
+        id: item.id ?? "",
+        label: item.label ?? null,
+      }))
+      .filter((item) => item.id.length > 0);
   }
 
   /** `GET /api/v1/watchdog/contracts/{id}/alerts` — most recent alerts first. */

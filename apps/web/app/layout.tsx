@@ -1,12 +1,16 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Suspense } from "react";
 import "./globals.css";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import { PlausibleAnalytics } from "@/components/PlausibleAnalytics";
+import { SkipLink } from "@/components/SkipLink";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { NONCE_HEADER } from "@/lib/csp";
+import { siteOrigin } from "@/lib/siteUrl";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://sorolens.dev"),
+  metadataBase: new URL(siteOrigin()),
   manifest: "/manifest.json",
   title: {
     default: "Sorolens — Indexed Observability for Soroban",
@@ -35,7 +39,7 @@ export const metadata: Metadata = {
     title: "Sorolens — Indexed Observability for Soroban",
     description:
       "Indexed observability for Soroban smart contracts — events, invocations, storage, and anomaly detection on Stellar.",
-    url: "https://sorolens.dev",
+    url: "/",
     images: [
       {
         url: "/og-image.png",
@@ -53,7 +57,7 @@ export const metadata: Metadata = {
     images: ["/og-image.png"],
   },
   alternates: {
-    canonical: "https://sorolens.dev",
+    canonical: "/",
   },
 };
 
@@ -66,15 +70,20 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Reading the request also renders every page per request, which a nonce
+  // requires: a statically generated page could not carry a fresh one.
+  const nonce = (await headers()).get(NONCE_HEADER) ?? undefined;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `
               try {
@@ -86,9 +95,10 @@ export default function RootLayout({
             `,
           }}
         />
-        <PlausibleAnalytics />
+        <PlausibleAnalytics nonce={nonce} />
       </head>
       <body className="min-h-screen antialiased">
+        <SkipLink />
         <ThemeProvider>
           {/* useSearchParams inside NavigationProgress requires a Suspense boundary */}
           <Suspense fallback={null}>
