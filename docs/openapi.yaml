@@ -4712,6 +4712,86 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/contracts/{id}/changelog:
+    get:
+      tags: [Contracts]
+      summary: Get a contract's Wasm hash changelog
+      operationId: getContractChangelog
+      description: |
+        Every Wasm hash the contract has run, oldest first (issue #276). A
+        tracked contract with no recorded versions returns an empty array.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: Wasm hash history, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContractVersion"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/changelog/feed:
+    get:
+      tags: [Contracts]
+      summary: Atom feed of a contract's Wasm hash changes
+      operationId: getContractChangelogFeed
+      description: |
+        Atom 1.0 feed with one entry per recorded Wasm hash, for feed readers.
+        The feed's self link and entry links point back at this API. A tracked
+        contract with no recorded versions returns a feed with no entries.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: Atom 1.0 XML document
+          content:
+            application/atom+xml:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/changelog/badge:
+    get:
+      tags: [Contracts]
+      summary: Get a Wasm hash badge SVG for a contract
+      operationId: getContractChangelogBadge
+      description: |
+        Shields.io-style SVG badge showing the first 8 characters of the
+        contract's latest Wasm hash, suitable for embedding in a README. A
+        contract with no recorded versions, including one that is not
+        tracked, gets an "unknown" badge rather than an error.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: SVG badge
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Always `no-cache, max-age=0`, so embeds show the current hash.
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/contracts/{id}/spec:
     get:
       tags: [Contracts]
@@ -8252,6 +8332,33 @@ components:
         tx_hash:
           type: string
         at:
+          type: string
+          format: date-time
+
+    ContractVersion:
+      type: object
+      description: One Wasm hash a contract has run (issue #276).
+      required: [id, contract_id, wasm_hash, first_seen_ledger, recorded_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        contract_id:
+          type: string
+        wasm_hash:
+          type: string
+          description: Wasm hash (hex).
+        first_seen_ledger:
+          type: integer
+          format: int64
+          description: Ledger at which this hash was first observed.
+        tx_hash:
+          type: string
+          description: Transaction that installed the hash, when known.
+        verified_source_ref:
+          type: string
+          description: Verified source reference, when the hash has been verified.
+        recorded_at:
           type: string
           format: date-time
 
