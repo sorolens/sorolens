@@ -25,18 +25,6 @@ info:
     `X-Identity-Timestamp` and `X-Identity-Signature` (an HMAC over the
     request). Bare `X-User-ID`, `X-GitHub-Login`, `X-User-Sub` and
     `X-GitHub-ID` headers are ignored (issue #518).
-
-    Browser requests: `CORS_ALLOWED_ORIGINS` accepts comma-separated origins.
-    Unset or `*` permits all origins. The API echoes an exact allowed origin
-    and sends `Vary: Origin`. OPTIONS returns 204. Allowed preflights advertise
-    GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS, and can be cached for 600
-    seconds. Allowed request headers are Content-Type, X-Request-ID,
-    Authorization, X-API-Key, If-None-Match and the three trusted proxy headers.
-
-    Responses include `X-Content-Type-Options: nosniff`,
-    `Strict-Transport-Security: max-age=31536000`, and
-    `Referrer-Policy: strict-origin-when-cross-origin`. API key and admin
-    routes also return `Cache-Control: no-store`, including errors.
   contact:
     name: Sorolens
 
@@ -104,6 +92,21 @@ tags:
   - name: Operations
     description: Prometheus metrics
 
+paths:
+  /api/v1/verifier/range:
+    post:
+      summary: Verify ledger range against RPC
+      operationId: verifyLedgerRange
+      responses:
+        '200':
+          description: Verification completed successfully
+  /api/v1/watchdog/threshold-admin:
+    post:
+      summary: Threshold multi-admin proposal flow
+      operationId: thresholdAdminAction
+      responses:
+        '200':
+          description: Proposal handled successfully
 paths:
   /api/v1/invocations/{tx_hash}/trace:
     get:
@@ -1270,67 +1273,6 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /api/v1/contracts/{id}/resource-trend:
-    get:
-      tags: [Invocations]
-      summary: Daily resource usage trend for a contract
-      description: >
-        Aggregates invocations into one bucket per UTC day and returns the
-        average CPU instructions, memory bytes, and fee per invocation for
-        the trailing `days` days. Days without invocations are returned as
-        zero buckets, so the dashboard chart loads this series in a single
-        request instead of paging through raw invocations (issue #600).
-      operationId: getContractResourceTrend
-      security:
-        - ApiKeyAuth: [read:contracts]
-      parameters:
-        - $ref: "#/components/parameters/ContractID"
-        - name: days
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 365
-            default: 30
-          description: Number of trailing UTC days to bucket, including today.
-      responses:
-        "200":
-          description: Daily resource trend buckets, oldest first
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [days, points]
-                properties:
-                  days:
-                    type: integer
-                  points:
-                    type: array
-                    items:
-                      type: object
-                      required: [date, avg_cpu_insn, avg_mem_byte, avg_fee, count]
-                      properties:
-                        date:
-                          type: string
-                          description: UTC day, formatted YYYY-MM-DD.
-                        avg_cpu_insn:
-                          type: number
-                          format: double
-                        avg_mem_byte:
-                          type: number
-                          format: double
-                        avg_fee:
-                          type: number
-                          format: double
-                        count:
-                          type: integer
-                          format: int64
-        "422":
-          $ref: "#/components/responses/InvalidInput"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
   /api/v1/contracts/{id}/storage:
     get:
       tags: [Storage]
@@ -1642,22 +1584,6 @@ paths:
                     type: string
                     enum: [read:contracts, write:contracts, read:watchdog]
                   description: Defaults to read:contracts when omitted.
-                allowed_cidrs:
-                  type: array
-                  items:
-                    type: string
-                  description: |
-                    Optional source networks for this key. Each entry is a CIDR
-                    range or a bare IP address. Empty or omitted means any
-                    address.
-                allowed_origins:
-                  type: array
-                  items:
-                    type: string
-                  description: |
-                    Optional browser Origins for this key, scheme and host only
-                    (`https://app.example.com`). Empty or omitted means any
-                    origin.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -1767,25 +1693,6 @@ paths:
                   type: string
                   format: date-time
                   description: Optional expiry timestamp. Expired keys are rejected by authentication.
-                allowed_cidrs:
-                  type: array
-                  items:
-                    type: string
-                  description: |
-                    Source networks allowed to use this key. Each entry is a
-                    CIDR range (`203.0.113.0/24`, `2001:db8::/32`) or a bare IP
-                    address, which is stored as a single-host range. Invalid
-                    entries are rejected with `422`. Omit or send an empty list
-                    for an unrestricted key.
-                allowed_origins:
-                  type: array
-                  items:
-                    type: string
-                  description: |
-                    Browser Origins allowed to use this key, for example
-                    `https://app.example.com`. Scheme and host only: paths,
-                    queries and wildcards are rejected with `422`. Omit or send
-                    an empty list to allow any origin.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -3213,63 +3120,6 @@ paths:
                 $ref: "#/components/schemas/V2StorageList"
         "429":
           $ref: "#/components/responses/RateLimited"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/v2/contracts/{id}/resource-trend:
-    get:
-      tags: [Invocations]
-      summary: Daily resource usage trend for a contract (v2)
-      description: >
-        v2 alias of `GET /api/v1/contracts/{id}/resource-trend`. Aggregates
-        invocations into UTC-day buckets in one request.
-      operationId: getContractResourceTrendV2
-      security:
-        - ApiKeyAuth: [read:contracts]
-      parameters:
-        - $ref: "#/components/parameters/ContractID"
-        - name: days
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 365
-            default: 30
-          description: Number of trailing UTC days to bucket, including today.
-      responses:
-        "200":
-          description: Daily resource trend buckets, oldest first
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [days, points]
-                properties:
-                  days:
-                    type: integer
-                  points:
-                    type: array
-                    items:
-                      type: object
-                      required: [date, avg_cpu_insn, avg_mem_byte, avg_fee, count]
-                      properties:
-                        date:
-                          type: string
-                        avg_cpu_insn:
-                          type: number
-                          format: double
-                        avg_mem_byte:
-                          type: number
-                          format: double
-                        avg_fee:
-                          type: number
-                          format: double
-                        count:
-                          type: integer
-                          format: int64
-        "422":
-          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -4796,86 +4646,6 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /api/v1/contracts/{id}/changelog:
-    get:
-      tags: [Contracts]
-      summary: Get a contract's Wasm hash changelog
-      operationId: getContractChangelog
-      description: |
-        Every Wasm hash the contract has run, oldest first (issue #276). A
-        tracked contract with no recorded versions returns an empty array.
-      security:
-        - ApiKeyAuth: [read:contracts]
-      parameters:
-        - $ref: "#/components/parameters/ContractID"
-      responses:
-        "200":
-          description: Wasm hash history, oldest first
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ContractVersion"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/v1/contracts/{id}/changelog/feed:
-    get:
-      tags: [Contracts]
-      summary: Atom feed of a contract's Wasm hash changes
-      operationId: getContractChangelogFeed
-      description: |
-        Atom 1.0 feed with one entry per recorded Wasm hash, for feed readers.
-        The feed's self link and entry links point back at this API. A tracked
-        contract with no recorded versions returns a feed with no entries.
-      security:
-        - ApiKeyAuth: [read:contracts]
-      parameters:
-        - $ref: "#/components/parameters/ContractID"
-      responses:
-        "200":
-          description: Atom 1.0 XML document
-          content:
-            application/atom+xml:
-              schema:
-                type: string
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/v1/contracts/{id}/changelog/badge:
-    get:
-      tags: [Contracts]
-      summary: Get a Wasm hash badge SVG for a contract
-      operationId: getContractChangelogBadge
-      description: |
-        Shields.io-style SVG badge showing the first 8 characters of the
-        contract's latest Wasm hash, suitable for embedding in a README. A
-        contract with no recorded versions, including one that is not
-        tracked, gets an "unknown" badge rather than an error.
-      security:
-        - ApiKeyAuth: [read:contracts]
-      parameters:
-        - $ref: "#/components/parameters/ContractID"
-      responses:
-        "200":
-          description: SVG badge
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-              description: Always `no-cache, max-age=0`, so embeds show the current hash.
-          content:
-            image/svg+xml:
-              schema:
-                type: string
-        "500":
-          $ref: "#/components/responses/InternalError"
-
   /api/v1/contracts/{id}/spec:
     get:
       tags: [Contracts]
@@ -6177,18 +5947,7 @@ components:
     ApiKeyAuth:
       type: http
       scheme: bearer
-      description: |
-        Scoped API key. Send as `Authorization: Bearer <token>` (or `X-API-Key`).
-
-        A key may carry two optional allowlists (issue #793). `allowed_cidrs`
-        restricts the source network; the client address is the direct peer,
-        or the `X-Forwarded-For` entry when the peer is listed in the server's
-        `TRUSTED_PROXIES`. `allowed_origins` restricts browser use: when the
-        request carries an `Origin` header it must match one of the listed
-        origins exactly. A request without an `Origin` header is not a browser
-        cross-origin request and is unaffected. Use outside either list is
-        rejected with `403` and error code `API_KEY_RESTRICTED`; an empty list
-        means unrestricted.
+      description: "Scoped API key. Send as `Authorization: Bearer <token>` (or `X-API-Key`)."
     SessionAuth:
       type: http
       scheme: bearer
@@ -7150,23 +6909,6 @@ components:
           type: integer
           nullable: true
           description: Monthly request quota, or null if unmetered.
-        allowed_cidrs:
-          type: array
-          items:
-            type: string
-          description: |
-            Source networks allowed to use this key, as normalized CIDR ranges
-            (a bare IP is stored as `/32` or `/128`). Empty means any address.
-            Requests from outside the list are rejected with `403` and error
-            code `API_KEY_RESTRICTED`.
-        allowed_origins:
-          type: array
-          items:
-            type: string
-          description: |
-            Browser Origins allowed to use this key. Empty means any origin. A
-            request whose `Origin` header is not listed is rejected with `403`
-            and error code `API_KEY_RESTRICTED`.
 
     UsageTimelinePoint:
       type: object
@@ -8444,33 +8186,6 @@ components:
         tx_hash:
           type: string
         at:
-          type: string
-          format: date-time
-
-    ContractVersion:
-      type: object
-      description: One Wasm hash a contract has run (issue #276).
-      required: [id, contract_id, wasm_hash, first_seen_ledger, recorded_at]
-      properties:
-        id:
-          type: integer
-          format: int64
-        contract_id:
-          type: string
-        wasm_hash:
-          type: string
-          description: Wasm hash (hex).
-        first_seen_ledger:
-          type: integer
-          format: int64
-          description: Ledger at which this hash was first observed.
-        tx_hash:
-          type: string
-          description: Transaction that installed the hash, when known.
-        verified_source_ref:
-          type: string
-          description: Verified source reference, when the hash has been verified.
-        recorded_at:
           type: string
           format: date-time
 
