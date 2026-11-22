@@ -369,6 +369,12 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		"POST /api/v1/alerts/{id}/snooze":         true,
 		"POST /api/v1/maintenance-windows":        true,
 		"PUT /api/v1/maintenance-windows/{id}":    true,
+		// Full-text event search (#798): v1-only until v2 envelope is defined.
+		"GET /api/v1/events/search": true,
+		// Webhook delivery log and manual retry (#828): v1-only until v2 envelope is defined.
+		"GET /api/v1/watchdog/subscriptions/{id}/deliveries":                 true,
+		"GET /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}":    true,
+		"POST /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}/retry": true,
 	}
 
 	var missing []string

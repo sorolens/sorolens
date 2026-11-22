@@ -136,6 +136,10 @@ func (f *fakeStore) GetLatestContractVersion(_ context.Context, contractID strin
 	return latest, nil
 }
 
+func (f *fakeStore) SearchEventValues(_ context.Context, _, _ string, _ int) ([]store.Event, string, error) {
+	return nil, "", nil
+}
+
 // ---- helpers ---------------------------------------------------------------
 
 const testContractID = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"

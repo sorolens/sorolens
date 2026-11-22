@@ -55,6 +55,12 @@ type Store interface {
 	// search endpoint (issue #159).
 	SearchEvents(ctx context.Context, query string, limit int) ([]Event, error)
 
+	// SearchEventValues returns up to limit events whose decoded topic or
+	// value text matches query using the event_tsv full-text index (issue
+	// #798). Results are newest-first. cursor is opaque; pass "" for the
+	// first page.
+	SearchEventValues(ctx context.Context, query, cursor string, limit int) ([]Event, string, error)
+
 	// SearchFunctions returns up to limit distinct contract function names
 	// containing query (case-insensitive prefix/substring match), each
 	// paired with its most recently recorded invocation. Part of the
@@ -271,6 +277,43 @@ var contractSortColumns = map[string]string{
 // ValidContractSort reports whether col is a sortable contracts column.
 func ValidContractSort(col string) bool {
 	return contractSortColumns[col] != ""
+}
+
+// DeliveryStore is the read/write surface for webhook delivery records
+// (issue #828).
+type DeliveryStore interface {
+	// ListDeliveries returns deliveries for a subscription, newest first.
+	// cursor is opaque; pass "" for the first page.
+	ListDeliveries(ctx context.Context, subscriptionID, cursor string, limit int) ([]WebhookDelivery, string, error)
+
+	// GetDelivery returns one delivery by id, or ErrNotFound.
+	GetDelivery(ctx context.Context, id string) (WebhookDelivery, error)
+
+	// UpsertDelivery inserts or updates a delivery row.
+	UpsertDelivery(ctx context.Context, d WebhookDelivery) error
+
+	// RetryDelivery marks a delivery for immediate retry and increments the
+	// attempt counter. Returns ErrNotFound if id is unknown.
+	RetryDelivery(ctx context.Context, id string) (WebhookDelivery, error)
+}
+
+// IdempotencyStore is the read/write surface for idempotency keys (issue #784).
+type IdempotencyStore interface {
+	// ClaimIdempotencyKey atomically inserts a new in-flight record or returns
+	// the existing one. It returns (record, true, nil) on a fresh claim and
+	// (existing, false, nil) when the key already exists. The caller must call
+	// CompleteIdempotencyKey once the response is ready.
+	ClaimIdempotencyKey(ctx context.Context, apiKeyID, key, bodyFingerprint string) (IdempotencyRecord, bool, error)
+
+	// GetIdempotencyRecord returns the saved record, or ErrNotFound.
+	GetIdempotencyRecord(ctx context.Context, apiKeyID, key string) (IdempotencyRecord, error)
+
+	// CompleteIdempotencyKey saves the response and marks the record no longer
+	// in-flight.
+	CompleteIdempotencyKey(ctx context.Context, apiKeyID, key string, status int, headers map[string]string, body string) error
+
+	// DeleteExpiredIdempotencyKeys removes records past their expiry.
+	DeleteExpiredIdempotencyKeys(ctx context.Context) (int64, error)
 }
 
 // NewStore returns a Store backed by the given pgxpool.Pool.

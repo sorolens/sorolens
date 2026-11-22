@@ -161,6 +161,12 @@ type invocationResponse struct {
 	// invocations (issue #806) and omitted otherwise.
 	FailureCategory string `json:"failure_category,omitempty"`
 	FailureCode     string `json:"failure_code,omitempty"`
+	// Fee breakdown (issue #805). All fields are in stroops. Nil when the
+	// indexer has not yet populated them (rows indexed before this feature).
+	InclusionFee          *int64 `json:"inclusion_fee,omitempty"`
+	ResourceFee           *int64 `json:"resource_fee,omitempty"`
+	ResourceFeeRefundable *int64 `json:"resource_fee_refundable,omitempty"`
+	FeeRefund             *int64 `json:"fee_refund,omitempty"`
 }
 
 type invocationDetailResponse struct {
@@ -203,6 +209,12 @@ type invocationWindowStatsResponse struct {
 	// FailuresByCategory lists every failure category, zero included
 	// (issue #806).
 	FailuresByCategory map[string]int64 `json:"failures_by_category"`
+	// Fee breakdown aggregates (issue #805). All values are in stroops.
+	AvgInclusionFee float64 `json:"avg_inclusion_fee"`
+	P95InclusionFee float64 `json:"p95_inclusion_fee"`
+	AvgResourceFee  float64 `json:"avg_resource_fee"`
+	P95ResourceFee  float64 `json:"p95_resource_fee"`
+	TotalFeeRefund  float64 `json:"total_fee_refund"`
 }
 
 type contractInvocationStatsResponse struct {
@@ -459,9 +471,13 @@ func invocationFromStore(inv store.Invocation) invocationResponse {
 		LedgerReadByte:     inv.LedgerReadByte,
 		LedgerWriteByte:    inv.LedgerWriteByte,
 		ApplicationOrder:   inv.ApplicationOrder,
-		Utilisation:        computeInvocationUtilisation(inv.CPUInsn, inv.MemByte, inv.LedgerReadByte, inv.LedgerWriteByte),
-		FailureCategory:    inv.FailureCategory,
-		FailureCode:        inv.FailureCode,
+		Utilisation:           computeInvocationUtilisation(inv.CPUInsn, inv.MemByte, inv.LedgerReadByte, inv.LedgerWriteByte),
+		FailureCategory:       inv.FailureCategory,
+		FailureCode:           inv.FailureCode,
+		InclusionFee:          inv.InclusionFee,
+		ResourceFee:           inv.ResourceFee,
+		ResourceFeeRefundable: inv.ResourceFeeRefundable,
+		FeeRefund:             inv.FeeRefund,
 	}
 }
 
@@ -911,6 +927,11 @@ func invocationWindowStatsFromStore(stats store.InvocationWindowStats) invocatio
 		AvgCPU:             stats.AvgCPU,
 		P95CPU:             stats.P95CPU,
 		FailuresByCategory: failuresByCategory(stats.FailuresByCategory),
+		AvgInclusionFee:    stats.AvgInclusionFee,
+		P95InclusionFee:    stats.P95InclusionFee,
+		AvgResourceFee:     stats.AvgResourceFee,
+		P95ResourceFee:     stats.P95ResourceFee,
+		TotalFeeRefund:     stats.TotalFeeRefund,
 	}
 }
 

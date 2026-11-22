@@ -514,6 +514,12 @@ export default function NotificationsPage() {
                         >
                           Configure
                         </button>
+                        <Link
+                          href={`/watchdog/notifications/${s.id}/deliveries`}
+                          className="text-xs text-[var(--color-text-secondary)] hover:underline"
+                        >
+                          Deliveries
+                        </Link>
                         <button
                           type="button"
                           onClick={() => setPendingDeleteId(s.id)}

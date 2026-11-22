@@ -1118,6 +1118,92 @@ func (s *postgresStore) SearchEvents(ctx context.Context, query string, limit in
 	return events, nil
 }
 
+// sanitizeTSQueryTerm strips characters that are special in tsquery syntax so
+// user-supplied strings can be used as a single lexeme term.
+func sanitizeTSQueryTerm(input string) string {
+	out := make([]byte, 0, len(input))
+	for i := 0; i < len(input); i++ {
+		c := input[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' {
+			out = append(out, c)
+		} else {
+			// Replace any other byte with a space; consecutive spaces collapse.
+			if len(out) > 0 && out[len(out)-1] != ' ' {
+				out = append(out, ' ')
+			}
+		}
+	}
+	// Trim trailing space.
+	result := strings.TrimSpace(string(out))
+	if result == "" {
+		result = "x" // fallback: won't match anything
+	}
+	return result
+}
+
+// SearchEventValues implements store.Store.SearchEventValues (issue #798).
+// It searches decoded event topic and value text using the event_tsv GIN index,
+// returning events whose decoded content matches query, newest-first, with
+// cursor-based pagination.
+func (s *postgresStore) SearchEventValues(ctx context.Context, query, cursor string, limit int) ([]Event, string, error) {
+	if query == "" {
+		return []Event{}, "", nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	// to_tsquery('simple', ...) matches the same tokenisation used at insert.
+	// We wrap the user query in a prefix search (lexeme:*) so partial words
+	// match (e.g. "GBQHXY" finds longer addresses).
+	q := `
+		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+		       topic_xdr, value_xdr, topic_decoded, value_decoded,
+		       in_successful_call, inserted_at
+		FROM events
+		WHERE event_tsv @@ to_tsquery('simple', $1)
+		  AND ($2 = '' OR id < $2)
+		ORDER BY ledger_closed_at DESC, id DESC
+		LIMIT $3`
+
+	// Build a simple prefix term: strip characters that break tsquery syntax,
+	// then append :* so partial lexemes match (e.g. "GBQHXY" finds addresses).
+	safeQuery := sanitizeTSQueryTerm(query) + ":*"
+
+	rows, err := s.readDB(ctx).Query(ctx, q, safeQuery, cursor, limit+1)
+	if err != nil {
+		return nil, "", fmt.Errorf("search event values: %w", err)
+	}
+	defer rows.Close()
+
+	var events []Event
+	for rows.Next() {
+		var e Event
+		var topicXDR, topicDec, valDec []byte
+		if err := rows.Scan(
+			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
+			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
+			&e.InSuccessfulCall, &e.InsertedAt,
+		); err != nil {
+			return nil, "", fmt.Errorf("scan event values search: %w", err)
+		}
+		_ = json.Unmarshal(topicXDR, &e.TopicXDR)
+		_ = json.Unmarshal(topicDec, &e.TopicDecoded)
+		_ = json.Unmarshal(valDec, &e.ValueDecoded)
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+
+	var nextCursor string
+	if len(events) > limit {
+		nextCursor = events[limit-1].ID
+		events = events[:limit]
+	}
+	return events, nextCursor, nil
+}
+
 // SearchFunctions implements store.Store.SearchFunctions (issue #159). It
 // mirrors SearchEvents: an inner DISTINCT ON collapses each matching
 // function name to its most recent invocation, and the outer query re-sorts

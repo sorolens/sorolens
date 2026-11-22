@@ -4283,6 +4283,58 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/events/search:
+    get:
+      tags: [Events]
+      summary: Full-text search over decoded event values
+      operationId: searchEventValues
+      description: |
+        Returns events whose decoded topic or value JSONB matches the query
+        using the event_tsv full-text index (issue #798). Results are newest-
+        first and cursor-paginated.
+      security:
+        - ApiKeyAuth: [read:contracts]
+        - {}
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Full-text search query (simple dictionary, prefix matching).
+        - $ref: "#/components/parameters/Cursor"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Page of matching events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next_cursor, query]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor for the next page; empty when exhausted.
+                  query:
+                    type: string
+                    description: The query as interpreted by the server.
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/invocations:
     get:
       tags: [Invocations]
@@ -4851,6 +4903,137 @@ paths:
       responses:
         "204":
           description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/subscriptions/{id}/deliveries:
+    get:
+      tags: [Notifications]
+      summary: List webhook deliveries for a subscription
+      operationId: listWebhookDeliveries
+      description: |
+        Returns webhook delivery attempts for the subscription, newest first,
+        cursor-paginated. The signed payload is omitted; use
+        GET .../deliveries/{deliveryID} for the full record (issue #828).
+      security:
+        - ApiKeyAuth: [read:watchdog]
+          RoleAuth: [contributor]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Subscription ID
+        - $ref: "#/components/parameters/Cursor"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Page of delivery records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deliveries, next_cursor]
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookDelivery"
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}:
+    get:
+      tags: [Notifications]
+      summary: Get a single webhook delivery record
+      operationId: getWebhookDelivery
+      description: |
+        Returns the full delivery record including the signed payload and
+        the response code and body received from the destination (issue #828).
+      security:
+        - ApiKeyAuth: [read:watchdog]
+          RoleAuth: [contributor]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Subscription ID
+        - name: deliveryID
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Delivery ID
+      responses:
+        "200":
+          description: Delivery record with full payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDelivery"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}/retry:
+    post:
+      tags: [Notifications]
+      summary: Manually retry a failed webhook delivery
+      operationId: retryWebhookDelivery
+      description: |
+        Marks a failed delivery for immediate retry by resetting its
+        next_retry_at to now and incrementing the attempt counter.
+        Only contributor+ callers may trigger a retry (issue #828).
+      security:
+        - ApiKeyAuth: [write:contracts]
+          RoleAuth: [contributor]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Subscription ID
+        - name: deliveryID
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Delivery ID
+      responses:
+        "202":
+          description: Delivery scheduled for immediate retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDelivery"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -8471,6 +8654,48 @@ components:
         severity_filter:
           type: string
           enum: [Info, Warning, Critical]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WebhookDelivery:
+      type: object
+      description: One webhook delivery attempt for an alert subscription (issue #828).
+      required: [id, subscription_id, attempt_number, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        subscription_id:
+          type: string
+        attempt_number:
+          type: integer
+        status:
+          type: string
+          enum: [pending, delivered, failed]
+        signed_payload:
+          type: object
+          description: The JSONB body sent (or to be sent) to the webhook URL.
+          nullable: true
+        response_status:
+          type: integer
+          nullable: true
+          description: HTTP status code returned by the destination.
+        response_body:
+          type: string
+          nullable: true
+          description: Response body from the destination (truncated at 4 KiB).
+        last_error:
+          type: string
+          nullable: true
+          description: Last transport-level error (network timeout, DNS failure, etc.).
+        next_retry_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the delivery will next be retried; null if no retry scheduled.
         created_at:
           type: string
           format: date-time
