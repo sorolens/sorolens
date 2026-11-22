@@ -66,15 +66,21 @@ services:
 
   # MinIO provides an S3-compatible endpoint so the cold-storage tier
   # (issue #146) can be exercised locally and in integration tests.
+  # Start it with `docker compose --profile archive up --build -d minio`.
   # Console: http://localhost:9001 (sorolens / sorolens123)
   # Create the bucket once with:
   #   docker compose exec minio mc mb --ignore-existing local/sorolens-archive
   minio:
-    image: minio/minio:latest
+    profiles: [archive]
+    image: sorolens/minio:local
+    build:
+      context: .
+      dockerfile: deploy/minio/Dockerfile
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: sorolens
       MINIO_ROOT_PASSWORD: sorolens123
+      MC_HOST_local: http://sorolens:sorolens123@127.0.0.1:9000
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -82,12 +88,6 @@ services:
       - sorolens_minio_data:/data
     networks:
       - sorolens_net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
 
   # One-shot job that applies the SQL schema on first start, so a fresh clone is
   # usable right after `docker compose up -d`. It applies the migrations exactly
@@ -242,6 +242,74 @@ services:
       retries: 5
       start_period: 20s
     restart: unless-stopped
+
+  api:
+    profiles: [full]
+    image: sorolens/api:local
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args: &buildinfo
+        VERSION: ${VERSION:-dev}
+        GIT_SHA: ${GIT_SHA:-dev}
+        BUILT_AT: ${BUILT_AT:-dev}
+    environment:
+      DATABASE_URL: postgres://sorolens:sorolens@postgres:5432/sorolens?sslmode=disable
+      DIRECT_DATABASE_URL: postgres://sorolens:sorolens@postgres:5432/sorolens?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
+      STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
+      IDENTITY_SIGNING_KEY: ${IDENTITY_SIGNING_KEY:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${COMPOSE_API_PORT:-8080}:8080"
+    networks: [sorolens_net]
+
+  indexer:
+    profiles: [full]
+    image: sorolens/indexer:local
+    build:
+      context: .
+      dockerfile: services/indexer/Dockerfile
+      args: *buildinfo
+    environment:
+      DATABASE_URL: postgres://sorolens:sorolens@postgres:5432/sorolens?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
+      SOROBAN_RPC_URL_TESTNET: ${SOROBAN_RPC_URL_TESTNET:-${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks: [sorolens_net]
+
+  web:
+    profiles: [full]
+    image: sorolens/web:local
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+    environment:
+      API_URL: http://api:8080
+      INDEXER_METRICS_URL: http://indexer:9100/metrics
+      PUSH_INTERNAL_SECRET: ${PUSH_INTERNAL_SECRET:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@sorolens.xyz}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${COMPOSE_WEB_PORT:-3000}:3000"
+    networks: [sorolens_net]
 
 volumes:
   sorolens_postgres_data:
