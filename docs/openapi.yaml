@@ -150,6 +150,43 @@ paths:
       responses:
         '200':
           description: New secret returned
+  /api/v1/watchdog/proposals:
+    post:
+      tags:
+        - Watchdog
+      summary: Create a multi-admin proposal for sensitive actions
+      operationId: createWatchdogProposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, payload]
+              properties:
+                action:
+                  type: string
+                payload:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '201':
+          description: Proposal created
+  /api/v1/watchdog/proposals/{id}/approve:
+    post:
+      tags:
+        - Watchdog
+      summary: Approve a watchdog proposal
+      operationId: approveWatchdogProposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proposal approved
   /health:
     get:
       tags: [Health]

@@ -16,6 +16,16 @@ use soroban_sdk::{
 // Types
 // ---------------------------------------------------------------------------
 
+
+/// A monitoring policy was stored or replaced by the admin.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PolicyUpdated {
+    #[topic]
+    pub contract_id: Address,
+    pub policy: MonitoringPolicy,
+    pub timestamp: u64,
+}
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HealthStatus {
@@ -101,6 +111,34 @@ pub enum BatchResult {
 }
 
 #[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdminSet {
+    pub admins: Vec<Address>,
+    pub threshold: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProposalType {
+    Pause,
+    Unpause,
+    SetAdmin(AdminSet),
+    Upgrade(soroban_sdk::BytesN<32>),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Proposal {
+    pub id: u64,
+    pub proposer: Address,
+    pub proposal_type: ProposalType,
+    pub approvals: Vec<Address>,
+    pub expiry: u64,
+    pub executed: bool,
+    pub cancelled: bool,
+}
+
+#[contracttype]
 #[derive(Clone)]
 enum DataKey {
     Admin,
@@ -110,6 +148,9 @@ enum DataKey {
     Paused,          // bool: emergency stop flag; absent means not paused
     PendingAdmin,    // Address: nominated next admin awaiting acceptance
     Policy(Address), // MonitoringPolicy by contract id (persistent)
+    AdminSetKey,     // AdminSet: M-of-N admin set if active
+    Proposal(u64),   // Proposal by proposal id
+    ProposalCount,   // u64: counter for proposal IDs
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +168,16 @@ pub enum Error {
     InvalidPolicy = 2,
     /// A policy batch was empty or larger than `MAX_BATCH_SIZE`.
     BatchSizeInvalid = 3,
+    /// Not an admin or authorized proposal signer.
+    NotAdmin = 4,
+    /// Proposal not found or already processed/cancelled.
+    ProposalNotFound = 5,
+    /// Proposal has expired.
+    ProposalExpired = 6,
+    /// Already approved by this admin.
+    AlreadyApproved = 7,
+    /// Invalid admin set or threshold parameters.
+    InvalidAdminSet = 8,
 }
 
 // ---------------------------------------------------------------------------
@@ -200,12 +251,39 @@ pub struct AdminTransferCancelled {
 
 /// A monitoring policy was stored or replaced by the admin.
 #[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PolicyUpdated {
+#[derive(Clone, Debug, Eq, PartialEq)]\pub struct PolicyUpdated {
     #[topic]
     pub contract_id: Address,
     pub policy: MonitoringPolicy,
     pub timestamp: u64,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalCreated {
+    #[topic]
+    pub proposal_id: u64,
+    pub proposer: Address,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]\pub struct ProposalApproved {
+    #[topic]
+    pub proposal_id: u64,
+    #[topic]
+    pub approver: Address,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]\pub struct ProposalExecuted {
+    #[topic]
+    pub proposal_id: u64,
+}
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]\pub struct ProposalCancelled {
+    #[topic]
+    pub proposal_id: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -734,6 +812,118 @@ impl WatchdogContract {
             .unwrap_or_else(|| panic!("not initialized"))
     }
 
+    pub fn admin_set(env: Env) -> Option<AdminSet> {
+        Self::bump_instance_ttl(&env);
+        env.storage()
+            .instance()
+            .get::<_, AdminSet>(&DataKey::AdminSetKey)
+    }
+
+    pub fn set_admin_set(env: Env, caller: Address, admins: Vec<Address>, threshold: u32) -> u64 {
+        caller.require_auth();
+        Self::require_admin_or_member(&env, &caller);
+        if threshold == 0 || threshold > admins.len() || admins.is_empty() {
+            panic_with_error!(&env, Error::InvalidAdminSet);
+        }
+        let admin_set = AdminSet { admins, threshold };
+        Self::create_proposal_internal(env, caller, ProposalType::SetAdmin(admin_set))
+    }
+
+    pub fn propose_pause(env: Env, caller: Address) -> u64 {
+        caller.require_auth();
+        Self::require_admin_or_member(&env, &caller);
+        Self::create_proposal_internal(env, caller, ProposalType::Pause)
+    }
+
+    pub fn propose_unpause(env: Env, caller: Address) -> u64 {
+        caller.require_auth();
+        Self::require_admin_or_member(&env, &caller);
+        Self::create_proposal_internal(env, caller, ProposalType::Unpause)
+    }
+
+    pub fn approve_proposal(env: Env, caller: Address, proposal_id: u64) {
+        caller.require_auth();
+        Self::require_admin_or_member(&env, &caller);
+
+        let key = DataKey::Proposal(proposal_id);
+        let mut proposal: Proposal = env.storage().persistent().get(&key).unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
+        if proposal.executed || proposal.cancelled {
+            panic_with_error!(&env, Error::ProposalNotFound);
+        }
+        let now = env.ledger().timestamp();
+        if proposal.expiry < now {
+            panic_with_error!(&env, Error::ProposalExpired);
+        }
+        for a in proposal.approvals.iter() {
+            if a == caller {
+                panic_with_error!(&env, Error::AlreadyApproved);
+            }
+        }
+        proposal.approvals.push_back(caller.clone());
+        env.storage().persistent().set(&key, &proposal);
+        Self::bump_persistent_ttl(&env, &key);
+        Self::bump_instance_ttl(&env);
+
+        ProposalApproved {
+            proposal_id,
+            approver: caller,
+        }
+        .publish(&env);
+
+        let threshold = Self::current_threshold(&env);
+        if proposal.approvals.len() >= threshold {
+            Self::execute_proposal_internal(env, proposal_id, &mut proposal);
+        }
+    }
+
+    pub fn execute_proposal(env: Env, caller: Address, proposal_id: u64) {
+        caller.require_auth();
+        Self::require_admin_or_member(&env, &caller);
+
+        let key = DataKey::Proposal(proposal_id);
+        let mut proposal: Proposal = env.storage().persistent().get(&key).unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
+        if proposal.executed || proposal.cancelled {
+            panic_with_error!(&env, Error::ProposalNotFound);
+        }
+        let now = env.ledger().timestamp();
+        if proposal.expiry < now {
+            panic_with_error!(&env, Error::ProposalExpired);
+        }
+        let threshold = Self::current_threshold(&env);
+        if proposal.approvals.len() < threshold {
+            panic!("threshold not met");
+        }
+        Self::execute_proposal_internal(env, proposal_id, &mut proposal);
+    }
+
+    pub fn cancel_proposal(env: Env, caller: Address, proposal_id: u64) {
+        caller.require_auth();
+        Self::require_admin_or_member(&env, &caller);
+
+        let key = DataKey::Proposal(proposal_id);
+        let mut proposal: Proposal = env.storage().persistent().get(&key).unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
+        if proposal.executed || proposal.cancelled {
+            panic_with_error!(&env, Error::ProposalNotFound);
+        }
+        if proposal.proposer != caller {
+            Self::require_admin_only(&env, &caller);
+        }
+        proposal.cancelled = true;
+        env.storage().persistent().set(&key, &proposal);
+        Self::bump_persistent_ttl(&env, &key);
+        Self::bump_instance_ttl(&env);
+
+        ProposalCancelled { proposal_id }.publish(&env);
+    }
+
+    pub fn get_proposal(env: Env, proposal_id: u64) -> Proposal {
+        Self::bump_instance_ttl(&env);
+        let key = DataKey::Proposal(proposal_id);
+        let proposal: Proposal = env.storage().persistent().get(&key).unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
+        Self::bump_persistent_ttl(&env, &key);
+        proposal
+    }
+
     pub fn is_paused(env: Env) -> bool {
         Self::bump_instance_ttl(&env);
         env.storage()
@@ -858,6 +1048,18 @@ impl WatchdogContract {
     }
 
     fn require_admin_only(env: &Env, caller: &Address) {
+        if let Some(admin_set) = env.storage().instance().get::<_, AdminSet>(&DataKey::AdminSetKey) {
+            let mut found = false;
+            for a in admin_set.admins.iter() {
+                if a == *caller {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                panic!("only admin or owner may perform this action");
+            }
+        } else {
         let admin: Address = env
             .storage()
             .instance()
@@ -866,6 +1068,108 @@ impl WatchdogContract {
         if caller != &admin {
             panic!("only admin or owner may perform this action");
         }
+    }
+}
+
+    fn require_admin_or_member(env: &Env, caller: &Address) {
+        if let Some(admin_set) = env.storage().instance().get::<_, AdminSet>(&DataKey::AdminSetKey) {
+            let mut found = false;
+            for a in admin_set.admins.iter() {
+                if a == *caller {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                panic_with_error!(env, Error::NotAdmin);
+            }
+        } else {
+            let admin: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::Admin)
+                .unwrap_or_else(|| panic!("not initialized"));
+            if caller != &admin {
+                panic_with_error!(env, Error::NotAdmin);
+            }
+        }
+    }
+
+    fn current_threshold(env: &Env) -> u32 {
+        if let Some(admin_set) = env.storage().instance().get::<_, AdminSet>(&DataKey::AdminSetKey) {
+            admin_set.threshold
+        } else {
+            1
+        }
+    }
+
+    fn create_proposal_internal(env: Env, proposer: Address, proposal_type: ProposalType) -> u64 {
+        let proposal_count: u64 = env.storage().instance().get(&DataKey::ProposalCount).unwrap_or(0);
+        let proposal_id = proposal_count + 1;
+        env.storage().instance().set(&DataKey::ProposalCount, &proposal_id);
+
+        let now = env.ledger().timestamp();
+        let expiry = now + 604800; // 7 days expiry
+
+        let mut approvals = Vec::new(&env);
+        approvals.push_back(proposer.clone());
+
+        let proposal = Proposal {
+            id: proposal_id,
+            proposer: proposer.clone(),
+            proposal_type,
+            approvals,
+            expiry,
+            executed: false,
+            cancelled: false,
+        };
+
+        let key = DataKey::Proposal(proposal_id);
+        env.storage().persistent().set(&key, &proposal);
+        Self::bump_persistent_ttl(&env, &key);
+        Self::bump_instance_ttl(&env);
+
+        ProposalCreated {
+            proposal_id,
+            proposer,
+        }
+        .publish(&env);
+
+        let threshold = Self::current_threshold(&env);
+        if proposal.approvals.len() >= threshold {
+            let mut p = proposal;
+            Self::execute_proposal_internal(env, proposal_id, &mut p);
+        }
+
+        proposal_id
+    }
+
+    fn execute_proposal_internal(env: Env, proposal_id: u64, proposal: &mut Proposal) {
+        proposal.executed = true;
+        let key = DataKey::Proposal(proposal_id);
+        env.storage().persistent().set(&key, proposal);
+        Self::bump_persistent_ttl(&env, &key);
+        Self::bump_instance_ttl(&env);
+
+        match &proposal.proposal_type {
+            ProposalType::Pause => {
+                env.storage().instance().set(&DataKey::Paused, &true);
+            }
+            ProposalType::Unpause => {
+                env.storage().instance().remove(&DataKey::Paused);
+            }
+            ProposalType::SetAdmin(admin_set) => {
+                env.storage().instance().set(&DataKey::AdminSetKey, admin_set);
+                if !admin_set.admins.is_empty() {
+                    env.storage().instance().set(&DataKey::Admin, &admin_set.admins.get(0).unwrap());
+                }
+            }
+            ProposalType::Upgrade(wasm_hash) => {
+                env.deployer().update_current_contract_wasm(wasm_hash.clone());
+            }
+        }
+
+        ProposalExecuted { proposal_id }.publish(&env);
     }
 }
 
@@ -1449,6 +1753,76 @@ mod test {
         client.unpause(&admin);
         client.unpause(&admin);
         assert!(!client.is_paused());
+    }
+
+    #[test]
+    fn threshold_multi_admin_proposal_flow_and_execution() {
+        let env = Env::default();
+        set_timestamp(&env, 1_000_000);
+        let (_admin, client) = setup(&env);
+
+        let a1 = Address::generate(&env);
+        let a2 = Address::generate(&env);
+        let a3 = Address::generate(&env);
+        let mut admins = Vec::new(&env);
+        admins.push_back(a1.clone());
+        admins.push_back(a2.clone());
+        admins.push_back(a3.clone());
+
+        let prop_id = client.set_admin_set(&a1, &admins, &2u32);
+        let prop = client.get_proposal(&prop_id);
+        assert_eq!(prop.approvals.len(), 1);
+        assert_eq!(prop.executed, true);
+
+        assert_eq!(client.admin_set().unwrap().threshold, 2);
+
+        let pause_prop_id = client.propose_pause(&a1);
+        let pause_prop = client.get_proposal(&pause_prop_id);
+        assert_eq!(pause_prop.executed, false);
+
+        client.approve_proposal(&a2, &pause_prop_id);
+        let pause_prop_after = client.get_proposal(&pause_prop_id);
+        assert_eq!(pause_prop_after.executed, true);
+        assert_eq!(client.is_paused(), true);
+    }
+
+    #[test]
+    #[should_panic(expected = "already approved")]
+    fn threshold_duplicate_approval_panics() {
+        let env = Env::default();
+        set_timestamp(&env, 1_000_000);
+        let (_admin, client) = setup(&env);
+
+        let a1 = Address::generate(&env);
+        let a2 = Address::generate(&env);
+        let mut admins = Vec::new(&env);
+        admins.push_back(a1.clone());
+        admins.push_back(a2.clone());
+
+        client.set_admin_set(&a1, &admins, &2u32);
+
+        let prop_id = client.propose_pause(&a1);
+        client.approve_proposal(&a1, &prop_id);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal expired")]
+    fn threshold_expired_proposal_panics() {
+        let env = Env::default();
+        set_timestamp(&env, 1_000_000);
+        let (_admin, client) = setup(&env);
+
+        let a1 = Address::generate(&env);
+        let a2 = Address::generate(&env);
+        let mut admins = Vec::new(&env);
+        admins.push_back(a1.clone());
+        admins.push_back(a2.clone());
+
+        client.set_admin_set(&a1, &admins, &2u32);
+
+        let prop_id = client.propose_pause(&a1);
+        set_timestamp(&env, 2_000_000);
+        client.approve_proposal(&a2, &prop_id);
     }
 
     #[test]
