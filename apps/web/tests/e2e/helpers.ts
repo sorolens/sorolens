@@ -453,7 +453,7 @@ export function contractInvocation() {
     ledger_closed_at: recentTimestamp(3),
     status: "SUCCESS",
     function_name: "swap",
-    args_decoded: null,
+    args_decoded: {},
     result_decoded: null,
     result_xdr: "",
     resource_fee_charged: 1200,

@@ -3136,10 +3136,9 @@ export interface components {
       ledger_closed_at: string;
       status: string;
       function_name: string;
-      /** @description Decoded invocation arguments, or null when they could not be decoded. */
       args_decoded: {
         [key: string]: unknown;
-      } | null;
+      };
       result_decoded: unknown;
       result_xdr: string;
       /** Format: int64 */

@@ -6633,8 +6633,6 @@ components:
         args_decoded:
           type: object
           additionalProperties: true
-          nullable: true
-          description: Decoded invocation arguments, or null when they could not be decoded.
         result_decoded: {}
         result_xdr:
           type: string
