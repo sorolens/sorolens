@@ -29,6 +29,13 @@ class CreateMyApiKeyResponse201:
         rotated_at (datetime.datetime | None | Unset): When the key's secret was last rotated in place.
         expires_at (datetime.datetime | None | Unset): When the key expires, or null if it does not expire.
         monthly_quota (int | None | Unset): Monthly request quota, or null if unmetered.
+        allowed_cidrs (list[str] | Unset): Source networks allowed to use this key, as normalized CIDR ranges
+            (a bare IP is stored as `/32` or `/128`). Empty means any address.
+            Requests from outside the list are rejected with `403` and error
+            code `API_KEY_RESTRICTED`.
+        allowed_origins (list[str] | Unset): Browser Origins allowed to use this key. Empty means any origin. A
+            request whose `Origin` header is not listed is rejected with `403`
+            and error code `API_KEY_RESTRICTED`.
     """
 
     id: str
@@ -43,6 +50,8 @@ class CreateMyApiKeyResponse201:
     rotated_at: datetime.datetime | None | Unset = UNSET
     expires_at: datetime.datetime | None | Unset = UNSET
     monthly_quota: int | None | Unset = UNSET
+    allowed_cidrs: list[str] | Unset = UNSET
+    allowed_origins: list[str] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -98,6 +107,14 @@ class CreateMyApiKeyResponse201:
         else:
             monthly_quota = self.monthly_quota
 
+        allowed_cidrs: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_cidrs, Unset):
+            allowed_cidrs = self.allowed_cidrs
+
+        allowed_origins: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_origins, Unset):
+            allowed_origins = self.allowed_origins
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -120,6 +137,10 @@ class CreateMyApiKeyResponse201:
             field_dict["expires_at"] = expires_at
         if monthly_quota is not UNSET:
             field_dict["monthly_quota"] = monthly_quota
+        if allowed_cidrs is not UNSET:
+            field_dict["allowed_cidrs"] = allowed_cidrs
+        if allowed_origins is not UNSET:
+            field_dict["allowed_origins"] = allowed_origins
 
         return field_dict
 
@@ -220,6 +241,10 @@ class CreateMyApiKeyResponse201:
 
         monthly_quota = _parse_monthly_quota(d.pop("monthly_quota", UNSET))
 
+        allowed_cidrs = cast(list[str], d.pop("allowed_cidrs", UNSET))
+
+        allowed_origins = cast(list[str], d.pop("allowed_origins", UNSET))
+
         create_my_api_key_response_201 = cls(
             id=id,
             name=name,
@@ -233,6 +258,8 @@ class CreateMyApiKeyResponse201:
             rotated_at=rotated_at,
             expires_at=expires_at,
             monthly_quota=monthly_quota,
+            allowed_cidrs=allowed_cidrs,
+            allowed_origins=allowed_origins,
         )
 
         create_my_api_key_response_201.additional_properties = d

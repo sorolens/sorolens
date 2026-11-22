@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -19,69 +18,6 @@ import (
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 )
 
-// corsMiddleware returns an http.Handler middleware that sets CORS headers.
-//
-// When CORS_ALLOWED_ORIGINS is unset or contains "*" all origins are allowed
-// (Access-Control-Allow-Origin: *). When it is a comma-separated list of
-// origins, only requests whose Origin header is in the list receive an echoed
-// origin back; all others receive the first entry in the list (the browser
-// will still block the mismatch). This lets a self-hosted API restrict
-// cross-origin access to the Vercel dashboard domain without any code change.
-func corsMiddleware() func(http.Handler) http.Handler {
-	raw := os.Getenv("CORS_ALLOWED_ORIGINS")
-
-	// Build the allow-set. nil means wildcard (*).
-	var allowed map[string]struct{}
-	if raw != "" {
-		allowed = make(map[string]struct{})
-		for _, o := range strings.Split(raw, ",") {
-			o = strings.TrimSpace(o)
-			if o == "" {
-				continue
-			}
-			if o == "*" {
-				allowed = nil // wildcard overrides any explicit list
-				break
-			}
-			allowed[o] = struct{}{}
-		}
-		if len(allowed) == 0 {
-			allowed = nil
-		}
-	}
-
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			var allowOrigin string
-			if allowed == nil {
-				allowOrigin = "*"
-			} else if _, ok := allowed[origin]; ok {
-				allowOrigin = origin
-			} else {
-				// Fall back to the first configured origin; the browser will
-				// reject the mismatch, but the response header is always set.
-				for o := range allowed {
-					allowOrigin = o
-					break
-				}
-			}
-
-			w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, Authorization, X-API-Key")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-			if allowOrigin != "*" {
-				w.Header().Set("Vary", "Origin")
-			}
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 // New builds and returns the HTTP router with all middleware and routes wired.
 // maxBodyBytes caps the request body size in bytes; values of zero or less
 // disable the limit. Callers normally pass config.MaxBodyBytesFromEnv().
@@ -92,7 +28,8 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(OTelMiddleware)
 
 	r.Use(middleware.RequestID)
-	r.Use(corsMiddleware())
+	r.Use(middleware.SecurityHeaders)
+	r.Use(middleware.CORS(os.Getenv("CORS_ALLOWED_ORIGINS")))
 	// Sentry must run before Recoverer: it reports a panic and re-panics so
 	// Recoverer still produces the standard 500 response.
 	r.Use(middleware.Sentry)
@@ -107,6 +44,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		Sessions:    h.SessionSigner,
 		ProxySecret: h.TrustedProxySecret,
 	}, h.Logger))
+	// Enforce per-key network and origin allowlists (issue #793). It runs after
+	// Identity because it only inspects a key that already authenticated, and
+	// before rate limiting so a rejected request never consumes a key's budget.
+	// The client address is resolved through TrustedProxies, the same source the
+	// rate limiter uses.
+	r.Use(middleware.APIKeyRestrictions(h.TrustedProxies))
 	r.Use(middleware.RequireAuthMode(h.RequireAuth, h.Logger))
 	// Audit trail for every mutating /api/ and /admin request (issue #122). It sits
 	// outside rate limiting, content-type and auth checks so their

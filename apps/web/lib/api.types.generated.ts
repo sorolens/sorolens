@@ -3386,6 +3386,19 @@ export interface components {
       expires_at?: string | null;
       /** @description Monthly request quota, or null if unmetered. */
       monthly_quota?: number | null;
+      /**
+       * @description Source networks allowed to use this key, as normalized CIDR ranges
+       *     (a bare IP is stored as `/32` or `/128`). Empty means any address.
+       *     Requests from outside the list are rejected with `403` and error
+       *     code `API_KEY_RESTRICTED`.
+       */
+      allowed_cidrs?: string[];
+      /**
+       * @description Browser Origins allowed to use this key. Empty means any origin. A
+       *     request whose `Origin` header is not listed is rejected with `403`
+       *     and error code `API_KEY_RESTRICTED`.
+       */
+      allowed_origins?: string[];
     };
     UsageTimelinePoint: {
       /** @example 2026-11-20 */
@@ -5849,6 +5862,18 @@ export interface operations {
           name: string;
           /** @description Defaults to read:contracts when omitted. */
           scopes?: ("read:contracts" | "write:contracts" | "read:watchdog")[];
+          /**
+           * @description Optional source networks for this key. Each entry is a CIDR
+           *     range or a bare IP address. Empty or omitted means any
+           *     address.
+           */
+          allowed_cidrs?: string[];
+          /**
+           * @description Optional browser Origins for this key, scheme and host only
+           *     (`https://app.example.com`). Empty or omitted means any
+           *     origin.
+           */
+          allowed_origins?: string[];
         };
       };
     };
@@ -5947,6 +5972,21 @@ export interface operations {
            * @description Optional expiry timestamp. Expired keys are rejected by authentication.
            */
           expires_at?: string;
+          /**
+           * @description Source networks allowed to use this key. Each entry is a
+           *     CIDR range (`203.0.113.0/24`, `2001:db8::/32`) or a bare IP
+           *     address, which is stored as a single-host range. Invalid
+           *     entries are rejected with `422`. Omit or send an empty list
+           *     for an unrestricted key.
+           */
+          allowed_cidrs?: string[];
+          /**
+           * @description Browser Origins allowed to use this key, for example
+           *     `https://app.example.com`. Scheme and host only: paths,
+           *     queries and wildcards are rejected with `422`. Omit or send
+           *     an empty list to allow any origin.
+           */
+          allowed_origins?: string[];
         };
       };
     };

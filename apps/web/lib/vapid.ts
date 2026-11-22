@@ -64,6 +64,7 @@ export async function sendPushNotification(
     subscription as Parameters<typeof webPush.sendNotification>[0],
     JSON.stringify(payload),
     {
+      timeout: 10_000,
       TTL: 86400, // 24 hours
       urgency: payload.severity === "Critical" ? "high" : "normal",
       topic: payload.tag,
