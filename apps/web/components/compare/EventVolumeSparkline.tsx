@@ -42,8 +42,8 @@ export function EventVolumeSparkline({
           <Area
             type="monotone"
             dataKey="count"
-            stroke="var(--color-accent)"
-            fill="var(--color-accent)"
+            stroke="var(--color-chart-1)"
+            fill="var(--color-chart-1)"
             fillOpacity={0.15}
             strokeWidth={1.5}
             isAnimationActive={false}

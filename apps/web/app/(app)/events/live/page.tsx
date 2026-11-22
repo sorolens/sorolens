@@ -51,10 +51,10 @@ export default function EventsPage() {
                 paused
                   ? "bg-white/10 text-[var(--color-text-secondary)]"
                   : isConnected
-                    ? "bg-green-900/40 text-green-400"
+                    ? "bg-[var(--color-safe-bg)] text-[var(--color-safe-text)]"
                     : isPolling
-                      ? "bg-amber-900/40 text-amber-400"
-                      : "bg-blue-900/40 text-blue-400"
+                      ? "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]"
+                      : "bg-[var(--color-info-bg)] text-[var(--color-info-text)]"
               }`}
             >
               <span
@@ -62,10 +62,10 @@ export default function EventsPage() {
                   paused
                     ? "bg-white/60"
                     : isConnected
-                      ? "bg-green-400 animate-pulse"
+                      ? "bg-[var(--color-safe)] animate-pulse"
                       : isPolling
-                        ? "bg-amber-400"
-                        : "bg-blue-400 animate-ping"
+                        ? "bg-[var(--color-warning)]"
+                        : "bg-[var(--color-info)] animate-ping"
                 }`}
               />
               {paused

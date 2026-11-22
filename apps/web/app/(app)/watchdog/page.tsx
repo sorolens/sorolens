@@ -42,7 +42,7 @@ const selectClass =
 function viewToggleClass(active: boolean): string {
   return `px-3 py-1.5 text-xs font-medium transition-colors ${
     active
-      ? "bg-[var(--color-accent)] text-white"
+      ? "bg-[var(--color-accent)] text-[var(--color-accent-foreground)]"
       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
   }`;
 }

@@ -117,7 +117,10 @@ export function ContractNotes({
           </button>
         </div>
         {message && (
-          <p role="alert" className="mt-2 text-xs text-red-400">
+          <p
+            role="alert"
+            className="mt-2 text-xs text-[var(--color-danger-text)]"
+          >
             {message}
           </p>
         )}
@@ -174,7 +177,7 @@ export function ContractNotes({
                         aria-label={`Delete note ${note.id}`}
                         disabled={saving}
                         onClick={() => onDelete(note.id)}
-                        className="rounded px-2 py-1 text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed"
+                        className="rounded px-2 py-1 text-[var(--color-danger-text)] transition-colors hover:bg-[var(--color-danger-bg)] disabled:cursor-not-allowed"
                       >
                         Delete
                       </button>

@@ -277,7 +277,10 @@ export default function EventsExplorerPage() {
           )}
         </div>
         {rangeError && (
-          <p role="alert" className="w-full text-xs text-red-400">
+          <p
+            role="alert"
+            className="w-full text-xs text-[var(--color-danger-text)]"
+          >
             {rangeError}
           </p>
         )}

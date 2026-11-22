@@ -57,8 +57,13 @@ export const metadata: Metadata = {
   },
 };
 
+// Match the browser chrome to the page tokens in globals.css. The previous
+// violet value matched neither theme (issue #609).
 export const viewport: Viewport = {
-  themeColor: "#7c3aed",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
+    { media: "(prefers-color-scheme: dark)", color: "#11111b" },
+  ],
 };
 
 export default function RootLayout({

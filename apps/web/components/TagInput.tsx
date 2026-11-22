@@ -104,7 +104,10 @@ export function TagInput({
         />
       </div>
       {message && (
-        <p role="alert" className="mt-1.5 text-xs text-red-400">
+        <p
+          role="alert"
+          className="mt-1.5 text-xs text-[var(--color-danger-text)]"
+        >
           {message}
         </p>
       )}

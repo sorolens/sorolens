@@ -1,30 +1,271 @@
 @import "tailwindcss";
 
+/*
+ * Semantic design tokens (issue #609).
+ *
+ * Every color used by the dashboard goes through one of these variables so the
+ * same component works in both themes. Do not use raw Tailwind palette classes
+ * for themed surfaces, text, borders or status colors: define a token here and
+ * reference it with `var(--color-...)` instead.
+ *
+ * Contrast: the text/surface pairs below are checked by
+ * app/globals.test.ts against WCAG AA (4.5:1 for normal text, 3:1 for UI
+ * boundaries and large text). Update the test when a token changes.
+ */
 :root[data-theme="light"],
 :root {
-  --color-warning: #d97706;
-  --color-danger: #e11d48;
-  --color-safe: #16a34a;
-  --color-bg-card: #ffffff;
+  color-scheme: light;
+
+  /* Surfaces */
   --color-bg-page: #f8fafc;
+  --color-bg-card: #ffffff;
+  --color-surface: #ffffff;
+  --color-bg: #f1f5f9;
+  --color-bg-hover: #e2e8f0;
   --color-border: #e2e8f0;
+  --color-border-hover: #94a3b8;
+  --color-overlay: rgba(15, 23, 42, 0.45);
+
+  /* Text */
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
-  --color-accent: #3b82f6;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #ffffff;
+
+  /* Accent */
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-bg: #dbeafe;
+  --color-accent-border: #93c5fd;
+  --color-accent-text: #1e40af;
+  --color-accent-foreground: #ffffff;
+
+  /* Status: danger */
+  --color-danger: #b91c1c;
+  --color-danger-hover: #991b1b;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fca5a5;
+  --color-danger-text: #991b1b;
+  --color-danger-foreground: #ffffff;
+
+  /* Status: warning */
+  --color-warning: #b45309;
+  --color-warning-hover: #92400e;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fcd34d;
+  --color-warning-text: #92400e;
+  --color-warning-foreground: #ffffff;
+
+  /* Status: safe / success */
+  --color-safe: #15803d;
+  --color-safe-hover: #166534;
+  --color-safe-bg: #f0fdf4;
+  --color-safe-border: #86efac;
+  --color-safe-text: #166534;
+  --color-safe-foreground: #ffffff;
+
+  /* Status: info */
+  --color-info: #1d4ed8;
+  --color-info-hover: #1e40af;
+  --color-info-bg: #eff6ff;
+  --color-info-border: #93c5fd;
+  --color-info-text: #1e40af;
+  --color-info-foreground: #ffffff;
+
+  /* Charts (categorical series, grid, axis, tooltip) */
+  --color-chart-1: #2563eb;
+  --color-chart-2: #15803d;
+  --color-chart-3: #b45309;
+  --color-chart-4: #7c3aed;
+  --color-chart-5: #be185d;
+  --color-chart-6: #0e7490;
+  --color-chart-7: #4d7c0f;
+  --color-chart-grid: #e2e8f0;
+  --color-chart-axis: #64748b;
+  --color-chart-tooltip-bg: #ffffff;
+  --color-chart-tooltip-border: #e2e8f0;
+  --color-chart-legend: #475569;
+  --color-chart-foreground: #ffffff;
+
+  /* Inline syntax highlighting (rule language, playground JSON) */
+  --color-syntax-string: #15803d;
+  --color-syntax-number: #b45309;
+  --color-syntax-boolean: #7c3aed;
+  --color-syntax-keyword: #9333ea;
+  --color-syntax-function: #0e7490;
+  --color-syntax-type: #b45309;
+  --color-syntax-error: #be123c;
+  --color-syntax-property: #1d4ed8;
 }
 
 :root[data-theme="dark"] {
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
-  --color-safe: #22c55e;
-  --color-bg-card: #1e1e2e;
+  color-scheme: dark;
+
+  /* Surfaces */
   --color-bg-page: #11111b;
+  --color-bg-card: #1e1e2e;
+  --color-surface: #1e1e2e;
+  --color-bg: #181825;
+  --color-bg-hover: #313244;
   --color-border: #313244;
+  --color-border-hover: #585b70;
+  --color-overlay: rgba(0, 0, 0, 0.6);
+
+  /* Text */
   --color-text-primary: #cdd6f4;
   --color-text-secondary: #a6adc8;
+  --color-text-muted: #9399b2;
+  --color-text-inverse: #11111b;
+
+  /* Accent */
   --color-accent: #89b4fa;
+  --color-accent-hover: #b4befe;
+  --color-accent-bg: #1e2a44;
+  --color-accent-border: #3b5279;
+  --color-accent-text: #b4befe;
+  --color-accent-foreground: #11111b;
+
+  /* Status: danger */
+  --color-danger: #f87171;
+  --color-danger-hover: #fca5a5;
+  --color-danger-bg: #3b1d24;
+  --color-danger-border: #7f3540;
+  --color-danger-text: #fca5a5;
+  --color-danger-foreground: #11111b;
+
+  /* Status: warning */
+  --color-warning: #fbbf24;
+  --color-warning-hover: #fcd34d;
+  --color-warning-bg: #3a2a12;
+  --color-warning-border: #7a5c1e;
+  --color-warning-text: #fcd34d;
+  --color-warning-foreground: #1f1300;
+
+  /* Status: safe / success */
+  --color-safe: #4ade80;
+  --color-safe-hover: #86efac;
+  --color-safe-bg: #14301f;
+  --color-safe-border: #2f6b45;
+  --color-safe-text: #86efac;
+  --color-safe-foreground: #11111b;
+
+  /* Status: info */
+  --color-info: #60a5fa;
+  --color-info-hover: #93c5fd;
+  --color-info-bg: #162a44;
+  --color-info-border: #2c4f7c;
+  --color-info-text: #93c5fd;
+  --color-info-foreground: #11111b;
+
+  /* Charts */
+  --color-chart-1: #89b4fa;
+  --color-chart-2: #4ade80;
+  --color-chart-3: #fbbf24;
+  --color-chart-4: #cba6f7;
+  --color-chart-5: #f38ba8;
+  --color-chart-6: #67e8f9;
+  --color-chart-7: #a3e635;
+  --color-chart-grid: #313244;
+  --color-chart-axis: #a6adc8;
+  --color-chart-tooltip-bg: #1e1e2e;
+  --color-chart-tooltip-border: #313244;
+  --color-chart-legend: #a6adc8;
+  --color-chart-foreground: #11111b;
+
+  /* Inline syntax highlighting */
+  --color-syntax-string: #a6e3a1;
+  --color-syntax-number: #fab387;
+  --color-syntax-boolean: #cba6f7;
+  --color-syntax-keyword: #cba6f7;
+  --color-syntax-function: #89dceb;
+  --color-syntax-type: #f9e2af;
+  --color-syntax-error: #f38ba8;
+  --color-syntax-property: #89b4fa;
 }
+
 body {
   background-color: var(--color-bg-page);
   color: var(--color-text-primary);
+}
+
+/* Links and focus rings follow the accent token in both themes. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Rendered documentation markdown (issue #598). */
+.docs-content {
+  color: var(--color-text-primary);
+  line-height: 1.7;
+}
+.docs-content h1,
+.docs-content h2,
+.docs-content h3 {
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 1.5rem 0 0.75rem;
+}
+.docs-content h1 {
+  font-size: 1.875rem;
+}
+.docs-content h2 {
+  font-size: 1.375rem;
+}
+.docs-content h3 {
+  font-size: 1.125rem;
+}
+.docs-content p,
+.docs-content ul,
+.docs-content ol,
+.docs-content pre,
+.docs-content blockquote {
+  margin: 0.75rem 0;
+}
+.docs-content ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+}
+.docs-content ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+}
+.docs-content a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.docs-content code {
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.85em;
+}
+.docs-content pre {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  overflow-x: auto;
+}
+.docs-content pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 0.8125rem;
+}
+.docs-content blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding-left: 1rem;
+  color: var(--color-text-secondary);
+}
+.docs-content hr {
+  border-color: var(--color-border);
+  margin: 1.5rem 0;
 }

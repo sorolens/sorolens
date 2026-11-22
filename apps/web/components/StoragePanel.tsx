@@ -62,10 +62,10 @@ function StorageRow({
         <span
           className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
             entry.durability === "persistent"
-              ? "bg-blue-900/40 text-blue-400"
+              ? "bg-[var(--color-info-bg)] text-[var(--color-info-text)]"
               : entry.durability === "temporary"
-                ? "bg-purple-900/40 text-purple-400"
-                : "bg-yellow-900/40 text-yellow-400"
+                ? "bg-[var(--color-accent-bg)] text-[var(--color-accent-text)]"
+                : "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]"
           }`}
         >
           {entry.durability}

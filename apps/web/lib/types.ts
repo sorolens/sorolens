@@ -1,3 +1,5 @@
+import type { operations } from "./api.types.generated";
+
 export interface Contract {
   id: string;
   network: string;
@@ -115,14 +117,15 @@ export interface InvocationFrequencyPoint {
 
 export type StatsResponse = ContractStats;
 
-/** One day of averaged per-invocation resource usage (issue #184). */
-export interface ResourceTrendPoint {
-  date: string;
-  avg_cpu_insn: number;
-  avg_mem_byte: number;
-  avg_fee: number;
-  count: number;
-}
+/**
+ * One day of averaged per-invocation resource usage (issue #184).
+ *
+ * Generated from docs/openapi.yaml (issue #599) so the chart cannot drift
+ * from the endpoint it calls.
+ */
+export type ResourceTrendResponse =
+  operations["getContractResourceTrend"]["responses"][200]["content"]["application/json"];
+export type ResourceTrendPoint = ResourceTrendResponse["points"][number];
 
 export interface ContractForecastPoint {
   date: string;

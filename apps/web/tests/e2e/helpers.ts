@@ -125,6 +125,9 @@ function defaultContract(route: Route): { status: number; body: unknown } {
       body: { invocations: [contractInvocation()], next_cursor: "" },
     };
   }
+  if (path.endsWith("/resource-trend")) {
+    return { status: 200, body: resourceTrendResponse() };
+  }
   if (path.endsWith("/storage")) {
     return {
       status: 200,
@@ -277,6 +280,7 @@ export function contractSummary() {
     label: "Escrow DEX",
     status: "active",
     wasm_hash: "3c1b2d9f",
+    tags: [],
     added_at: "2026-07-02T10:15:00Z",
     last_activity_at: "2026-07-02T10:14:00Z",
   };
@@ -352,11 +356,29 @@ export function contractInvocation() {
     function_name: "swap",
     args_decoded: null,
     result_decoded: null,
+    result_xdr: "",
     resource_fee_charged: 1200,
     cpu_insn: 140_000,
     mem_byte: 64_000,
     ledger_read_byte: 2048,
     ledger_write_byte: 512,
+    application_order: 1,
+  };
+}
+
+/** One response from `GET /api/v1/contracts/{id}/resource-trend` (#600). */
+export function resourceTrendResponse() {
+  return {
+    days: 30,
+    points: [
+      {
+        date: new Date().toISOString().slice(0, 10),
+        avg_cpu_insn: 140_000,
+        avg_mem_byte: 64_000,
+        avg_fee: 1200,
+        count: 1,
+      },
+    ],
   };
 }
 

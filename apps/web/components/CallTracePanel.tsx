@@ -124,8 +124,8 @@ export function CallTracePanel({ initialTxHash = "" }: CallTracePanelProps) {
               <span
                 className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
                   trace.status === "SUCCESS"
-                    ? "bg-green-900/40 text-green-400"
-                    : "bg-red-900/40 text-red-400"
+                    ? "bg-[var(--color-safe-bg)] text-[var(--color-safe-text)]"
+                    : "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]"
                 }`}
               >
                 {trace.status}

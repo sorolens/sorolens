@@ -763,6 +763,37 @@ Paginated invocation list.
 
 ---
 
+#### `GET /api/v1/contracts/:id/resource-trend`
+
+Server-side daily aggregation for the resource-usage chart (issue #600). It
+replaces the dashboard's client-side paging over raw invocations: one request
+returns one bucket per UTC day for the trailing `days` days (default 30, max
+365), with averages for CPU instructions, memory bytes and fee, plus the
+invocation count. Days without invocations are returned as zero buckets.
+
+**Query params:** `days` (1-365, default 30).
+
+**Response `200`:**
+
+```json
+{
+  "days": 30,
+  "points": [
+    {
+      "date": "2026-07-03",
+      "avg_cpu_insn": 4883530,
+      "avg_mem_byte": 2298162,
+      "avg_fee": 123456,
+      "count": 42
+    }
+  ]
+}
+```
+
+The same aggregation is exposed at `/api/v2/contracts/:id/resource-trend`.
+
+---
+
 #### `GET /api/v1/contracts/:id/invocations/:tx_hash`
 
 Full detail for a single invocation, including all associated events.

@@ -21,7 +21,13 @@ interface Readiness {
 function StateValue({ value }: { value: string | null }) {
   const healthy = value === "ok" || value === "connected";
   return (
-    <span className={healthy ? "text-green-400" : "text-amber-400"}>
+    <span
+      className={
+        healthy
+          ? "text-[var(--color-safe)]"
+          : "text-[var(--color-warning-text)]"
+      }
+    >
       {value ?? "Unavailable"}
     </span>
   );
@@ -41,7 +47,9 @@ function StatusSection({
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">{title}</h2>
         {unavailable && (
-          <span className="text-xs text-amber-400">Some data unavailable</span>
+          <span className="text-xs text-[var(--color-warning-text)]">
+            Some data unavailable
+          </span>
         )}
       </div>
       {children}
@@ -118,7 +126,10 @@ export default function StatusPage() {
       </header>
 
       {failures.length > 0 && (
-        <p className="mb-4 text-sm text-amber-400" role="status">
+        <p
+          className="mb-4 text-sm text-[var(--color-warning-text)]"
+          role="status"
+        >
           Partial status data: {failures.join(", ")} could not be reached.
         </p>
       )}
@@ -159,7 +170,9 @@ export default function StatusPage() {
             </div>
           </dl>
         ) : (
-          <p className="text-sm text-amber-400">API health is unavailable.</p>
+          <p className="text-sm text-[var(--color-warning-text)]">
+            API health is unavailable.
+          </p>
         )}
       </StatusSection>
 
@@ -209,7 +222,7 @@ export default function StatusPage() {
             </div>
           </dl>
         ) : (
-          <p className="text-sm text-amber-400">
+          <p className="text-sm text-[var(--color-warning-text)]">
             Build metadata is unavailable.
           </p>
         )}
@@ -217,7 +230,7 @@ export default function StatusPage() {
 
       <StatusSection title="Indexer progress" unavailable={!indexer}>
         {!indexer ? (
-          <p className="text-sm text-amber-400">
+          <p className="text-sm text-[var(--color-warning-text)]">
             Indexer metrics are unavailable.
           </p>
         ) : indexer.networks.length === 0 ? (

@@ -42,12 +42,14 @@ const PASTE_CONTRACT_ID_RE = /^C[A-Z0-9]{55}$/;
 
 function StatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
-    active: "bg-green-900/40 text-green-400",
-    backfilling: "bg-blue-900/40 text-blue-400",
-    error: "bg-red-900/40 text-red-400",
-    inactive: "bg-yellow-900/40 text-yellow-400",
+    active: "bg-[var(--color-safe-bg)] text-[var(--color-safe-text)]",
+    backfilling: "bg-[var(--color-info-bg)] text-[var(--color-info-text)]",
+    error: "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]",
+    inactive: "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]",
   };
-  const cls = colorMap[status] ?? "bg-yellow-900/40 text-yellow-400";
+  const cls =
+    colorMap[status] ??
+    "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]";
   return (
     <span
       className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${cls}`}
@@ -195,7 +197,7 @@ function UntrackConfirmModal({
           type="button"
           onClick={onConfirm}
           disabled={pending}
-          className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex-1 rounded-lg bg-[var(--color-danger)] px-4 py-2.5 text-sm font-semibold text-[var(--color-danger-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? "Untracking…" : `Untrack ${count}`}
         </button>
@@ -822,7 +824,7 @@ export default function ContractsClient({
                 type="button"
                 onClick={() => setShowUntrackModal(true)}
                 disabled={bulkPending}
-                className="rounded-lg border border-red-500/40 bg-red-600/10 px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-600/20 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3 py-1.5 text-sm font-medium text-[var(--color-danger-text)] transition-colors hover:bg-[var(--color-danger-bg)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Untrack {selected.size}{" "}
                 {selected.size === 1 ? "contract" : "contracts"}

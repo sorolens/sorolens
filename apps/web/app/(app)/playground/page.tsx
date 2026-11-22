@@ -180,7 +180,11 @@ export default function PlaygroundPage() {
               >
                 {p.name}
                 <span className="ml-1 font-normal">({p.in})</span>
-                {p.required && <span className="ml-1 text-red-400">*</span>}
+                {p.required && (
+                  <span className="ml-1 text-[var(--color-danger-text)]">
+                    *
+                  </span>
+                )}
               </label>
               <input
                 id={`param-${p.name}`}
@@ -298,8 +302,8 @@ export default function PlaygroundPage() {
                   data-testid="response-status"
                   className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                     response.status >= 200 && response.status < 300
-                      ? "bg-green-900/40 text-green-400"
-                      : "bg-red-900/40 text-red-400"
+                      ? "bg-[var(--color-safe-bg)] text-[var(--color-safe-text)]"
+                      : "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]"
                   }`}
                 >
                   {response.status} {response.statusText}
