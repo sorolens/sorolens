@@ -44,6 +44,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		Sessions:    h.SessionSigner,
 		ProxySecret: h.TrustedProxySecret,
 	}, h.Logger))
+	// Enforce per-key network and origin allowlists (issue #793). It runs after
+	// Identity because it only inspects a key that already authenticated, and
+	// before rate limiting so a rejected request never consumes a key's budget.
+	// The client address is resolved through TrustedProxies, the same source the
+	// rate limiter uses.
+	r.Use(middleware.APIKeyRestrictions(h.TrustedProxies))
 	r.Use(middleware.RequireAuthMode(h.RequireAuth, h.Logger))
 	// Audit trail for every mutating /api/ and /admin request (issue #122). It sits
 	// outside rate limiting, content-type and auth checks so their

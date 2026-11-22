@@ -1605,6 +1605,22 @@ paths:
                     type: string
                     enum: [read:contracts, write:contracts, read:watchdog]
                   description: Defaults to read:contracts when omitted.
+                allowed_cidrs:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    Optional source networks for this key. Each entry is a CIDR
+                    range or a bare IP address. Empty or omitted means any
+                    address.
+                allowed_origins:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    Optional browser Origins for this key, scheme and host only
+                    (`https://app.example.com`). Empty or omitted means any
+                    origin.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -1714,6 +1730,25 @@ paths:
                   type: string
                   format: date-time
                   description: Optional expiry timestamp. Expired keys are rejected by authentication.
+                allowed_cidrs:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    Source networks allowed to use this key. Each entry is a
+                    CIDR range (`203.0.113.0/24`, `2001:db8::/32`) or a bare IP
+                    address, which is stored as a single-host range. Invalid
+                    entries are rejected with `422`. Omit or send an empty list
+                    for an unrestricted key.
+                allowed_origins:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    Browser Origins allowed to use this key, for example
+                    `https://app.example.com`. Scheme and host only: paths,
+                    queries and wildcards are rejected with `422`. Omit or send
+                    an empty list to allow any origin.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -6105,7 +6140,18 @@ components:
     ApiKeyAuth:
       type: http
       scheme: bearer
-      description: "Scoped API key. Send as `Authorization: Bearer <token>` (or `X-API-Key`)."
+      description: |
+        Scoped API key. Send as `Authorization: Bearer <token>` (or `X-API-Key`).
+
+        A key may carry two optional allowlists (issue #793). `allowed_cidrs`
+        restricts the source network; the client address is the direct peer,
+        or the `X-Forwarded-For` entry when the peer is listed in the server's
+        `TRUSTED_PROXIES`. `allowed_origins` restricts browser use: when the
+        request carries an `Origin` header it must match one of the listed
+        origins exactly. A request without an `Origin` header is not a browser
+        cross-origin request and is unaffected. Use outside either list is
+        rejected with `403` and error code `API_KEY_RESTRICTED`; an empty list
+        means unrestricted.
     SessionAuth:
       type: http
       scheme: bearer
@@ -7067,6 +7113,23 @@ components:
           type: integer
           nullable: true
           description: Monthly request quota, or null if unmetered.
+        allowed_cidrs:
+          type: array
+          items:
+            type: string
+          description: |
+            Source networks allowed to use this key, as normalized CIDR ranges
+            (a bare IP is stored as `/32` or `/128`). Empty means any address.
+            Requests from outside the list are rejected with `403` and error
+            code `API_KEY_RESTRICTED`.
+        allowed_origins:
+          type: array
+          items:
+            type: string
+          description: |
+            Browser Origins allowed to use this key. Empty means any origin. A
+            request whose `Origin` header is not listed is rejected with `403`
+            and error code `API_KEY_RESTRICTED`.
 
     UsageTimelinePoint:
       type: object
