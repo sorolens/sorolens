@@ -25,6 +25,18 @@ info:
     `X-Identity-Timestamp` and `X-Identity-Signature` (an HMAC over the
     request). Bare `X-User-ID`, `X-GitHub-Login`, `X-User-Sub` and
     `X-GitHub-ID` headers are ignored (issue #518).
+
+    Browser requests: `CORS_ALLOWED_ORIGINS` accepts comma-separated origins.
+    Unset or `*` permits all origins. The API echoes an exact allowed origin
+    and sends `Vary: Origin`. OPTIONS returns 204. Allowed preflights advertise
+    GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS, and can be cached for 600
+    seconds. Allowed request headers are Content-Type, X-Request-ID,
+    Authorization, X-API-Key, If-None-Match and the three trusted proxy headers.
+
+    Responses include `X-Content-Type-Options: nosniff`,
+    `Strict-Transport-Security: max-age=31536000`, and
+    `Referrer-Policy: strict-origin-when-cross-origin`. API key and admin
+    routes also return `Cache-Control: no-store`, including errors.
   contact:
     name: Sorolens
 

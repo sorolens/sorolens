@@ -39,7 +39,7 @@ func ETag(next http.Handler) http.Handler {
 		// Streams bypass the recorder entirely: it buffers until the handler
 		// returns and does not implement http.Flusher, so an SSE handler
 		// behind it would answer 500 "streaming unsupported".
-		if (r.Method != http.MethodGet && r.Method != http.MethodHead) || etagExcludedPath(r.URL.Path) {
+		if (r.Method != http.MethodGet && r.Method != http.MethodHead) || w.Header().Get("Cache-Control") == "no-store" || etagExcludedPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
