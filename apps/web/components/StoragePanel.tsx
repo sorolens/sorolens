@@ -62,10 +62,10 @@ function StorageRow({
         <span
           className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
             entry.durability === "persistent"
-              ? "bg-blue-900/40 text-blue-400"
+              ? "bg-[var(--color-info-bg)] text-[var(--color-info-text)]"
               : entry.durability === "temporary"
-                ? "bg-purple-900/40 text-purple-400"
-                : "bg-yellow-900/40 text-yellow-400"
+                ? "bg-[var(--color-accent-bg)] text-[var(--color-accent-text)]"
+                : "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]"
           }`}
         >
           {entry.durability}
@@ -73,7 +73,7 @@ function StorageRow({
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-bg-hover)]">
             <div
               className={`h-full rounded-full transition-all ${barColor}`}
               style={{ width: `${Math.min(100, urgency.pct)}%` }}
@@ -183,7 +183,7 @@ export function StoragePanel({
             onClick={onLoadMore}
             disabled={loading}
             aria-busy={loading}
-            className="rounded-md bg-white/10 px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-white/20 disabled:opacity-50"
+            className="rounded-md bg-[var(--color-bg-hover)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
           >
             {loading ? "Loading..." : "Load More"}
           </button>

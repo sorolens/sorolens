@@ -124,6 +124,18 @@ from .get_contract_report_format import GetContractReportFormat
 from .get_contract_report_history_response_200 import (
     GetContractReportHistoryResponse200,
 )
+from .get_contract_resource_trend_response_200 import (
+    GetContractResourceTrendResponse200,
+)
+from .get_contract_resource_trend_response_200_points_item import (
+    GetContractResourceTrendResponse200PointsItem,
+)
+from .get_contract_resource_trend_v2_response_200 import (
+    GetContractResourceTrendV2Response200,
+)
+from .get_contract_resource_trend_v2_response_200_points_item import (
+    GetContractResourceTrendV2Response200PointsItem,
+)
 from .get_contract_uptime_window import GetContractUptimeWindow
 from .get_global_stats_response_200 import GetGlobalStatsResponse200
 from .get_watchdog_stats_network import GetWatchdogStatsNetwork
@@ -456,6 +468,10 @@ __all__ = (
     "GetContractForecastResponse200",
     "GetContractReportFormat",
     "GetContractReportHistoryResponse200",
+    "GetContractResourceTrendResponse200",
+    "GetContractResourceTrendResponse200PointsItem",
+    "GetContractResourceTrendV2Response200",
+    "GetContractResourceTrendV2Response200PointsItem",
     "GetContractUptimeWindow",
     "GetGlobalStatsResponse200",
     "GetWatchdogStatsNetwork",

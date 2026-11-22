@@ -724,6 +724,31 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/contracts/{id}/resource-trend": {
+      get: {
+        operationId: "getContractResourceTrend",
+        summary: "Daily resource usage trend for a contract",
+        tags: ["Invocations"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "days",
+            in: "query",
+            required: false,
+            description:
+              "Number of trailing UTC days to bucket, including today.",
+            type: "integer",
+            default: "30",
+          },
+        ],
+      },
+    },
     "/api/v1/contracts/{id}/storage": {
       get: {
         operationId: "listContractStorage",
@@ -1863,6 +1888,31 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             in: "query",
             required: false,
             type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v2/contracts/{id}/resource-trend": {
+      get: {
+        operationId: "getContractResourceTrendV2",
+        summary: "Daily resource usage trend for a contract (v2)",
+        tags: ["Invocations"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "days",
+            in: "query",
+            required: false,
+            description:
+              "Number of trailing UTC days to bucket, including today.",
+            type: "integer",
+            default: "30",
           },
         ],
       },

@@ -164,6 +164,7 @@ describe("ApiKeySection", () => {
     await screen.findAllByTestId("settings-api-key-row");
 
     fireEvent.click(screen.getAllByRole("button", { name: "Revoke" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke key" }));
 
     await waitFor(() =>
       expect(screen.getAllByTestId("settings-api-key-row")).toHaveLength(1)
@@ -178,6 +179,7 @@ describe("ApiKeySection", () => {
     await screen.findByTestId("settings-api-key-row");
 
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke key" }));
 
     expect(
       await screen.findByTestId("settings-api-key-error")

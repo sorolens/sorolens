@@ -130,7 +130,7 @@ export default function WatchlistPage() {
                     <button
                       type="button"
                       onClick={() => setPendingRemoveId(item.contract_id)}
-                      className="text-xs text-red-400 hover:underline"
+                      className="text-xs text-[var(--color-danger-text)] hover:underline"
                     >
                       Remove
                     </button>

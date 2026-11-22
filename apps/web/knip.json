@@ -10,7 +10,8 @@
     "hooks/**/*.{ts,tsx}",
     "lib/**/*.{ts,tsx}",
     "worker/**/*.{ts,tsx}",
-    "!**/*.test.{ts,tsx}"
+    "!**/*.test.{ts,tsx}",
+    "!lib/*.generated.ts"
   ],
   "vitest": false,
   "playwright": false,

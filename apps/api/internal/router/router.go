@@ -342,6 +342,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// transaction, so a trace is reachable straight from an invocation.
 		get("/invocations/{tx_hash}/trace", h.GetInvocationTrace)
 		get("/contracts/{id}/storage", h.ListStorageEntries)
+		get("/contracts/{id}/resource-trend", h.ContractResourceTrend)
 		get("/contracts/{id}/stats", h.ContractStats)
 		get("/contracts/{id}/forecast", h.ContractForecast)
 		get("/contracts/{id}/snapshot", h.ContractSnapshot)
@@ -533,6 +534,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/events", h.V2ListEvents)
 		get("/contracts/{id}/invocations", h.V2ListInvocations)
 		get("/contracts/{id}/storage", h.V2ListStorageEntries)
+		get("/contracts/{id}/resource-trend", h.V2ContractResourceTrend)
 		get("/contracts/{id}/stats", h.V2ContractStats)
 		get("/contracts/{id}/forecast", h.V2ContractForecast)
 		get("/contracts/{id}/snapshot", h.V2ContractSnapshot)

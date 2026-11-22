@@ -1221,6 +1221,67 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/contracts/{id}/resource-trend:
+    get:
+      tags: [Invocations]
+      summary: Daily resource usage trend for a contract
+      description: >
+        Aggregates invocations into one bucket per UTC day and returns the
+        average CPU instructions, memory bytes, and fee per invocation for
+        the trailing `days` days. Days without invocations are returned as
+        zero buckets, so the dashboard chart loads this series in a single
+        request instead of paging through raw invocations (issue #600).
+      operationId: getContractResourceTrend
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+          description: Number of trailing UTC days to bucket, including today.
+      responses:
+        "200":
+          description: Daily resource trend buckets, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [days, points]
+                properties:
+                  days:
+                    type: integer
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      required: [date, avg_cpu_insn, avg_mem_byte, avg_fee, count]
+                      properties:
+                        date:
+                          type: string
+                          description: UTC day, formatted YYYY-MM-DD.
+                        avg_cpu_insn:
+                          type: number
+                          format: double
+                        avg_mem_byte:
+                          type: number
+                          format: double
+                        avg_fee:
+                          type: number
+                          format: double
+                        count:
+                          type: integer
+                          format: int64
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/contracts/{id}/storage:
     get:
       tags: [Storage]
@@ -3068,6 +3129,63 @@ paths:
                 $ref: "#/components/schemas/V2StorageList"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/contracts/{id}/resource-trend:
+    get:
+      tags: [Invocations]
+      summary: Daily resource usage trend for a contract (v2)
+      description: >
+        v2 alias of `GET /api/v1/contracts/{id}/resource-trend`. Aggregates
+        invocations into UTC-day buckets in one request.
+      operationId: getContractResourceTrendV2
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+          description: Number of trailing UTC days to bucket, including today.
+      responses:
+        "200":
+          description: Daily resource trend buckets, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [days, points]
+                properties:
+                  days:
+                    type: integer
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      required: [date, avg_cpu_insn, avg_mem_byte, avg_fee, count]
+                      properties:
+                        date:
+                          type: string
+                        avg_cpu_insn:
+                          type: number
+                          format: double
+                        avg_mem_byte:
+                          type: number
+                          format: double
+                        avg_fee:
+                          type: number
+                          format: double
+                        count:
+                          type: integer
+                          format: int64
+        "422":
+          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
 

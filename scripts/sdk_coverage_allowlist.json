@@ -239,6 +239,13 @@
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
         ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
       }
     ],
     "python": [
@@ -464,6 +471,13 @@
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
         ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
       }
     ],
     "go": [
@@ -668,6 +682,13 @@
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
         ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
       }
     ],
     "typescript": [
@@ -863,6 +884,13 @@
         "operations": [
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
+        ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
         ]
       }
     ]
