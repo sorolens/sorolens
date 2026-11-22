@@ -68,6 +68,9 @@ importers:
       use-debounce:
         specifier: ^10.1.1
         version: 10.1.1(react@19.3.0)
+      web-push:
+        specifier: ^3.6.7
+        version: 3.6.7(supports-color@10.2.2)
     devDependencies:
       '@axe-core/playwright':
         specifier: ^4.14.0
@@ -138,9 +141,6 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@22.20.4)(jsdom@26.1.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(terser@5.51.2)
-      web-push:
-        specifier: ^3.6.7
-        version: 3.6.7(supports-color@10.2.2)
 
   packages/typescript-sdk:
     devDependencies:

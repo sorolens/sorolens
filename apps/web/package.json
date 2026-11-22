@@ -29,7 +29,8 @@
     "react-dom": "^19.1.0",
     "recharts": "^2.15.3",
     "swr": "^2.5.1",
-    "use-debounce": "^10.1.1"
+    "use-debounce": "^10.1.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
@@ -54,7 +55,6 @@
     "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4.1.6",
     "typescript": "^5.5.0",
-    "vitest": "^2.1.9",
-    "web-push": "^3.6.7"
+    "vitest": "^2.1.9"
   }
 }
