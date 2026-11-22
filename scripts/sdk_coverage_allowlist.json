@@ -246,6 +246,14 @@
           "getContractResourceTrend",
           "getContractResourceTrendV2"
         ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
       }
     ],
     "python": [
@@ -478,6 +486,14 @@
           "getContractResourceTrend",
           "getContractResourceTrendV2"
         ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
       }
     ],
     "go": [
@@ -689,6 +705,14 @@
           "getContractResourceTrend",
           "getContractResourceTrendV2"
         ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
       }
     ],
     "typescript": [
@@ -891,6 +915,14 @@
         "operations": [
           "getContractResourceTrend",
           "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
         ]
       }
     ]

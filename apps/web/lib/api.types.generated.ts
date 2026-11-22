@@ -2320,6 +2320,72 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/contracts/{id}/changelog": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get a contract's Wasm hash changelog
+     * @description Every Wasm hash the contract has run, oldest first (issue #276). A
+     *     tracked contract with no recorded versions returns an empty array.
+     */
+    get: operations["getContractChangelog"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/contracts/{id}/changelog/feed": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Atom feed of a contract's Wasm hash changes
+     * @description Atom 1.0 feed with one entry per recorded Wasm hash, for feed readers.
+     *     The feed's self link and entry links point back at this API. A tracked
+     *     contract with no recorded versions returns a feed with no entries.
+     */
+    get: operations["getContractChangelogFeed"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/contracts/{id}/changelog/badge": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get a Wasm hash badge SVG for a contract
+     * @description Shields.io-style SVG badge showing the first 8 characters of the
+     *     contract's latest Wasm hash, suitable for embedding in a README. A
+     *     contract with no recorded versions, including one that is not
+     *     tracked, gets an "unknown" badge rather than an error.
+     */
+    get: operations["getContractChangelogBadge"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/contracts/{id}/spec": {
     parameters: {
       query?: never;
@@ -4011,6 +4077,25 @@ export interface components {
       tx_hash?: string;
       /** Format: date-time */
       at: string;
+    };
+    /** @description One Wasm hash a contract has run (issue */
+    ContractVersion: {
+      /** Format: int64 */
+      id: number;
+      contract_id: string;
+      /** @description Wasm hash (hex). */
+      wasm_hash: string;
+      /**
+       * Format: int64
+       * @description Ledger at which this hash was first observed.
+       */
+      first_seen_ledger: number;
+      /** @description Transaction that installed the hash, when known. */
+      tx_hash?: string;
+      /** @description Verified source reference, when the hash has been verified. */
+      verified_source_ref?: string;
+      /** Format: date-time */
+      recorded_at: string;
     };
     HealthScore: {
       contract_id: string;
@@ -8686,6 +8771,82 @@ export interface operations {
         };
       };
       404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getContractChangelog: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Wasm hash history, oldest first */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ContractVersion"][];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getContractChangelogFeed: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Atom 1.0 XML document */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/atom+xml": string;
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getContractChangelogBadge: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description SVG badge */
+      200: {
+        headers: {
+          /** @description Always `no-cache, max-age=0`, so embeds show the current hash. */
+          "Cache-Control"?: string;
+          [name: string]: unknown;
+        };
+        content: {
+          "image/svg+xml": string;
+        };
+      };
       500: components["responses"]["InternalError"];
     };
   };
