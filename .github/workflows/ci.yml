@@ -100,31 +100,31 @@ jobs:
             go run "./examples/$example"
           done
       - name: golangci-lint (apps/api)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         continue-on-error: true
         with:
-          version: latest
+          version: v2.15.0
           working-directory: apps/api
           args: --timeout=10m
       - name: golangci-lint (services/indexer)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         continue-on-error: true
         with:
-          version: latest
+          version: v2.15.0
           working-directory: services/indexer
           args: --timeout=10m
       - name: golangci-lint (cli)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         continue-on-error: true
         with:
-          version: latest
+          version: v2.15.0
           working-directory: cli
           args: --timeout=10m
       - name: golangci-lint (packages/go-client)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         continue-on-error: true
         with:
-          version: latest
+          version: v2.15.0
           working-directory: packages/go-client
           args: --timeout=10m
       - name: Upload coverage to Codecov
@@ -135,13 +135,10 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       # Go client regeneration (issue #149): fail if the checked-in generated
       # code under packages/go-client is out of date with docs/openapi.yaml.
-      - name: Install oapi-codegen
-        run: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1
       - name: Regenerate Go client
-        working-directory: packages/go-client
-        run: oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
+        run: make client-go
       - name: Verify Go client has no diff
-        run: git diff --exit-code -- packages/go-client/internal
+        run: git diff --exit-code -- packages/go-client
       # Issue #819: keep the generated CLI reference and man pages in sync
       # with the Cobra command tree without adding another pull request check.
       - name: Verify CLI documentation is up to date
