@@ -31,6 +31,10 @@ const PUBLIC_ROUTES: readonly PublicRoute[] = [
   { path: "/watchdog/reports", changeFrequency: "daily", priority: 0.7 },
   { path: "/live", changeFrequency: "hourly", priority: 0.6 },
   { path: "/status", changeFrequency: "daily", priority: 0.5 },
+  { path: "/docs", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/docs/getting-started", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/docs/concepts", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/about", changeFrequency: "monthly", priority: 0.5 },
   { path: "/integrations", changeFrequency: "weekly", priority: 0.5 },
 ];
 

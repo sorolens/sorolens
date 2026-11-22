@@ -57,3 +57,22 @@ Object.defineProperty(globalThis, "localStorage", {
   writable: true,
   configurable: true,
 });
+
+// cmdk observes its list with ResizeObserver, which jsdom does not implement.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    value: ResizeObserverStub,
+    writable: true,
+    configurable: true,
+  });
+}
+
+// cmdk scrolls the active option into view; jsdom does not implement layout.
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}

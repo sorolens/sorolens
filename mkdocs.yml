@@ -113,6 +113,7 @@ nav:
       - Kubernetes (Helm): self-hosting/kubernetes.md
       - AWS: self-hosting/aws.md
       - Indexer: indexer.md
+      - Failure categories: failure-categories.md
       - Sharded indexer: indexer-sharding.md
       - Read replicas: read_replica.md
       - Hubble import: hubble-import.md

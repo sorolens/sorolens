@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sorolens/sorolens/apps/api/failurecategory"
 	"github.com/sorolens/sorolens/apps/api/internal/forecast"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
@@ -156,6 +157,10 @@ type invocationResponse struct {
 	LedgerWriteByte    int64                `json:"ledger_write_byte"`
 	ApplicationOrder   int                  `json:"application_order"`
 	Utilisation        *ResourceUtilisation `json:"utilisation,omitempty"`
+	// FailureCategory and FailureCode are set only on classified FAILED
+	// invocations (issue #806) and omitted otherwise.
+	FailureCategory string `json:"failure_category,omitempty"`
+	FailureCode     string `json:"failure_code,omitempty"`
 }
 
 type invocationDetailResponse struct {
@@ -195,6 +200,9 @@ type invocationWindowStatsResponse struct {
 	P95Fee            float64 `json:"p95_fee"`
 	AvgCPU            float64 `json:"avg_cpu"`
 	P95CPU            float64 `json:"p95_cpu"`
+	// FailuresByCategory lists every failure category, zero included
+	// (issue #806).
+	FailuresByCategory map[string]int64 `json:"failures_by_category"`
 }
 
 type contractInvocationStatsResponse struct {
@@ -222,6 +230,27 @@ var validInvocationStatuses = map[string]bool{
 	"SUCCESS":   true,
 	"FAILED":    true,
 	"NOT_FOUND": true,
+}
+
+// failureCategoryParam parses the optional ?failure_category filter (issue
+// #806). Matching is case-insensitive, like ?status. ok is false for a value
+// outside failurecategory.All.
+func failureCategoryParam(r *http.Request) (string, bool) {
+	v := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("failure_category")))
+	if v == "" {
+		return "", true
+	}
+	c, ok := failurecategory.Parse(v)
+	return string(c), ok
+}
+
+// failureCategoryError is the 422 message for an invalid ?failure_category.
+func failureCategoryError() string {
+	names := make([]string, 0, len(failurecategory.All()))
+	for _, c := range failurecategory.All() {
+		names = append(names, string(c))
+	}
+	return "failure_category must be one of: " + strings.Join(names, ", ")
 }
 
 var validDurabilities = map[string]bool{
@@ -431,6 +460,8 @@ func invocationFromStore(inv store.Invocation) invocationResponse {
 		LedgerWriteByte:    inv.LedgerWriteByte,
 		ApplicationOrder:   inv.ApplicationOrder,
 		Utilisation:        computeInvocationUtilisation(inv.CPUInsn, inv.MemByte, inv.LedgerReadByte, inv.LedgerWriteByte),
+		FailureCategory:    inv.FailureCategory,
+		FailureCode:        inv.FailureCode,
 	}
 }
 
@@ -821,13 +852,19 @@ func (h *Handler) ListInvocations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "from must not exceed to")
 		return
 	}
+	failureCategory, ok := failureCategoryParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, failureCategoryError())
+		return
+	}
 	limit := pageLimit(r, DefaultPageSize)
 	f := store.InvocationFilters{
-		Status:       status,
-		FunctionName: r.URL.Query().Get("function_name"),
-		Network:      network,
-		From:         from,
-		To:           to,
+		Status:          status,
+		FunctionName:    r.URL.Query().Get("function_name"),
+		Network:         network,
+		From:            from,
+		To:              to,
+		FailureCategory: failureCategory,
 	}
 	invs, nextRaw, err := h.Store.ListInvocations(r.Context(), contractID, rawCursor, limit, f)
 	if err != nil {
@@ -866,14 +903,25 @@ func (h *Handler) ContractInvocationStats(w http.ResponseWriter, r *http.Request
 
 func invocationWindowStatsFromStore(stats store.InvocationWindowStats) invocationWindowStatsResponse {
 	return invocationWindowStatsResponse{
-		InvocationCount:   stats.InvocationCount,
-		FailedInvocations: stats.FailedInvocations,
-		FailureRate:       stats.FailureRate,
-		AvgFee:            stats.AvgFee,
-		P95Fee:            stats.P95Fee,
-		AvgCPU:            stats.AvgCPU,
-		P95CPU:            stats.P95CPU,
+		InvocationCount:    stats.InvocationCount,
+		FailedInvocations:  stats.FailedInvocations,
+		FailureRate:        stats.FailureRate,
+		AvgFee:             stats.AvgFee,
+		P95Fee:             stats.P95Fee,
+		AvgCPU:             stats.AvgCPU,
+		P95CPU:             stats.P95CPU,
+		FailuresByCategory: failuresByCategory(stats.FailuresByCategory),
 	}
+}
+
+// failuresByCategory returns counts for every category, filling zeros for any
+// a store left out.
+func failuresByCategory(in map[string]int64) map[string]int64 {
+	out := store.NewFailureCounts()
+	for cat, n := range in {
+		store.AddFailureCount(out, cat, n)
+	}
+	return out
 }
 
 // GetInvocation handles GET /api/v1/contracts/{id}/invocations/{tx_hash}.
@@ -991,16 +1039,23 @@ func (h *Handler) ListAllInvocations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	failureCategory, ok := failureCategoryParam(r)
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, failureCategoryError())
+		return
+	}
+
 	limit := pageLimit(r, DefaultPageSize)
 	f := store.InvocationFilters{
-		ContractID:   strings.TrimSpace(r.URL.Query().Get("contract_id")),
-		Status:       status,
-		FunctionName: r.URL.Query().Get("fn"),
-		Network:      network,
-		From:         from,
-		To:           to,
-		Since:        since,
-		Until:        until,
+		ContractID:      strings.TrimSpace(r.URL.Query().Get("contract_id")),
+		Status:          status,
+		FunctionName:    r.URL.Query().Get("fn"),
+		Network:         network,
+		From:            from,
+		To:              to,
+		Since:           since,
+		Until:           until,
+		FailureCategory: failureCategory,
 	}
 	invs, nextLedger, nextTxHash, err := h.Store.ListAllInvocations(
 		r.Context(), cursorLedger, cursorTxHash, limit, f,
@@ -1067,6 +1122,49 @@ func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"storage":     resp,
 		"next_cursor": cursor.Encode(nextRaw),
+	})
+}
+
+// ---- resource trend ---------------------------------------------------------
+
+type resourceTrendPointResponse struct {
+	Date       string  `json:"date"`
+	AvgCPUInsn float64 `json:"avg_cpu_insn"`
+	AvgMemByte float64 `json:"avg_mem_byte"`
+	AvgFee     float64 `json:"avg_fee"`
+	Count      int64   `json:"count"`
+}
+
+// ContractResourceTrend handles GET /api/v1/contracts/{id}/resource-trend.
+// It returns daily buckets of averaged CPU, memory and fee in one request,
+// replacing the dashboard's 10-page walk over raw invocations (issue #600).
+func (h *Handler) ContractResourceTrend(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	days := intQuery(r, "days", 30)
+	if days > 365 {
+		days = 365
+	}
+
+	buckets, err := h.Store.GetResourceTrend(r.Context(), contractID, days)
+	if err != nil {
+		h.Logger.Error("get resource trend", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch resource trend")
+		return
+	}
+
+	points := make([]resourceTrendPointResponse, len(buckets))
+	for i, bucket := range buckets {
+		points[i] = resourceTrendPointResponse{
+			Date:       bucket.Day.UTC().Format("2006-01-02"),
+			AvgCPUInsn: bucket.AvgCPUInsn,
+			AvgMemByte: bucket.AvgMemByte,
+			AvgFee:     bucket.AvgFee,
+			Count:      bucket.Count,
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"days":   days,
+		"points": points,
 	})
 }
 

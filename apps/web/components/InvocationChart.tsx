@@ -27,30 +27,31 @@ export function InvocationChart({ data }: InvocationChartProps) {
   return (
     <ResponsiveContainer width="100%" height={256}>
       <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+          tick={{ fontSize: 11, fill: "var(--color-chart-axis)" }}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
-          tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+          tick={{ fontSize: 11, fill: "var(--color-chart-axis)" }}
           tickLine={false}
           axisLine={false}
           width={40}
         />
         <Tooltip
           contentStyle={{
-            background: "var(--color-bg-card)",
-            border: "1px solid var(--color-border)",
+            background: "var(--color-chart-tooltip-bg)",
+            border: "1px solid var(--color-chart-tooltip-border)",
             borderRadius: "0.5rem",
             fontSize: "0.875rem",
+            color: "var(--color-text-primary)",
           }}
         />
         <Bar
           dataKey="count"
-          fill="var(--color-accent)"
+          fill="var(--color-chart-1)"
           radius={[4, 4, 0, 0]}
           opacity={0.8}
         />

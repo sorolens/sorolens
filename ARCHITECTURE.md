@@ -251,6 +251,8 @@ CREATE TABLE invocations (
     ledger_read_byte   BIGINT,                        -- from core_metrics diagnostic event
     ledger_write_byte  BIGINT,                        -- from core_metrics diagnostic event
     application_order  INTEGER,                       -- index of tx within the ledger
+    failure_category   TEXT,                          -- FAILED only: budget_exceeded | contract_error | auth_failure | storage | wasm_trap | other
+    failure_code       TEXT,                          -- FAILED only: raw error, e.g. "Error(Contract, #4)" (docs/failure-categories.md)
     inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -262,6 +264,10 @@ CREATE INDEX idx_invocations_ledger_closed_at ON invocations (ledger_closed_at D
 
 -- Filter by status (e.g. "show only failed invocations").
 CREATE INDEX idx_invocations_status ON invocations (contract_id, status);
+
+-- Filter the global explorer by failure category; failed rows only.
+CREATE INDEX idx_invocations_failure_category ON invocations (failure_category, ledger DESC, tx_hash DESC)
+    WHERE failure_category IS NOT NULL;
 
 -- ============================================================
 -- storage_entries
@@ -314,6 +320,7 @@ CREATE TABLE sync_state (
 | `idx_invocations_contract_ledger`  | Same pattern as events; the invocation list is paginated with newest-first ordering.                                                                                                                             |
 | `idx_invocations_ledger_closed_at` | Time-range filter for resource-usage charts.                                                                                                                                                                     |
 | `idx_invocations_status`           | Supports the "show only failures" filter on the invocations list.                                                                                                                                                |
+| `idx_invocations_failure_category` | Serves `GET /api/v1/invocations?failure_category=...` in its `ledger DESC, tx_hash DESC` order. Partial on `failure_category IS NOT NULL`, so it only holds failed invocations.                                   |
 | `idx_storage_live_until`           | The TTL health view needs to order by `live_until_ledger ASC` for a given contract; partial index on `status = 'live'` avoids scanning archived rows.                                                            |
 | `idx_storage_durability`           | Supports filtering the storage view by entry type.                                                                                                                                                               |
 | `idx_contract_tags_tag`            | Cross-contract lookup for the dashboard's tag filter ("which contracts carry tag X?"). The `(contract_id, tag)` primary key already serves per-contract tag reads, so only the reverse direction needs an index. |
@@ -766,7 +773,9 @@ first (`ledger DESC, tx_hash DESC`). Backs the dashboard's `/invocations` page.
 **Query params:** `cursor`, `limit` (default 50, max 200), `contract_id`, `fn`
 (function name), `status` (`SUCCESS`/`FAILED`/`NOT_FOUND`), `network`, `from` /
 `to` (ledger bounds), `since` / `until` (inclusive `ledger_closed_at` bounds, as
-`YYYY-MM-DD` or RFC3339).
+`YYYY-MM-DD` or RFC3339), `failure_category` (`budget_exceeded`/`contract_error`/
+`auth_failure`/`storage`/`wasm_trap`/`other`, see
+[docs/failure-categories.md](docs/failure-categories.md)).
 
 Pagination is keyset-based: the cursor encodes the `(ledger, tx_hash)` position,
 which is the sort tuple, so pages stay stable while the indexer appends rows.
@@ -795,8 +804,12 @@ which is the sort tuple, so pages stay stable while the indexer appends rows.
 }
 ```
 
+A classified `FAILED` invocation also carries `failure_category` and
+`failure_code` (the raw host error, e.g. `"Error(Contract, #4)"`); both are
+omitted for every other row.
+
 `next_cursor` is an empty string on the last page. Invalid `cursor`, `since`,
-`until`, or `network` values return `422`.
+`until`, `network`, or `failure_category` values return `422`.
 
 ---
 
@@ -804,7 +817,7 @@ which is the sort tuple, so pages stay stable while the indexer appends rows.
 
 Paginated invocation list.
 
-**Query params:** `cursor`, `limit` (max 500), `status` (`SUCCESS`/`FAILED`), `since`, `until`, `function_name`.
+**Query params:** `cursor`, `limit` (max 500), `status` (`SUCCESS`/`FAILED`), `since`, `until`, `function_name`, `failure_category` (as for `GET /api/v1/invocations`).
 
 **Response `200`:**
 
@@ -837,6 +850,37 @@ Paginated invocation list.
 
 ---
 
+#### `GET /api/v1/contracts/:id/resource-trend`
+
+Server-side daily aggregation for the resource-usage chart (issue #600). It
+replaces the dashboard's client-side paging over raw invocations: one request
+returns one bucket per UTC day for the trailing `days` days (default 30, max
+365), with averages for CPU instructions, memory bytes and fee, plus the
+invocation count. Days without invocations are returned as zero buckets.
+
+**Query params:** `days` (1-365, default 30).
+
+**Response `200`:**
+
+```json
+{
+  "days": 30,
+  "points": [
+    {
+      "date": "2026-07-03",
+      "avg_cpu_insn": 4883530,
+      "avg_mem_byte": 2298162,
+      "avg_fee": 123456,
+      "count": 42
+    }
+  ]
+}
+```
+
+The same aggregation is exposed at `/api/v2/contracts/:id/resource-trend`.
+
+---
+
 #### `GET /api/v1/contracts/:id/invocations/:tx_hash`
 
 Full detail for a single invocation, including all associated events.
@@ -863,6 +907,28 @@ Full detail for a single invocation, including all associated events.
 ```
 
 **Responses:** `200`, `404 Not Found`.
+
+---
+
+#### `GET /api/v1/contracts/:id/invocations/stats`
+
+Invocation outcomes and resource usage over the last 24 hours, 7 days and 30
+days (`windows["24h" | "7d" | "30d"]`). Each window has `invocation_count`,
+`failed_invocations`, `failure_rate`, average and p95 fee and CPU, and
+`failures_by_category`: the classified failures per failure category, with
+every category listed (zero included). Failed invocations indexed before
+classification existed count toward `failed_invocations` only.
+
+```json
+"failures_by_category": {
+  "budget_exceeded": 1,
+  "contract_error": 2,
+  "auth_failure": 0,
+  "storage": 0,
+  "wasm_trap": 0,
+  "other": 1
+}
+```
 
 ---
 

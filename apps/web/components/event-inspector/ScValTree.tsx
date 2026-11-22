@@ -14,30 +14,30 @@ interface ScValTreeProps {
 function getTypeColor(type: string): string {
   switch (type.toLowerCase()) {
     case "symbol":
-      return "bg-amber-900/40 text-amber-300 border-amber-700/50";
+      return "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)] border-[var(--color-warning-border)]";
     case "string":
-      return "bg-yellow-900/40 text-yellow-300 border-yellow-700/50";
+      return "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)] border-[var(--color-warning-border)]";
     case "address":
-      return "bg-emerald-900/40 text-emerald-300 border-emerald-700/50";
+      return "bg-[var(--color-safe-bg)] text-[var(--color-safe)] border-[var(--color-safe-border)]";
     case "vec":
-      return "bg-blue-900/40 text-blue-300 border-blue-700/50";
+      return "bg-[var(--color-info-bg)] text-[var(--color-info-text)] border-[var(--color-info-border)]";
     case "map":
-      return "bg-purple-900/40 text-purple-300 border-purple-700/50";
+      return "bg-[var(--color-accent-bg)] text-[var(--color-accent-text)] border-[var(--color-accent-border)]";
     case "i128":
     case "u128":
     case "i64":
     case "u64":
     case "i32":
     case "u32":
-      return "bg-cyan-900/40 text-cyan-300 border-cyan-700/50";
+      return "bg-[var(--color-info-bg)] text-[var(--color-info-text)] border-[var(--color-info-border)]";
     case "bytes":
-      return "bg-indigo-900/40 text-indigo-300 border-indigo-700/50";
+      return "bg-[var(--color-accent-bg)] text-[var(--color-accent-text)] border-[var(--color-accent-border)]";
     case "bool":
-      return "bg-rose-900/40 text-rose-300 border-rose-700/50";
+      return "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)] border-[var(--color-danger-border)]";
     case "error":
-      return "bg-red-900/50 text-red-300 border-red-600";
+      return "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)] border-[var(--color-danger)]";
     default:
-      return "bg-gray-800 text-gray-300 border-gray-700";
+      return "bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] border-[var(--color-border)]";
   }
 }
 
@@ -109,12 +109,14 @@ export function ScValTree({
     return (
       <div
         data-testid={`scval-node-${path}`}
-        className="my-1 rounded border border-red-700/60 bg-red-950/30 p-2.5 font-mono text-xs text-red-200"
+        className="my-1 rounded border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-2.5 font-mono text-xs text-[var(--color-danger-text)]"
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-red-400">{label}:</span>
-            <span className="rounded border border-red-600 bg-red-900/50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-300">
+            <span className="font-semibold text-[var(--color-danger-text)]">
+              {label}:
+            </span>
+            <span className="rounded border border-[var(--color-danger)] bg-[var(--color-danger-bg)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-danger-text)]">
               Decode Error
             </span>
           </div>
@@ -122,18 +124,20 @@ export function ScValTree({
             type="button"
             onClick={handleCopyPath}
             title="Copy path"
-            className="rounded px-1.5 py-0.5 text-[10px] text-red-400 hover:bg-red-900/40"
+            className="rounded px-1.5 py-0.5 text-[10px] text-[var(--color-danger-text)] hover:bg-[var(--color-danger-bg)]"
           >
             {copiedPath ? "Copied Path!" : path}
           </button>
         </div>
-        <p className="mt-1 text-[11px] text-red-300/80">
+        <p className="mt-1 text-[11px] text-[var(--color-danger-text)]/80">
           Failed to decode ScVal XDR payload. The XDR data may be corrupted or
           non-standard.
         </p>
         {xdr && (
-          <div className="mt-1.5 flex items-center gap-2 rounded bg-black/40 p-1.5">
-            <span className="truncate text-red-300">{xdr}</span>
+          <div className="mt-1.5 flex items-center gap-2 rounded bg-[var(--color-bg)] p-1.5">
+            <span className="truncate text-[var(--color-danger-text)]">
+              {xdr}
+            </span>
             <button
               type="button"
               onClick={(e) => {
@@ -144,7 +148,7 @@ export function ScValTree({
                   setTimeout(() => setCopiedValue(false), 1500);
                 }
               }}
-              className="ml-auto shrink-0 text-[10px] text-red-400 hover:underline"
+              className="ml-auto shrink-0 text-[10px] text-[var(--color-danger-text)] hover:underline"
             >
               {copiedValue ? "Copied Raw!" : "Copy Raw XDR"}
             </button>
@@ -177,13 +181,16 @@ export function ScValTree({
       >
         {isContainer ? (
           <span
-            className="w-3 text-center text-gray-400 transition-transform select-none"
+            className="w-3 text-center text-[var(--color-text-secondary)] transition-transform select-none"
             aria-hidden="true"
           >
             {expanded ? "▼" : "▶"}
           </span>
         ) : (
-          <span className="w-3 text-gray-600" aria-hidden="true">
+          <span
+            className="w-3 text-[var(--color-text-muted)]"
+            aria-hidden="true"
+          >
             •
           </span>
         )}
@@ -202,7 +209,7 @@ export function ScValTree({
 
         {!isContainer && (
           <span
-            className="truncate text-gray-300 select-all"
+            className="truncate text-[var(--color-text-secondary)] select-all"
             title={scVal.human}
           >
             {scVal.human}
@@ -210,7 +217,7 @@ export function ScValTree({
         )}
 
         {isContainer && (
-          <span className="text-gray-500 text-[11px]">
+          <span className="text-[var(--color-text-muted)] text-[11px]">
             {scVal.type === "vec"
               ? `[${vecItems.length} items]`
               : `{${mapEntries.length} entries}`}
@@ -222,7 +229,7 @@ export function ScValTree({
             type="button"
             onClick={handleCopyPath}
             title={`Copy path: ${path}`}
-            className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-white/20 hover:text-white"
+            className="rounded bg-[var(--color-bg-hover)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
           >
             {copiedPath ? "Copied Path!" : "Path"}
           </button>
@@ -230,7 +237,7 @@ export function ScValTree({
             type="button"
             onClick={handleCopyValue}
             title="Copy value"
-            className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-white/20 hover:text-white"
+            className="rounded bg-[var(--color-bg-hover)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
           >
             {copiedValue ? "Copied!" : "Copy"}
           </button>

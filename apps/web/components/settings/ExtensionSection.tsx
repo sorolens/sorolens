@@ -110,7 +110,7 @@ export function ExtensionSection() {
           data-testid="settings-extension-create"
           onClick={handleCreate}
           disabled={busy}
-          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy
             ? "Creating…"
@@ -142,7 +142,7 @@ export function ExtensionSection() {
         <p
           role="alert"
           data-testid="settings-extension-error"
-          className="mt-2 text-xs text-red-400"
+          className="mt-2 text-xs text-[var(--color-danger-text)]"
         >
           {error}
         </p>

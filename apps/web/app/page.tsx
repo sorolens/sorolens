@@ -82,6 +82,18 @@ export default function HomePage() {
             >
               Dashboard
             </Link>
+            <Link
+              href="/docs"
+              className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              Docs
+            </Link>
+            <Link
+              href="/about"
+              className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              About
+            </Link>
             <a
               href="https://github.com/sorolens/sorolens"
               className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
@@ -202,6 +214,8 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm text-[var(--color-text-secondary)] sm:px-6 lg:px-8">
           <span>MIT licensed. Built for the Stellar developer community.</span>
           <div className="flex flex-wrap gap-4">
+            <Link href="/docs">Docs</Link>
+            <Link href="/about">About</Link>
             <a
               href="https://github.com/sorolens/sorolens"
               rel="noopener noreferrer"

@@ -36,11 +36,11 @@ export function ErrorState({
   return (
     <div
       role="alert"
-      className={`rounded-lg border border-red-900/60 bg-red-950/30 text-sm ${
+      className={`rounded-lg border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-sm ${
         compact ? "p-4" : "p-6"
       } ${className}`.trim()}
     >
-      <p className="font-medium text-red-300">{title}</p>
+      <p className="font-medium text-[var(--color-danger-text)]">{title}</p>
       {message && (
         <p className="mt-1 text-[var(--color-text-secondary)]">{message}</p>
       )}

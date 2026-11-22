@@ -173,7 +173,11 @@ export default function PlaygroundPage() {
               >
                 {p.name}
                 <span className="ml-1 font-normal">({p.in})</span>
-                {p.required && <span className="ml-1 text-red-400">*</span>}
+                {p.required && (
+                  <span className="ml-1 text-[var(--color-danger-text)]">
+                    *
+                  </span>
+                )}
               </label>
               <input
                 id={`param-${p.name}`}
@@ -191,7 +195,7 @@ export default function PlaygroundPage() {
                   }
                 }}
                 placeholder={p.description}
-                className="w-full rounded-md border border-[var(--color-border)] bg-black/30 px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+                className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
               />
             </div>
           ))}
@@ -210,7 +214,7 @@ export default function PlaygroundPage() {
                 onChange={(e) => setBody(e.target.value)}
                 rows={6}
                 spellCheck={false}
-                className="w-full rounded-md border border-[var(--color-border)] bg-black/30 px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
+                className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
               />
             </div>
           )}
@@ -229,7 +233,7 @@ export default function PlaygroundPage() {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={t("playground.pasteKey")}
-              className="w-full rounded-md border border-[var(--color-border)] bg-black/30 px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+              className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
             />
           </div>
 
@@ -259,7 +263,7 @@ export default function PlaygroundPage() {
             </div>
             <pre
               data-testid="curl-command"
-              className="overflow-x-auto rounded-md bg-black/30 p-3 font-mono text-[11px] leading-relaxed"
+              className="overflow-x-auto rounded-md bg-[var(--color-bg)] p-3 font-mono text-[11px] leading-relaxed"
             >
               {curl}
             </pre>
@@ -291,8 +295,8 @@ export default function PlaygroundPage() {
                   data-testid="response-status"
                   className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                     response.status >= 200 && response.status < 300
-                      ? "bg-green-900/40 text-green-400"
-                      : "bg-red-900/40 text-red-400"
+                      ? "bg-[var(--color-safe-bg)] text-[var(--color-safe-text)]"
+                      : "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]"
                   }`}
                 >
                   {response.status} {response.statusText}

@@ -8,6 +8,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NavigationProgress } from "./NavigationProgress";
@@ -138,10 +139,7 @@ describe("NavigationProgress", () => {
   });
 
   it("disables animations and transitions for reduced-motion users", () => {
-    const css = readFileSync(
-      new URL("../app/globals.css", import.meta.url),
-      "utf8"
-    );
+    const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
 
     expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
     expect(css).toMatch(/animation:\s*none\s*!important/);

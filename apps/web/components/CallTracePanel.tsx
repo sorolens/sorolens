@@ -94,7 +94,7 @@ export function CallTracePanel({ initialTxHash = "" }: CallTracePanelProps) {
           type="submit"
           disabled={loading}
           aria-busy={loading}
-          className="rounded-md bg-white/10 px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-white/20 disabled:opacity-50"
+          className="rounded-md bg-[var(--color-bg-hover)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
         >
           {loading ? "Loading..." : "Load trace"}
         </button>
@@ -129,8 +129,8 @@ export function CallTracePanel({ initialTxHash = "" }: CallTracePanelProps) {
               <span
                 className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
                   trace.status === "SUCCESS"
-                    ? "bg-green-900/40 text-green-400"
-                    : "bg-red-900/40 text-red-400"
+                    ? "bg-[var(--color-safe-bg)] text-[var(--color-safe-text)]"
+                    : "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]"
                 }`}
               >
                 {trace.status}
