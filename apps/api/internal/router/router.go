@@ -398,6 +398,17 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 			})
 		})
 
+		// Alert escalation policies (issue #791). Reads are open; authoring
+		// and mutation require the contributor role.
+		get("/escalation-policies", h.ListEscalationPolicies)
+		get("/escalation-policies/{id}", h.GetEscalationPolicy)
+		r.With(scope, contributor).Post("/escalation-policies", h.CreateEscalationPolicy)
+		r.With(scope, contributor).Put("/escalation-policies/{id}", h.UpdateEscalationPolicy)
+		r.With(scope, contributor).Delete("/escalation-policies/{id}", h.DeleteEscalationPolicy)
+
+		// TTL history: ExtendFootprintTTL and RestoreFootprint operations (issue #804).
+		get("/contracts/{id}/ttl-history", h.ListTTLHistory)
+
 		// Watchdog: data from the on-chain sorolens-watchdog contract.
 		// Watchdog stats are written by the indexer, not the API, so they
 		// rely on the TTL rather than write invalidation.

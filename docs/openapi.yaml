@@ -4427,6 +4427,16 @@ paths:
             type: string
             format: date-time
           description: Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).
+        - name: filter
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Advanced filter expression (issue #787). Supports topic equality
+            (`topic[N]=VALUE`) and decoded-value numeric comparisons
+            (`value.field>=number`). Multiple clauses may be combined with `;`.
+          example: "topic[0]=transfer;value.amount>=1000"
       responses:
         "200":
           description: Page of events
@@ -4932,6 +4942,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/ttl-history:
+    get:
+      tags: [Contracts]
+      summary: List TTL extension and restore operations for a contract
+      operationId: listContractTTLHistory
+      description: |
+        Returns ExtendFootprintTTL and RestoreFootprint operations recorded by the
+        indexer for this contract, newest first (issue #804).
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - $ref: "#/components/parameters/Cursor"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Page of TTL operations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [operations, next_cursor]
+                properties:
+                  operations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TTLOperation"
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor for the next (older) page; empty when no more pages.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -5587,6 +5641,159 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/escalation-policies:
+    get:
+      tags: [Alerts]
+      summary: List alert escalation policies
+      operationId: listEscalationPolicies
+      security:
+        - ApiKeyAuth: [read:contracts]
+        - SessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: List of escalation policies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [policies, next_cursor]
+                properties:
+                  policies:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EscalationPolicy"
+                  next_cursor:
+                    type: string
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Alerts]
+      summary: Create an alert escalation policy
+      operationId: createEscalationPolicy
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEscalationPolicyRequest"
+      responses:
+        "201":
+          description: Escalation policy created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EscalationPolicy"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/escalation-policies/{id}:
+    get:
+      tags: [Alerts]
+      summary: Get an escalation policy by ID
+      operationId: getEscalationPolicy
+      security:
+        - ApiKeyAuth: [read:contracts]
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Escalation policy details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EscalationPolicy"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags: [Alerts]
+      summary: Update an escalation policy
+      operationId: updateEscalationPolicy
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEscalationPolicyRequest"
+      responses:
+        "200":
+          description: Updated escalation policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EscalationPolicy"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Alerts]
+      summary: Delete an escalation policy
+      operationId: deleteEscalationPolicy
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Escalation policy deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -7443,6 +7650,100 @@ components:
         suppress_notifications:
           type: boolean
           default: true
+
+    EscalationStep:
+      type: object
+      required: [order, channel, recipients, delay_mins]
+      properties:
+        order:
+          type: integer
+          minimum: 1
+        channel:
+          type: string
+          description: Delivery channel (e.g. email, slack, pagerduty).
+        recipients:
+          type: array
+          items:
+            type: string
+          description: List of recipient addresses or identifiers for this step.
+        delay_mins:
+          type: integer
+          minimum: 0
+          description: Minutes to wait before escalating to the next step.
+
+    EscalationPolicy:
+      type: object
+      required: [id, name, steps, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/EscalationStep"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateEscalationPolicyRequest:
+      type: object
+      required: [name, steps]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        steps:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/EscalationStep"
+
+    TTLOperation:
+      type: object
+      required: [id, contract_id, network, tx_hash, ledger, ledger_closed_at, op_type, key_xdr, inserted_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        contract_id:
+          type: string
+        network:
+          type: string
+          enum: [mainnet, testnet, futurenet, standalone]
+        tx_hash:
+          type: string
+        ledger:
+          type: integer
+          format: int64
+        ledger_closed_at:
+          type: string
+          format: date-time
+        op_type:
+          type: string
+          enum: [extend_ttl, restore_footprint]
+        key_xdr:
+          type: string
+          description: Base64-encoded LedgerKey XDR identifying the storage entry.
+        old_live_ledger:
+          type: integer
+          format: int64
+          nullable: true
+          description: Live-until ledger before the operation (null for restores).
+        new_live_ledger:
+          type: integer
+          format: int64
+          nullable: true
+          description: Live-until ledger after the operation.
+        inserted_at:
+          type: string
+          format: date-time
 
     MonitoredContract:
       type: object

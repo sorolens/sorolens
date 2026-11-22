@@ -375,6 +375,16 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		"GET /api/v1/contracts/{id}/changelog":       true,
 		"GET /api/v1/contracts/{id}/changelog/feed":  true,
 		"GET /api/v1/contracts/{id}/changelog/badge": true,
+		// Escalation policies (issue #791): v1-only operational surface until
+		// the v2 envelope is specified.
+		"GET /api/v1/escalation-policies":          true,
+		"GET /api/v1/escalation-policies/{id}":     true,
+		"POST /api/v1/escalation-policies":         true,
+		"PUT /api/v1/escalation-policies/{id}":     true,
+		"DELETE /api/v1/escalation-policies/{id}":  true,
+		// TTL history (issue #804): v1-only operational surface until the v2
+		// envelope is specified.
+		"GET /api/v1/contracts/{id}/ttl-history": true,
 	}
 
 	var missing []string

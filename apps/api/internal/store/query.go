@@ -48,6 +48,8 @@ type FullStore interface {
 	ExportJobStore
 	UsageStore
 	MaintenanceStore
+	EscalationPolicyStore
+	TTLHistoryStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.

@@ -52,6 +52,8 @@ type MockStore struct {
 	maintenanceWindowSeq  int64
 	contractTokens        map[string]TokenMetadata
 	*MockExportJobStore
+	escalationStore *MockEscalationPolicyStore
+	ttlHistoryStore *MockTTLHistoryStore
 
 	// auditMu guards auditEvents: the audit middleware writes asynchronously.
 	auditMu      sync.Mutex

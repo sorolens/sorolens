@@ -437,6 +437,19 @@ func (s *Store) CountFailedEvents(ctx context.Context, network string) (int, err
 	return n, nil
 }
 
+func (s *Store) RecordTTLOperation(ctx context.Context, op poller.TTLOperation) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO ttl_history
+			(contract_id, network, tx_hash, ledger, ledger_closed_at,
+			 op_type, key_xdr, old_live_ledger, new_live_ledger, inserted_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+		ON CONFLICT (contract_id, tx_hash, key_xdr) DO NOTHING`,
+		op.ContractID, op.Network, op.TxHash, op.Ledger, op.LedgerClosedAt,
+		op.OpType, op.KeyXDR, op.OldLiveLedger, op.NewLiveLedger,
+	)
+	return err
+}
+
 func insertFailedEvent(ctx context.Context, q execer, fe poller.FailedEvent) error {
 	attempts := fe.Attempts
 	if attempts <= 0 {

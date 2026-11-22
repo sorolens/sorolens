@@ -353,6 +353,8 @@ func (f *fakeStore) UpsertContractHealthScore(_ context.Context, s ContractHealt
 	return nil
 }
 
+func (f *fakeStore) RecordTTLOperation(_ context.Context, _ TTLOperation) error { return nil }
+
 // ---- fake RedisClient -----------------------------------------------------
 
 type fakeRedis struct {

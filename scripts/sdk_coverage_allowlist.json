@@ -254,6 +254,17 @@
           "getContractChangelogBadge",
           "getContractChangelogFeed"
         ]
+      },
+      {
+        "reason": "Escalation policies (issue #791) and TTL history (issue #804) are new operational surfaces not yet exposed by the hand-written Rust SDK surface.",
+        "operations": [
+          "createEscalationPolicy",
+          "deleteEscalationPolicy",
+          "getEscalationPolicy",
+          "listContractTTLHistory",
+          "listEscalationPolicies",
+          "updateEscalationPolicy"
+        ]
       }
     ],
     "python": [
@@ -494,6 +505,17 @@
           "getContractChangelogBadge",
           "getContractChangelogFeed"
         ]
+      },
+      {
+        "reason": "Escalation policies (issue #791) and TTL history (issue #804) are new operational surfaces not yet exposed by the hand-written Python SDK surface.",
+        "operations": [
+          "createEscalationPolicy",
+          "deleteEscalationPolicy",
+          "getEscalationPolicy",
+          "listContractTTLHistory",
+          "listEscalationPolicies",
+          "updateEscalationPolicy"
+        ]
       }
     ],
     "go": [
@@ -713,6 +735,17 @@
           "getContractChangelogBadge",
           "getContractChangelogFeed"
         ]
+      },
+      {
+        "reason": "Escalation policies (issue #791) and TTL history (issue #804) are new operational surfaces not yet exposed by the hand-written JVM SDK surface.",
+        "operations": [
+          "createEscalationPolicy",
+          "deleteEscalationPolicy",
+          "getEscalationPolicy",
+          "listContractTTLHistory",
+          "listEscalationPolicies",
+          "updateEscalationPolicy"
+        ]
       }
     ],
     "typescript": [
@@ -923,6 +956,17 @@
           "getContractChangelog",
           "getContractChangelogBadge",
           "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "Escalation policies (issue #791) and TTL history (issue #804) are new operational surfaces not yet exposed by the hand-written JVM and TypeScript SDK surfaces.",
+        "operations": [
+          "createEscalationPolicy",
+          "deleteEscalationPolicy",
+          "getEscalationPolicy",
+          "listContractTTLHistory",
+          "listEscalationPolicies",
+          "updateEscalationPolicy"
         ]
       }
     ]

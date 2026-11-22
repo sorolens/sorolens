@@ -79,6 +79,11 @@ type Store interface {
 	// CountFailedEvents returns the number of events parked in the
 	// dead-letter queue for a network, used for the dlq_size metric.
 	CountFailedEvents(ctx context.Context, network string) (int, error)
+
+	// RecordTTLOperation persists one ExtendFootprintTTL or RestoreFootprint
+	// transaction for the TTL history endpoint (issue #804). It is a no-op
+	// when an identical (contract_id, tx_hash, key_xdr) row already exists.
+	RecordTTLOperation(ctx context.Context, op TTLOperation) error
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -346,6 +351,20 @@ type ContractVersion struct {
 	FirstSeenLedger   int64
 	TxHash            string
 	VerifiedSourceRef string
+}
+
+// TTLOperation mirrors store.TTLOperation for the TTL history table.
+type TTLOperation struct {
+	ContractID     string
+	Network        string
+	TxHash         string
+	Ledger         uint32
+	LedgerClosedAt time.Time
+	// OpType is "extend_ttl" or "restore_footprint".
+	OpType        string
+	KeyXDR        string
+	OldLiveLedger *uint32
+	NewLiveLedger *uint32
 }
 
 // ErrVersionNotFound is returned by GetLatestContractVersion when no entry exists.
