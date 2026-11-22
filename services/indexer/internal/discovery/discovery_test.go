@@ -17,6 +17,8 @@ var fixtures = []struct {
 	contractID string
 	source     string
 	deployer   string
+	isSAC      bool
+	sac        *SACMetadata
 }{
 	{
 		name:       "create_v2",
@@ -24,6 +26,7 @@ var fixtures = []struct {
 		contractID: "CASLIQNFCMW3UXPTVA5KDQZK6NEBPK4K35XY2SEQ3D7JGRCOVLP2BKBK",
 		source:     "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR",
 		deployer:   "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR",
+		isSAC:      false,
 	},
 	{
 		name:       "op_source",
@@ -31,6 +34,7 @@ var fixtures = []struct {
 		contractID: "CCQSCLV3N3LV27ZDXTRJG7FHWSSRMAQR47NF3LOVHRGW7FV6DFL5XR2V",
 		source:     "GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U",
 		deployer:   "GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U",
+		isSAC:      false,
 	},
 	{
 		name:       "fee_bump",
@@ -38,6 +42,7 @@ var fixtures = []struct {
 		contractID: "CASLIQNFCMW3UXPTVA5KDQZK6NEBPK4K35XY2SEQ3D7JGRCOVLP2BKBK",
 		source:     "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR",
 		deployer:   "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR",
+		isSAC:      false,
 	},
 	{
 		name:       "invoke",
@@ -45,6 +50,7 @@ var fixtures = []struct {
 		contractID: "",
 		source:     "",
 		deployer:   "",
+		isSAC:      false,
 	},
 	{
 		name:       "muxed_source",
@@ -52,6 +58,7 @@ var fixtures = []struct {
 		contractID: "CASLIQNFCMW3UXPTVA5KDQZK6NEBPK4K35XY2SEQ3D7JGRCOVLP2BKBK",
 		source:     "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR",
 		deployer:   "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR",
+		isSAC:      false,
 	},
 	{
 		name:       "from_asset",
@@ -59,6 +66,14 @@ var fixtures = []struct {
 		contractID: "CDL5UKTHSI4MPDVKDOFM2MVN2PZN3G76NTHSE5BLEXINTTFAOZSHRXVU",
 		source:     "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR",
 		deployer:   "",
+		isSAC:      true,
+		sac: &SACMetadata{
+			AssetCode: "USD",
+			Issuer:    "GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U",
+			Decimals:  7,
+			Symbol:    "USD",
+			Name:      "USD",
+		},
 	},
 	{
 		name:       "create_v1",
@@ -66,6 +81,7 @@ var fixtures = []struct {
 		contractID: "CASLIQNFCMW3UXPTVA5KDQZK6NEBPK4K35XY2SEQ3D7JGRCOVLP2BKBK",
 		source:     "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR",
 		deployer:   "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR",
+		isSAC:      false,
 	},
 }
 
@@ -94,6 +110,21 @@ func TestDeploymentsFixtures(t *testing.T) {
 			}
 			if d.Deployer != tc.deployer {
 				t.Errorf("deployer: want %q, got %q", tc.deployer, d.Deployer)
+			}
+			if d.IsSAC != tc.isSAC {
+				t.Errorf("isSAC: want %v, got %v", tc.isSAC, d.IsSAC)
+			}
+			if tc.sac == nil {
+				if d.SAC != nil {
+					t.Errorf("sac metadata: want nil, got %+v", d.SAC)
+				}
+			} else {
+				if d.SAC == nil {
+					t.Fatalf("sac metadata: want %+v, got nil", tc.sac)
+				}
+				if *d.SAC != *tc.sac {
+					t.Errorf("sac metadata: want %+v, got %+v", *tc.sac, *d.SAC)
+				}
 			}
 		})
 	}
@@ -130,6 +161,79 @@ func TestDeploymentsMalformed(t *testing.T) {
 		if _, err := Deployments(trunc, PassphraseTestnet); err == nil {
 			t.Errorf("truncated at %d: want error", n)
 		}
+	}
+}
+
+func TestDeploymentsNativeAndAlphanum12(t *testing.T) {
+	// Construct a synthetic envelope for Native asset SAC deployment
+	// based on the valid from_asset fixture.
+	raw, err := base64.StdEncoding.DecodeString(fixtures[5].envelope)
+	if err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+
+	// In from_asset:
+	// offset 84 is opInvokeHostFunction (24)
+	// offset 88 is hostFnCreateContract (1)
+	// offset 92 is preimageFromAsset (1)
+	// offset 96 is assetCreditAlphanum4 (1) -> 4 bytes code + 4 bytes keytype + 32 bytes key = 40 bytes
+	// offset 136 is executable (1)
+	// Let's replace the asset part with Native (assetNative = 0):
+	var nativeEnv []byte
+	nativeEnv = append(nativeEnv, raw[:96]...)
+	// assetNative discriminant = 0 (4 bytes)
+	nativeEnv = append(nativeEnv, 0, 0, 0, 0)
+	// executable = 1
+	nativeEnv = append(nativeEnv, 0, 0, 0, 1)
+	// trailing signatures etc from offset 140
+	nativeEnv = append(nativeEnv, raw[140:]...)
+
+	encodedNative := base64.StdEncoding.EncodeToString(nativeEnv)
+	deps, err := Deployments(encodedNative, PassphraseTestnet)
+	if err != nil {
+		t.Fatalf("native SAC deployments: %v", err)
+	}
+	if len(deps) != 1 {
+		t.Fatalf("want 1 deployment, got %d", len(deps))
+	}
+	d := deps[0]
+	if !d.IsSAC {
+		t.Errorf("want IsSAC=true, got %v", d.IsSAC)
+	}
+	if d.SAC == nil || d.SAC.AssetCode != "native" || d.SAC.Decimals != 7 {
+		t.Errorf("want native SAC metadata, got %+v", d.SAC)
+	}
+
+	// Now construct an Alphanum12 SAC:
+	var alpha12Env []byte
+	alpha12Env = append(alpha12Env, raw[:96]...)
+	// assetCreditAlphanum12 discriminant = 2 (4 bytes)
+	alpha12Env = append(alpha12Env, 0, 0, 0, 2)
+	// 12 bytes code: "LONGTOKEN12\x00"
+	alpha12Env = append(alpha12Env, []byte("LONGTOKEN12\x00")...)
+	// keytype 0 (4 bytes) + 32 bytes key from raw[104:140]
+	alpha12Env = append(alpha12Env, raw[104:140]...)
+	// executable = 1
+	alpha12Env = append(alpha12Env, 0, 0, 0, 1)
+	alpha12Env = append(alpha12Env, raw[140:]...)
+
+	encoded12 := base64.StdEncoding.EncodeToString(alpha12Env)
+	deps12, err := Deployments(encoded12, PassphraseTestnet)
+	if err != nil {
+		t.Fatalf("alphanum12 SAC deployments: %v", err)
+	}
+	if len(deps12) != 1 {
+		t.Fatalf("want 1 deployment, got %d", len(deps12))
+	}
+	d12 := deps12[0]
+	if !d12.IsSAC {
+		t.Errorf("want IsSAC=true, got %v", d12.IsSAC)
+	}
+	if d12.SAC == nil || d12.SAC.AssetCode != "LONGTOKEN12" || d12.SAC.Decimals != 7 {
+		t.Errorf("want LONGTOKEN12 SAC metadata, got %+v", d12.SAC)
+	}
+	if d12.SAC.Issuer != "GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U" {
+		t.Errorf("want issuer GCATS..., got %s", d12.SAC.Issuer)
 	}
 }
 

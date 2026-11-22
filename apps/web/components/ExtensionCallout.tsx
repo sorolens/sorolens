@@ -31,7 +31,7 @@ export function ExtensionCallout() {
       <div className="mt-4 flex flex-wrap gap-3">
         <a
           href={EXTENSION_INSTALL_URL}
-          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-primary)] transition-opacity hover:opacity-90"
           rel="noopener noreferrer"
         >
           Get the extension

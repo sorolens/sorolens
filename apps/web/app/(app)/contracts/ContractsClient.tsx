@@ -10,7 +10,9 @@ import type { Column } from "@sorolens/ui";
 import { LabelledId } from "@/components/LabelledId";
 import { useContracts } from "@/hooks/useContracts";
 import { useQueryState } from "@/hooks/useQueryState";
-import { ErrorState, errorMessage } from "@/components/ErrorState";
+import { errorMessage } from "@/components/ErrorState";
+import { EmptyState } from "@/components/EmptyState";
+import { useLocale } from "@/lib/i18n";
 import { ApiError, batchContracts } from "@/lib/api";
 import type { BatchContractsAction } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
@@ -50,12 +52,14 @@ const MIN_COMPARE = 2;
 
 function StatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
-    active: "bg-green-900/40 text-green-400",
-    backfilling: "bg-blue-900/40 text-blue-400",
-    error: "bg-red-900/40 text-red-400",
-    inactive: "bg-yellow-900/40 text-yellow-400",
+    active: "bg-[var(--color-safe-bg)] text-[var(--color-safe-text)]",
+    backfilling: "bg-[var(--color-info-bg)] text-[var(--color-info-text)]",
+    error: "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]",
+    inactive: "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]",
   };
-  const cls = colorMap[status] ?? "bg-yellow-900/40 text-yellow-400";
+  const cls =
+    colorMap[status] ??
+    "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]";
   return (
     <span
       className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${cls}`}
@@ -203,7 +207,7 @@ function UntrackConfirmModal({
           type="button"
           onClick={onConfirm}
           disabled={pending}
-          className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex-1 rounded-lg bg-[var(--color-danger)] px-4 py-2.5 text-sm font-semibold text-[var(--color-danger-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? "Untracking…" : `Untrack ${count}`}
         </button>
@@ -254,7 +258,7 @@ function TagModal({
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="payments"
-            className="w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+            className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
           />
         </div>
         <div className="flex gap-3 pt-1">
@@ -392,6 +396,7 @@ export default function ContractsClient() {
   // Selected network from the header selector.
   const { network } = useNetwork();
   const userId = useSessionUserId();
+  const { t } = useLocale();
 
   // Still needed for the paste-to-add toast's navigation to the wizard.
   const router = useRouter();
@@ -922,7 +927,7 @@ export default function ContractsClient() {
                 type="button"
                 onClick={() => setShowUntrackModal(true)}
                 disabled={bulkPending}
-                className="rounded-lg border border-red-500/40 bg-red-600/10 px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-600/20 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3 py-1.5 text-sm font-medium text-[var(--color-danger-text)] transition-colors hover:bg-[var(--color-danger-bg)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Untrack {selected.size}{" "}
                 {selected.size === 1 ? "contract" : "contracts"}
@@ -945,9 +950,10 @@ export default function ContractsClient() {
 
         {/* Failed request: keeps any previously loaded rows visible below */}
         {loadFailed && (
-          <ErrorState
+          <EmptyState
+            variant="error"
             className="mb-4"
-            title="Couldn't load contracts."
+            title={t("contracts.error.title")}
             message={errorMessage(error, "The contracts request failed.")}
             onRetry={() => void mutate()}
             retrying={isValidating}
@@ -956,26 +962,28 @@ export default function ContractsClient() {
 
         {/* Empty state: only when the request succeeded */}
         {!loading && !loadFailed && sorted.length === 0 && (
-          <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-16 text-center border border-[var(--color-border)]">
-            <p className="text-lg font-medium text-[var(--color-text-primary)]">
-              {searchInput
-                ? "No contracts match your search"
-                : "No contracts tracked yet"}
-            </p>
-            {!searchInput && !tagFilter && (
-              <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                Use the CLI or API to start tracking a Soroban contract, or
-                click{" "}
-                <Link
-                  href="/contracts/new"
-                  className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
-                >
-                  run the tracking wizard
-                </Link>{" "}
-                to add one from here.
-              </p>
-            )}
-          </div>
+          <EmptyState
+            variant={searchInput ? "no-results" : "first-run"}
+            title={
+              searchInput
+                ? t("contracts.empty.noResults.title")
+                : t("contracts.empty.firstRun.title")
+            }
+            description={
+              !searchInput && !tagFilter ? (
+                <>
+                  {t("contracts.empty.firstRun.body")}{" "}
+                  <Link
+                    href="/contracts/new"
+                    className="text-[var(--color-accent)] underline underline-offset-2 hover:opacity-80"
+                  >
+                    {t("contracts.empty.firstRun.action")}
+                  </Link>{" "}
+                  {t("contracts.empty.firstRun.bodySuffix")}
+                </>
+              ) : undefined
+            }
+          />
         )}
 
         {/* Data table */}
@@ -995,9 +1003,11 @@ export default function ContractsClient() {
             linkComponent={Link}
             rowHref={(c) => (isPendingRow(c) ? null : `/contracts/${c.id}`)}
             emptyState={
-              <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-12 text-center text-sm text-[var(--color-text-secondary)] border border-[var(--color-border)]">
-                No contracts match your search.
-              </div>
+              <EmptyState
+                variant="no-results"
+                compact
+                title={t("contracts.empty.noResults.body")}
+              />
             }
           />
         )}

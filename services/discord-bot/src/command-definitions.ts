@@ -246,14 +246,13 @@ export const commandDefinitions = [
   new SlashCommandBuilder()
     .setName("assign-release")
     .setDescription(
-      "(Admin) Stop counting an issue toward someone's max (does not unassign on GitHub)"
+      "(Admin) Free issues the bot gave out (does not unassign on GitHub)"
     )
     .setDefaultMemberPermissions("0")
-    .addIntegerOption((o) =>
+    .addStringOption((o) =>
       o
-        .setName("issue")
-        .setDescription("Issue number")
-        .setMinValue(1)
+        .setName("issues")
+        .setDescription("Issue numbers, e.g. 567, 647, 767 or 800-810")
         .setRequired(true)
     ),
   new SlashCommandBuilder()

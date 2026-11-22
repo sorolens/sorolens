@@ -15,9 +15,10 @@ RUN apk add --no-cache git ca-certificates tzdata
 ENV GOTOOLCHAIN=local
 WORKDIR /src
 
-# The indexer's rules engine imports apps/api/rulelang, so the two modules are
-# resolved together through a trimmed workspace. Shipping the whole monorepo
-# would copy the dashboard and every other module into the build context.
+# The indexer's rules engine imports apps/api/rulelang and its failure
+# classifier imports apps/api/failurecategory, so the two modules are resolved
+# together through a trimmed workspace. Shipping the whole monorepo would copy
+# the dashboard and every other module into the build context.
 COPY apps/api/go.mod apps/api/go.sum ./apps/api/
 COPY services/indexer/go.mod services/indexer/go.sum ./services/indexer/
 RUN printf 'go 1.26\n\nuse (\n\t./apps/api\n\t./services/indexer\n)\n' > go.work
@@ -26,6 +27,7 @@ COPY go.work.sum ./
 RUN cd services/indexer && go mod download
 
 COPY apps/api/rulelang ./apps/api/rulelang
+COPY apps/api/failurecategory ./apps/api/failurecategory
 COPY services/indexer/ ./services/indexer/
 
 # Build for the container's own platform: the binary runs in the image built in

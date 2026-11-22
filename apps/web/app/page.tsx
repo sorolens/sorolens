@@ -25,6 +25,14 @@ const features = [
   },
 ];
 
+// Pages that exist in the dashboard but have no card of their own below.
+const explore = [
+  { href: "/invocations", label: "Invocations" },
+  { href: "/compare", label: "Compare contracts" },
+  { href: "/watchlist", label: "Watchlist" },
+  { href: "/watchdog/reports", label: "Reports" },
+];
+
 const steps = [
   {
     n: "1",
@@ -74,6 +82,18 @@ export default function HomePage() {
             >
               Dashboard
             </Link>
+            <Link
+              href="/docs"
+              className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              Docs
+            </Link>
+            <Link
+              href="/about"
+              className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              About
+            </Link>
             <a
               href="https://github.com/sorolens/sorolens"
               className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
@@ -117,6 +137,20 @@ export default function HomePage() {
                 View on GitHub
               </a>
             </div>
+            <nav
+              aria-label="Explore the dashboard"
+              className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm"
+            >
+              {explore.map((e) => (
+                <Link
+                  key={e.href}
+                  href={e.href}
+                  className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+                >
+                  {e.label}
+                </Link>
+              ))}
+            </nav>
           </div>
 
           {/* Live stats */}
@@ -180,6 +214,8 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm text-[var(--color-text-secondary)] sm:px-6 lg:px-8">
           <span>MIT licensed. Built for the Stellar developer community.</span>
           <div className="flex flex-wrap gap-4">
+            <Link href="/docs">Docs</Link>
+            <Link href="/about">About</Link>
             <a
               href="https://github.com/sorolens/sorolens"
               rel="noopener noreferrer"

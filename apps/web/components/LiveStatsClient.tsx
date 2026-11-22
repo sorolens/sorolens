@@ -168,9 +168,9 @@ export function LiveStatsClient({ className, initialData }: Props) {
       {anyStale && (
         <div
           data-testid="live-stats-stale"
-          className="mb-3 rounded-lg border border-amber-900/60 bg-amber-950/30 p-4 text-sm"
+          className="mb-3 rounded-lg border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] p-4 text-sm"
         >
-          <p className="font-medium text-amber-300">
+          <p className="font-medium text-[var(--color-warning-text)]">
             Some figures are out of date.
           </p>
           <p className="mt-1 text-[var(--color-text-secondary)]">
@@ -226,7 +226,7 @@ export function LiveStatsClient({ className, initialData }: Props) {
               {marked && (
                 <div
                   data-testid={`live-stats-age-${item.label}`}
-                  className="mt-1 text-xs text-amber-400"
+                  className="mt-1 text-xs text-[var(--color-warning-text)]"
                 >
                   {item.value === null
                     ? "unavailable"

@@ -34,6 +34,7 @@ from .compare_response_window import CompareResponseWindow
 from .contract import Contract
 from .contract_alert import ContractAlert
 from .contract_alert_severity import ContractAlertSeverity
+from .contract_alert_state import ContractAlertState
 from .contract_backfill import ContractBackfill
 from .contract_event_rate import ContractEventRate
 from .contract_event_schema import ContractEventSchema
@@ -68,6 +69,7 @@ from .contract_validation_result import ContractValidationResult
 from .contract_verification import ContractVerification
 from .contract_verification_request import ContractVerificationRequest
 from .contract_verification_status import ContractVerificationStatus
+from .contract_version import ContractVersion
 from .create_alert_rule_body import CreateAlertRuleBody
 from .create_alert_rule_body_severity import CreateAlertRuleBodySeverity
 from .create_alert_subscription import CreateAlertSubscription
@@ -89,6 +91,11 @@ from .create_export_job_v2_body_filters import CreateExportJobV2BodyFilters
 from .create_export_job_v2_body_format import CreateExportJobV2BodyFormat
 from .create_export_job_v2_body_type import CreateExportJobV2BodyType
 from .create_group_body import CreateGroupBody
+from .create_maintenance_window_request import CreateMaintenanceWindowRequest
+from .create_maintenance_window_request_recurrence import (
+    CreateMaintenanceWindowRequestRecurrence,
+)
+from .create_maintenance_window_request_scope import CreateMaintenanceWindowRequestScope
 from .create_my_api_key_body import CreateMyApiKeyBody
 from .create_my_api_key_body_scopes_item import CreateMyApiKeyBodyScopesItem
 from .create_my_api_key_response_201 import CreateMyApiKeyResponse201
@@ -104,14 +111,31 @@ from .event import Event
 from .export_contract_events_csv_network import ExportContractEventsCsvNetwork
 from .failed_event import FailedEvent
 from .failed_event_event import FailedEventEvent
+from .failure_category import FailureCategory
+from .failure_counts_by_category import FailureCountsByCategory
 from .forecast_point import ForecastPoint
 from .forecast_series import ForecastSeries
 from .forecast_series_metric import ForecastSeriesMetric
+from .get_alert_counts_network import GetAlertCountsNetwork
+from .get_alert_counts_response_200 import GetAlertCountsResponse200
+from .get_alert_counts_response_200_counts import GetAlertCountsResponse200Counts
 from .get_api_v1_search_response_200 import GetApiV1SearchResponse200
 from .get_contract_forecast_response_200 import GetContractForecastResponse200
 from .get_contract_report_format import GetContractReportFormat
 from .get_contract_report_history_response_200 import (
     GetContractReportHistoryResponse200,
+)
+from .get_contract_resource_trend_response_200 import (
+    GetContractResourceTrendResponse200,
+)
+from .get_contract_resource_trend_response_200_points_item import (
+    GetContractResourceTrendResponse200PointsItem,
+)
+from .get_contract_resource_trend_v2_response_200 import (
+    GetContractResourceTrendV2Response200,
+)
+from .get_contract_resource_trend_v2_response_200_points_item import (
+    GetContractResourceTrendV2Response200PointsItem,
 )
 from .get_contract_uptime_window import GetContractUptimeWindow
 from .get_global_stats_response_200 import GetGlobalStatsResponse200
@@ -182,6 +206,8 @@ from .list_contracts_response_200 import ListContractsResponse200
 from .list_contracts_sort import ListContractsSort
 from .list_failed_events_response_200 import ListFailedEventsResponse200
 from .list_integrations_response_200 import ListIntegrationsResponse200
+from .list_maintenance_windows_response_200 import ListMaintenanceWindowsResponse200
+from .list_maintenance_windows_scope import ListMaintenanceWindowsScope
 from .list_monitored_contracts_network import ListMonitoredContractsNetwork
 from .list_monitored_contracts_response_200 import ListMonitoredContractsResponse200
 from .list_my_api_keys_response_200 import ListMyApiKeysResponse200
@@ -199,6 +225,9 @@ from .list_watchdog_alerts_response_200 import ListWatchdogAlertsResponse200
 from .list_watchdog_alerts_severity import ListWatchdogAlertsSeverity
 from .list_watched_accounts_response_200 import ListWatchedAccountsResponse200
 from .live_activity_response_200 import LiveActivityResponse200
+from .maintenance_window import MaintenanceWindow
+from .maintenance_window_recurrence import MaintenanceWindowRecurrence
+from .maintenance_window_scope import MaintenanceWindowScope
 from .monitored_contract import MonitoredContract
 from .monthly_sla import MonthlySLA
 from .observed_shape import ObservedShape
@@ -232,13 +261,19 @@ from .slack_command_body import SlackCommandBody
 from .slack_message import SlackMessage
 from .slack_message_blocks_item import SlackMessageBlocksItem
 from .slack_message_response_type import SlackMessageResponseType
+from .snooze_alert_body import SnoozeAlertBody
 from .storage_entry import StorageEntry
 from .stream_contract_events_response_200 import StreamContractEventsResponse200
 from .test_integration_id import TestIntegrationId
 from .test_integration_response_200 import TestIntegrationResponse200
 from .test_integration_response_409 import TestIntegrationResponse409
 from .test_integration_response_502 import TestIntegrationResponse502
+from .token_metadata import TokenMetadata
 from .update_group_body import UpdateGroupBody
+from .update_maintenance_window_request import UpdateMaintenanceWindowRequest
+from .update_maintenance_window_request_recurrence import (
+    UpdateMaintenanceWindowRequestRecurrence,
+)
 from .uptime_result import UptimeResult
 from .uptime_result_window import UptimeResultWindow
 from .usage_timeline_point import UsageTimelinePoint
@@ -354,6 +389,7 @@ __all__ = (
     "Contract",
     "ContractAlert",
     "ContractAlertSeverity",
+    "ContractAlertState",
     "ContractBackfill",
     "ContractEventRate",
     "ContractEventSchema",
@@ -386,6 +422,7 @@ __all__ = (
     "ContractVerification",
     "ContractVerificationRequest",
     "ContractVerificationStatus",
+    "ContractVersion",
     "CreateAlertRuleBody",
     "CreateAlertRuleBodySeverity",
     "CreateAlertSubscription",
@@ -405,6 +442,9 @@ __all__ = (
     "CreateExportJobV2BodyFormat",
     "CreateExportJobV2BodyType",
     "CreateGroupBody",
+    "CreateMaintenanceWindowRequest",
+    "CreateMaintenanceWindowRequestRecurrence",
+    "CreateMaintenanceWindowRequestScope",
     "CreateMyApiKeyBody",
     "CreateMyApiKeyBodyScopesItem",
     "CreateMyApiKeyResponse201",
@@ -418,13 +458,22 @@ __all__ = (
     "ExportContractEventsCsvNetwork",
     "FailedEvent",
     "FailedEventEvent",
+    "FailureCategory",
+    "FailureCountsByCategory",
     "ForecastPoint",
     "ForecastSeries",
     "ForecastSeriesMetric",
+    "GetAlertCountsNetwork",
+    "GetAlertCountsResponse200",
+    "GetAlertCountsResponse200Counts",
     "GetApiV1SearchResponse200",
     "GetContractForecastResponse200",
     "GetContractReportFormat",
     "GetContractReportHistoryResponse200",
+    "GetContractResourceTrendResponse200",
+    "GetContractResourceTrendResponse200PointsItem",
+    "GetContractResourceTrendV2Response200",
+    "GetContractResourceTrendV2Response200PointsItem",
     "GetContractUptimeWindow",
     "GetGlobalStatsResponse200",
     "GetWatchdogStatsNetwork",
@@ -492,6 +541,8 @@ __all__ = (
     "ListContractsSort",
     "ListFailedEventsResponse200",
     "ListIntegrationsResponse200",
+    "ListMaintenanceWindowsResponse200",
+    "ListMaintenanceWindowsScope",
     "ListMonitoredContractsNetwork",
     "ListMonitoredContractsResponse200",
     "ListMyApiKeysResponse200",
@@ -505,6 +556,9 @@ __all__ = (
     "ListWatchdogAlertsSeverity",
     "ListWatchedAccountsResponse200",
     "LiveActivityResponse200",
+    "MaintenanceWindow",
+    "MaintenanceWindowRecurrence",
+    "MaintenanceWindowScope",
     "MonitoredContract",
     "MonthlySLA",
     "ObservedShape",
@@ -536,13 +590,17 @@ __all__ = (
     "SlackMessage",
     "SlackMessageBlocksItem",
     "SlackMessageResponseType",
+    "SnoozeAlertBody",
     "StorageEntry",
     "StreamContractEventsResponse200",
     "TestIntegrationId",
     "TestIntegrationResponse200",
     "TestIntegrationResponse409",
     "TestIntegrationResponse502",
+    "TokenMetadata",
     "UpdateGroupBody",
+    "UpdateMaintenanceWindowRequest",
+    "UpdateMaintenanceWindowRequestRecurrence",
     "UptimeResult",
     "UptimeResultWindow",
     "UsageTimelinePoint",

@@ -358,6 +358,23 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		"GET /api/v1/reports/subscriptions":         true,
 		"DELETE /api/v1/reports/subscriptions/{id}": true,
 		"GET /api/v1/reports/unsubscribe":           true,
+		// Alert lifecycle and maintenance windows (issues #789, #790):
+		// v1-only operational surfaces until v2 envelope is specified.
+		"DELETE /api/v1/maintenance-windows/{id}": true,
+		"GET /api/v1/alerts/counts":               true,
+		"GET /api/v1/maintenance-windows":         true,
+		"GET /api/v1/maintenance-windows/{id}":    true,
+		"POST /api/v1/alerts/{id}/ack":            true,
+		"POST /api/v1/alerts/{id}/resolve":        true,
+		"POST /api/v1/alerts/{id}/snooze":         true,
+		"POST /api/v1/maintenance-windows":        true,
+		"PUT /api/v1/maintenance-windows/{id}":    true,
+		// Wasm hash changelog (issues #276, #767): the feed and badge are Atom
+		// XML and SVG for feed readers and READMEs, not JSON documents, and the
+		// JSON history has no v2 envelope defined yet.
+		"GET /api/v1/contracts/{id}/changelog":       true,
+		"GET /api/v1/contracts/{id}/changelog/feed":  true,
+		"GET /api/v1/contracts/{id}/changelog/badge": true,
 	}
 
 	var missing []string

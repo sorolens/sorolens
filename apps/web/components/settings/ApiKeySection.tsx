@@ -173,7 +173,7 @@ export function ApiKeySection() {
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <code
                 data-testid="settings-api-key-value"
-                className="overflow-x-auto rounded bg-black/30 px-2 py-1 font-mono text-xs text-[var(--color-text-primary)]"
+                className="overflow-x-auto rounded bg-[var(--color-bg)] px-2 py-1 font-mono text-xs text-[var(--color-text-primary)]"
               >
                 {plaintext}
               </code>
@@ -205,7 +205,7 @@ export function ApiKeySection() {
           type="button"
           onClick={handleCreate}
           disabled={creating || loading}
-          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {creating ? "Creating…" : "Generate key"}
         </button>

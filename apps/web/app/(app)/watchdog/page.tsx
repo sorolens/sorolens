@@ -18,9 +18,11 @@ import type {
 import { StatCard } from "@/components/StatCard";
 import { TableSkeleton } from "@/components/Skeleton";
 import { ErrorState, errorMessage } from "@/components/ErrorState";
+import { EmptyState } from "@/components/EmptyState";
 import { HealthBadge, SeverityBadge } from "@/components/WatchdogBadges";
 import { networkFilter, useNetwork } from "@/lib/network";
 import { truncateMiddle } from "@/lib/format";
+import { useLocale } from "@/lib/i18n";
 
 const ZERO_STATS: WatchdogStats = {
   total_monitored: 0,
@@ -42,13 +44,14 @@ const selectClass =
 function viewToggleClass(active: boolean): string {
   return `px-3 py-1.5 text-xs font-medium transition-colors ${
     active
-      ? "bg-[var(--color-accent)] text-white"
+      ? "bg-[var(--color-accent)] text-[var(--color-accent-foreground)]"
       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
   }`;
 }
 
 export default function WatchdogPage() {
   const { network } = useNetwork();
+  const { t } = useLocale();
   const [stats, setStats] = useState<WatchdogStats>(ZERO_STATS);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [statsReload, setStatsReload] = useState(0);
@@ -61,6 +64,12 @@ export default function WatchdogPage() {
   const [view, setView] = useState<"grouped" | "flat">("grouped");
   const [severityFilter, setSeverityFilter] = useState<AlertSeverity | "">("");
   const [contractFilter, setContractFilter] = useState("");
+  // Filtered feeds that come back empty read as "no matches", not "no data".
+  const hasAlertFilters = Boolean(severityFilter || contractFilter);
+  const clearAlertFilters = () => {
+    setSeverityFilter("");
+    setContractFilter("");
+  };
 
   const [groups, setGroups] = useState<AlertGroup[] | null>(null);
   const [groupsCursor, setGroupsCursor] = useState("");
@@ -359,15 +368,17 @@ export default function WatchdogPage() {
         {contractsLoading ? (
           <TableSkeleton />
         ) : contractsError ? (
-          <ErrorState
-            title="Couldn't load monitored contracts."
+          <EmptyState
+            variant="error"
+            title={t("watchdog.contracts.error.title")}
             message={contractsError}
             onRetry={() => loadContracts(cursors[cursorIndex])}
           />
         ) : contracts.length === 0 ? (
           <EmptyState
-            title="No monitored contracts yet"
-            body="Register a contract with the on-chain watchdog to get started. It will appear here on the indexer's next tick."
+            variant="first-run"
+            title={t("watchdog.contracts.empty.title")}
+            description={t("watchdog.contracts.empty.body")}
           />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
@@ -515,8 +526,9 @@ export default function WatchdogPage() {
         </div>
 
         {feedError ? (
-          <ErrorState
-            title="Couldn't load alerts."
+          <EmptyState
+            variant="error"
+            title={t("watchdog.alerts.error.title")}
             message={feedError}
             onRetry={() => setFeedReload((n) => n + 1)}
           />
@@ -525,8 +537,25 @@ export default function WatchdogPage() {
             <TableSkeleton />
           ) : groups.length === 0 ? (
             <EmptyState
-              title="No alerts yet"
-              body="Alerts pushed via report_alert on the watchdog contract are deduplicated and appear here as groups."
+              variant={hasAlertFilters ? "no-results" : "first-run"}
+              title={
+                hasAlertFilters
+                  ? t("watchdog.alerts.noResults.title")
+                  : t("watchdog.alerts.empty.title")
+              }
+              description={
+                hasAlertFilters
+                  ? t("watchdog.alerts.noResults.body")
+                  : t("watchdog.alerts.empty.groupedBody")
+              }
+              action={
+                hasAlertFilters
+                  ? {
+                      label: t("empty.clearFilters"),
+                      onClick: clearAlertFilters,
+                    }
+                  : undefined
+              }
             />
           ) : (
             <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
@@ -682,8 +711,25 @@ export default function WatchdogPage() {
           <TableSkeleton />
         ) : alerts.length === 0 ? (
           <EmptyState
-            title="No alerts yet"
-            body="Alerts pushed via report_alert on the watchdog contract will appear here."
+            variant={hasAlertFilters ? "no-results" : "first-run"}
+            title={
+              hasAlertFilters
+                ? t("watchdog.alerts.noResults.title")
+                : t("watchdog.alerts.empty.title")
+            }
+            description={
+              hasAlertFilters
+                ? t("watchdog.alerts.noResults.body")
+                : t("watchdog.alerts.empty.body")
+            }
+            action={
+              hasAlertFilters
+                ? {
+                    label: t("empty.clearFilters"),
+                    onClick: clearAlertFilters,
+                  }
+                : undefined
+            }
           />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
@@ -770,15 +816,6 @@ export default function WatchdogPage() {
             </div>
           )}
       </section>
-    </div>
-  );
-}
-
-function EmptyState({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg-card)] p-8 text-center">
-      <p className="font-medium">{title}</p>
-      <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{body}</p>
     </div>
   );
 }

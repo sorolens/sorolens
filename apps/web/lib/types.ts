@@ -1,3 +1,12 @@
+import type { operations } from "./api.types.generated";
+export interface TokenMetadata {
+  asset_code: string;
+  issuer: string;
+  decimals: number;
+  symbol: string;
+  name: string;
+}
+
 export interface Contract {
   id: string;
   network: string;
@@ -7,6 +16,7 @@ export interface Contract {
   created_at_ledger: number;
   backfill_complete_at: string | null;
   tags: string[];
+  token?: TokenMetadata | null;
 }
 
 export interface ContractDetail extends Contract {
@@ -124,14 +134,15 @@ export interface VolumePoint {
 
 export type StatsResponse = ContractStats;
 
-/** One day of averaged per-invocation resource usage (issue #184). */
-export interface ResourceTrendPoint {
-  date: string;
-  avg_cpu_insn: number;
-  avg_mem_byte: number;
-  avg_fee: number;
-  count: number;
-}
+/**
+ * One day of averaged per-invocation resource usage (issue #184).
+ *
+ * Generated from docs/openapi.yaml (issue #599) so the chart cannot drift
+ * from the endpoint it calls.
+ */
+export type ResourceTrendResponse =
+  operations["getContractResourceTrend"]["responses"][200]["content"]["application/json"];
+export type ResourceTrendPoint = ResourceTrendResponse["points"][number];
 
 export interface ContractForecastPoint {
   date: string;
@@ -186,6 +197,7 @@ export interface ContractSummary {
   last_activity_at: string | null;
   /** User-defined tags. Absent on optimistic rows built before a response. */
   tags?: string[];
+  token?: TokenMetadata | null;
 }
 
 export interface ContractsListResponse {
@@ -207,6 +219,7 @@ export interface SearchContract {
   backfill_complete_at: string | null;
   added_at: string;
   tags: string[] | null;
+  token?: TokenMetadata | null;
 }
 
 /** Response of GET /api/v1/search: `{ "items": [...] }` per docs/openapi.yaml. */
@@ -443,6 +456,7 @@ export interface GlobalStats {
   total_events: number;
   total_invocations: number;
   total_storage_entries: number;
+  approximate?: boolean;
 }
 
 // ---- live dashboard (#139) --------------------------------------------------

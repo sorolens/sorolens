@@ -213,12 +213,12 @@ export function ContractPicker({
                 Loading monitored contracts…
               </div>
             ) : error ? (
-              <div className="p-3 text-center text-red-400">
+              <div className="p-3 text-center text-[var(--color-danger-text)]">
                 {error}
                 <button
                   type="button"
                   onClick={() => fetchPage(cursors[cursorIndex])}
-                  className="mt-1 block w-full text-xs underline hover:text-red-300"
+                  className="mt-1 block w-full text-xs underline hover:text-[var(--color-danger-text)]"
                 >
                   Retry
                 </button>

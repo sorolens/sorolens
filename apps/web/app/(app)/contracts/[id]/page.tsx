@@ -228,7 +228,11 @@ function ContractDetailContent({ id }: { id: string }) {
       }
     }
 
-    load();
+    // notFound() throws to hand control to the not-found boundary. It is
+    // called after a 404 inside this async effect, so contain that expected
+    // control-flow rejection instead of leaving it unhandled. API failures are
+    // already handled by the try/catch above.
+    load().catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -508,12 +512,12 @@ function ContractDetailContent({ id }: { id: string }) {
           <span
             className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
               contract?.status === "active"
-                ? "bg-green-900/40 text-green-400"
+                ? "bg-[var(--color-safe-bg)] text-[var(--color-safe-text)]"
                 : contract?.status === "backfilling"
-                  ? "bg-blue-900/40 text-blue-400"
+                  ? "bg-[var(--color-info-bg)] text-[var(--color-info-text)]"
                   : contract?.status === "error"
-                    ? "bg-red-900/40 text-red-400"
-                    : "bg-yellow-900/40 text-yellow-400"
+                    ? "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]"
+                    : "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]"
             }`}
           >
             {contract?.status}
@@ -703,8 +707,8 @@ function ContractDetailContent({ id }: { id: string }) {
             <div className="flex items-center gap-3">
               <h2 className="text-xl font-semibold">Events</h2>
               {isStreamConnected && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/40 px-2.5 py-0.5 text-xs font-medium text-green-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-safe-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--color-safe)]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-safe)] animate-pulse" />
                   Live
                 </span>
               )}
@@ -714,7 +718,7 @@ function ContractDetailContent({ id }: { id: string }) {
               onClick={() => setShowFailedOnly(!showFailedOnly)}
               className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
                 showFailedOnly
-                  ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
+                  ? "bg-[var(--color-danger)]/20 text-[var(--color-danger)] hover:bg-[var(--color-danger-bg)]/30"
                   : "bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] hover:text-[var(--color-text-primary)]"
               }`}
             >

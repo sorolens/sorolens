@@ -119,8 +119,11 @@ services:
       INDEXER_METRICS_ADDR: ""
     healthcheck:
       disable: true
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       mock-rpc:
         condition: service_healthy

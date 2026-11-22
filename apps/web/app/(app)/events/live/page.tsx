@@ -47,24 +47,24 @@ export default function EventsPage() {
           : "Disconnected";
 
   const badgeTone = paused
-    ? "bg-white/10 text-[var(--color-text-secondary)]"
+    ? "bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)]"
     : status === "connected"
-      ? "bg-green-900/40 text-green-400"
+      ? "bg-[var(--color-safe-bg)] text-[var(--color-safe)]"
       : status === "polling"
-        ? "bg-amber-900/40 text-amber-400"
+        ? "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]"
         : status === "connecting"
-          ? "bg-blue-900/40 text-blue-400"
-          : "bg-red-900/40 text-red-400";
+          ? "bg-[var(--color-info-bg)] text-[var(--color-info-text)]"
+          : "bg-[var(--color-danger-bg)]/40 text-[var(--color-danger-text)]";
 
   const dotTone = paused
     ? "bg-white/60"
     : status === "connected"
-      ? "bg-green-400 animate-pulse"
+      ? "bg-[var(--color-safe)] animate-pulse"
       : status === "polling"
-        ? "bg-amber-400"
+        ? "bg-[var(--color-warning)]"
         : status === "connecting"
-          ? "bg-blue-400 animate-ping"
-          : "bg-red-400";
+          ? "bg-[var(--color-info)] animate-ping"
+          : "bg-[var(--color-danger)]";
 
   return (
     <div className="space-y-8">

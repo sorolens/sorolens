@@ -52,7 +52,7 @@ func (h *Handler) ListAllEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	events, nextRaw, err := h.Store.ListAllEvents(r.Context(), rawCursor, intQuery(r, "limit", 50), f)
+	events, nextRaw, err := h.Store.ListAllEvents(r.Context(), rawCursor, pageLimit(r, DefaultPageSize), f)
 	if err != nil {
 		h.Logger.Error("list all events", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list events")

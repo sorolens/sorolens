@@ -9,7 +9,7 @@ export interface ContractOgCard {
 }
 
 export function shortContractId(id: string): string {
-  return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
+  return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-5)}` : id;
 }
 
 export function formatCount(value: number): string {

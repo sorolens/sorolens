@@ -441,20 +441,22 @@ export default function ImportContractsCsv({
         );
       case "importing":
         return (
-          <span className="inline-flex items-center gap-1.5 text-blue-400">
+          <span className="inline-flex items-center gap-1.5 text-[var(--color-info-text)]">
             <span
-              className="inline-block h-2 w-2 animate-spin rounded-full border border-blue-400 border-t-transparent"
+              className="inline-block h-2 w-2 animate-spin rounded-full border border-[var(--color-info-border)] border-t-transparent"
               aria-hidden="true"
             />
             Importing…
           </span>
         );
       case "ok":
-        return <span className="font-medium text-green-400">Imported</span>;
+        return (
+          <span className="font-medium text-[var(--color-safe)]">Imported</span>
+        );
       case "error":
         return (
           <span
-            className="text-red-400"
+            className="text-[var(--color-danger-text)]"
             title={row.message ?? undefined}
             data-testid={`row-error-${row.line}`}
           >
@@ -464,7 +466,7 @@ export default function ImportContractsCsv({
       case "invalid":
         return (
           <span
-            className="text-red-400"
+            className="text-[var(--color-danger-text)]"
             title={row.error ?? undefined}
             data-testid={`row-invalid-${row.line}`}
           >
@@ -528,11 +530,14 @@ export default function ImportContractsCsv({
             const file = e.target.files?.[0];
             if (file) void handleFile(file);
           }}
-          className="mb-4 w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2 text-sm text-[var(--color-text-primary)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--color-accent)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--color-bg-page)] disabled:opacity-50"
+          className="mb-4 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--color-accent)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--color-bg-page)] disabled:opacity-50"
         />
 
         {parseError && (
-          <p className="mb-4 text-sm text-red-400" role="alert">
+          <p
+            className="mb-4 text-sm text-[var(--color-danger-text)]"
+            role="alert"
+          >
             {parseError}
           </p>
         )}
@@ -541,9 +546,11 @@ export default function ImportContractsCsv({
           <>
             <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-text-secondary)]">
               <span>{rows.length} row(s)</span>
-              <span className="text-green-400">{okCount} imported</span>
+              <span className="text-[var(--color-safe)]">
+                {okCount} imported
+              </span>
               {invalidCount > 0 && (
-                <span className="text-red-400">
+                <span className="text-[var(--color-danger-text)]">
                   {invalidCount} with problems
                 </span>
               )}
@@ -561,9 +568,11 @@ export default function ImportContractsCsv({
                   %)
                 </span>
                 <span>
-                  <span className="text-green-400">{okCount} imported</span>
+                  <span className="text-[var(--color-safe)]">
+                    {okCount} imported
+                  </span>
                   {invalidCount > 0 && (
-                    <span className="ml-2 text-red-400">
+                    <span className="ml-2 text-[var(--color-danger-text)]">
                       {invalidCount} failed / invalid
                     </span>
                   )}
@@ -591,7 +600,7 @@ export default function ImportContractsCsv({
                     type="button"
                     data-testid="retry-failed-btn"
                     onClick={handleRetryFailed}
-                    className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/20"
+                    className="rounded-md border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] px-3 py-1 text-xs font-medium text-[var(--color-warning-text)] hover:bg-[var(--color-warning-bg)]"
                   >
                     Retry {errorCount} failed row{errorCount === 1 ? "" : "s"}
                   </button>

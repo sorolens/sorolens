@@ -144,3 +144,59 @@ func TestMerge_GroupKeyIncludesRule(t *testing.T) {
 		t.Errorf("GroupKey = %q, want %q", g.GroupKey, want)
 	}
 }
+
+func TestShouldNotify(t *testing.T) {
+	now := t0
+	future := t0.Add(1 * time.Hour)
+	past := t0.Add(-1 * time.Hour)
+
+	if !alertgroup.ShouldNotify("open", nil, now) {
+		t.Errorf("expected open to notify")
+	}
+	if alertgroup.ShouldNotify("acknowledged", nil, now) {
+		t.Errorf("expected acknowledged NOT to notify")
+	}
+	if alertgroup.ShouldNotify("resolved", nil, now) {
+		t.Errorf("expected resolved NOT to notify")
+	}
+	if alertgroup.ShouldNotify("snoozed", &future, now) {
+		t.Errorf("expected active snoozed NOT to notify")
+	}
+	if !alertgroup.ShouldNotify("snoozed", &past, now) {
+		t.Errorf("expected expired snoozed TO notify")
+	}
+}
+
+func TestMerge_SnoozeResumes(t *testing.T) {
+	snoozedUntil := t0.Add(100 * time.Second)
+	g := &alertgroup.Group{
+		GroupKey:         "C1|Critical|rule1",
+		ContractID:       "C1",
+		Severity:         "Critical",
+		Rule:             "rule1",
+		Count:            1,
+		DedupeWindowSecs: 300,
+		FirstSeen:        t0,
+		LastSeen:         t0,
+		State:            "snoozed",
+		SnoozedUntil:     &snoozedUntil,
+	}
+
+	a1 := alert("C1", "Critical", "rule1", "during snooze", t0.Add(50*time.Second))
+	g1, res := alertgroup.Merge(g, a1, 300)
+	if res != alertgroup.MergeResultMerged {
+		t.Fatalf("expected merged")
+	}
+	if g1.State != "snoozed" {
+		t.Errorf("expected state to remain snoozed, got %s", g1.State)
+	}
+
+	a2 := alert("C1", "Critical", "rule1", "after snooze", t0.Add(150*time.Second))
+	g2, res2 := alertgroup.Merge(g1, a2, 300)
+	if res2 != alertgroup.MergeResultMerged {
+		t.Fatalf("expected merged")
+	}
+	if g2.State != "open" {
+		t.Errorf("expected state to resume to open, got %s", g2.State)
+	}
+}

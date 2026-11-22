@@ -289,6 +289,8 @@ func subscriptionContractScenario() contractScenario {
 
 func watchdogContractScenario() contractScenario {
 	now := time.Now().UTC().Truncate(time.Second)
+	base := now.Add(-48 * time.Hour)
+	lastCheck := base.Add(6 * time.Hour)
 	return contractScenario{
 		name:   "watchdog",
 		tables: []string{"monitored_contracts"},

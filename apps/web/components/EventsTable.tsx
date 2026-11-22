@@ -58,8 +58,8 @@ function EventRow({
         <span
           className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
             event.in_successful_call
-              ? "bg-green-900/40 text-green-400"
-              : "bg-red-900/40 text-red-400"
+              ? "bg-[var(--color-safe-bg)] text-[var(--color-safe-text)]"
+              : "bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]"
           }`}
         >
           {event.in_successful_call ? "OK" : "FAIL"}
@@ -75,7 +75,7 @@ function EventRow({
             onClick={() => onInspect(event)}
             data-testid={`inspect-event-${event.id}`}
             title={`Inspect event ${event.id}`}
-            className="rounded bg-white/10 px-2 py-1 text-xs text-gray-300 hover:bg-white/20 hover:text-white"
+            className="rounded bg-[var(--color-bg-hover)] px-2 py-1 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
           >
             Inspect
           </button>
@@ -109,7 +109,7 @@ function ExpandedEventRow({
             <button
               type="button"
               onClick={() => onInspect(event)}
-              className="inline-flex items-center gap-1.5 rounded bg-indigo-600/30 border border-indigo-500/40 px-3 py-1 text-xs font-medium text-indigo-300 hover:bg-indigo-600/50"
+              className="inline-flex items-center gap-1.5 rounded bg-[var(--color-accent-bg)] border border-[var(--color-accent-border)] px-3 py-1 text-xs font-medium text-[var(--color-accent-text)] hover:bg-[var(--color-accent-bg)]"
             >
               Inspect ScVal Tree & Raw XDR
             </button>
@@ -315,7 +315,7 @@ export function EventsTable({
             onClick={onLoadMore}
             disabled={loading}
             aria-busy={loading}
-            className="rounded-md bg-white/10 px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-white/20 disabled:opacity-50"
+            className="rounded-md bg-[var(--color-bg-hover)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
           >
             {loading ? "Loading..." : "Load More"}
           </button>

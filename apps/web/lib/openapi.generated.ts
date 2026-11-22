@@ -673,6 +673,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             description: "Upper ledger bound (inclusive).",
             type: "integer",
           },
+          {
+            name: "failure_category",
+            in: "query",
+            required: false,
+            description:
+              "Show only failed invocations of this category (case-insensitive). Invocations indexed before failure classification existed have no category and never match. An unknown value returns 422.",
+            type: "string",
+          },
         ],
       },
     },
@@ -712,6 +720,31 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             required: true,
             description: "Hex-encoded transaction hash.",
             type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/resource-trend": {
+      get: {
+        operationId: "getContractResourceTrend",
+        summary: "Daily resource usage trend for a contract",
+        tags: ["Invocations"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "days",
+            in: "query",
+            required: false,
+            description:
+              "Number of trailing UTC days to bucket, including today.",
+            type: "integer",
+            default: "30",
           },
         ],
       },
@@ -1859,6 +1892,31 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v2/contracts/{id}/resource-trend": {
+      get: {
+        operationId: "getContractResourceTrendV2",
+        summary: "Daily resource usage trend for a contract (v2)",
+        tags: ["Invocations"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "days",
+            in: "query",
+            required: false,
+            description:
+              "Number of trailing UTC days to bucket, including today.",
+            type: "integer",
+            default: "30",
+          },
+        ],
+      },
+    },
     "/api/v2/contracts/{id}/stats": {
       get: {
         operationId: "v2ContractStats",
@@ -2680,6 +2738,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
               "Inclusive upper bound on ledger_closed_at (RFC 3339).",
             type: "string",
           },
+          {
+            name: "failure_category",
+            in: "query",
+            required: false,
+            description:
+              "Show only failed invocations of this category (case-insensitive). Invocations indexed before failure classification existed have no category and never match. An unknown value returns 422.",
+            type: "string",
+          },
         ],
       },
     },
@@ -2763,6 +2829,7 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "limit",
             in: "query",
             required: false,
+            description: "Page size (default 50, clamped to 200).",
             type: "integer",
             default: "50",
           },
@@ -2813,6 +2880,54 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
       get: {
         operationId: "getContractGraph",
         summary: "Get the contract's cross-contract call graph",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/changelog": {
+      get: {
+        operationId: "getContractChangelog",
+        summary: "Get a contract's Wasm hash changelog",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/changelog/feed": {
+      get: {
+        operationId: "getContractChangelogFeed",
+        summary: "Atom feed of a contract's Wasm hash changes",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/changelog/badge": {
+      get: {
+        operationId: "getContractChangelogBadge",
+        summary: "Get a Wasm hash badge SVG for a contract",
         tags: ["Contracts"],
         parameters: [
           {
@@ -3024,6 +3139,159 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             in: "query",
             required: false,
             description: "Maximum results to return (default 100).",
+            type: "integer",
+          },
+        ],
+      },
+    },
+    "/api/v1/alerts/counts": {
+      get: {
+        operationId: "getAlertCounts",
+        summary: "Get alert counts broken down by state",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "contract_id",
+            in: "query",
+            required: false,
+            description: "Optional contract ID filter.",
+            type: "string",
+          },
+          {
+            name: "network",
+            in: "query",
+            required: false,
+            description: "Network filter; empty means all networks.",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/alerts/{id}/ack": {
+      post: {
+        operationId: "acknowledgeAlert",
+        summary: "Acknowledge an alert",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Alert ID",
+            type: "integer",
+          },
+        ],
+      },
+    },
+    "/api/v1/alerts/{id}/snooze": {
+      post: {
+        operationId: "snoozeAlert",
+        summary: "Snooze an alert",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Alert ID",
+            type: "integer",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/alerts/{id}/resolve": {
+      post: {
+        operationId: "resolveAlert",
+        summary: "Resolve an alert",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Alert ID",
+            type: "integer",
+          },
+        ],
+      },
+    },
+    "/api/v1/maintenance-windows": {
+      get: {
+        operationId: "listMaintenanceWindows",
+        summary: "List maintenance windows",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "scope",
+            in: "query",
+            required: false,
+            description: "Scope filter",
+            type: "string",
+          },
+          {
+            name: "target_id",
+            in: "query",
+            required: false,
+            description: "Target ID filter",
+            type: "string",
+          },
+        ],
+      },
+      post: {
+        operationId: "createMaintenanceWindow",
+        summary: "Create a maintenance window",
+        tags: ["Maintenance"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/maintenance-windows/{id}": {
+      get: {
+        operationId: "getMaintenanceWindow",
+        summary: "Get a maintenance window by ID",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Maintenance window ID",
+            type: "integer",
+          },
+        ],
+      },
+      put: {
+        operationId: "updateMaintenanceWindow",
+        summary: "Update a maintenance window",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Maintenance window ID",
+            type: "integer",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
+      },
+      delete: {
+        operationId: "deleteMaintenanceWindow",
+        summary: "Delete a maintenance window",
+        tags: ["Maintenance"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Maintenance window ID",
             type: "integer",
           },
         ],

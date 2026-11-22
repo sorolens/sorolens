@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sorolens/sorolens/apps/api/internal/changelog"
 	"github.com/sorolens/sorolens/apps/api/internal/graph"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/metrics"
@@ -49,6 +50,14 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// rejections are audited too, and inside Recoverer so a panic is
 	// recorded as 500 before being recovered.
 	r.Use(middleware.Audit(h.Store, h.Logger, "/api/", "/admin"))
+	// Rate limiting is keyed by the verified API key when present and by the
+	// trusted-proxy client IP otherwise. It runs after Identity so the key
+	// is available, and before the route handlers so it can short-circuit.
+	r.Use(middleware.RateLimit(h.RedisClient, h.Store, middleware.RateLimitConfig{
+		TrustedProxies: h.TrustedProxies,
+		AnonymousLimit: h.RateLimitPerMinute,
+		Window:         h.RateLimitWindow,
+	}))
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(middleware.Metrics)
 
@@ -63,9 +72,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// compression decision, so limiter headers written later are unaffected).
 	r.Use(middleware.Compression)
 
-	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
 	r.Use(middleware.UsageMeter(h.RedisClient, h.UsageFlusher))
-
 	// Health (not rate-limited)
 	r.Get("/health", h.Health)
 	r.Get("/readyz", h.Readyz)
@@ -74,7 +81,6 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// rather than under /api/v1 so it stays reachable without a versioned client
 	// and without the v1 scope/role middleware.
 	r.Get("/api/version", h.Version)
-
 	// Prometheus metrics. It sits outside /api/v1 so it needs no API key, and
 	// the rate limiter skips it explicitly (see middleware.RateLimit) so a
 	// scrape is never throttled. A registry per router keeps tests that build
@@ -134,6 +140,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.Get("/audit", h.ListAuditEvents)
 	})
 
+	// Response cache for stats (issue #776)
+	cacheStats := middleware.Cache(h.Cache, middleware.CacheNamespaceStats, h.CacheTTL, h.Logger)
+
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
@@ -178,7 +187,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
 
 		// Stats
-		get("/stats/global", h.GlobalStats)
+		r.With(scope, cacheStats).Get("/stats/global", h.GlobalStats)
 
 		// Live dashboard feeds (#139): the newest events across all tracked
 		// contracts, and per-contract events-per-minute buckets for the
@@ -189,10 +198,21 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Cross-contract events explorer feed (issue #97).
 		get("/events", h.ListAllEvents)
 
-		// Alert deduplication and grouping engine (issue #269).
+		// Alert deduplication, grouping and lifecycle (issues #269, #789).
 		// GET /api/v1/alerts          — grouped view (default)
 		// GET /api/v1/alerts?flat=true — raw ContractAlert feed
 		get("/alerts", h.ListAlerts)
+		get("/alerts/counts", h.AlertCounts)
+		r.With(scope, contributor).Post("/alerts/{id}/ack", h.AcknowledgeAlert)
+		r.With(scope, contributor).Post("/alerts/{id}/snooze", h.SnoozeAlert)
+		r.With(scope, contributor).Post("/alerts/{id}/resolve", h.ResolveAlert)
+
+		// Maintenance windows (issue #790).
+		get("/maintenance-windows", h.ListMaintenanceWindows)
+		get("/maintenance-windows/{id}", h.GetMaintenanceWindow)
+		r.With(scope, contributor).Post("/maintenance-windows", h.CreateMaintenanceWindow)
+		r.With(scope, contributor).Put("/maintenance-windows/{id}", h.UpdateMaintenanceWindow)
+		r.With(scope, contributor).Delete("/maintenance-windows/{id}", h.DeleteMaintenanceWindow)
 
 		// Integrations catalog and test-send (issue #612). Reads are public
 		// like the rest of the v0.1 surface; the test send triggers an
@@ -260,6 +280,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// transaction, so a trace is reachable straight from an invocation.
 		get("/invocations/{tx_hash}/trace", h.GetInvocationTrace)
 		get("/contracts/{id}/storage", h.ListStorageEntries)
+		get("/contracts/{id}/resource-trend", h.ContractResourceTrend)
 		get("/contracts/{id}/stats", h.ContractStats)
 		get("/contracts/{id}/forecast", h.ContractForecast)
 		get("/contracts/{id}/snapshot", h.ContractSnapshot)
@@ -269,6 +290,15 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/summary", h.ContractSummary)
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
+
+		// Wasm hash changelog (issue #276): the history as JSON, an Atom feed
+		// and an embeddable SVG badge. Public reads like the rest of the
+		// per-contract surface; the badge sets its own no-cache header so a
+		// README always shows the current hash.
+		cl := changelog.New(h.Store)
+		get("/contracts/{id}/changelog", cl.GetChangelog)
+		get("/contracts/{id}/changelog/feed", cl.GetFeed)
+		get("/contracts/{id}/changelog/badge", cl.GetBadge)
 
 		// Source verification (issue #263). Submitting source mutates the
 		// verification record, so it requires at least contributor role;
@@ -435,7 +465,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.Get("/exports/{id}/download", h.DownloadExport)
 
 		// Stats
-		get("/stats/global", h.V2GlobalStats)
+		r.With(scope, cacheStats).Get("/stats/global", h.V2GlobalStats)
 
 		// Contracts
 		r.With(scope).Post("/contracts/validate", h.V2ValidateContract)
@@ -451,6 +481,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/events", h.V2ListEvents)
 		get("/contracts/{id}/invocations", h.V2ListInvocations)
 		get("/contracts/{id}/storage", h.V2ListStorageEntries)
+		get("/contracts/{id}/resource-trend", h.V2ContractResourceTrend)
 		get("/contracts/{id}/stats", h.V2ContractStats)
 		get("/contracts/{id}/forecast", h.V2ContractForecast)
 		get("/contracts/{id}/snapshot", h.V2ContractSnapshot)

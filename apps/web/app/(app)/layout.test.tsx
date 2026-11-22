@@ -98,6 +98,42 @@ describe("AppLayout", () => {
     ).toBe("/status");
   });
 
+  it("links every dashboard page from the primary nav (issue #647)", async () => {
+    await renderLayout();
+
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    const expected: Record<string, string> = {
+      Invocations: "/invocations",
+      Compare: "/compare",
+      Watchlist: "/watchlist",
+      Reports: "/watchdog/reports",
+    };
+    for (const [name, href] of Object.entries(expected)) {
+      expect(within(nav).getByRole("link", { name })).toHaveAttribute(
+        "href",
+        href
+      );
+    }
+  });
+
+  it.each([
+    ["/invocations", "Invocations"],
+    ["/compare", "Compare"],
+    ["/watchlist", "Watchlist"],
+  ])("marks %s active on its own page", async (pathname, name) => {
+    route.pathname = pathname;
+    await renderLayout();
+
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).getByRole("link", { name })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(
+      within(nav).getByRole("link", { name: "Contracts" })
+    ).not.toHaveAttribute("aria-current");
+  });
+
   it("renders one labelled primary nav and main landmark", async () => {
     await renderLayout();
 
@@ -153,6 +189,11 @@ describe("AppLayout", () => {
       target: { value: "es" },
     });
     expect(screen.getByRole("link", { name: "Contratos" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Invocaciones" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Comparar" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Lista de seguimiento" })
+    ).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Zona horaria"), {
       target: { value: "local" },

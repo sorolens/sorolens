@@ -33,16 +33,16 @@ export function ResourceTrendChart({ data }: ResourceTrendChartProps) {
   return (
     <ResponsiveContainer width="100%" height={288}>
       <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+          tick={{ fontSize: 11, fill: "var(--color-chart-axis)" }}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
           yAxisId="cpu"
-          tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+          tick={{ fontSize: 11, fill: "var(--color-chart-axis)" }}
           tickLine={false}
           axisLine={false}
           width={48}
@@ -51,19 +51,25 @@ export function ResourceTrendChart({ data }: ResourceTrendChartProps) {
         <YAxis yAxisId="fee" hide domain={["auto", "auto"]} />
         <Tooltip
           contentStyle={{
-            background: "var(--color-bg-card)",
-            border: "1px solid var(--color-border)",
+            background: "var(--color-chart-tooltip-bg)",
+            border: "1px solid var(--color-chart-tooltip-border)",
             borderRadius: "0.5rem",
             fontSize: "0.875rem",
+            color: "var(--color-text-primary)",
           }}
         />
-        <Legend wrapperStyle={{ fontSize: "0.75rem" }} />
+        <Legend
+          wrapperStyle={{
+            fontSize: "0.75rem",
+            color: "var(--color-chart-legend)",
+          }}
+        />
         <Line
           yAxisId="cpu"
           type="monotone"
           dataKey="avg_cpu_insn"
           name="Avg CPU (insn)"
-          stroke="var(--color-accent)"
+          stroke="var(--color-chart-1)"
           strokeWidth={2}
           dot={false}
         />
@@ -72,7 +78,7 @@ export function ResourceTrendChart({ data }: ResourceTrendChartProps) {
           type="monotone"
           dataKey="avg_mem_byte"
           name="Avg memory (bytes)"
-          stroke="var(--color-safe)"
+          stroke="var(--color-chart-2)"
           strokeWidth={2}
           dot={false}
         />
@@ -81,7 +87,7 @@ export function ResourceTrendChart({ data }: ResourceTrendChartProps) {
           type="monotone"
           dataKey="avg_fee"
           name="Avg fee"
-          stroke="var(--color-warning)"
+          stroke="var(--color-chart-3)"
           strokeWidth={2}
           dot={false}
         />

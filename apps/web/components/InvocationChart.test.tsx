@@ -61,6 +61,6 @@ describe("InvocationChart", () => {
 
     const bar = screen.getByTestId("bar");
     expect(bar).toHaveAttribute("data-key", "count");
-    expect(bar).toHaveAttribute("data-fill", "var(--color-accent)");
+    expect(bar).toHaveAttribute("data-fill", "var(--color-chart-1)");
   });
 });

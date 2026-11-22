@@ -215,6 +215,14 @@ type LabelStore interface {
 	ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error)
 }
 
+// ContractTokenStore is the read/write surface for SAC token metadata.
+type ContractTokenStore interface {
+	// UpsertContractToken inserts or updates token metadata for a contract.
+	UpsertContractToken(ctx context.Context, contractID string, m TokenMetadata) error
+	// GetContractToken returns token metadata for a contract, or ErrNotFound.
+	GetContractToken(ctx context.Context, contractID string) (TokenMetadata, error)
+}
+
 // ContractBulkStore is the write surface for bulk contract actions used by the
 // /api/v1/contracts/batch endpoint.
 type ContractBulkStore interface {

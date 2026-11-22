@@ -27,6 +27,14 @@ vi.mock("@/components/ThemeToggle", () => ({
   ThemeToggle: () => <div data-testid="theme-toggle" />,
 }));
 
+vi.mock("@/components/CmdkSearch", () => ({
+  CmdkSearch: () => null,
+}));
+
+vi.mock("@/components/AppShortcuts", () => ({
+  AppShortcuts: () => null,
+}));
+
 describe("LastUpdated", () => {
   beforeEach(() => {
     resetLastUpdated();

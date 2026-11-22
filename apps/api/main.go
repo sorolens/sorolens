@@ -121,6 +121,9 @@ func main() {
 		SlackSigningSecret: cfg.SlackSigningSecret,
 		SessionSigner:      middleware.NewSessionSigner(identitySigningKey(cfg, logger), cfg.IdentitySessionTTL),
 		TrustedProxySecret: cfg.TrustedIdentityProxySecret,
+		TrustedProxies:     cfg.TrustedProxies,
+		RateLimitPerMinute: cfg.RateLimitPerMinute,
+		RateLimitWindow:    cfg.RateLimitWindow,
 		RequestTimeout:     cfg.RequestTimeout,
 		StreamTimeout:      cfg.StreamTimeout,
 		RequireAuth:        cfg.RequireAuth,
@@ -271,4 +274,8 @@ func (r *realRedisClient) Incr(ctx context.Context, key string) (int64, error) {
 }
 func (r *realRedisClient) Expire(ctx context.Context, key string, expiration time.Duration) (bool, error) {
 	return r.client.Expire(ctx, key, expiration).Result()
+}
+
+func (r *realRedisClient) Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error) {
+	return r.client.Eval(ctx, script, keys, args...).Result()
 }
