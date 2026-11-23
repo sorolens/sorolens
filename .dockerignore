@@ -4,3 +4,8 @@
 **/target
 **/dist
 **/.turbo
+
+# Secrets and local compose settings never enter build contexts.
+**/.env
+**/.env.*
+!**/.env.example

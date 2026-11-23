@@ -130,11 +130,13 @@ there, not here.
 | `API_REQUIRE_AUTH` | `false` | no | Require authentication mode: rejects all unauthenticated requests except health endpoints. Defaults to false (open read surface). |
 | `API_STREAM_TIMEOUT` | `5m` | no | Lifetime of one SSE connection on /api/v1/stream/events (Go duration). When it expires the stream closes and EventSource clients reconnect. |
 | `COLD_STORAGE_ACCESS_KEY_ID` | `sorolens` | no | Explicit credentials. Leave both empty to use the default AWS credential chain (environment, shared config, IAM role). |
-| `COLD_STORAGE_BUCKET` | `sorolens-archive` | no | S3-compatible bucket that holds archived events as Parquet files. Leaving this empty disables the cold-storage tier: the nightly archive job refuses to run and the API never falls back to object storage. Local development and integration tests use the MinIO service in docker-compose.yml: docker compose exec minio mc mb --ignore-existing local/sorolens-archive |
+| `COLD_STORAGE_BUCKET` | `sorolens-archive` | no | S3-compatible bucket that holds archived events as Parquet files. Leaving this empty disables the cold-storage tier: the nightly archive job refuses to run and the API never falls back to object storage. Start MinIO with docker compose --profile archive up --build -d minio. Create the bucket with docker compose exec minio mc mb --ignore-existing local/sorolens-archive. |
 | `COLD_STORAGE_ENDPOINT` | `http://localhost:9000` | no | Custom endpoint for MinIO / Backblaze B2 / other S3-compatible services. Leave empty to use the standard AWS endpoint for the region. |
 | `COLD_STORAGE_REGION` | `us-east-1` | no | Signing region. S3-compatible services generally accept us-east-1. |
 | `COLD_STORAGE_SECRET_ACCESS_KEY` | `sorolens123` | no | Explicit credentials. Leave both empty to use the default AWS credential chain (environment, shared config, IAM role). |
 | `COLD_STORAGE_THRESHOLD_DAYS` | `90` | no | Events older than this many days are exported to Parquet and deleted from Postgres by the nightly archive job. |
+| `COMPOSE_API_PORT` | `8080` | no | Host ports for the API and web services in the full Compose profile. |
+| `COMPOSE_WEB_PORT` | `3000` | no | Host ports for the API and web services in the full Compose profile. |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | no | Comma-separated browser origins. The API allows all origins when this setting is unset or contains a wildcard (*). |
 | `DATABASE_URL` | `postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable` | no | PostgreSQL connection string (pooled). Used by the API at runtime. Format: postgres://user:password@host:port/dbname?sslmode=require |
 | `DB_MAX_CONNS` | `20` | no | API pgx pool limits and connection recycling. These defaults are suitable for a small deployment; set them lower or higher to match the Postgres capacity. |
@@ -154,7 +156,7 @@ there, not here.
 | `INDEXER_STORAGE_EXPIRY_THRESHOLD_LEDGERS` | `5000` | no | Storage expiry alerting: how close to expiry (in ledgers) counts as "about to expire". 5000 ledgers at ~5s/ledger is approximately 7 days. Unset or invalid keeps the 5000 default. |
 | `LOG_LEVEL` | `info` | no | Log level. Valid values: debug \| info \| warn \| error |
 | `METRICS_PORT` | `9090` | no | Optional dedicated metrics port. When set, GET /metrics is additionally served on this port by the API and by the indexer (--mode continuous), so Prometheus can scrape on a private interface instead of the public one. Leave unset to expose metrics only on PORT. |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | no | Public URL of the API for the browser dashboard. Set to your deployed API origin for staging/prod; leave as the localhost default for local dev. |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | no | Public API URL bundled into the dashboard at build time. Use the deployed API origin for staging or production and the localhost default for local development. |
 | `NEXT_PUBLIC_PWA_ENABLED` | `false` | no | Set to "true" to run the service worker in development mode. Always enabled in NODE_ENV=production. |
 | `PORT` | `8080` | no | HTTP port for the API server. |
 | `PUSH_INTERNAL_SECRET` | — | no | Shared secret guarding the internal PUT /api/push/subscribe endpoint. Set a long random value before enabling push delivery. Missing configuration makes dispatch requests return HTTP 401. |
