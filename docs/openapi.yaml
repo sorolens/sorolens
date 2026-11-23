@@ -74,8 +74,6 @@ tags:
     description: Structured audit trail of state-changing API requests (admin only)
   - name: Groups
     description: Per-user contract groups (portfolios) with aggregate statistics
-  - name: Watchdog
-    description: On-chain watchdog monitoring data
 
   - name: Version
     description: Build metadata for the running API instance
@@ -91,6 +89,9 @@ tags:
     description: Inbound third-party integrations (Slack slash commands)
   - name: Operations
     description: Prometheus metrics
+
+  - name: Watchdog
+    description: On-chain watchdog monitoring data
 
 paths:
   /api/v1/verifier/range:
