@@ -141,7 +141,7 @@ from .get_contract_uptime_window import GetContractUptimeWindow
 from .get_global_stats_response_200 import GetGlobalStatsResponse200
 from .get_watchdog_stats_network import GetWatchdogStatsNetwork
 from .graphql_body import GraphqlBody
-from .graphql_body_variables import GraphqlBodyVariables
+# from .graphql_body_variables import GraphqlBodyVariables
 from .graphql_response_200 import GraphqlResponse200
 from .graphql_response_200_data import GraphqlResponse200Data
 from .graphql_response_200_errors_item import GraphqlResponse200ErrorsItem
