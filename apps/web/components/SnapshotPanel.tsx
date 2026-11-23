@@ -67,7 +67,7 @@ export function SnapshotPanel({
             placeholder={
               currentLedger > 0 ? String(currentLedger) : "e.g. 12345"
             }
-            className="w-48 rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2 font-mono text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+            className="w-48 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
           />
         </div>
         <button

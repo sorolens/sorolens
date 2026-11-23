@@ -614,6 +614,56 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 	return out, nextCursor, nil
 }
 
+// GetResourceTrend aggregates seeded invocations by UTC day for the trailing
+// `days` days, including zero buckets.
+func (m *MockStore) GetResourceTrend(_ context.Context, contractID string, days int) ([]ResourceTrendBucket, error) {
+	if m.ListInvocationsErr != nil {
+		return nil, m.ListInvocationsErr
+	}
+	if days <= 0 {
+		days = 30
+	}
+	if days > 365 {
+		days = 365
+	}
+
+	type acc struct {
+		cpu, mem, fee float64
+		count         int64
+	}
+	byDay := map[string]*acc{}
+	for _, inv := range m.invocations {
+		if inv.ContractID != contractID {
+			continue
+		}
+		key := inv.LedgerClosedAt.UTC().Format("2006-01-02")
+		a := byDay[key]
+		if a == nil {
+			a = &acc{}
+			byDay[key] = a
+		}
+		a.cpu += float64(inv.CPUInsn)
+		a.mem += float64(inv.MemByte)
+		a.fee += float64(inv.ResourceFeeCharged)
+		a.count++
+	}
+
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	out := make([]ResourceTrendBucket, 0, days)
+	for offset := days - 1; offset >= 0; offset-- {
+		day := today.AddDate(0, 0, -offset)
+		bucket := ResourceTrendBucket{Day: day}
+		if a := byDay[day.Format("2006-01-02")]; a != nil && a.count > 0 {
+			bucket.AvgCPUInsn = a.cpu / float64(a.count)
+			bucket.AvgMemByte = a.mem / float64(a.count)
+			bucket.AvgFee = a.fee / float64(a.count)
+			bucket.Count = a.count
+		}
+		out = append(out, bucket)
+	}
+	return out, nil
+}
+
 // GetInvocation returns the invocation row for a transaction hash.
 func (m *MockStore) GetInvocation(_ context.Context, txHash string) (Invocation, error) {
 	if m.GetInvocationErr != nil {

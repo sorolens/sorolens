@@ -101,7 +101,7 @@ function EventRow({ event }: { event: GlobalEvent }) {
                 <p className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
                   Topics
                 </p>
-                <pre className="max-h-64 overflow-auto rounded bg-black/30 p-3 font-mono text-xs">
+                <pre className="max-h-64 overflow-auto rounded bg-[var(--color-bg)] p-3 font-mono text-xs">
                   {formatEventData(event.topic_decoded ?? event.topic_xdr)}
                 </pre>
               </div>
@@ -109,7 +109,7 @@ function EventRow({ event }: { event: GlobalEvent }) {
                 <p className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
                   Value
                 </p>
-                <pre className="max-h-64 overflow-auto rounded bg-black/30 p-3 font-mono text-xs">
+                <pre className="max-h-64 overflow-auto rounded bg-[var(--color-bg)] p-3 font-mono text-xs">
                   {formatEventData(data)}
                 </pre>
               </div>
@@ -378,7 +378,10 @@ function EventsExplorerPage() {
           )}
         </div>
         {rangeError && (
-          <p role="alert" className="w-full text-xs text-red-400">
+          <p
+            role="alert"
+            className="w-full text-xs text-[var(--color-danger-text)]"
+          >
             {rangeError}
           </p>
         )}

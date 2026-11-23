@@ -31,41 +31,42 @@ export function EventVolumeChart({ data }: EventVolumeChartProps) {
           <linearGradient id="eventVolumeGradient" x1="0" y1="0" x2="0" y2="1">
             <stop
               offset="5%"
-              stopColor="var(--color-accent)"
+              stopColor="var(--color-chart-1)"
               stopOpacity={0.3}
             />
             <stop
               offset="95%"
-              stopColor="var(--color-accent)"
+              stopColor="var(--color-chart-1)"
               stopOpacity={0}
             />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+          tick={{ fontSize: 11, fill: "var(--color-chart-axis)" }}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
-          tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+          tick={{ fontSize: 11, fill: "var(--color-chart-axis)" }}
           tickLine={false}
           axisLine={false}
           width={40}
         />
         <Tooltip
           contentStyle={{
-            background: "var(--color-bg-card)",
-            border: "1px solid var(--color-border)",
+            background: "var(--color-chart-tooltip-bg)",
+            border: "1px solid var(--color-chart-tooltip-border)",
             borderRadius: "0.5rem",
             fontSize: "0.875rem",
+            color: "var(--color-text-primary)",
           }}
         />
         <Area
           type="monotone"
           dataKey="count"
-          stroke="var(--color-accent)"
+          stroke="var(--color-chart-1)"
           fill="url(#eventVolumeGradient)"
           strokeWidth={2}
         />

@@ -1146,6 +1146,49 @@ func (h *Handler) ListStorageEntries(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ---- resource trend ---------------------------------------------------------
+
+type resourceTrendPointResponse struct {
+	Date       string  `json:"date"`
+	AvgCPUInsn float64 `json:"avg_cpu_insn"`
+	AvgMemByte float64 `json:"avg_mem_byte"`
+	AvgFee     float64 `json:"avg_fee"`
+	Count      int64   `json:"count"`
+}
+
+// ContractResourceTrend handles GET /api/v1/contracts/{id}/resource-trend.
+// It returns daily buckets of averaged CPU, memory and fee in one request,
+// replacing the dashboard's 10-page walk over raw invocations (issue #600).
+func (h *Handler) ContractResourceTrend(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	days := intQuery(r, "days", 30)
+	if days > 365 {
+		days = 365
+	}
+
+	buckets, err := h.Store.GetResourceTrend(r.Context(), contractID, days)
+	if err != nil {
+		h.Logger.Error("get resource trend", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch resource trend")
+		return
+	}
+
+	points := make([]resourceTrendPointResponse, len(buckets))
+	for i, bucket := range buckets {
+		points[i] = resourceTrendPointResponse{
+			Date:       bucket.Day.UTC().Format("2006-01-02"),
+			AvgCPUInsn: bucket.AvgCPUInsn,
+			AvgMemByte: bucket.AvgMemByte,
+			AvgFee:     bucket.AvgFee,
+			Count:      bucket.Count,
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"days":   days,
+		"points": points,
+	})
+}
+
 // ContractStats handles GET /api/v1/contracts/{id}/stats.
 func (h *Handler) ContractStats(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")

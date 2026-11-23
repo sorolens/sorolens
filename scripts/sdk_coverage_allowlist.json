@@ -239,6 +239,21 @@
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
         ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
       }
     ],
     "python": [
@@ -464,6 +479,21 @@
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
         ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
       }
     ],
     "go": [
@@ -668,6 +698,21 @@
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
         ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
       }
     ],
     "typescript": [
@@ -863,6 +908,21 @@
         "operations": [
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
+        ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
         ]
       }
     ]

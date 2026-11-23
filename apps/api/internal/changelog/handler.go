@@ -1,7 +1,7 @@
 // Package changelog implements the HTTP handlers for the per-contract
 // Wasm hash changelog feature (issue #276).
 //
-// Routes:
+// Routes (mounted under /api/v1 by the router):
 //
 //	GET /contracts/{id}/changelog        – JSON array of ContractVersion records
 //	GET /contracts/{id}/changelog/feed   – Atom 1.0 XML feed
@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
@@ -49,23 +50,23 @@ type versionJSON struct {
 func (h *Handler) GetChangelog(w http.ResponseWriter, r *http.Request) {
 	contractID := extractContractID(r)
 	if contractID == "" {
-		http.Error(w, "missing contract id", http.StatusBadRequest)
+		writeError(w, r, http.StatusBadRequest, codeInvalidInput, "missing contract id")
 		return
 	}
 
 	// Confirm contract exists so we return 404 instead of an empty array.
 	if _, err := h.store.GetContract(r.Context(), contractID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "contract not found", http.StatusNotFound)
+			writeError(w, r, http.StatusNotFound, codeNotFound, "contract not found")
 			return
 		}
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		writeError(w, r, http.StatusInternalServerError, codeInternal, "internal error")
 		return
 	}
 
 	versions, err := h.store.ListContractVersions(r.Context(), contractID)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		writeError(w, r, http.StatusInternalServerError, codeInternal, "internal error")
 		return
 	}
 
@@ -115,26 +116,27 @@ type atomEntry struct {
 func (h *Handler) GetFeed(w http.ResponseWriter, r *http.Request) {
 	contractID := extractContractID(r)
 	if contractID == "" {
-		http.Error(w, "missing contract id", http.StatusBadRequest)
+		writeError(w, r, http.StatusBadRequest, codeInvalidInput, "missing contract id")
 		return
 	}
 
 	if _, err := h.store.GetContract(r.Context(), contractID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "contract not found", http.StatusNotFound)
+			writeError(w, r, http.StatusNotFound, codeNotFound, "contract not found")
 			return
 		}
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		writeError(w, r, http.StatusInternalServerError, codeInternal, "internal error")
 		return
 	}
 
 	versions, err := h.store.ListContractVersions(r.Context(), contractID)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		writeError(w, r, http.StatusInternalServerError, codeInternal, "internal error")
 		return
 	}
 
-	selfURL := fmt.Sprintf("%s/contracts/%s/changelog/feed", baseURL(r), contractID)
+	base := baseURL(r)
+	selfURL := fmt.Sprintf("%s/contracts/%s/changelog/feed", base, contractID)
 
 	updated := time.Now().UTC().Format(time.RFC3339)
 	if len(versions) > 0 {
@@ -159,11 +161,11 @@ func (h *Handler) GetFeed(w http.ResponseWriter, r *http.Request) {
 		}
 		feed.Entries = append(feed.Entries, atomEntry{
 			Title:   fmt.Sprintf("Wasm %s (ledger %d)", shortHash(v.WasmHash), v.FirstSeenLedger),
-			ID:      fmt.Sprintf("%s/contracts/%s/changelog#%d", baseURL(r), contractID, v.ID),
+			ID:      fmt.Sprintf("%s/contracts/%s/changelog#%d", base, contractID, v.ID),
 			Updated: v.RecordedAt.UTC().Format(time.RFC3339),
 			Content: fmt.Sprintf("hash=%s | first_seen_ledger=%d | %s%s",
 				v.WasmHash, v.FirstSeenLedger, txInfo, verifiedInfo),
-			Link: atomLink{Href: fmt.Sprintf("%s/contracts/%s/changelog", baseURL(r), contractID)},
+			Link: atomLink{Href: fmt.Sprintf("%s/contracts/%s/changelog", base, contractID)},
 		})
 	}
 
@@ -192,22 +194,25 @@ const badgeSVGTemplate = `<svg xmlns="http://www.w3.org/2000/svg" width="%d" hei
 
 // GetBadge handles GET /contracts/{id}/changelog/badge.
 // It returns an SVG badge showing the first 8 characters of the latest
-// known Wasm hash, suitable for embedding in READMEs.
+// known Wasm hash, suitable for embedding in READMEs. A contract with no
+// recorded versions, including one that is not tracked at all, gets an
+// "unknown" badge rather than an error so an embedded image never breaks.
 func (h *Handler) GetBadge(w http.ResponseWriter, r *http.Request) {
 	contractID := extractContractID(r)
 	if contractID == "" {
-		http.Error(w, "missing contract id", http.StatusBadRequest)
+		writeError(w, r, http.StatusBadRequest, codeInvalidInput, "missing contract id")
 		return
 	}
 
 	latest, err := h.store.GetLatestContractVersion(r.Context(), contractID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			// Contract exists but no versions yet; show an "unknown" badge.
+			// No versions recorded (or the contract is not tracked); show an
+			// "unknown" badge.
 			writeBadge(w, "unknown")
 			return
 		}
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		writeError(w, r, http.StatusInternalServerError, codeInternal, "internal error")
 		return
 	}
 
@@ -249,14 +254,42 @@ func extractContractID(r *http.Request) string {
 	return ""
 }
 
-// baseURL returns the scheme+host of the incoming request for building
-// self-links in the Atom feed.
+// baseURL returns the scheme, host and mount prefix of the incoming request
+// (e.g. "https://host/api/v1") for building links in the Atom feed. The
+// prefix is everything before "/contracts/" in the request path, so links
+// stay valid wherever the router mounts these handlers.
 func baseURL(r *http.Request) string {
 	scheme := "https"
 	if r.TLS == nil {
 		scheme = "http"
 	}
-	return scheme + "://" + r.Host
+	prefix := ""
+	if i := strings.Index(r.URL.Path, "/contracts/"); i > 0 {
+		prefix = r.URL.Path[:i]
+	}
+	return scheme + "://" + r.Host + prefix
+}
+
+// Error codes, matching the shared error envelope written by the handler
+// package so every endpoint reports errors the same way.
+const (
+	codeNotFound     = "NOT_FOUND"
+	codeInvalidInput = "INVALID_INPUT"
+	codeInternal     = "INTERNAL"
+)
+
+// writeError writes the standard {"error": {code, message, request_id}}
+// JSON envelope.
+func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]string{
+			"code":       code,
+			"message":    message,
+			"request_id": middleware.GetRequestID(r.Context()),
+		},
+	})
 }
 
 // shortHash returns the first 8 characters of a hex hash string.

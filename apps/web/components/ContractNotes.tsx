@@ -100,7 +100,7 @@ export function ContractNotes({
           rows={4}
           spellCheck={false}
           placeholder="Why was this contract migrated? Who owns it?"
-          className="w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
         />
         <div className="mt-2 flex items-center justify-between gap-3">
           <span className="text-xs text-[var(--color-text-secondary)]">
@@ -117,7 +117,10 @@ export function ContractNotes({
           </button>
         </div>
         {message && (
-          <p role="alert" className="mt-2 text-xs text-red-400">
+          <p
+            role="alert"
+            className="mt-2 text-xs text-[var(--color-danger-text)]"
+          >
             {message}
           </p>
         )}
@@ -178,7 +181,7 @@ export function ContractNotes({
                         aria-label={`Delete note ${note.id}`}
                         disabled={saving}
                         onClick={() => onDelete(note.id)}
-                        className="rounded px-2 py-1 text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed"
+                        className="rounded px-2 py-1 text-[var(--color-danger-text)] transition-colors hover:bg-[var(--color-danger-bg)] disabled:cursor-not-allowed"
                       >
                         Delete
                       </button>
@@ -195,7 +198,7 @@ export function ContractNotes({
                       rows={4}
                       spellCheck={false}
                       onChange={(e) => setEditDraft(e.target.value)}
-                      className="w-full rounded-lg border border-[var(--color-border)] bg-black/30 px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
+                      className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
                     />
                     <div className="mt-2 flex gap-2">
                       <button
@@ -225,7 +228,7 @@ export function ContractNotes({
                   // emits tags it generates itself, so this HTML is safe.
                   <div
                     data-testid="note-body"
-                    className="text-sm leading-relaxed text-[var(--color-text-primary)] [&_a]:text-[var(--color-accent)] [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--color-border)] [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-black/40 [&_code]:px-1 [&_h1]:mb-2 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-black/40 [&_pre]:p-3"
+                    className="text-sm leading-relaxed text-[var(--color-text-primary)] [&_a]:text-[var(--color-accent)] [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--color-border)] [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-[var(--color-bg)] [&_code]:px-1 [&_h1]:mb-2 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-[var(--color-bg)] [&_pre]:p-3"
                     dangerouslySetInnerHTML={{
                       __html: renderMarkdown(note.body),
                     }}

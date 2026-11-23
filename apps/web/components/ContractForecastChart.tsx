@@ -145,16 +145,16 @@ export function ContractForecastChart({ contractId }: Props) {
             >
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="var(--color-border)"
+                stroke="var(--color-chart-grid)"
               />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+                tick={{ fontSize: 11, fill: "var(--color-chart-axis)" }}
                 tickLine={false}
                 axisLine={false}
               />
               <YAxis
-                tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+                tick={{ fontSize: 11, fill: "var(--color-chart-axis)" }}
                 tickLine={false}
                 axisLine={false}
                 width={56}
@@ -165,10 +165,11 @@ export function ContractForecastChart({ contractId }: Props) {
                   name,
                 ]}
                 contentStyle={{
-                  background: "var(--color-bg-card)",
-                  border: "1px solid var(--color-border)",
+                  background: "var(--color-chart-tooltip-bg)",
+                  border: "1px solid var(--color-chart-tooltip-border)",
                   borderRadius: "0.5rem",
                   fontSize: "0.875rem",
+                  color: "var(--color-text-primary)",
                 }}
               />
               <Area
@@ -182,13 +183,13 @@ export function ContractForecastChart({ contractId }: Props) {
                 dataKey="confidence"
                 stackId="range"
                 stroke="none"
-                fill="var(--color-safe)"
+                fill="var(--color-chart-2)"
                 fillOpacity={0.2}
                 name="95% confidence range"
               />
               <Line
                 dataKey="value"
-                stroke="var(--color-accent)"
+                stroke="var(--color-chart-1)"
                 strokeWidth={2}
                 dot={false}
                 name={selectedMetric.label}

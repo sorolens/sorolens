@@ -369,12 +369,12 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		"POST /api/v1/alerts/{id}/snooze":         true,
 		"POST /api/v1/maintenance-windows":        true,
 		"PUT /api/v1/maintenance-windows/{id}":    true,
-		// Full-text event search (#798): v1-only until v2 envelope is defined.
-		"GET /api/v1/events/search": true,
-		// Webhook delivery log and manual retry (#828): v1-only until v2 envelope is defined.
-		"GET /api/v1/watchdog/subscriptions/{id}/deliveries":                 true,
-		"GET /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}":    true,
-		"POST /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}/retry": true,
+		// Wasm hash changelog (issues #276, #767): the feed and badge are Atom
+		// XML and SVG for feed readers and READMEs, not JSON documents, and the
+		// JSON history has no v2 envelope defined yet.
+		"GET /api/v1/contracts/{id}/changelog":       true,
+		"GET /api/v1/contracts/{id}/changelog/feed":  true,
+		"GET /api/v1/contracts/{id}/changelog/badge": true,
 	}
 
 	var missing []string

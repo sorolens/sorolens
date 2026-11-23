@@ -51,7 +51,7 @@ export function SettingsCard({
           onClick={() => {
             onSave();
           }}
-          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-[var(--color-accent-foreground)] transition-opacity hover:opacity-90"
         >
           {saveLabel}
         </button>

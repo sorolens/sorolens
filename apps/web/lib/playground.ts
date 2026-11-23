@@ -26,13 +26,13 @@ export function highlightJson(text: string): string {
       if (str !== undefined) {
         return colon !== undefined
           ? `<span class="text-[var(--color-accent)]">${str}</span>${colon}`
-          : `<span class="text-emerald-400">${str}</span>`;
+          : `<span class="text-[var(--color-syntax-string)]">${str}</span>`;
       }
       if (num !== undefined) {
-        return `<span class="text-amber-400">${num}</span>`;
+        return `<span class="text-[var(--color-syntax-number)]">${num}</span>`;
       }
       if (bool !== undefined) {
-        return `<span class="text-fuchsia-400">${bool}</span>`;
+        return `<span class="text-[var(--color-syntax-boolean)]">${bool}</span>`;
       }
       return match;
     }
