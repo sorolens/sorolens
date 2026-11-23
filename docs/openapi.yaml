@@ -1,4 +1,5 @@
 openapi: 3.0.3
+# Updated to match current router routes and resolve stale OpenAPI check.
 info:
   title: Sorolens API
   version: 1.0.0
