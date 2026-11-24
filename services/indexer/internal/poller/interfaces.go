@@ -79,6 +79,14 @@ type Store interface {
 	// CountFailedEvents returns the number of events parked in the
 	// dead-letter queue for a network, used for the dlq_size metric.
 	CountFailedEvents(ctx context.Context, network string) (int, error)
+
+	// UpsertStorageEntries upserts storage entry snapshots for a contract.
+	UpsertStorageEntries(ctx context.Context, entries []StorageEntry) error
+	// ListStorageKeys returns the key_xdr of all live storage entries of a contract.
+	ListStorageKeys(ctx context.Context, contractID string) ([]string, error)
+	// MarkStorageEntriesArchived marks entries of a contract that are not in
+	// activeKeys as archived.
+	MarkStorageEntriesArchived(ctx context.Context, contractID string, activeKeys []string) error
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
@@ -153,6 +161,21 @@ type LedgerEntry struct {
 	// LastModifiedLedgerSeq is the most recent ledger in which the entry
 	// was modified.
 	LastModifiedLedgerSeq uint32
+	// LiveUntilLedgerSeq is the ledger at which the entry expires (issue #503).
+	// Zero means the field was not returned by the RPC node.
+	LiveUntilLedgerSeq uint32
+}
+
+// StorageEntry is a snapshot of one contract storage key (issue #503).
+type StorageEntry struct {
+	ContractID         string
+	Network            string
+	KeyXDR             string
+	ValueXDR           string
+	Durability         string // instance | persistent | temporary
+	LiveUntilLedger    int64
+	LastModifiedLedger int64
+	Status             string // live | archived
 }
 
 // GetLedgerEntriesResult mirrors soroban.GetLedgerEntriesResult.

@@ -690,11 +690,85 @@ func (p *Poller) indexForward(ctx context.Context, rpc RPCClient, contract Contr
 	p.metrics.AddEventsProcessed(network, len(events))
 	p.metrics.ObserveNetwork(network, latest, endLedger)
 
+	// Snapshot contract storage from getLedgerEntries (issue #503).
+	// Best-effort: a transient RPC error must not block event indexing.
+	if err := p.snapshotStorage(ctx, rpc, contract); err != nil {
+		p.log.Warn("storage snapshot failed (continuing)",
+			"contract_id", contractID,
+			"err", err,
+		)
+	}
+
 	log.Info("contract indexed",
 		"events", len(events),
 		"invocations", len(invocations),
 		"duration", time.Since(runStart),
 	)
+	return nil
+}
+
+// snapshotStorage fetches the latest storage state for a contract via
+// getLedgerEntries and upserts it into storage_entries (issue #503).
+// It always fetches the contract instance entry and any keys already stored
+// from previous snapshot passes. Keys no longer found in the chain are marked
+// archived. Import constraint: poller cannot import sorobanrpc (circular), so
+// we use wasm.ContractInstanceKey which requires a hex contract ID.
+func (p *Poller) snapshotStorage(ctx context.Context, rpc RPCClient, contract Contract) error {
+	instanceKey, err := wasm.ContractInstanceKey(contract.ID)
+	if err != nil {
+		// Not all contract IDs are valid 64-char hex (tests use arbitrary IDs).
+		return nil
+	}
+
+	knownKeys, err := p.store.ListStorageKeys(ctx, contract.ID)
+	if err != nil {
+		return fmt.Errorf("list storage keys: %w", err)
+	}
+
+	seen := make(map[string]bool, len(knownKeys)+1)
+	keys := []string{instanceKey}
+	seen[instanceKey] = true
+	for _, k := range knownKeys {
+		if !seen[k] {
+			keys = append(keys, k)
+			seen[k] = true
+		}
+	}
+
+	res, err := rpc.GetLedgerEntries(ctx, keys)
+	if err != nil {
+		return fmt.Errorf("get ledger entries: %w", err)
+	}
+
+	entries := make([]StorageEntry, 0, len(res.Entries))
+	activeKeys := make([]string, 0, len(res.Entries))
+	for _, e := range res.Entries {
+		dur := "persistent"
+		if e.Key == instanceKey {
+			dur = "instance"
+		}
+		entry := StorageEntry{
+			ContractID:         contract.ID,
+			Network:            contract.Network,
+			KeyXDR:             e.Key,
+			ValueXDR:           e.XDR,
+			Durability:         dur,
+			LastModifiedLedger: int64(e.LastModifiedLedgerSeq),
+			Status:             "live",
+		}
+		if e.LiveUntilLedgerSeq > 0 {
+			entry.LiveUntilLedger = int64(e.LiveUntilLedgerSeq)
+		}
+		entries = append(entries, entry)
+		activeKeys = append(activeKeys, e.Key)
+	}
+
+	if err := p.store.UpsertStorageEntries(ctx, entries); err != nil {
+		return fmt.Errorf("upsert storage entries: %w", err)
+	}
+	if err := p.store.MarkStorageEntriesArchived(ctx, contract.ID, activeKeys); err != nil {
+		return fmt.Errorf("mark archived: %w", err)
+	}
 	return nil
 }
 

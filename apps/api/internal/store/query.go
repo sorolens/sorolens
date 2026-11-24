@@ -49,6 +49,7 @@ type FullStore interface {
 	UsageStore
 	MaintenanceStore
 	PushSubscriptionStore
+	TokenTransferStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
@@ -162,6 +163,24 @@ type DailyAggregate struct {
 	Events      float64
 }
 
+// LedgerSummary holds aggregate data for a single ledger sequence.
+type LedgerSummary struct {
+	Sequence        uint32                    `json:"sequence"`
+	ClosedAt        time.Time                 `json:"closed_at"`
+	TxCount         int64                     `json:"tx_count"`
+	InvocationCount int64                     `json:"invocation_count"`
+	FailedCount     int64                     `json:"failed_count"`
+	EventCount      int64                     `json:"event_count"`
+	TopContracts    []ContractActivitySummary `json:"top_contracts"`
+}
+
+// ContractActivitySummary is one entry in LedgerSummary.TopContracts.
+type ContractActivitySummary struct {
+	ContractID  string `json:"contract_id"`
+	EventCount  int64  `json:"event_count"`
+	InvokeCount int64  `json:"invocation_count"`
+}
+
 // ResourceTrendBucket is one UTC day of averaged per-invocation resource
 // usage for a contract. It backs GET /api/v1/contracts/{id}/resource-trend
 // (issue #600), replacing the dashboard's client-side paging over raw
@@ -199,6 +218,15 @@ type QueryStore interface {
 	// newest row. It returns the next page's cursor components, which are zero
 	// and empty when the page returned is the last one.
 	ListAllInvocations(ctx context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error)
+
+	// GetEventsByTxHash returns all events emitted in the given transaction,
+	// ordered ledger ASC, id ASC. Returns an empty slice (not ErrNotFound) when
+	// no events are recorded for that tx_hash.
+	GetEventsByTxHash(ctx context.Context, txHash string) ([]Event, error)
+
+	// GetLedgerSummary returns aggregated stats for the given ledger sequence.
+	// Returns ErrNotFound when the ledger has no indexed data.
+	GetLedgerSummary(ctx context.Context, sequence uint32, network string) (LedgerSummary, error)
 	ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error)
 	GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error)
 	GetContractInvocationStats(ctx context.Context, contractID string) (ContractInvocationStats, error)

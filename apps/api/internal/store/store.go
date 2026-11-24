@@ -126,6 +126,14 @@ type Store interface {
 	// GetLatestContractVersion returns the most recently seen ContractVersion for
 	// the given contract. Returns ErrNotFound when no version has been recorded yet.
 	GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error)
+
+	// IncrementRollups increments the hourly and daily rollup buckets for a
+	// contract's indexing window (issue #788). events, invocations, and failures
+	// are the counts for the window that just committed; closedAt is the latest
+	// ledger_closed_at in the window, used to derive the hour/day bucket.
+	// A network-wide aggregate row (contract_id = '') is updated alongside the
+	// per-contract row. Best-effort: callers log and continue on error.
+	IncrementRollups(ctx context.Context, network, contractID string, closedAt time.Time, events, invocations, failures int) error
 }
 
 // AlertSubscriptionStore is the read/write surface for alert webhook subscriptions.

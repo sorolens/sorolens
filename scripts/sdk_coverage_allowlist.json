@@ -269,6 +269,19 @@
           "v2ListPushSubscriptions",
           "v2ListPushSubscriptionsForDispatch"
         ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
+        ]
       }
     ],
     "python": [
@@ -524,6 +537,19 @@
           "v2ListPushSubscriptions",
           "v2ListPushSubscriptionsForDispatch"
         ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
+        ]
       }
     ],
     "go": [
@@ -758,6 +784,19 @@
           "v2ListPushSubscriptions",
           "v2ListPushSubscriptionsForDispatch"
         ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
+        ]
       }
     ],
     "typescript": [
@@ -983,6 +1022,19 @@
           "v2DeletePushSubscriptionForDispatch",
           "v2ListPushSubscriptions",
           "v2ListPushSubscriptionsForDispatch"
+        ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
         ]
       }
     ]

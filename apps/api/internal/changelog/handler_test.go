@@ -492,3 +492,7 @@ func (f *fakeStore) SearchEvents(_ context.Context, query string, limit int) ([]
 func (f *fakeStore) SearchFunctions(_ context.Context, query string, limit int) ([]store.FunctionMatch, error) {
 	return nil, nil
 }
+
+func (f *fakeStore) IncrementRollups(_ context.Context, _, _ string, _ time.Time, _, _, _ int) error {
+	return nil
+}
