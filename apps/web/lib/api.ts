@@ -61,6 +61,8 @@ import type {
   ResourceTrendResponse,
   SearchResponse,
   ContractUpgradeMarker,
+  DeliveriesResponse,
+  WebhookDelivery,
 } from "./types";
 import type { ContractVersionEntry } from "@sorolens/ui";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
@@ -1070,5 +1072,43 @@ export function deleteContractNote(
       method: "DELETE",
       headers: sessionHeaders(userId),
     }
+  );
+}
+
+// ---- webhook deliveries (#828) ---------------------------------------------
+
+export function listDeliveries(
+  subscriptionId: string,
+  cursor = "",
+  limit = 50,
+  userId?: string
+): Promise<DeliveriesResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return fetchJson<DeliveriesResponse>(
+    `${API_URL}/api/v1/watchdog/subscriptions/${encodeURIComponent(subscriptionId)}/deliveries?${params}`,
+    { headers: userHeaders(userId) }
+  );
+}
+
+export function getDelivery(
+  subscriptionId: string,
+  deliveryId: string,
+  userId?: string
+): Promise<WebhookDelivery> {
+  return fetchJson<WebhookDelivery>(
+    `${API_URL}/api/v1/watchdog/subscriptions/${encodeURIComponent(subscriptionId)}/deliveries/${encodeURIComponent(deliveryId)}`,
+    { headers: userHeaders(userId) }
+  );
+}
+
+export async function retryDelivery(
+  subscriptionId: string,
+  deliveryId: string,
+  userId?: string
+): Promise<WebhookDelivery> {
+  return fetchJson<WebhookDelivery>(
+    `${API_URL}/api/v1/watchdog/subscriptions/${encodeURIComponent(subscriptionId)}/deliveries/${encodeURIComponent(deliveryId)}/retry`,
+    { method: "POST", headers: userHeaders(userId) }
   );
 }

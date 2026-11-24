@@ -1118,6 +1118,92 @@ func (s *postgresStore) SearchEvents(ctx context.Context, query string, limit in
 	return events, nil
 }
 
+// sanitizeTSQueryTerm strips characters that are special in tsquery syntax so
+// user-supplied strings can be used as a single lexeme term.
+func sanitizeTSQueryTerm(input string) string {
+	out := make([]byte, 0, len(input))
+	for i := 0; i < len(input); i++ {
+		c := input[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' {
+			out = append(out, c)
+		} else {
+			// Replace any other byte with a space; consecutive spaces collapse.
+			if len(out) > 0 && out[len(out)-1] != ' ' {
+				out = append(out, ' ')
+			}
+		}
+	}
+	// Trim trailing space.
+	result := strings.TrimSpace(string(out))
+	if result == "" {
+		result = "x" // fallback: won't match anything
+	}
+	return result
+}
+
+// SearchEventValues implements store.Store.SearchEventValues (issue #798).
+// It searches decoded event topic and value text using the event_tsv GIN index,
+// returning events whose decoded content matches query, newest-first, with
+// cursor-based pagination.
+func (s *postgresStore) SearchEventValues(ctx context.Context, query, cursor string, limit int) ([]Event, string, error) {
+	if query == "" {
+		return []Event{}, "", nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	// to_tsquery('simple', ...) matches the same tokenisation used at insert.
+	// We wrap the user query in a prefix search (lexeme:*) so partial words
+	// match (e.g. "GBQHXY" finds longer addresses).
+	q := `
+		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
+		       topic_xdr, value_xdr, topic_decoded, value_decoded,
+		       in_successful_call, inserted_at
+		FROM events
+		WHERE event_tsv @@ to_tsquery('simple', $1)
+		  AND ($2 = '' OR id < $2)
+		ORDER BY ledger_closed_at DESC, id DESC
+		LIMIT $3`
+
+	// Build a simple prefix term: strip characters that break tsquery syntax,
+	// then append :* so partial lexemes match (e.g. "GBQHXY" finds addresses).
+	safeQuery := sanitizeTSQueryTerm(query) + ":*"
+
+	rows, err := s.readDB(ctx).Query(ctx, q, safeQuery, cursor, limit+1)
+	if err != nil {
+		return nil, "", fmt.Errorf("search event values: %w", err)
+	}
+	defer rows.Close()
+
+	var events []Event
+	for rows.Next() {
+		var e Event
+		var topicXDR, topicDec, valDec []byte
+		if err := rows.Scan(
+			&e.ID, &e.ContractID, &e.Network, &e.Ledger, &e.LedgerClosedAt, &e.TxHash, &e.Type,
+			&topicXDR, &e.ValueXDR, &topicDec, &valDec,
+			&e.InSuccessfulCall, &e.InsertedAt,
+		); err != nil {
+			return nil, "", fmt.Errorf("scan event values search: %w", err)
+		}
+		_ = json.Unmarshal(topicXDR, &e.TopicXDR)
+		_ = json.Unmarshal(topicDec, &e.TopicDecoded)
+		_ = json.Unmarshal(valDec, &e.ValueDecoded)
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+
+	var nextCursor string
+	if len(events) > limit {
+		nextCursor = events[limit-1].ID
+		events = events[:limit]
+	}
+	return events, nextCursor, nil
+}
+
 // SearchFunctions implements store.Store.SearchFunctions (issue #159). It
 // mirrors SearchEvents: an inner DISTINCT ON collapses each matching
 // function name to its most recent invocation, and the outer query re-sorts
@@ -1162,4 +1248,44 @@ func (s *postgresStore) SearchFunctions(ctx context.Context, query string, limit
 	}
 
 	return matches, nil
+}
+
+// IncrementRollups increments pre-aggregated hourly and daily rollup buckets
+// for a contract window (issue #788). Both a per-contract row and a
+// network-wide aggregate row (contract_id = '') are upserted.
+func (s *postgresStore) IncrementRollups(ctx context.Context, network, contractID string, closedAt time.Time, events, invocations, failures int) error {
+	hour := closedAt.UTC().Truncate(time.Hour)
+	day := time.Date(closedAt.Year(), closedAt.Month(), closedAt.Day(), 0, 0, 0, 0, time.UTC)
+
+	hourUpsert := `
+		INSERT INTO events_rollup_hourly (network, contract_id, hour, event_count, invoke_count, fail_count)
+		VALUES ($1,$2,$3,$4,$5,$6)
+		ON CONFLICT (network, contract_id, hour) DO UPDATE
+		  SET event_count  = events_rollup_hourly.event_count  + EXCLUDED.event_count,
+		      invoke_count = events_rollup_hourly.invoke_count + EXCLUDED.invoke_count,
+		      fail_count   = events_rollup_hourly.fail_count   + EXCLUDED.fail_count`
+	dayUpsert := `
+		INSERT INTO events_rollup_daily (network, contract_id, day, event_count, invoke_count, fail_count)
+		VALUES ($1,$2,$3,$4,$5,$6)
+		ON CONFLICT (network, contract_id, day) DO UPDATE
+		  SET event_count  = events_rollup_daily.event_count  + EXCLUDED.event_count,
+		      invoke_count = events_rollup_daily.invoke_count + EXCLUDED.invoke_count,
+		      fail_count   = events_rollup_daily.fail_count   + EXCLUDED.fail_count`
+
+	batch := &pgx.Batch{}
+	// Per-contract rows.
+	batch.Queue(hourUpsert, network, contractID, hour, events, invocations, failures)
+	batch.Queue(dayUpsert, network, contractID, day, events, invocations, failures)
+	// Network-wide aggregate rows (contract_id = '').
+	batch.Queue(hourUpsert, network, "", hour, events, invocations, failures)
+	batch.Queue(dayUpsert, network, "", day, events, invocations, failures)
+
+	res := s.pool.SendBatch(ctx, batch)
+	defer res.Close()
+	for i := 0; i < 4; i++ {
+		if _, err := res.Exec(); err != nil {
+			return fmt.Errorf("increment rollup %d: %w", i, err)
+		}
+	}
+	return nil
 }

@@ -2137,6 +2137,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/events/search": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Full-text search over decoded event values
+     * @description Returns events whose decoded topic or value JSONB matches the query
+     *     using the event_tsv full-text index (issue #798). Results are newest-
+     *     first and cursor-paginated.
+     */
+    get: operations["searchEventValues"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/invocations": {
     parameters: {
       query?: never;
@@ -2149,6 +2171,166 @@ export interface paths {
      * @description Cross-contract invocation explorer, newest first (ledger DESC).
      */
     get: operations["listAllInvocations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/transactions/{hash}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get transaction details
+     * @description Returns the invocation, all events, and cross-contract call trace for a transaction in a single response. Any component not yet indexed is omitted; a 404 is returned only when no data at all exists for the hash.
+     */
+    get: operations["getTransaction"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/transactions/{hash}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get transaction details (v2)
+     * @description v2 passthrough — identical shape to v1.
+     */
+    get: operations["getTransactionV2"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/ledgers/{sequence}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get ledger summary
+     * @description Returns aggregated statistics for a single ledger: close time, transaction count, invocation count, failed invocations, event count, and the top contracts by event volume.
+     */
+    get: operations["getLedger"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/ledgers/{sequence}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get ledger summary (v2)
+     * @description v2 passthrough — identical shape to v1.
+     */
+    get: operations["getLedgerV2"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/contracts/{id}/transfers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List SEP-41 token transfers
+     * @description Returns paginated SEP-41 token transfer events for a contract (transfer, mint, burn, clawback, approve), newest first.
+     */
+    get: operations["listTokenTransfers"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/contracts/{id}/transfers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List SEP-41 token transfers (v2)
+     * @description v2 passthrough — identical shape to v1.
+     */
+    get: operations["listTokenTransfersV2"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/contracts/{id}/holders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List SEP-41 token holders
+     * @description Returns token holders for a contract sorted by balance descending. Balances are aggregated from indexed transfer, mint and burn events.
+     */
+    get: operations["listTokenHolders"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/contracts/{id}/holders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List SEP-41 token holders (v2)
+     * @description v2 passthrough — identical shape to v1.
+     */
+    get: operations["listTokenHoldersV2"];
     put?: never;
     post?: never;
     delete?: never;
@@ -2539,6 +2721,71 @@ export interface paths {
     post?: never;
     /** Delete an alert subscription */
     delete: operations["deleteAlertSubscription"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/watchdog/subscriptions/{id}/deliveries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List webhook deliveries for a subscription
+     * @description Returns webhook delivery attempts for the subscription, newest first,
+     *     cursor-paginated. The signed payload is omitted; use
+     *     GET .../deliveries/{deliveryID} for the full record (issue #828).
+     */
+    get: operations["listWebhookDeliveries"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get a single webhook delivery record
+     * @description Returns the full delivery record including the signed payload and
+     *     the response code and body received from the destination (issue #828).
+     */
+    get: operations["getWebhookDelivery"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Manually retry a failed webhook delivery
+     * @description Marks a failed delivery for immediate retry by resetting its
+     *     next_retry_at to now and incrementing the attempt counter.
+     *     Only contributor+ callers may trigger a retry (issue #828).
+     */
+    post: operations["retryWebhookDelivery"];
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -4264,6 +4511,31 @@ export interface components {
       has_routing_key: boolean;
       /** @enum {string} */
       severity_filter: "Info" | "Warning" | "Critical";
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    /** @description One webhook delivery attempt for an alert subscription (issue */
+    WebhookDelivery: {
+      id: string;
+      subscription_id: string;
+      attempt_number: number;
+      /** @enum {string} */
+      status: "pending" | "delivered" | "failed";
+      /** @description The JSONB body sent (or to be sent) to the webhook URL. */
+      signed_payload?: Record<string, never> | null;
+      /** @description HTTP status code returned by the destination. */
+      response_status?: number | null;
+      /** @description Response body from the destination (truncated at 4 KiB). */
+      response_body?: string | null;
+      /** @description Last transport-level error (network timeout, DNS failure, etc.). */
+      last_error?: string | null;
+      /**
+       * Format: date-time
+       * @description When the delivery will next be retried; null if no retry scheduled.
+       */
+      next_retry_at?: string | null;
       /** Format: date-time */
       created_at: string;
       /** Format: date-time */
@@ -8586,6 +8858,40 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  searchEventValues: {
+    parameters: {
+      query: {
+        /** @description Full-text search query (simple dictionary, prefix matching). */
+        q: string;
+        /** @description Opaque pagination cursor from a previous response. */
+        cursor?: components["parameters"]["Cursor"];
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page of matching events */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            events: components["schemas"]["Event"][];
+            /** @description Opaque cursor for the next page; empty when exhausted. */
+            next_cursor: string;
+            /** @description The query as interpreted by the server. */
+            query: string;
+          };
+        };
+      };
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   listAllInvocations: {
     parameters: {
       query?: {
@@ -8628,6 +8934,297 @@ export interface operations {
             /** @description Opaque cursor for the next (older) page; empty when no more pages. */
             next_cursor: string;
           };
+        };
+      };
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getTransaction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description 64-character lowercase hex transaction hash. */
+        hash: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Transaction detail */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            tx_hash: string;
+            /** Format: int32 */
+            ledger: number;
+            status?: string;
+            network?: string;
+            invocation?: components["schemas"]["Invocation"];
+            events: components["schemas"]["Event"][];
+            trace?: Record<string, never>;
+          };
+        };
+      };
+      400: components["responses"]["InvalidInput"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getTransactionV2: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        hash: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Transaction detail */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      400: components["responses"]["InvalidInput"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getLedger: {
+    parameters: {
+      query?: {
+        /** @description Network filter; empty means all networks. */
+        network?: components["parameters"]["NetworkParam"];
+      };
+      header?: never;
+      path: {
+        /** @description Ledger sequence number. */
+        sequence: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Ledger summary */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** Format: int32 */
+            sequence: number;
+            /** Format: date-time */
+            closed_at?: string;
+            /** Format: int64 */
+            tx_count: number;
+            /** Format: int64 */
+            invocation_count: number;
+            /** Format: int64 */
+            failed_count: number;
+            /** Format: int64 */
+            event_count: number;
+            top_contracts: {
+              contract_id: string;
+              /** Format: int64 */
+              event_count: number;
+              /** Format: int64 */
+              invocation_count: number;
+            }[];
+          };
+        };
+      };
+      400: components["responses"]["InvalidInput"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getLedgerV2: {
+    parameters: {
+      query?: {
+        /** @description Network filter; empty means all networks. */
+        network?: components["parameters"]["NetworkParam"];
+      };
+      header?: never;
+      path: {
+        sequence: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Ledger summary */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      400: components["responses"]["InvalidInput"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listTokenTransfers: {
+    parameters: {
+      query?: {
+        /** @description Opaque pagination cursor from a previous response. */
+        cursor?: components["parameters"]["Cursor"];
+        /** @description Network filter; empty means all networks. */
+        network?: components["parameters"]["NetworkParam"];
+        /** @description Filter by transfer type. */
+        type?: "transfer" | "mint" | "burn" | "clawback" | "approve";
+        /** @description Lower ledger bound (inclusive). */
+        from?: number;
+        /** @description Upper ledger bound (inclusive). */
+        to?: number;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page of token transfers */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            transfers: {
+              /** Format: int64 */
+              id: number;
+              contract_id: string;
+              network: string;
+              tx_hash: string;
+              /** Format: int32 */
+              ledger: number;
+              /** Format: date-time */
+              ledger_closed_at: string;
+              event_id: string;
+              /** @enum {string} */
+              transfer_type:
+                "transfer" | "mint" | "burn" | "clawback" | "approve";
+              from?: string;
+              to?: string;
+              amount: string;
+            }[];
+            next_cursor: string;
+          };
+        };
+      };
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listTokenTransfersV2: {
+    parameters: {
+      query?: {
+        /** @description Network filter; empty means all networks. */
+        network?: components["parameters"]["NetworkParam"];
+      };
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page of token transfers */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listTokenHolders: {
+    parameters: {
+      query?: {
+        /** @description Network filter; empty means all networks. */
+        network?: components["parameters"]["NetworkParam"];
+        /** @description Holder address of the last entry on the previous page. */
+        cursor?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page of token holders */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            holders: {
+              holder: string;
+              /** @description Token balance as a decimal string (numeric(39,0)). */
+              balance: string;
+              /** Format: date-time */
+              updated_at: string;
+            }[];
+            next_cursor: string;
+          };
+        };
+      };
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listTokenHoldersV2: {
+    parameters: {
+      query?: {
+        /** @description Network filter; empty means all networks. */
+        network?: components["parameters"]["NetworkParam"];
+      };
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page of token holders */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
         };
       };
       422: components["responses"]["InvalidInput"];
@@ -9137,6 +9734,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listWebhookDeliveries: {
+    parameters: {
+      query?: {
+        /** @description Opaque pagination cursor from a previous response. */
+        cursor?: components["parameters"]["Cursor"];
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        /** @description Subscription ID */
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page of delivery records */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            deliveries: components["schemas"]["WebhookDelivery"][];
+            next_cursor: string;
+          };
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getWebhookDelivery: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Subscription ID */
+        id: string;
+        /** @description Delivery ID */
+        deliveryID: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Delivery record with full payload */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WebhookDelivery"];
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  retryWebhookDelivery: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Subscription ID */
+        id: string;
+        /** @description Delivery ID */
+        deliveryID: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Delivery scheduled for immediate retry */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WebhookDelivery"];
+        };
       };
       401: components["responses"]["Unauthorized"];
       403: components["responses"]["ForbiddenRole"];

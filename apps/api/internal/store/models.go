@@ -118,6 +118,12 @@ type Invocation struct {
 	// indexed before classification existed.
 	FailureCategory string
 	FailureCode     string
+	// Fee breakdown fields (issue #805). All values are stroops (integer
+	// 1/10 000 000 XLM). Fields are nil for rows indexed before this feature.
+	InclusionFee           *int64
+	ResourceFee            *int64
+	ResourceFeeRefundable  *int64
+	FeeRefund              *int64
 }
 
 // CallEdge is one parent -> child invocation edge of a transaction's
@@ -344,4 +350,36 @@ type ContractVerification struct {
 	SubmittedAt    time.Time
 	VerifiedAt     *time.Time
 	UpdatedAt      time.Time
+}
+
+// WebhookDelivery records one delivery attempt for an alert subscription
+// (issue #828).
+type WebhookDelivery struct {
+	ID             string
+	SubscriptionID string
+	AttemptNumber  int
+	// Status is pending | delivered | failed.
+	Status         string
+	// SignedPayload is the JSONB payload that was (or will be) sent.
+	SignedPayload   []byte
+	ResponseStatus  *int
+	ResponseBody    *string
+	LastError       *string
+	NextRetryAt     *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+// IdempotencyRecord stores the saved response for a (api_key_id, key) pair
+// (issue #784).
+type IdempotencyRecord struct {
+	APIKeyID        string
+	IdempotencyKey  string
+	BodyFingerprint string
+	ResponseStatus  int
+	ResponseHeaders map[string]string
+	ResponseBody    string
+	InFlight        bool
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
 }
