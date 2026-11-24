@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
@@ -231,6 +232,8 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to create subscription")
 		return
 	}
+	// The response carries the signing secret: never persist or replay it.
+	middleware.RedactIdempotentResponse(r)
 	writeJSON(w, http.StatusCreated, createSubscriptionResponse{
 		subscriptionResponse: subscriptionFromStore(sub),
 		SigningSecret:        secret,

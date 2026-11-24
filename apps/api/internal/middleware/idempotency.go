@@ -16,6 +16,7 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -31,6 +32,28 @@ const IdempotencyKeyHeader = "Idempotency-Key"
 
 // idempotencyKeyMaxLen is the maximum accepted key length.
 const idempotencyKeyMaxLen = 255
+
+// secretReplayStatus and secretReplayBody are what a replay of a response that
+// carried a secret (API key, signing secret, ...) returns instead of the
+// original body. The original body is never stored.
+const secretReplayStatus = http.StatusConflict
+const secretReplayBody = `{"error":{"code":"IDEMPOTENT_REPLAY_UNAVAILABLE","message":"the original request succeeded, but its response contained a secret that is shown only once and cannot be replayed; create a new resource with a new Idempotency-Key if you lost it"}}`
+
+type idempotencyStateKey struct{}
+
+// idempotencyState lets a handler opt out of response persistence.
+type idempotencyState struct{ redact bool }
+
+// RedactIdempotentResponse tells the Idempotency middleware that the response
+// of the current request contains a secret. A successful response is then
+// neither stored nor replayed: only a fixed 409 message is persisted. Handlers
+// that return an API key, token or signing secret must call this. It is a
+// no-op when the request is not under Idempotency-Key handling.
+func RedactIdempotentResponse(r *http.Request) {
+	if st, ok := r.Context().Value(idempotencyStateKey{}).(*idempotencyState); ok {
+		st.redact = true
+	}
+}
 
 // Idempotency returns a middleware that enforces Idempotency-Key semantics on
 // POST routes. It reads the authenticated API key ID from the request context
@@ -105,11 +128,22 @@ func handleIdempotency(s store.IdempotencyStore, logger *slog.Logger, next http.
 	}
 
 	// Fresh claim: execute the handler and capture its response.
+	state := &idempotencyState{}
+	r = r.WithContext(context.WithValue(r.Context(), idempotencyStateKey{}, state))
+
 	rw := &responseCapture{ResponseWriter: w, status: http.StatusOK}
 	next.ServeHTTP(rw, r)
 
+	status := rw.status
 	headers := map[string]string{"Content-Type": rw.Header().Get("Content-Type")}
-	if err := s.CompleteIdempotencyKey(r.Context(), apiKeyID, key, rw.status, headers, rw.buf.String()); err != nil {
+	bodyToStore := rw.buf.String()
+	if state.redact && status >= 200 && status < 300 {
+		// Never persist a secret: keep only a fixed message for replays.
+		status = secretReplayStatus
+		headers = map[string]string{"Content-Type": "application/json"}
+		bodyToStore = secretReplayBody
+	}
+	if err := s.CompleteIdempotencyKey(context.WithoutCancel(r.Context()), apiKeyID, key, status, headers, bodyToStore); err != nil {
 		logger.Error("complete idempotency key", "err", err)
 	}
 }
