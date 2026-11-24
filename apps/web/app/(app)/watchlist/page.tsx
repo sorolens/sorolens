@@ -6,11 +6,14 @@ import { listWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/api";
 import type { WatchlistItem } from "@/lib/types";
 import { StarButton } from "@/components/StarButton";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { ErrorState, errorMessage } from "@/components/ErrorState";
+import { errorMessage } from "@/components/ErrorState";
+import { EmptyState } from "@/components/EmptyState";
 import { useSessionUserId } from "@/lib/useSession";
+import { useLocale } from "@/lib/i18n";
 
 export default function WatchlistPage() {
   const userId = useSessionUserId();
+  const { t } = useLocale();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,22 +77,21 @@ export default function WatchlistPage() {
       )}
 
       {!loading && error && (
-        <ErrorState
-          title="Couldn't load your watchlist."
+        <EmptyState
+          variant="error"
+          title={t("watchlist.error.title")}
           message={error}
           onRetry={load}
         />
       )}
 
       {!loading && !error && items.length === 0 && (
-        <div className="rounded-lg bg-[var(--color-bg-card)] px-8 py-16 text-center border border-[var(--color-border)]">
-          <p className="text-lg font-medium text-[var(--color-text-primary)]">
-            No bookmarks yet
-          </p>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            Star a contract on the Contracts page to add it to your watchlist.
-          </p>
-        </div>
+        <EmptyState
+          variant="first-run"
+          title={t("watchlist.empty.title")}
+          description={t("watchlist.empty.body")}
+          action={{ label: t("empty.browseContracts"), href: "/contracts" }}
+        />
       )}
 
       {!loading && !error && items.length > 0 && (
@@ -128,7 +130,7 @@ export default function WatchlistPage() {
                     <button
                       type="button"
                       onClick={() => setPendingRemoveId(item.contract_id)}
-                      className="text-xs text-red-400 hover:underline"
+                      className="text-xs text-[var(--color-danger-text)] hover:underline"
                     >
                       Remove
                     </button>

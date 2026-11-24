@@ -720,6 +720,38 @@ func (h *Handler) V2ContractStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// V2ContractResourceTrend handles GET /api/v2/contracts/{id}/resource-trend.
+// It mirrors the v1 aggregation endpoint (issue #600).
+func (h *Handler) V2ContractResourceTrend(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	days := intQuery(r, "days", 30)
+	if days > 365 {
+		days = 365
+	}
+
+	buckets, err := h.Store.GetResourceTrend(r.Context(), contractID, days)
+	if err != nil {
+		h.Logger.Error("v2 get resource trend", "err", err)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to fetch resource trend")
+		return
+	}
+
+	points := make([]resourceTrendPointResponse, len(buckets))
+	for i, bucket := range buckets {
+		points[i] = resourceTrendPointResponse{
+			Date:       bucket.Day.UTC().Format("2006-01-02"),
+			AvgCPUInsn: bucket.AvgCPUInsn,
+			AvgMemByte: bucket.AvgMemByte,
+			AvgFee:     bucket.AvgFee,
+			Count:      bucket.Count,
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"days":   days,
+		"points": points,
+	})
+}
+
 // ---- upgrades / health score ------------------------------------------------
 
 // V2ListContractUpgrades handles GET /api/v2/contracts/{id}/upgrades.

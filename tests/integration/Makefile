@@ -19,7 +19,11 @@ integration-test:
 	trap '$(COMPOSE) down -v --remove-orphans' EXIT; \
 	$(MAKE) up; \
 	echo "Waiting for the API to become ready..."; \
-	until curl -fsS http://localhost:8080/readyz >/dev/null; do sleep 1; done; \
+	for attempt in $$(seq 1 60); do \
+		if curl -fsS http://localhost:8080/readyz >/dev/null; then break; fi; \
+		if [ "$$attempt" = 60 ]; then $(COMPOSE) logs api; exit 1; fi; \
+		sleep 1; \
+	done; \
 	go test ./... -v -count=1
 
 # Fault-injection scenarios: RPC timeouts, truncated payloads, connection drops,

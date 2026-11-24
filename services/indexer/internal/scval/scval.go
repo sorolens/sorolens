@@ -17,6 +17,7 @@ type scVal struct {
 const (
 	scvBool   = 0
 	scvVoid   = 1
+	scvError  = 2
 	scvU32    = 3
 	scvI32    = 4
 	scvU64    = 5
@@ -33,7 +34,7 @@ const (
 
 var scvTypeNames = map[uint32]string{
 	scvBool: "scvBool", scvVoid: "scvVoid",
-	2: "scvError", scvU32: "scvU32", scvI32: "scvI32",
+	scvError: "scvError", scvU32: "scvU32", scvI32: "scvI32",
 	scvU64: "scvU64", scvI64: "scvI64",
 	7: "scvTimePoint", 8: "scvDuration",
 	scvU128: "scvU128", scvI128: "scvI128",
@@ -67,6 +68,18 @@ func Decode(b64 string) (scVal, error) {
 		}
 		v := binary.BigEndian.Uint32(body[:4]) != 0
 		return scVal{Type: typeName, Value: v, Human: fmt.Sprintf("%v", v)}, nil
+	case scvError:
+		// ScError is a union on ScErrorType; every arm carries one 4-byte
+		// value (a contract code or an ScErrorCode), so an unknown type can
+		// still be read and kept verbatim.
+		if len(body) < 8 {
+			break
+		}
+		e := ScError{
+			Type: binary.BigEndian.Uint32(body[:4]),
+			Code: binary.BigEndian.Uint32(body[4:8]),
+		}
+		return scVal{Type: typeName, Value: e, Human: e.String()}, nil
 	case scvU32:
 		if len(body) < 4 {
 			break

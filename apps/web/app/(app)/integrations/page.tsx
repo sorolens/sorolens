@@ -97,7 +97,7 @@ export default function IntegrationsPage() {
       {loadError ? (
         <div
           role="alert"
-          className="mt-6 rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-300"
+          className="mt-6 rounded-lg border border-[var(--color-danger-border)]/60 bg-[var(--color-danger-bg)] p-4 text-sm text-[var(--color-danger-text)]"
         >
           <p>{loadError}</p>
           <button
@@ -142,8 +142,8 @@ export default function IntegrationsPage() {
                     data-testid={`integration-${integration.id}-status`}
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                       integration.configured
-                        ? "bg-green-900/40 text-green-400"
-                        : "bg-amber-900/40 text-amber-400"
+                        ? "bg-[var(--color-safe-bg)] text-[var(--color-safe)]"
+                        : "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]"
                     }`}
                   >
                     {integration.configured ? "Configured" : "Not configured"}
@@ -170,7 +170,7 @@ export default function IntegrationsPage() {
                     data-testid={`integration-${integration.id}-test`}
                     disabled={testing === integration.id}
                     onClick={() => void handleTest(integration)}
-                    className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {testing === integration.id
                       ? "Sending…"
@@ -183,8 +183,8 @@ export default function IntegrationsPage() {
                       data-testid={`integration-${integration.id}-feedback`}
                       className={`text-sm ${
                         result.type === "success"
-                          ? "text-emerald-400"
-                          : "text-red-400"
+                          ? "text-[var(--color-safe)]"
+                          : "text-[var(--color-danger-text)]"
                       }`}
                     >
                       {result.message}

@@ -673,6 +673,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             description: "Upper ledger bound (inclusive).",
             type: "integer",
           },
+          {
+            name: "failure_category",
+            in: "query",
+            required: false,
+            description:
+              "Show only failed invocations of this category (case-insensitive). Invocations indexed before failure classification existed have no category and never match. An unknown value returns 422.",
+            type: "string",
+          },
         ],
       },
     },
@@ -712,6 +720,31 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             required: true,
             description: "Hex-encoded transaction hash.",
             type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/resource-trend": {
+      get: {
+        operationId: "getContractResourceTrend",
+        summary: "Daily resource usage trend for a contract",
+        tags: ["Invocations"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "days",
+            in: "query",
+            required: false,
+            description:
+              "Number of trailing UTC days to bucket, including today.",
+            type: "integer",
+            default: "30",
           },
         ],
       },
@@ -1859,6 +1892,31 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v2/contracts/{id}/resource-trend": {
+      get: {
+        operationId: "getContractResourceTrendV2",
+        summary: "Daily resource usage trend for a contract (v2)",
+        tags: ["Invocations"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "days",
+            in: "query",
+            required: false,
+            description:
+              "Number of trailing UTC days to bucket, including today.",
+            type: "integer",
+            default: "30",
+          },
+        ],
+      },
+    },
     "/api/v2/contracts/{id}/stats": {
       get: {
         operationId: "v2ContractStats",
@@ -2680,6 +2738,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
               "Inclusive upper bound on ledger_closed_at (RFC 3339).",
             type: "string",
           },
+          {
+            name: "failure_category",
+            in: "query",
+            required: false,
+            description:
+              "Show only failed invocations of this category (case-insensitive). Invocations indexed before failure classification existed have no category and never match. An unknown value returns 422.",
+            type: "string",
+          },
         ],
       },
     },
@@ -2814,6 +2880,54 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
       get: {
         operationId: "getContractGraph",
         summary: "Get the contract's cross-contract call graph",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/changelog": {
+      get: {
+        operationId: "getContractChangelog",
+        summary: "Get a contract's Wasm hash changelog",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/changelog/feed": {
+      get: {
+        operationId: "getContractChangelogFeed",
+        summary: "Atom feed of a contract's Wasm hash changes",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/changelog/badge": {
+      get: {
+        operationId: "getContractChangelogBadge",
+        summary: "Get a Wasm hash badge SVG for a contract",
         tags: ["Contracts"],
         parameters: [
           {

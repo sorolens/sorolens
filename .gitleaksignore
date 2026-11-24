@@ -1,0 +1,53 @@
+# Exact historical fingerprints for known fixtures and false positives.
+
+# Published public RPC provider URLs from Stellar's endpoint list.
+2dfc000955b4d183df24ae5574ad874a9153b891:RESEARCH.md:generic-api-key:248
+2dfc000955b4d183df24ae5574ad874a9153b891:RESEARCH.md:generic-api-key:249
+c630c5c5293639035c3d5601139662f02c5e5abc:RESEARCH.md:generic-api-key:244
+c630c5c5293639035c3d5601139662f02c5e5abc:RESEARCH.md:generic-api-key:245
+
+# Placeholder credentials in authentication examples.
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:101
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:110
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:148
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:192
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:229
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:261
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:294
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:356
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:375
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:422
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:curl-auth-header:447
+3ffb131f4ac759f7dc69b10528df33051aefb8e6:docs/authentication.md:generic-api-key:174
+
+# Placeholder basic auth in a metrics example.
+58abbc7aa43e442aca99e73a825614667cc9d990:docs/metrics.md:curl-auth-user:377
+
+# Historical compressed OpenAPI bytes misidentified as generic keys.
+35be606bcf20e4d33d3492dd4741bd7afff91737:packages/go-client/internal/client/client.gen.go:generic-api-key:26827
+5668d21ebc2ab45a60983d79b4b6a1f2bb356e6f:packages/go-client/internal/client/client.gen.go:generic-api-key:21391
+cbb195c330476eb1d11c5ccb664f0dff80d65dd6:packages/go-client/internal/client/client.gen.go:generic-api-key:17458
+cbb195c330476eb1d11c5ccb664f0dff80d65dd6:packages/go-client/internal/client/client.gen.go:generic-api-key:17589
+de14b18dfe3fd9e776e51f8cda5e1480955a1519:packages/go-client/internal/client/client.gen.go:generic-api-key:26773
+
+# Disposable VAPID test key; the transport is mocked.
+9243e65a7d83f33c6c9c18cccf938ec43c197e77:apps/web/app/api/push/push-routes.test.ts:generic-api-key:29
+
+# Mock settings credential.
+2e28328feb93507e55db3b787d62d3857df3cdfe:apps/web/lib/settings.test.ts:generic-api-key:64
+
+# Mock Slack signing credential.
+f77359bd0b89307de5f923fb78dcc429fef3b6b1:apps/api/internal/handler/slack_test.go:generic-api-key:24
+
+# Mock webhook credential.
+773ba934d99a0dfbc47eb575f687d2dd5c17e86d:services/indexer/expiry_notify_test.go:generic-api-key:102
+
+# Public Stellar issuer fixture in discovery tests.
+9506ecc4d5931a6bfa2db230021342d5553bc520:services/indexer/internal/discovery/discovery_test.go:generic-api-key:232
+
+# Historical compressed OpenAPI bytes added after the first scan.
+4220f51e5717240b261df54216b96044c5c49b0b:packages/go-client/internal/client/client.gen.go:generic-api-key:31125
+9506ecc4d5931a6bfa2db230021342d5553bc520:packages/go-client/internal/client/client.gen.go:generic-api-key:31021
+
+# Mock Sorolens credential in CLI doctor tests.
+65e276bfe2e4a3888f2a91dca86fd5768c585926:cli/cmd/doctor_test.go:generic-api-key:14

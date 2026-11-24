@@ -594,6 +594,9 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 		if f.FunctionName != "" && inv.FunctionName != f.FunctionName {
 			continue
 		}
+		if f.FailureCategory != "" && inv.FailureCategory != f.FailureCategory {
+			continue
+		}
 		out = append(out, inv)
 		if len(out) > limit {
 			break
@@ -605,6 +608,56 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+// GetResourceTrend aggregates seeded invocations by UTC day for the trailing
+// `days` days, including zero buckets.
+func (m *MockStore) GetResourceTrend(_ context.Context, contractID string, days int) ([]ResourceTrendBucket, error) {
+	if m.ListInvocationsErr != nil {
+		return nil, m.ListInvocationsErr
+	}
+	if days <= 0 {
+		days = 30
+	}
+	if days > 365 {
+		days = 365
+	}
+
+	type acc struct {
+		cpu, mem, fee float64
+		count         int64
+	}
+	byDay := map[string]*acc{}
+	for _, inv := range m.invocations {
+		if inv.ContractID != contractID {
+			continue
+		}
+		key := inv.LedgerClosedAt.UTC().Format("2006-01-02")
+		a := byDay[key]
+		if a == nil {
+			a = &acc{}
+			byDay[key] = a
+		}
+		a.cpu += float64(inv.CPUInsn)
+		a.mem += float64(inv.MemByte)
+		a.fee += float64(inv.ResourceFeeCharged)
+		a.count++
+	}
+
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	out := make([]ResourceTrendBucket, 0, days)
+	for offset := days - 1; offset >= 0; offset-- {
+		day := today.AddDate(0, 0, -offset)
+		bucket := ResourceTrendBucket{Day: day}
+		if a := byDay[day.Format("2006-01-02")]; a != nil && a.count > 0 {
+			bucket.AvgCPUInsn = a.cpu / float64(a.count)
+			bucket.AvgMemByte = a.mem / float64(a.count)
+			bucket.AvgFee = a.fee / float64(a.count)
+			bucket.Count = a.count
+		}
+		out = append(out, bucket)
+	}
+	return out, nil
 }
 
 // GetInvocation returns the invocation row for a transaction hash.
@@ -707,6 +760,9 @@ func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, c
 		if f.Until != nil && inv.LedgerClosedAt.After(*f.Until) {
 			continue
 		}
+		if f.FailureCategory != "" && inv.FailureCategory != f.FailureCategory {
+			continue
+		}
 		out = append(out, inv)
 	}
 
@@ -798,12 +854,18 @@ func (m *MockStore) GetContractInvocationStats(_ context.Context, contractID str
 }
 
 func invocationWindowStats(invocations []Invocation) InvocationWindowStats {
-	stats := InvocationWindowStats{InvocationCount: int64(len(invocations))}
+	stats := InvocationWindowStats{
+		InvocationCount:    int64(len(invocations)),
+		FailuresByCategory: NewFailureCounts(),
+	}
 	fees := make([]float64, 0, len(invocations))
 	cpus := make([]float64, 0, len(invocations))
 	for _, inv := range invocations {
 		if inv.Status != "SUCCESS" {
 			stats.FailedInvocations++
+		}
+		if inv.FailureCategory != "" {
+			AddFailureCount(stats.FailuresByCategory, inv.FailureCategory, 1)
 		}
 		fees = append(fees, float64(inv.ResourceFeeCharged))
 		cpus = append(cpus, float64(inv.CPUInsn))

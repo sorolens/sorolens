@@ -113,6 +113,11 @@ type Invocation struct {
 	LedgerWriteByte    int64
 	ApplicationOrder   int
 	InsertedAt         time.Time
+	// FailureCategory and FailureCode classify a FAILED invocation by its
+	// host error (issue #806). Both are empty for other statuses and for rows
+	// indexed before classification existed.
+	FailureCategory string
+	FailureCode     string
 }
 
 // CallEdge is one parent -> child invocation edge of a transaction's

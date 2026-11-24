@@ -141,9 +141,9 @@ export function ConfirmDialog({
             aria-label={actionName ?? confirmText}
             onClick={() => void onConfirm()}
             disabled={isLoading}
-            className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-50 ${
+            className={`rounded-lg px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-opacity disabled:opacity-50 ${
               isDestructive
-                ? "bg-red-600 hover:bg-red-700"
+                ? "bg-[var(--color-danger)] hover:bg-[var(--color-danger-hover)]"
                 : "bg-[var(--color-accent)] hover:opacity-90"
             }`}
           >
