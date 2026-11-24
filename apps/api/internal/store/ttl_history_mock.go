@@ -68,8 +68,5 @@ func (m *MockStore) ListTTLHistory(ctx context.Context, contractID, cursor strin
 }
 
 func (m *MockStore) ttlHistory() *MockTTLHistoryStore {
-	if m.ttlHistoryStore == nil {
-		m.ttlHistoryStore = newMockTTLHistoryStore()
-	}
 	return m.ttlHistoryStore
 }

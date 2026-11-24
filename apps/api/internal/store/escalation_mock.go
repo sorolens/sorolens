@@ -94,8 +94,5 @@ func (m *MockStore) DeleteEscalationPolicy(ctx context.Context, id string) error
 }
 
 func (m *MockStore) escalation() *MockEscalationPolicyStore {
-	if m.escalationStore == nil {
-		m.escalationStore = newMockEscalationPolicyStore()
-	}
 	return m.escalationStore
 }

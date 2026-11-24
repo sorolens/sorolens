@@ -177,7 +177,9 @@ func NewMockStore() *MockStore {
 		labels:                make([]Label, 0),
 		watchedAccounts:       make(map[string]WatchedAccount),
 		contractTokens:        make(map[string]TokenMetadata),
-		MockExportJobStore:    NewMockExportJobStore(),
+		MockExportJobStore:  NewMockExportJobStore(),
+		escalationStore:     newMockEscalationPolicyStore(),
+		ttlHistoryStore:     newMockTTLHistoryStore(),
 	}
 }
 
