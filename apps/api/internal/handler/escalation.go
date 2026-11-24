@@ -74,7 +74,7 @@ func (h *Handler) ListEscalationPolicies(w http.ResponseWriter, r *http.Request)
 	for i, p := range policies {
 		resp[i] = escalationPolicyFromStore(p)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"escalation_policies": resp})
+	writeJSON(w, http.StatusOK, map[string]any{"policies": resp, "next_cursor": ""})
 }
 
 // CreateEscalationPolicy handles POST /api/v1/escalation-policies.
