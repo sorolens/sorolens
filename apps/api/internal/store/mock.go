@@ -50,7 +50,9 @@ type MockStore struct {
 	watchedAccounts       map[string]WatchedAccount
 	maintenanceWindows    map[int64]MaintenanceWindow
 	maintenanceWindowSeq  int64
-	contractTokens        map[string]TokenMetadata
+	// maintenanceMu guards maintenanceWindows and maintenanceWindowSeq.
+	maintenanceMu  sync.Mutex
+	contractTokens map[string]TokenMetadata
 	*MockExportJobStore
 	escalationStore *MockEscalationPolicyStore
 	ttlHistoryStore *MockTTLHistoryStore
@@ -177,9 +179,9 @@ func NewMockStore() *MockStore {
 		labels:                make([]Label, 0),
 		watchedAccounts:       make(map[string]WatchedAccount),
 		contractTokens:        make(map[string]TokenMetadata),
-		MockExportJobStore:  NewMockExportJobStore(),
-		escalationStore:     newMockEscalationPolicyStore(),
-		ttlHistoryStore:     newMockTTLHistoryStore(),
+		MockExportJobStore:    NewMockExportJobStore(),
+		escalationStore:       newMockEscalationPolicyStore(),
+		ttlHistoryStore:       newMockTTLHistoryStore(),
 	}
 }
 
@@ -1664,4 +1666,3 @@ func (m *MockStore) GetContractToken(_ context.Context, contractID string) (Toke
 	}
 	return tok, nil
 }
-

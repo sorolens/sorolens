@@ -139,6 +139,7 @@ func (m *MockStore) DeleteEventsByID(_ context.Context, ids []string) (int64, er
 	return deleted, nil
 }
 
+// ensureMaintenance lazily creates the map; callers must hold maintenanceMu.
 func (m *MockStore) ensureMaintenance() {
 	if m.maintenanceWindows == nil {
 		m.maintenanceWindows = make(map[int64]MaintenanceWindow)
@@ -165,6 +166,8 @@ func (m *MockStore) CreateMaintenanceWindow(_ context.Context, w MaintenanceWind
 		w.Recurrence = "none"
 	}
 
+	m.maintenanceMu.Lock()
+	defer m.maintenanceMu.Unlock()
 	m.ensureMaintenance()
 	m.maintenanceWindowSeq++
 	w.ID = m.maintenanceWindowSeq
@@ -175,6 +178,8 @@ func (m *MockStore) CreateMaintenanceWindow(_ context.Context, w MaintenanceWind
 }
 
 func (m *MockStore) GetMaintenanceWindow(_ context.Context, id int64) (MaintenanceWindow, error) {
+	m.maintenanceMu.Lock()
+	defer m.maintenanceMu.Unlock()
 	m.ensureMaintenance()
 	w, ok := m.maintenanceWindows[id]
 	if !ok {
@@ -193,6 +198,8 @@ func (m *MockStore) UpdateMaintenanceWindow(_ context.Context, w MaintenanceWind
 	if _, err := time.LoadLocation(w.Timezone); err != nil {
 		return MaintenanceWindow{}, fmt.Errorf("%w: invalid timezone %s", ErrInvalidMaintenanceWindow, w.Timezone)
 	}
+	m.maintenanceMu.Lock()
+	defer m.maintenanceMu.Unlock()
 	m.ensureMaintenance()
 	existing, ok := m.maintenanceWindows[w.ID]
 	if !ok {
@@ -210,6 +217,8 @@ func (m *MockStore) UpdateMaintenanceWindow(_ context.Context, w MaintenanceWind
 }
 
 func (m *MockStore) DeleteMaintenanceWindow(_ context.Context, id int64) error {
+	m.maintenanceMu.Lock()
+	defer m.maintenanceMu.Unlock()
 	m.ensureMaintenance()
 	if _, ok := m.maintenanceWindows[id]; !ok {
 		return ErrMaintenanceWindowNotFound
@@ -219,6 +228,8 @@ func (m *MockStore) DeleteMaintenanceWindow(_ context.Context, id int64) error {
 }
 
 func (m *MockStore) ListMaintenanceWindows(_ context.Context, scope, targetID string) ([]MaintenanceWindow, error) {
+	m.maintenanceMu.Lock()
+	defer m.maintenanceMu.Unlock()
 	m.ensureMaintenance()
 	var out []MaintenanceWindow
 	for _, w := range m.maintenanceWindows {
