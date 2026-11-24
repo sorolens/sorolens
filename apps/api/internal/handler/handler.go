@@ -47,6 +47,8 @@ type APIStore interface {
 	store.UsageStore
 	store.MaintenanceStore
 	store.ContractTokenStore
+	store.DeliveryStore
+	store.IdempotencyStore
 	store.TokenTransferStore
 }
 

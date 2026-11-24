@@ -267,6 +267,15 @@
           "listTokenTransfers",
           "listTokenTransfersV2"
         ]
+      },
+      {
+        "reason": "Webhook delivery history and retry (issue #805) and event value search (issue #828) are control-plane/search operations not yet exposed by the SDK.",
+        "operations": [
+          "getWebhookDelivery",
+          "listWebhookDeliveries",
+          "retryWebhookDelivery",
+          "searchEventValues"
+        ]
       }
     ],
     "python": [
@@ -520,6 +529,15 @@
           "listTokenTransfers",
           "listTokenTransfersV2"
         ]
+      },
+      {
+        "reason": "Webhook delivery history and retry (issue #805) and event value search (issue #828) are control-plane/search operations not yet exposed by the SDK.",
+        "operations": [
+          "getWebhookDelivery",
+          "listWebhookDeliveries",
+          "retryWebhookDelivery",
+          "searchEventValues"
+        ]
       }
     ],
     "go": [
@@ -752,6 +770,15 @@
           "listTokenTransfers",
           "listTokenTransfersV2"
         ]
+      },
+      {
+        "reason": "Webhook delivery history and retry (issue #805) and event value search (issue #828) are control-plane/search operations not yet exposed by the SDK.",
+        "operations": [
+          "getWebhookDelivery",
+          "listWebhookDeliveries",
+          "retryWebhookDelivery",
+          "searchEventValues"
+        ]
       }
     ],
     "typescript": [
@@ -975,6 +1002,15 @@
           "listTokenHoldersV2",
           "listTokenTransfers",
           "listTokenTransfersV2"
+        ]
+      },
+      {
+        "reason": "Webhook delivery history and retry (issue #805) and event value search (issue #828) are control-plane/search operations not yet exposed by the SDK.",
+        "operations": [
+          "getWebhookDelivery",
+          "listWebhookDeliveries",
+          "retryWebhookDelivery",
+          "searchEventValues"
         ]
       }
     ]
