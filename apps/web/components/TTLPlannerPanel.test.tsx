@@ -12,7 +12,7 @@ afterEach(cleanup);
 
 function makeEntry(
   keyXdr: string,
-  ledgersUntilExpiry: number | null,
+  ledgersUntilExpiry: number | null
 ): StorageEntry {
   return {
     key_xdr: keyXdr,
@@ -35,7 +35,7 @@ describe("TTLPlannerPanel", () => {
         entries={entries}
         currentLedger={1_000_000}
         network="testnet"
-      />,
+      />
     );
     expect(screen.getByText(/TTL Extension Planner/i)).toBeInTheDocument();
   });
@@ -47,14 +47,18 @@ describe("TTLPlannerPanel", () => {
         entries={entries}
         currentLedger={1_000_000}
         network="testnet"
-      />,
+      />
     );
     expect(container.firstChild).toBeNull();
   });
 
   it("renders nothing when entries array is empty", () => {
     const { container } = render(
-      <TTLPlannerPanel entries={[]} currentLedger={1_000_000} network="testnet" />,
+      <TTLPlannerPanel
+        entries={[]}
+        currentLedger={1_000_000}
+        network="testnet"
+      />
     );
     expect(container.firstChild).toBeNull();
   });
@@ -66,7 +70,7 @@ describe("TTLPlannerPanel", () => {
         entries={entries}
         currentLedger={1_000_000}
         network="testnet"
-      />,
+      />
     );
     expect(screen.getByText(/500 ledgers/)).toBeInTheDocument();
   });

@@ -28,7 +28,7 @@ export function TTLPlannerPanel({
   const nearExpiry = entries.filter(
     (e) =>
       e.ledgers_until_expiry != null &&
-      e.ledgers_until_expiry < WARNING_THRESHOLD_LEDGERS,
+      e.ledgers_until_expiry < WARNING_THRESHOLD_LEDGERS
   );
 
   if (nearExpiry.length === 0) return null;
@@ -103,12 +103,10 @@ export function TTLPlannerPanel({
       </ul>
 
       <div className="mb-3 flex flex-wrap items-center gap-3">
-        <button
-          onClick={toggleAll}
-          className="text-xs underline"
-          type="button"
-        >
-          {selected.size === nearExpiry.length ? "Deselect all" : "Select all expiring"}
+        <button onClick={toggleAll} className="text-xs underline" type="button">
+          {selected.size === nearExpiry.length
+            ? "Deselect all"
+            : "Select all expiring"}
         </button>
         <label className="flex items-center gap-1 text-xs">
           Extend by
@@ -147,9 +145,7 @@ export function TTLPlannerPanel({
             {result.cli_command}
           </pre>
           <button
-            onClick={() =>
-              navigator.clipboard.writeText(result.cli_command)
-            }
+            onClick={() => navigator.clipboard.writeText(result.cli_command)}
             type="button"
             className="mt-1 text-xs underline"
           >

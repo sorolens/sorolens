@@ -26,14 +26,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!body.newLiveUntilLedger || body.newLiveUntilLedger <= 0) {
     return NextResponse.json(
       { error: "newLiveUntilLedger must be positive" },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
   const network = body.network || "testnet";
-  const keyArgs = body.keys
-    .map((k) => `  --key "${k}"`)
-    .join(" \\\n");
+  const keyArgs = body.keys.map((k) => `  --key "${k}"`).join(" \\\n");
   const cli_command =
     `stellar contract extend \\\n` +
     `  --network ${network} \\\n` +
