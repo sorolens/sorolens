@@ -29,6 +29,8 @@ sorolens-bin
 # Misc
 .DS_Store
 .env
+*.bak
+modify_*.py
 
 # Python
 __pycache__/

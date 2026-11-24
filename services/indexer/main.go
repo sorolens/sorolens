@@ -27,8 +27,20 @@ import (
 	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
 )
 
+// Set by the image build through Go linker flags.
+var (
+	version = "dev"
+	gitSHA  = "dev"
+	builtAt = "dev"
+)
+
 func main() {
 	defer reportPanic()
+
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Printf("sorolens-indexer %s (%s, %s)\n", version, gitSHA, builtAt)
+		return
+	}
 
 	tp, _ := poller.InitTracer()
 	if tp != nil {
@@ -72,6 +84,8 @@ func main() {
 			defer sentry.Flush(2 * time.Second)
 		}
 	}
+
+	log.Info("indexer build", "version", version, "git_sha", gitSHA, "built_at", builtAt)
 
 	cfg := poller.Config{
 		Workers:              workers,
