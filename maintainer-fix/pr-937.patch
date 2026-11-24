@@ -1,0 +1,1674 @@
+From b75a1b109ad1532f3bbdadab7cb577ed6f8ce765 Mon Sep 17 00:00:00 2001
+From: Emmanuellsensai <86744981+Emmanuellsensai@users.noreply.github.com>
+Date: Tue, 24 Nov 2026 13:24:56 +0000
+Subject: [PATCH] Fix CI: renumber migrations, partitioned index, v2 route
+ list, Python client, prettier
+
+- Renumber the PR migrations 000052-000055 to 000053-000056 after merging
+  main, which already has 000052_api_key_restrictions.
+- 000054: CREATE INDEX CONCURRENTLY is not allowed on the partitioned events
+  parent; use a plain CREATE INDEX (same as 000020/000023/000046), with a
+  migration lint allowlist entry. Fix the down migration the same way.
+- List the new v1-only routes in the v2 not-ported set.
+- Regenerate the Python client with openapi-python-client 0.29.1 on Python 3.12.
+- Run prettier on the deliveries page.
+---
+ .../internal/db/migration_lint_allowlist.txt  |   1 +
+ ... 000053_invocation_fee_breakdown.down.sql} |   0
+ ...=> 000053_invocation_fee_breakdown.up.sql} |   0
+ ... => 000054_event_fulltext_search.down.sql} |   2 +-
+ ...ql => 000054_event_fulltext_search.up.sql} |   2 +-
+ ...n.sql => 000055_idempotency_keys.down.sql} |   0
+ ....up.sql => 000055_idempotency_keys.up.sql} |   0
+ ...sql => 000056_webhook_deliveries.down.sql} |   0
+ ...p.sql => 000056_webhook_deliveries.up.sql} |   0
+ apps/api/internal/handler/v2_test.go          |   6 +
+ .../notifications/[id]/deliveries/page.tsx    |  48 +++-
+ .../api/events/search_event_values.py         | 217 +++++++++++++++
+ .../api/notifications/get_webhook_delivery.py | 203 ++++++++++++++
+ .../notifications/list_webhook_deliveries.py  | 226 ++++++++++++++++
+ .../notifications/retry_webhook_delivery.py   | 207 +++++++++++++++
+ .../sorolens/_generated/models/__init__.py    |  10 +
+ .../list_webhook_deliveries_response_200.py   |  84 ++++++
+ .../search_event_values_response_200.py       |  92 +++++++
+ .../_generated/models/webhook_delivery.py     | 247 ++++++++++++++++++
+ .../webhook_delivery_signed_payload_type_0.py |  48 ++++
+ .../models/webhook_delivery_status.py         |  10 +
+ 21 files changed, 1388 insertions(+), 15 deletions(-)
+ rename apps/api/internal/db/migrations/{000052_invocation_fee_breakdown.down.sql => 000053_invocation_fee_breakdown.down.sql} (100%)
+ rename apps/api/internal/db/migrations/{000052_invocation_fee_breakdown.up.sql => 000053_invocation_fee_breakdown.up.sql} (100%)
+ rename apps/api/internal/db/migrations/{000053_event_fulltext_search.down.sql => 000054_event_fulltext_search.down.sql} (64%)
+ rename apps/api/internal/db/migrations/{000053_event_fulltext_search.up.sql => 000054_event_fulltext_search.up.sql} (93%)
+ rename apps/api/internal/db/migrations/{000054_idempotency_keys.down.sql => 000055_idempotency_keys.down.sql} (100%)
+ rename apps/api/internal/db/migrations/{000054_idempotency_keys.up.sql => 000055_idempotency_keys.up.sql} (100%)
+ rename apps/api/internal/db/migrations/{000055_webhook_deliveries.down.sql => 000056_webhook_deliveries.down.sql} (100%)
+ rename apps/api/internal/db/migrations/{000055_webhook_deliveries.up.sql => 000056_webhook_deliveries.up.sql} (100%)
+ create mode 100644 packages/python-sdk/src/sorolens/_generated/api/events/search_event_values.py
+ create mode 100644 packages/python-sdk/src/sorolens/_generated/api/notifications/get_webhook_delivery.py
+ create mode 100644 packages/python-sdk/src/sorolens/_generated/api/notifications/list_webhook_deliveries.py
+ create mode 100644 packages/python-sdk/src/sorolens/_generated/api/notifications/retry_webhook_delivery.py
+ create mode 100644 packages/python-sdk/src/sorolens/_generated/models/list_webhook_deliveries_response_200.py
+ create mode 100644 packages/python-sdk/src/sorolens/_generated/models/search_event_values_response_200.py
+ create mode 100644 packages/python-sdk/src/sorolens/_generated/models/webhook_delivery.py
+ create mode 100644 packages/python-sdk/src/sorolens/_generated/models/webhook_delivery_signed_payload_type_0.py
+ create mode 100644 packages/python-sdk/src/sorolens/_generated/models/webhook_delivery_status.py
+
+diff --git a/apps/api/internal/db/migration_lint_allowlist.txt b/apps/api/internal/db/migration_lint_allowlist.txt
+index fe8c682..bacab78 100644
+--- a/apps/api/internal/db/migration_lint_allowlist.txt
++++ b/apps/api/internal/db/migration_lint_allowlist.txt
+@@ -11,3 +11,4 @@
+ 000036_api_key_user_id.up.sql index-not-concurrent Partial index on api_keys, a small table, over a column added NULL in the same migration. Applied before the policy (#845).
+ 000039_api_key_expires_at.up.sql index-not-concurrent Partial index on api_keys, a small table, over a column added NULL in the same migration. Merged before the policy (#845).
+ 000046_trigram_and_composite_indexes.up.sql index-not-concurrent events is partitioned (000005); PostgreSQL rejects CONCURRENTLY on a partitioned parent (#762).
++000054_event_fulltext_search.up.sql index-not-concurrent events is partitioned (000005); PostgreSQL rejects CONCURRENTLY on a partitioned parent, so the GIN index is built on the parent.
+diff --git a/apps/api/internal/db/migrations/000052_invocation_fee_breakdown.down.sql b/apps/api/internal/db/migrations/000053_invocation_fee_breakdown.down.sql
+similarity index 100%
+rename from apps/api/internal/db/migrations/000052_invocation_fee_breakdown.down.sql
+rename to apps/api/internal/db/migrations/000053_invocation_fee_breakdown.down.sql
+diff --git a/apps/api/internal/db/migrations/000052_invocation_fee_breakdown.up.sql b/apps/api/internal/db/migrations/000053_invocation_fee_breakdown.up.sql
+similarity index 100%
+rename from apps/api/internal/db/migrations/000052_invocation_fee_breakdown.up.sql
+rename to apps/api/internal/db/migrations/000053_invocation_fee_breakdown.up.sql
+diff --git a/apps/api/internal/db/migrations/000053_event_fulltext_search.down.sql b/apps/api/internal/db/migrations/000054_event_fulltext_search.down.sql
+similarity index 64%
+rename from apps/api/internal/db/migrations/000053_event_fulltext_search.down.sql
+rename to apps/api/internal/db/migrations/000054_event_fulltext_search.down.sql
+index d4c1924..5099a13 100644
+--- a/apps/api/internal/db/migrations/000053_event_fulltext_search.down.sql
++++ b/apps/api/internal/db/migrations/000054_event_fulltext_search.down.sql
+@@ -1,3 +1,3 @@
+ -- Rollback full-text event search (issue #798).
+-DROP INDEX CONCURRENTLY IF EXISTS idx_events_event_tsv;
++DROP INDEX IF EXISTS idx_events_event_tsv;
+ ALTER TABLE events DROP COLUMN IF EXISTS event_tsv;
+diff --git a/apps/api/internal/db/migrations/000053_event_fulltext_search.up.sql b/apps/api/internal/db/migrations/000054_event_fulltext_search.up.sql
+similarity index 93%
+rename from apps/api/internal/db/migrations/000053_event_fulltext_search.up.sql
+rename to apps/api/internal/db/migrations/000054_event_fulltext_search.up.sql
+index 40eb093..60bf93d 100644
+--- a/apps/api/internal/db/migrations/000053_event_fulltext_search.up.sql
++++ b/apps/api/internal/db/migrations/000054_event_fulltext_search.up.sql
+@@ -17,5 +17,5 @@ ALTER TABLE events
+             )
+         ) STORED;
+ 
+-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_events_event_tsv
++CREATE INDEX IF NOT EXISTS idx_events_event_tsv
+     ON events USING GIN (event_tsv);
+diff --git a/apps/api/internal/db/migrations/000054_idempotency_keys.down.sql b/apps/api/internal/db/migrations/000055_idempotency_keys.down.sql
+similarity index 100%
+rename from apps/api/internal/db/migrations/000054_idempotency_keys.down.sql
+rename to apps/api/internal/db/migrations/000055_idempotency_keys.down.sql
+diff --git a/apps/api/internal/db/migrations/000054_idempotency_keys.up.sql b/apps/api/internal/db/migrations/000055_idempotency_keys.up.sql
+similarity index 100%
+rename from apps/api/internal/db/migrations/000054_idempotency_keys.up.sql
+rename to apps/api/internal/db/migrations/000055_idempotency_keys.up.sql
+diff --git a/apps/api/internal/db/migrations/000055_webhook_deliveries.down.sql b/apps/api/internal/db/migrations/000056_webhook_deliveries.down.sql
+similarity index 100%
+rename from apps/api/internal/db/migrations/000055_webhook_deliveries.down.sql
+rename to apps/api/internal/db/migrations/000056_webhook_deliveries.down.sql
+diff --git a/apps/api/internal/db/migrations/000055_webhook_deliveries.up.sql b/apps/api/internal/db/migrations/000056_webhook_deliveries.up.sql
+similarity index 100%
+rename from apps/api/internal/db/migrations/000055_webhook_deliveries.up.sql
+rename to apps/api/internal/db/migrations/000056_webhook_deliveries.up.sql
+diff --git a/apps/api/internal/handler/v2_test.go b/apps/api/internal/handler/v2_test.go
+index 2749394..2ae29d6 100644
+--- a/apps/api/internal/handler/v2_test.go
++++ b/apps/api/internal/handler/v2_test.go
+@@ -375,6 +375,12 @@ func TestV2CoversEveryV1Route(t *testing.T) {
+ 		"GET /api/v1/contracts/{id}/changelog":       true,
+ 		"GET /api/v1/contracts/{id}/changelog/feed":  true,
+ 		"GET /api/v1/contracts/{id}/changelog/badge": true,
++		// Event value search (issue #798) and webhook delivery log (issue
++		// #828): v1-only until a v2 envelope is specified.
++		"GET /api/v1/events/search":                                              true,
++		"GET /api/v1/watchdog/subscriptions/{id}/deliveries":                     true,
++		"GET /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}":        true,
++		"POST /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}/retry": true,
+ 	}
+ 
+ 	var missing []string
+diff --git a/apps/web/app/(app)/watchdog/notifications/[id]/deliveries/page.tsx b/apps/web/app/(app)/watchdog/notifications/[id]/deliveries/page.tsx
+index 2e48193..2d205fe 100644
+--- a/apps/web/app/(app)/watchdog/notifications/[id]/deliveries/page.tsx
++++ b/apps/web/app/(app)/watchdog/notifications/[id]/deliveries/page.tsx
+@@ -5,22 +5,31 @@ import Link from "next/link";
+ import { useParams } from "next/navigation";
+ import { ConfirmDialog } from "@/components/ConfirmDialog";
+ import { TableSkeleton } from "@/components/Skeleton";
+-import { getDelivery, listDeliveries, retryDelivery, ApiError } from "@/lib/api";
++import {
++  getDelivery,
++  listDeliveries,
++  retryDelivery,
++  ApiError,
++} from "@/lib/api";
+ import { getUserId } from "@/lib/user";
+ import type { WebhookDelivery } from "@/lib/types";
+ 
+ // ---- status badge ----------------------------------------------------------
+ 
+ const STATUS_CLASSES: Record<string, string> = {
+-  delivered: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
++  delivered:
++    "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+   failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+-  pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
++  pending:
++    "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+ };
+ 
+ function StatusBadge({ status }: { status: string }) {
+   const cls = STATUS_CLASSES[status] ?? "bg-gray-100 text-gray-800";
+   return (
+-    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${cls}`}>
++    <span
++      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${cls}`}
++    >
+       {status}
+     </span>
+   );
+@@ -100,26 +109,32 @@ function DeliveryDrawer({
+         </div>
+ 
+         {loading && (
+-          <div className="p-6 text-sm text-[var(--color-text-secondary)]">Loading…</div>
+-        )}
+-        {error && (
+-          <div className="p-6 text-sm text-red-500">{error}</div>
++          <div className="p-6 text-sm text-[var(--color-text-secondary)]">
++            Loading…
++          </div>
+         )}
++        {error && <div className="p-6 text-sm text-red-500">{error}</div>}
+         {delivery && (
+           <div className="space-y-6 p-6">
+             {/* Summary row */}
+             <div className="flex flex-wrap gap-4 text-sm">
+               <div>
+-                <span className="text-[var(--color-text-secondary)]">Status </span>
++                <span className="text-[var(--color-text-secondary)]">
++                  Status{" "}
++                </span>
+                 <StatusBadge status={delivery.status} />
+               </div>
+               <div>
+-                <span className="text-[var(--color-text-secondary)]">Attempts </span>
++                <span className="text-[var(--color-text-secondary)]">
++                  Attempts{" "}
++                </span>
+                 <span className="font-mono">{delivery.attempt_number}</span>
+               </div>
+               {delivery.response_status != null && (
+                 <div>
+-                  <span className="text-[var(--color-text-secondary)]">HTTP </span>
++                  <span className="text-[var(--color-text-secondary)]">
++                    HTTP{" "}
++                  </span>
+                   <span className="font-mono">{delivery.response_status}</span>
+                 </div>
+               )}
+@@ -224,8 +239,15 @@ export default function DeliveriesPage() {
+       setLoading(true);
+       setLoadError(null);
+       try {
+-        const res = await listDeliveries(subscriptionId, nextCursor, 50, userId);
+-        setDeliveries((prev) => (nextCursor ? [...prev, ...res.deliveries] : res.deliveries));
++        const res = await listDeliveries(
++          subscriptionId,
++          nextCursor,
++          50,
++          userId
++        );
++        setDeliveries((prev) =>
++          nextCursor ? [...prev, ...res.deliveries] : res.deliveries
++        );
+         setCursor(res.next_cursor);
+         setHasMore(!!res.next_cursor);
+       } catch (e) {
+diff --git a/packages/python-sdk/src/sorolens/_generated/api/events/search_event_values.py b/packages/python-sdk/src/sorolens/_generated/api/events/search_event_values.py
+new file mode 100644
+index 0000000..500f254
+--- /dev/null
++++ b/packages/python-sdk/src/sorolens/_generated/api/events/search_event_values.py
+@@ -0,0 +1,217 @@
++from http import HTTPStatus
++from typing import Any
++
++import httpx
++
++from ... import errors
++from ...client import AuthenticatedClient, Client
++from ...models.error import Error
++from ...models.search_event_values_response_200 import SearchEventValuesResponse200
++from ...types import UNSET, Response, Unset
++
++
++def _get_kwargs(
++    *,
++    q: str,
++    cursor: str | Unset = UNSET,
++    limit: int | Unset = 50,
++) -> dict[str, Any]:
++
++    params: dict[str, Any] = {}
++
++    params["q"] = q
++
++    params["cursor"] = cursor
++
++    params["limit"] = limit
++
++    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
++
++    _kwargs: dict[str, Any] = {
++        "method": "get",
++        "url": "/api/v1/events/search",
++        "params": params,
++    }
++
++    return _kwargs
++
++
++def _parse_response(
++    *, client: AuthenticatedClient | Client, response: httpx.Response
++) -> Error | SearchEventValuesResponse200 | None:
++    if response.status_code == 200:
++        response_200 = SearchEventValuesResponse200.from_dict(response.json())
++
++        return response_200
++
++    if response.status_code == 422:
++        response_422 = Error.from_dict(response.json())
++
++        return response_422
++
++    if response.status_code == 500:
++        response_500 = Error.from_dict(response.json())
++
++        return response_500
++
++    if client.raise_on_unexpected_status:
++        raise errors.UnexpectedStatus(response.status_code, response.content)
++    else:
++        return None
++
++
++def _build_response(
++    *, client: AuthenticatedClient | Client, response: httpx.Response
++) -> Response[Error | SearchEventValuesResponse200]:
++    return Response(
++        status_code=HTTPStatus(response.status_code),
++        content=response.content,
++        headers=response.headers,
++        parsed=_parse_response(client=client, response=response),
++    )
++
++
++def sync_detailed(
++    *,
++    client: AuthenticatedClient,
++    q: str,
++    cursor: str | Unset = UNSET,
++    limit: int | Unset = 50,
++) -> Response[Error | SearchEventValuesResponse200]:
++    """Full-text search over decoded event values
++
++     Returns events whose decoded topic or value JSONB matches the query
++    using the event_tsv full-text index (issue #798). Results are newest-
++    first and cursor-paginated.
++
++    Args:
++        q (str):
++        cursor (str | Unset):
++        limit (int | Unset):  Default: 50.
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Response[Error | SearchEventValuesResponse200]
++    """
++
++    kwargs = _get_kwargs(
++        q=q,
++        cursor=cursor,
++        limit=limit,
++    )
++
++    response = client.get_httpx_client().request(
++        **kwargs,
++    )
++
++    return _build_response(client=client, response=response)
++
++
++def sync(
++    *,
++    client: AuthenticatedClient,
++    q: str,
++    cursor: str | Unset = UNSET,
++    limit: int | Unset = 50,
++) -> Error | SearchEventValuesResponse200 | None:
++    """Full-text search over decoded event values
++
++     Returns events whose decoded topic or value JSONB matches the query
++    using the event_tsv full-text index (issue #798). Results are newest-
++    first and cursor-paginated.
++
++    Args:
++        q (str):
++        cursor (str | Unset):
++        limit (int | Unset):  Default: 50.
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Error | SearchEventValuesResponse200
++    """
++
++    return sync_detailed(
++        client=client,
++        q=q,
++        cursor=cursor,
++        limit=limit,
++    ).parsed
++
++
++async def asyncio_detailed(
++    *,
++    client: AuthenticatedClient,
++    q: str,
++    cursor: str | Unset = UNSET,
++    limit: int | Unset = 50,
++) -> Response[Error | SearchEventValuesResponse200]:
++    """Full-text search over decoded event values
++
++     Returns events whose decoded topic or value JSONB matches the query
++    using the event_tsv full-text index (issue #798). Results are newest-
++    first and cursor-paginated.
++
++    Args:
++        q (str):
++        cursor (str | Unset):
++        limit (int | Unset):  Default: 50.
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Response[Error | SearchEventValuesResponse200]
++    """
++
++    kwargs = _get_kwargs(
++        q=q,
++        cursor=cursor,
++        limit=limit,
++    )
++
++    response = await client.get_async_httpx_client().request(**kwargs)
++
++    return _build_response(client=client, response=response)
++
++
++async def asyncio(
++    *,
++    client: AuthenticatedClient,
++    q: str,
++    cursor: str | Unset = UNSET,
++    limit: int | Unset = 50,
++) -> Error | SearchEventValuesResponse200 | None:
++    """Full-text search over decoded event values
++
++     Returns events whose decoded topic or value JSONB matches the query
++    using the event_tsv full-text index (issue #798). Results are newest-
++    first and cursor-paginated.
++
++    Args:
++        q (str):
++        cursor (str | Unset):
++        limit (int | Unset):  Default: 50.
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Error | SearchEventValuesResponse200
++    """
++
++    return (
++        await asyncio_detailed(
++            client=client,
++            q=q,
++            cursor=cursor,
++            limit=limit,
++        )
++    ).parsed
+diff --git a/packages/python-sdk/src/sorolens/_generated/api/notifications/get_webhook_delivery.py b/packages/python-sdk/src/sorolens/_generated/api/notifications/get_webhook_delivery.py
+new file mode 100644
+index 0000000..723f7ea
+--- /dev/null
++++ b/packages/python-sdk/src/sorolens/_generated/api/notifications/get_webhook_delivery.py
+@@ -0,0 +1,203 @@
++from http import HTTPStatus
++from typing import Any
++from urllib.parse import quote
++
++import httpx
++
++from ... import errors
++from ...client import AuthenticatedClient, Client
++from ...models.error import Error
++from ...models.role_error import RoleError
++from ...models.webhook_delivery import WebhookDelivery
++from ...types import Response
++
++
++def _get_kwargs(
++    id: str,
++    delivery_id: str,
++) -> dict[str, Any]:
++
++    _kwargs: dict[str, Any] = {
++        "method": "get",
++        "url": "/api/v1/watchdog/subscriptions/{id}/deliveries/{delivery_id}".format(
++            id=quote(str(id), safe=""),
++            delivery_id=quote(str(delivery_id), safe=""),
++        ),
++    }
++
++    return _kwargs
++
++
++def _parse_response(
++    *, client: AuthenticatedClient | Client, response: httpx.Response
++) -> Error | RoleError | WebhookDelivery | None:
++    if response.status_code == 200:
++        response_200 = WebhookDelivery.from_dict(response.json())
++
++        return response_200
++
++    if response.status_code == 401:
++        response_401 = Error.from_dict(response.json())
++
++        return response_401
++
++    if response.status_code == 403:
++        response_403 = RoleError.from_dict(response.json())
++
++        return response_403
++
++    if response.status_code == 404:
++        response_404 = Error.from_dict(response.json())
++
++        return response_404
++
++    if response.status_code == 500:
++        response_500 = Error.from_dict(response.json())
++
++        return response_500
++
++    if client.raise_on_unexpected_status:
++        raise errors.UnexpectedStatus(response.status_code, response.content)
++    else:
++        return None
++
++
++def _build_response(
++    *, client: AuthenticatedClient | Client, response: httpx.Response
++) -> Response[Error | RoleError | WebhookDelivery]:
++    return Response(
++        status_code=HTTPStatus(response.status_code),
++        content=response.content,
++        headers=response.headers,
++        parsed=_parse_response(client=client, response=response),
++    )
++
++
++def sync_detailed(
++    id: str,
++    delivery_id: str,
++    *,
++    client: AuthenticatedClient,
++) -> Response[Error | RoleError | WebhookDelivery]:
++    """Get a single webhook delivery record
++
++     Returns the full delivery record including the signed payload and
++    the response code and body received from the destination (issue #828).
++
++    Args:
++        id (str):
++        delivery_id (str):
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Response[Error | RoleError | WebhookDelivery]
++    """
++
++    kwargs = _get_kwargs(
++        id=id,
++        delivery_id=delivery_id,
++    )
++
++    response = client.get_httpx_client().request(
++        **kwargs,
++    )
++
++    return _build_response(client=client, response=response)
++
++
++def sync(
++    id: str,
++    delivery_id: str,
++    *,
++    client: AuthenticatedClient,
++) -> Error | RoleError | WebhookDelivery | None:
++    """Get a single webhook delivery record
++
++     Returns the full delivery record including the signed payload and
++    the response code and body received from the destination (issue #828).
++
++    Args:
++        id (str):
++        delivery_id (str):
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Error | RoleError | WebhookDelivery
++    """
++
++    return sync_detailed(
++        id=id,
++        delivery_id=delivery_id,
++        client=client,
++    ).parsed
++
++
++async def asyncio_detailed(
++    id: str,
++    delivery_id: str,
++    *,
++    client: AuthenticatedClient,
++) -> Response[Error | RoleError | WebhookDelivery]:
++    """Get a single webhook delivery record
++
++     Returns the full delivery record including the signed payload and
++    the response code and body received from the destination (issue #828).
++
++    Args:
++        id (str):
++        delivery_id (str):
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Response[Error | RoleError | WebhookDelivery]
++    """
++
++    kwargs = _get_kwargs(
++        id=id,
++        delivery_id=delivery_id,
++    )
++
++    response = await client.get_async_httpx_client().request(**kwargs)
++
++    return _build_response(client=client, response=response)
++
++
++async def asyncio(
++    id: str,
++    delivery_id: str,
++    *,
++    client: AuthenticatedClient,
++) -> Error | RoleError | WebhookDelivery | None:
++    """Get a single webhook delivery record
++
++     Returns the full delivery record including the signed payload and
++    the response code and body received from the destination (issue #828).
++
++    Args:
++        id (str):
++        delivery_id (str):
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Error | RoleError | WebhookDelivery
++    """
++
++    return (
++        await asyncio_detailed(
++            id=id,
++            delivery_id=delivery_id,
++            client=client,
++        )
++    ).parsed
+diff --git a/packages/python-sdk/src/sorolens/_generated/api/notifications/list_webhook_deliveries.py b/packages/python-sdk/src/sorolens/_generated/api/notifications/list_webhook_deliveries.py
+new file mode 100644
+index 0000000..5f29d7a
+--- /dev/null
++++ b/packages/python-sdk/src/sorolens/_generated/api/notifications/list_webhook_deliveries.py
+@@ -0,0 +1,226 @@
++from http import HTTPStatus
++from typing import Any
++from urllib.parse import quote
++
++import httpx
++
++from ... import errors
++from ...client import AuthenticatedClient, Client
++from ...models.error import Error
++from ...models.list_webhook_deliveries_response_200 import (
++    ListWebhookDeliveriesResponse200,
++)
++from ...models.role_error import RoleError
++from ...types import UNSET, Response, Unset
++
++
++def _get_kwargs(
++    id: str,
++    *,
++    cursor: str | Unset = UNSET,
++    limit: int | Unset = 50,
++) -> dict[str, Any]:
++
++    params: dict[str, Any] = {}
++
++    params["cursor"] = cursor
++
++    params["limit"] = limit
++
++    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
++
++    _kwargs: dict[str, Any] = {
++        "method": "get",
++        "url": "/api/v1/watchdog/subscriptions/{id}/deliveries".format(
++            id=quote(str(id), safe=""),
++        ),
++        "params": params,
++    }
++
++    return _kwargs
++
++
++def _parse_response(
++    *, client: AuthenticatedClient | Client, response: httpx.Response
++) -> Error | ListWebhookDeliveriesResponse200 | RoleError | None:
++    if response.status_code == 200:
++        response_200 = ListWebhookDeliveriesResponse200.from_dict(response.json())
++
++        return response_200
++
++    if response.status_code == 401:
++        response_401 = Error.from_dict(response.json())
++
++        return response_401
++
++    if response.status_code == 403:
++        response_403 = RoleError.from_dict(response.json())
++
++        return response_403
++
++    if response.status_code == 500:
++        response_500 = Error.from_dict(response.json())
++
++        return response_500
++
++    if client.raise_on_unexpected_status:
++        raise errors.UnexpectedStatus(response.status_code, response.content)
++    else:
++        return None
++
++
++def _build_response(
++    *, client: AuthenticatedClient | Client, response: httpx.Response
++) -> Response[Error | ListWebhookDeliveriesResponse200 | RoleError]:
++    return Response(
++        status_code=HTTPStatus(response.status_code),
++        content=response.content,
++        headers=response.headers,
++        parsed=_parse_response(client=client, response=response),
++    )
++
++
++def sync_detailed(
++    id: str,
++    *,
++    client: AuthenticatedClient,
++    cursor: str | Unset = UNSET,
++    limit: int | Unset = 50,
++) -> Response[Error | ListWebhookDeliveriesResponse200 | RoleError]:
++    """List webhook deliveries for a subscription
++
++     Returns webhook delivery attempts for the subscription, newest first,
++    cursor-paginated. The signed payload is omitted; use
++    GET .../deliveries/{deliveryID} for the full record (issue #828).
++
++    Args:
++        id (str):
++        cursor (str | Unset):
++        limit (int | Unset):  Default: 50.
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Response[Error | ListWebhookDeliveriesResponse200 | RoleError]
++    """
++
++    kwargs = _get_kwargs(
++        id=id,
++        cursor=cursor,
++        limit=limit,
++    )
++
++    response = client.get_httpx_client().request(
++        **kwargs,
++    )
++
++    return _build_response(client=client, response=response)
++
++
++def sync(
++    id: str,
++    *,
++    client: AuthenticatedClient,
++    cursor: str | Unset = UNSET,
++    limit: int | Unset = 50,
++) -> Error | ListWebhookDeliveriesResponse200 | RoleError | None:
++    """List webhook deliveries for a subscription
++
++     Returns webhook delivery attempts for the subscription, newest first,
++    cursor-paginated. The signed payload is omitted; use
++    GET .../deliveries/{deliveryID} for the full record (issue #828).
++
++    Args:
++        id (str):
++        cursor (str | Unset):
++        limit (int | Unset):  Default: 50.
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Error | ListWebhookDeliveriesResponse200 | RoleError
++    """
++
++    return sync_detailed(
++        id=id,
++        client=client,
++        cursor=cursor,
++        limit=limit,
++    ).parsed
++
++
++async def asyncio_detailed(
++    id: str,
++    *,
++    client: AuthenticatedClient,
++    cursor: str | Unset = UNSET,
++    limit: int | Unset = 50,
++) -> Response[Error | ListWebhookDeliveriesResponse200 | RoleError]:
++    """List webhook deliveries for a subscription
++
++     Returns webhook delivery attempts for the subscription, newest first,
++    cursor-paginated. The signed payload is omitted; use
++    GET .../deliveries/{deliveryID} for the full record (issue #828).
++
++    Args:
++        id (str):
++        cursor (str | Unset):
++        limit (int | Unset):  Default: 50.
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Response[Error | ListWebhookDeliveriesResponse200 | RoleError]
++    """
++
++    kwargs = _get_kwargs(
++        id=id,
++        cursor=cursor,
++        limit=limit,
++    )
++
++    response = await client.get_async_httpx_client().request(**kwargs)
++
++    return _build_response(client=client, response=response)
++
++
++async def asyncio(
++    id: str,
++    *,
++    client: AuthenticatedClient,
++    cursor: str | Unset = UNSET,
++    limit: int | Unset = 50,
++) -> Error | ListWebhookDeliveriesResponse200 | RoleError | None:
++    """List webhook deliveries for a subscription
++
++     Returns webhook delivery attempts for the subscription, newest first,
++    cursor-paginated. The signed payload is omitted; use
++    GET .../deliveries/{deliveryID} for the full record (issue #828).
++
++    Args:
++        id (str):
++        cursor (str | Unset):
++        limit (int | Unset):  Default: 50.
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Error | ListWebhookDeliveriesResponse200 | RoleError
++    """
++
++    return (
++        await asyncio_detailed(
++            id=id,
++            client=client,
++            cursor=cursor,
++            limit=limit,
++        )
++    ).parsed
+diff --git a/packages/python-sdk/src/sorolens/_generated/api/notifications/retry_webhook_delivery.py b/packages/python-sdk/src/sorolens/_generated/api/notifications/retry_webhook_delivery.py
+new file mode 100644
+index 0000000..902af3e
+--- /dev/null
++++ b/packages/python-sdk/src/sorolens/_generated/api/notifications/retry_webhook_delivery.py
+@@ -0,0 +1,207 @@
++from http import HTTPStatus
++from typing import Any
++from urllib.parse import quote
++
++import httpx
++
++from ... import errors
++from ...client import AuthenticatedClient, Client
++from ...models.error import Error
++from ...models.role_error import RoleError
++from ...models.webhook_delivery import WebhookDelivery
++from ...types import Response
++
++
++def _get_kwargs(
++    id: str,
++    delivery_id: str,
++) -> dict[str, Any]:
++
++    _kwargs: dict[str, Any] = {
++        "method": "post",
++        "url": "/api/v1/watchdog/subscriptions/{id}/deliveries/{delivery_id}/retry".format(
++            id=quote(str(id), safe=""),
++            delivery_id=quote(str(delivery_id), safe=""),
++        ),
++    }
++
++    return _kwargs
++
++
++def _parse_response(
++    *, client: AuthenticatedClient | Client, response: httpx.Response
++) -> Error | RoleError | WebhookDelivery | None:
++    if response.status_code == 202:
++        response_202 = WebhookDelivery.from_dict(response.json())
++
++        return response_202
++
++    if response.status_code == 401:
++        response_401 = Error.from_dict(response.json())
++
++        return response_401
++
++    if response.status_code == 403:
++        response_403 = RoleError.from_dict(response.json())
++
++        return response_403
++
++    if response.status_code == 404:
++        response_404 = Error.from_dict(response.json())
++
++        return response_404
++
++    if response.status_code == 500:
++        response_500 = Error.from_dict(response.json())
++
++        return response_500
++
++    if client.raise_on_unexpected_status:
++        raise errors.UnexpectedStatus(response.status_code, response.content)
++    else:
++        return None
++
++
++def _build_response(
++    *, client: AuthenticatedClient | Client, response: httpx.Response
++) -> Response[Error | RoleError | WebhookDelivery]:
++    return Response(
++        status_code=HTTPStatus(response.status_code),
++        content=response.content,
++        headers=response.headers,
++        parsed=_parse_response(client=client, response=response),
++    )
++
++
++def sync_detailed(
++    id: str,
++    delivery_id: str,
++    *,
++    client: AuthenticatedClient,
++) -> Response[Error | RoleError | WebhookDelivery]:
++    """Manually retry a failed webhook delivery
++
++     Marks a failed delivery for immediate retry by resetting its
++    next_retry_at to now and incrementing the attempt counter.
++    Only contributor+ callers may trigger a retry (issue #828).
++
++    Args:
++        id (str):
++        delivery_id (str):
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Response[Error | RoleError | WebhookDelivery]
++    """
++
++    kwargs = _get_kwargs(
++        id=id,
++        delivery_id=delivery_id,
++    )
++
++    response = client.get_httpx_client().request(
++        **kwargs,
++    )
++
++    return _build_response(client=client, response=response)
++
++
++def sync(
++    id: str,
++    delivery_id: str,
++    *,
++    client: AuthenticatedClient,
++) -> Error | RoleError | WebhookDelivery | None:
++    """Manually retry a failed webhook delivery
++
++     Marks a failed delivery for immediate retry by resetting its
++    next_retry_at to now and incrementing the attempt counter.
++    Only contributor+ callers may trigger a retry (issue #828).
++
++    Args:
++        id (str):
++        delivery_id (str):
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Error | RoleError | WebhookDelivery
++    """
++
++    return sync_detailed(
++        id=id,
++        delivery_id=delivery_id,
++        client=client,
++    ).parsed
++
++
++async def asyncio_detailed(
++    id: str,
++    delivery_id: str,
++    *,
++    client: AuthenticatedClient,
++) -> Response[Error | RoleError | WebhookDelivery]:
++    """Manually retry a failed webhook delivery
++
++     Marks a failed delivery for immediate retry by resetting its
++    next_retry_at to now and incrementing the attempt counter.
++    Only contributor+ callers may trigger a retry (issue #828).
++
++    Args:
++        id (str):
++        delivery_id (str):
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Response[Error | RoleError | WebhookDelivery]
++    """
++
++    kwargs = _get_kwargs(
++        id=id,
++        delivery_id=delivery_id,
++    )
++
++    response = await client.get_async_httpx_client().request(**kwargs)
++
++    return _build_response(client=client, response=response)
++
++
++async def asyncio(
++    id: str,
++    delivery_id: str,
++    *,
++    client: AuthenticatedClient,
++) -> Error | RoleError | WebhookDelivery | None:
++    """Manually retry a failed webhook delivery
++
++     Marks a failed delivery for immediate retry by resetting its
++    next_retry_at to now and incrementing the attempt counter.
++    Only contributor+ callers may trigger a retry (issue #828).
++
++    Args:
++        id (str):
++        delivery_id (str):
++
++    Raises:
++        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
++        httpx.TimeoutException: If the request takes longer than Client.timeout.
++
++    Returns:
++        Error | RoleError | WebhookDelivery
++    """
++
++    return (
++        await asyncio_detailed(
++            id=id,
++            delivery_id=delivery_id,
++            client=client,
++        )
++    ).parsed
+diff --git a/packages/python-sdk/src/sorolens/_generated/models/__init__.py b/packages/python-sdk/src/sorolens/_generated/models/__init__.py
+index 8f06a38..0287402 100644
+--- a/packages/python-sdk/src/sorolens/_generated/models/__init__.py
++++ b/packages/python-sdk/src/sorolens/_generated/models/__init__.py
+@@ -224,6 +224,7 @@ from .list_watchdog_alerts_network import ListWatchdogAlertsNetwork
+ from .list_watchdog_alerts_response_200 import ListWatchdogAlertsResponse200
+ from .list_watchdog_alerts_severity import ListWatchdogAlertsSeverity
+ from .list_watched_accounts_response_200 import ListWatchedAccountsResponse200
++from .list_webhook_deliveries_response_200 import ListWebhookDeliveriesResponse200
+ from .live_activity_response_200 import LiveActivityResponse200
+ from .maintenance_window import MaintenanceWindow
+ from .maintenance_window_recurrence import MaintenanceWindowRecurrence
+@@ -255,6 +256,7 @@ from .rotate_api_key_admin_response_200 import RotateApiKeyAdminResponse200
+ from .rotate_api_key_response_200 import RotateApiKeyResponse200
+ from .rule_diagnostic import RuleDiagnostic
+ from .scope_error import ScopeError
++from .search_event_values_response_200 import SearchEventValuesResponse200
+ from .session import Session
+ from .set_alert_rule_enabled_body import SetAlertRuleEnabledBody
+ from .slack_command_body import SlackCommandBody
+@@ -357,6 +359,9 @@ from .watchdog_stats import WatchdogStats
+ from .watched_account import WatchedAccount
+ from .watchlist import Watchlist
+ from .watchlist_item import WatchlistItem
++from .webhook_delivery import WebhookDelivery
++from .webhook_delivery_signed_payload_type_0 import WebhookDeliverySignedPayloadType0
++from .webhook_delivery_status import WebhookDeliveryStatus
+ 
+ __all__ = (
+     "APIKey",
+@@ -555,6 +560,7 @@ __all__ = (
+     "ListWatchdogAlertsResponse200",
+     "ListWatchdogAlertsSeverity",
+     "ListWatchedAccountsResponse200",
++    "ListWebhookDeliveriesResponse200",
+     "LiveActivityResponse200",
+     "MaintenanceWindow",
+     "MaintenanceWindowRecurrence",
+@@ -584,6 +590,7 @@ __all__ = (
+     "RotateApiKeyResponse200",
+     "RuleDiagnostic",
+     "ScopeError",
++    "SearchEventValuesResponse200",
+     "Session",
+     "SetAlertRuleEnabledBody",
+     "SlackCommandBody",
+@@ -684,4 +691,7 @@ __all__ = (
+     "WatchedAccount",
+     "Watchlist",
+     "WatchlistItem",
++    "WebhookDelivery",
++    "WebhookDeliverySignedPayloadType0",
++    "WebhookDeliveryStatus",
+ )
+diff --git a/packages/python-sdk/src/sorolens/_generated/models/list_webhook_deliveries_response_200.py b/packages/python-sdk/src/sorolens/_generated/models/list_webhook_deliveries_response_200.py
+new file mode 100644
+index 0000000..380edf3
+--- /dev/null
++++ b/packages/python-sdk/src/sorolens/_generated/models/list_webhook_deliveries_response_200.py
+@@ -0,0 +1,84 @@
++from __future__ import annotations
++
++from collections.abc import Mapping
++from typing import TYPE_CHECKING, Any, Self, TypeVar
++
++from attrs import define as _attrs_define
++from attrs import field as _attrs_field
++from typing_extensions import Self
++
++if TYPE_CHECKING:
++    from ..models.webhook_delivery import WebhookDelivery
++
++
++T = TypeVar("T", bound="ListWebhookDeliveriesResponse200")
++
++
++@_attrs_define
++class ListWebhookDeliveriesResponse200:
++    """
++    Attributes:
++        deliveries (list[WebhookDelivery]):
++        next_cursor (str):
++    """
++
++    deliveries: list[WebhookDelivery]
++    next_cursor: str
++    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
++
++    def to_dict(self) -> dict[str, Any]:
++        deliveries = []
++        for deliveries_item_data in self.deliveries:
++            deliveries_item = deliveries_item_data.to_dict()
++            deliveries.append(deliveries_item)
++
++        next_cursor = self.next_cursor
++
++        field_dict: dict[str, Any] = {}
++        field_dict.update(self.additional_properties)
++        field_dict.update(
++            {
++                "deliveries": deliveries,
++                "next_cursor": next_cursor,
++            }
++        )
++
++        return field_dict
++
++    @classmethod
++    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
++        from ..models.webhook_delivery import WebhookDelivery
++
++        d = dict(src_dict)
++        deliveries = []
++        _deliveries = d.pop("deliveries")
++        for deliveries_item_data in _deliveries:
++            deliveries_item = WebhookDelivery.from_dict(deliveries_item_data)
++
++            deliveries.append(deliveries_item)
++
++        next_cursor = d.pop("next_cursor")
++
++        list_webhook_deliveries_response_200 = cls(
++            deliveries=deliveries,
++            next_cursor=next_cursor,
++        )
++
++        list_webhook_deliveries_response_200.additional_properties = d
++        return list_webhook_deliveries_response_200
++
++    @property
++    def additional_keys(self) -> list[str]:
++        return list(self.additional_properties.keys())
++
++    def __getitem__(self, key: str) -> Any:
++        return self.additional_properties[key]
++
++    def __setitem__(self, key: str, value: Any) -> None:
++        self.additional_properties[key] = value
++
++    def __delitem__(self, key: str) -> None:
++        del self.additional_properties[key]
++
++    def __contains__(self, key: str) -> bool:
++        return key in self.additional_properties
+diff --git a/packages/python-sdk/src/sorolens/_generated/models/search_event_values_response_200.py b/packages/python-sdk/src/sorolens/_generated/models/search_event_values_response_200.py
+new file mode 100644
+index 0000000..f626452
+--- /dev/null
++++ b/packages/python-sdk/src/sorolens/_generated/models/search_event_values_response_200.py
+@@ -0,0 +1,92 @@
++from __future__ import annotations
++
++from collections.abc import Mapping
++from typing import TYPE_CHECKING, Any, Self, TypeVar
++
++from attrs import define as _attrs_define
++from attrs import field as _attrs_field
++from typing_extensions import Self
++
++if TYPE_CHECKING:
++    from ..models.event import Event
++
++
++T = TypeVar("T", bound="SearchEventValuesResponse200")
++
++
++@_attrs_define
++class SearchEventValuesResponse200:
++    """
++    Attributes:
++        events (list[Event]):
++        next_cursor (str): Opaque cursor for the next page; empty when exhausted.
++        query (str): The query as interpreted by the server.
++    """
++
++    events: list[Event]
++    next_cursor: str
++    query: str
++    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
++
++    def to_dict(self) -> dict[str, Any]:
++        events = []
++        for events_item_data in self.events:
++            events_item = events_item_data.to_dict()
++            events.append(events_item)
++
++        next_cursor = self.next_cursor
++
++        query = self.query
++
++        field_dict: dict[str, Any] = {}
++        field_dict.update(self.additional_properties)
++        field_dict.update(
++            {
++                "events": events,
++                "next_cursor": next_cursor,
++                "query": query,
++            }
++        )
++
++        return field_dict
++
++    @classmethod
++    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
++        from ..models.event import Event
++
++        d = dict(src_dict)
++        events = []
++        _events = d.pop("events")
++        for events_item_data in _events:
++            events_item = Event.from_dict(events_item_data)
++
++            events.append(events_item)
++
++        next_cursor = d.pop("next_cursor")
++
++        query = d.pop("query")
++
++        search_event_values_response_200 = cls(
++            events=events,
++            next_cursor=next_cursor,
++            query=query,
++        )
++
++        search_event_values_response_200.additional_properties = d
++        return search_event_values_response_200
++
++    @property
++    def additional_keys(self) -> list[str]:
++        return list(self.additional_properties.keys())
++
++    def __getitem__(self, key: str) -> Any:
++        return self.additional_properties[key]
++
++    def __setitem__(self, key: str, value: Any) -> None:
++        self.additional_properties[key] = value
++
++    def __delitem__(self, key: str) -> None:
++        del self.additional_properties[key]
++
++    def __contains__(self, key: str) -> bool:
++        return key in self.additional_properties
+diff --git a/packages/python-sdk/src/sorolens/_generated/models/webhook_delivery.py b/packages/python-sdk/src/sorolens/_generated/models/webhook_delivery.py
+new file mode 100644
+index 0000000..b0bbc16
+--- /dev/null
++++ b/packages/python-sdk/src/sorolens/_generated/models/webhook_delivery.py
+@@ -0,0 +1,247 @@
++from __future__ import annotations
++
++import datetime
++from collections.abc import Mapping
++from typing import TYPE_CHECKING, Any, Self, TypeVar, cast
++
++from attrs import define as _attrs_define
++from attrs import field as _attrs_field
++from typing_extensions import Self
++
++from ..models.webhook_delivery_status import WebhookDeliveryStatus
++from ..types import UNSET, Unset
++
++if TYPE_CHECKING:
++    from ..models.webhook_delivery_signed_payload_type_0 import (
++        WebhookDeliverySignedPayloadType0,
++    )
++
++
++T = TypeVar("T", bound="WebhookDelivery")
++
++
++@_attrs_define
++class WebhookDelivery:
++    """One webhook delivery attempt for an alert subscription (issue
++
++    Attributes:
++        id (str):
++        subscription_id (str):
++        attempt_number (int):
++        status (WebhookDeliveryStatus):
++        created_at (datetime.datetime):
++        updated_at (datetime.datetime):
++        signed_payload (None | Unset | WebhookDeliverySignedPayloadType0): The JSONB body sent (or to be sent) to the
++            webhook URL.
++        response_status (int | None | Unset): HTTP status code returned by the destination.
++        response_body (None | str | Unset): Response body from the destination (truncated at 4 KiB).
++        last_error (None | str | Unset): Last transport-level error (network timeout, DNS failure, etc.).
++        next_retry_at (datetime.datetime | None | Unset): When the delivery will next be retried; null if no retry
++            scheduled.
++    """
++
++    id: str
++    subscription_id: str
++    attempt_number: int
++    status: WebhookDeliveryStatus
++    created_at: datetime.datetime
++    updated_at: datetime.datetime
++    signed_payload: None | Unset | WebhookDeliverySignedPayloadType0 = UNSET
++    response_status: int | None | Unset = UNSET
++    response_body: None | str | Unset = UNSET
++    last_error: None | str | Unset = UNSET
++    next_retry_at: datetime.datetime | None | Unset = UNSET
++    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
++
++    def to_dict(self) -> dict[str, Any]:
++        from ..models.webhook_delivery_signed_payload_type_0 import (
++            WebhookDeliverySignedPayloadType0,
++        )
++
++        id = self.id
++
++        subscription_id = self.subscription_id
++
++        attempt_number = self.attempt_number
++
++        status = self.status.value
++
++        created_at = self.created_at.isoformat()
++
++        updated_at = self.updated_at.isoformat()
++
++        signed_payload: dict[str, Any] | None | Unset
++        if isinstance(self.signed_payload, Unset):
++            signed_payload = UNSET
++        elif isinstance(self.signed_payload, WebhookDeliverySignedPayloadType0):
++            signed_payload = self.signed_payload.to_dict()
++        else:
++            signed_payload = self.signed_payload
++
++        response_status: int | None | Unset
++        if isinstance(self.response_status, Unset):
++            response_status = UNSET
++        else:
++            response_status = self.response_status
++
++        response_body: None | str | Unset
++        if isinstance(self.response_body, Unset):
++            response_body = UNSET
++        else:
++            response_body = self.response_body
++
++        last_error: None | str | Unset
++        if isinstance(self.last_error, Unset):
++            last_error = UNSET
++        else:
++            last_error = self.last_error
++
++        next_retry_at: None | str | Unset
++        if isinstance(self.next_retry_at, Unset):
++            next_retry_at = UNSET
++        elif isinstance(self.next_retry_at, datetime.datetime):
++            next_retry_at = self.next_retry_at.isoformat()
++        else:
++            next_retry_at = self.next_retry_at
++
++        field_dict: dict[str, Any] = {}
++        field_dict.update(self.additional_properties)
++        field_dict.update(
++            {
++                "id": id,
++                "subscription_id": subscription_id,
++                "attempt_number": attempt_number,
++                "status": status,
++                "created_at": created_at,
++                "updated_at": updated_at,
++            }
++        )
++        if signed_payload is not UNSET:
++            field_dict["signed_payload"] = signed_payload
++        if response_status is not UNSET:
++            field_dict["response_status"] = response_status
++        if response_body is not UNSET:
++            field_dict["response_body"] = response_body
++        if last_error is not UNSET:
++            field_dict["last_error"] = last_error
++        if next_retry_at is not UNSET:
++            field_dict["next_retry_at"] = next_retry_at
++
++        return field_dict
++
++    @classmethod
++    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
++        from ..models.webhook_delivery_signed_payload_type_0 import (
++            WebhookDeliverySignedPayloadType0,
++        )
++
++        d = dict(src_dict)
++        id = d.pop("id")
++
++        subscription_id = d.pop("subscription_id")
++
++        attempt_number = d.pop("attempt_number")
++
++        status = WebhookDeliveryStatus(d.pop("status"))
++
++        created_at = datetime.datetime.fromisoformat(d.pop("created_at"))
++
++        updated_at = datetime.datetime.fromisoformat(d.pop("updated_at"))
++
++        def _parse_signed_payload(
++            data: object,
++        ) -> None | Unset | WebhookDeliverySignedPayloadType0:
++            if data is None:
++                return data
++            if isinstance(data, Unset):
++                return data
++            try:
++                if not isinstance(data, dict):
++                    raise TypeError()
++                signed_payload_type_0 = WebhookDeliverySignedPayloadType0.from_dict(
++                    data
++                )
++
++                return signed_payload_type_0
++            except (TypeError, ValueError, AttributeError, KeyError):
++                pass
++            return cast(None | Unset | WebhookDeliverySignedPayloadType0, data)
++
++        signed_payload = _parse_signed_payload(d.pop("signed_payload", UNSET))
++
++        def _parse_response_status(data: object) -> int | None | Unset:
++            if data is None:
++                return data
++            if isinstance(data, Unset):
++                return data
++            return cast(int | None | Unset, data)
++
++        response_status = _parse_response_status(d.pop("response_status", UNSET))
++
++        def _parse_response_body(data: object) -> None | str | Unset:
++            if data is None:
++                return data
++            if isinstance(data, Unset):
++                return data
++            return cast(None | str | Unset, data)
++
++        response_body = _parse_response_body(d.pop("response_body", UNSET))
++
++        def _parse_last_error(data: object) -> None | str | Unset:
++            if data is None:
++                return data
++            if isinstance(data, Unset):
++                return data
++            return cast(None | str | Unset, data)
++
++        last_error = _parse_last_error(d.pop("last_error", UNSET))
++
++        def _parse_next_retry_at(data: object) -> datetime.datetime | None | Unset:
++            if data is None:
++                return data
++            if isinstance(data, Unset):
++                return data
++            try:
++                if not isinstance(data, str):
++                    raise TypeError()
++                next_retry_at_type_0 = datetime.datetime.fromisoformat(data)
++
++                return next_retry_at_type_0
++            except (TypeError, ValueError, AttributeError, KeyError):
++                pass
++            return cast(datetime.datetime | None | Unset, data)
++
++        next_retry_at = _parse_next_retry_at(d.pop("next_retry_at", UNSET))
++
++        webhook_delivery = cls(
++            id=id,
++            subscription_id=subscription_id,
++            attempt_number=attempt_number,
++            status=status,
++            created_at=created_at,
++            updated_at=updated_at,
++            signed_payload=signed_payload,
++            response_status=response_status,
++            response_body=response_body,
++            last_error=last_error,
++            next_retry_at=next_retry_at,
++        )
++
++        webhook_delivery.additional_properties = d
++        return webhook_delivery
++
++    @property
++    def additional_keys(self) -> list[str]:
++        return list(self.additional_properties.keys())
++
++    def __getitem__(self, key: str) -> Any:
++        return self.additional_properties[key]
++
++    def __setitem__(self, key: str, value: Any) -> None:
++        self.additional_properties[key] = value
++
++    def __delitem__(self, key: str) -> None:
++        del self.additional_properties[key]
++
++    def __contains__(self, key: str) -> bool:
++        return key in self.additional_properties
+diff --git a/packages/python-sdk/src/sorolens/_generated/models/webhook_delivery_signed_payload_type_0.py b/packages/python-sdk/src/sorolens/_generated/models/webhook_delivery_signed_payload_type_0.py
+new file mode 100644
+index 0000000..7cf5e08
+--- /dev/null
++++ b/packages/python-sdk/src/sorolens/_generated/models/webhook_delivery_signed_payload_type_0.py
+@@ -0,0 +1,48 @@
++from __future__ import annotations
++
++from collections.abc import Mapping
++from typing import Any, Self, TypeVar
++
++from attrs import define as _attrs_define
++from attrs import field as _attrs_field
++from typing_extensions import Self
++
++T = TypeVar("T", bound="WebhookDeliverySignedPayloadType0")
++
++
++@_attrs_define
++class WebhookDeliverySignedPayloadType0:
++    """The JSONB body sent (or to be sent) to the webhook URL."""
++
++    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
++
++    def to_dict(self) -> dict[str, Any]:
++
++        field_dict: dict[str, Any] = {}
++        field_dict.update(self.additional_properties)
++
++        return field_dict
++
++    @classmethod
++    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
++        d = dict(src_dict)
++        webhook_delivery_signed_payload_type_0 = cls()
++
++        webhook_delivery_signed_payload_type_0.additional_properties = d
++        return webhook_delivery_signed_payload_type_0
++
++    @property
++    def additional_keys(self) -> list[str]:
++        return list(self.additional_properties.keys())
++
++    def __getitem__(self, key: str) -> Any:
++        return self.additional_properties[key]
++
++    def __setitem__(self, key: str, value: Any) -> None:
++        self.additional_properties[key] = value
++
++    def __delitem__(self, key: str) -> None:
++        del self.additional_properties[key]
++
++    def __contains__(self, key: str) -> bool:
++        return key in self.additional_properties
+diff --git a/packages/python-sdk/src/sorolens/_generated/models/webhook_delivery_status.py b/packages/python-sdk/src/sorolens/_generated/models/webhook_delivery_status.py
+new file mode 100644
+index 0000000..300a858
+--- /dev/null
++++ b/packages/python-sdk/src/sorolens/_generated/models/webhook_delivery_status.py
+@@ -0,0 +1,10 @@
++from enum import StrEnum
++
++
++class WebhookDeliveryStatus(StrEnum):
++    DELIVERED = "delivered"
++    FAILED = "failed"
++    PENDING = "pending"
++
++    def __str__(self) -> str:
++        return str(self.value)
+-- 
+2.43.0
+
