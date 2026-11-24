@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -55,9 +56,7 @@ func runTrack(cmd *cobra.Command, args []string) error {
 	// any network call.
 	if trackPreset != "" {
 		if _, err := presets.Lookup(presets.PresetType(trackPreset)); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			fmt.Fprintf(os.Stderr, "Run %s track --help for available presets.\n", os.Args[0])
-			return err
+			return fmt.Errorf("%w (run '%s track --help' for available presets)", err, os.Args[0])
 		}
 	}
 
@@ -68,9 +67,9 @@ func runTrack(cmd *cobra.Command, args []string) error {
 	c := newClient(globalConfig.Timeout)
 	contract, err := c.TrackContract(cmd.Context(), contractID, trackAlias, globalConfig.Network, trackPreset)
 	if err != nil {
-		if se, ok := err.(*client.SorolensError); ok {
-			fmt.Fprintf(os.Stderr, "Error (%s): %s\n", se.Code, se.Message)
-			return err
+		var se *client.SorolensError
+		if errors.As(err, &se) && se.Code != "" {
+			return fmt.Errorf("%s: %s", se.Code, se.Message)
 		}
 		return err
 	}
