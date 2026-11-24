@@ -79,6 +79,14 @@ type Store interface {
 	// CountFailedEvents returns the number of events parked in the
 	// dead-letter queue for a network, used for the dlq_size metric.
 	CountFailedEvents(ctx context.Context, network string) (int, error)
+
+	// UpsertStorageEntries upserts storage entry snapshots for a contract.
+	UpsertStorageEntries(ctx context.Context, entries []StorageEntry) error
+	// ListStorageKeys returns the key_xdr of all live storage entries of a contract.
+	ListStorageKeys(ctx context.Context, contractID string) ([]string, error)
+	// MarkStorageEntriesArchived marks entries of a contract that are not in
+	// activeKeys as archived.
+	MarkStorageEntriesArchived(ctx context.Context, contractID string, activeKeys []string) error
 }
 
 // RedisClient is the subset of Redis operations the poller needs for advisory locks.
