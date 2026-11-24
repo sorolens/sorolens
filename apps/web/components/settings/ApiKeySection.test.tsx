@@ -16,6 +16,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api";
 import type { APIKey, CreatedAPIKey } from "@/lib/apiKeys";
 import { ApiKeySection } from "./ApiKeySection";
 
@@ -24,6 +25,24 @@ const mockCreateMyApiKey = vi.fn();
 const mockRevokeMyApiKey = vi.fn();
 
 vi.mock("@/lib/apiKeys", () => ({
+  API_KEY_SCOPES: [
+    {
+      value: "read:contracts",
+      label: "Read contracts",
+      description: "List contracts, events, invocations and storage.",
+    },
+    {
+      value: "read:watchdog",
+      label: "Read watchdog",
+      description: "Read watchdog health checks, alerts and reports.",
+    },
+    {
+      value: "write:contracts",
+      label: "Write contracts",
+      description: "Track, untrack and tag contracts.",
+    },
+  ],
+  DEFAULT_KEY_SCOPES: ["read:contracts", "read:watchdog"],
   listMyApiKeys: () => mockListMyApiKeys(),
   createMyApiKey: (...args: unknown[]) => mockCreateMyApiKey(...args),
   revokeMyApiKey: (...args: unknown[]) => mockRevokeMyApiKey(...args),
@@ -103,7 +122,45 @@ describe("ApiKeySection", () => {
     const row = await screen.findByTestId("settings-api-key-row");
     expect(row).toHaveTextContent("Dashboard key");
     expect(row).toHaveTextContent("slo_7f3a…");
+    expect(row).toHaveTextContent("Scopes: read:contracts, read:watchdog");
     expect(screen.queryByTestId("settings-api-key-created")).toBeNull();
+  });
+
+  it("offers a scope picker and creates the key with the chosen scopes", async () => {
+    render(<ApiKeySection />);
+    await screen.findByText(/No API key yet/);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Read watchdog/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Write contracts/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate key" }));
+
+    await waitFor(() =>
+      expect(mockCreateMyApiKey).toHaveBeenCalledWith(undefined, [
+        "read:contracts",
+        "write:contracts",
+      ])
+    );
+  });
+
+  it("keeps the last scope selected so a key always has one", async () => {
+    render(<ApiKeySection />);
+    await screen.findByText(/No API key yet/);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Read contracts/ }));
+
+    expect(
+      screen.getByRole("checkbox", { name: /Read watchdog/ })
+    ).toBeDisabled();
+  });
+
+  it("shows a clear 403 state and hides the create controls", async () => {
+    mockListMyApiKeys.mockRejectedValue(new ApiError(403, "permission denied"));
+    render(<ApiKeySection />);
+
+    const alert = await screen.findByTestId("settings-api-key-forbidden");
+    expect(alert).toHaveTextContent(/does not have permission/);
+    expect(screen.queryByRole("button", { name: "Generate key" })).toBeNull();
+    expect(screen.queryByTestId("settings-api-key-error")).toBeNull();
   });
 
   it("reports a failed load instead of showing an empty state", async () => {

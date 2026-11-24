@@ -86,6 +86,17 @@ beforeEach(() => {
         json: () => Promise.resolve({ ok: true }),
       });
     }
+    if (String(url).includes("/api/v1/auth/session")) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            user_id: "user-1",
+            token: "sls_test-session",
+            expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+          }),
+      });
+    }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   });
 

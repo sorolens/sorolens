@@ -14,6 +14,24 @@ test("landing page renders the hero section", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("landing page shows product screenshots and copyable quickstarts", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.goto("/");
+
+  await expect(page.getByTestId("landing-screenshot")).toHaveCount(3);
+  await expect(
+    page.getByRole("button", { name: "Copy CLI quickstart" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Copy API request" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open the API playground" })
+  ).toHaveAttribute("href", "/playground");
+});
+
 test("landing page 'View Dashboard' navigates to /contracts", async ({
   page,
 }) => {

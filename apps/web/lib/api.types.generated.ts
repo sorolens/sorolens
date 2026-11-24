@@ -1741,6 +1741,43 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v2/push/subscriptions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the caller's push subscriptions (v2 passthrough) */
+    get: operations["v2ListPushSubscriptions"];
+    put?: never;
+    /** Register a push subscription (v2 passthrough) */
+    post: operations["v2CreatePushSubscription"];
+    /** Unsubscribe a push endpoint (v2 passthrough) */
+    delete: operations["v2DeletePushSubscription"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v2/push/subscriptions/dispatch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List every subscription for the dispatcher (v2 passthrough) */
+    get: operations["v2ListPushSubscriptionsForDispatch"];
+    put?: never;
+    post?: never;
+    /** Prune an expired subscription (v2 passthrough) */
+    delete: operations["v2DeletePushSubscriptionForDispatch"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v2/api-keys": {
     parameters: {
       query?: never;
@@ -1962,6 +1999,58 @@ export interface paths {
       };
     };
     delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/push/subscriptions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the caller's persistent Web Push subscriptions */
+    get: operations["listPushSubscriptions"];
+    put?: never;
+    /**
+     * Register or update a browser Web Push subscription
+     * @description Stores the subscription in Postgres so it survives process restarts.
+     *     The endpoint is unique; re-subscribing the same browser updates it.
+     */
+    post: operations["createPushSubscription"];
+    /**
+     * Unsubscribe a browser endpoint
+     * @description Idempotent; an already-removed endpoint still returns 204.
+     */
+    delete: operations["deletePushSubscription"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/push/subscriptions/dispatch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List every subscription for the internal push dispatcher
+     * @description Internal route for the alerting pipeline. Requires the
+     *     `X-Push-Secret` header to match `PUSH_INTERNAL_SECRET`; it is not
+     *     available to dashboard users.
+     */
+    get: operations["listPushSubscriptionsForDispatch"];
+    put?: never;
+    post?: never;
+    /**
+     * Prune an expired subscription reported by a push service
+     * @description Internal route guarded by the `X-Push-Secret` header.
+     */
+    delete: operations["deletePushSubscriptionForDispatch"];
     options?: never;
     head?: never;
     patch?: never;
@@ -8041,6 +8130,132 @@ export interface operations {
       404: components["responses"]["NotFound"];
     };
   };
+  v2ListPushSubscriptions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The caller's subscriptions, without key material */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+    };
+  };
+  v2CreatePushSubscription: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** Format: uri */
+          endpoint: string;
+          keys: {
+            auth: string;
+            p256dh: string;
+          };
+          filters?: Record<string, never>;
+        };
+      };
+    };
+    responses: {
+      /** @description Subscription saved */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+      422: components["responses"]["InvalidInput"];
+    };
+  };
+  v2DeletePushSubscription: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** Format: uri */
+          endpoint: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Subscription removed */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+    };
+  };
+  v2ListPushSubscriptionsForDispatch: {
+    parameters: {
+      query?: never;
+      header: {
+        "X-Push-Secret": string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description All subscriptions with their push keys */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+    };
+  };
+  v2DeletePushSubscriptionForDispatch: {
+    parameters: {
+      query?: never;
+      header: {
+        "X-Push-Secret": string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** Format: uri */
+          endpoint: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Subscription removed */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+    };
+  };
   v2ListAPIKeys: {
     parameters: {
       query?: never;
@@ -8374,6 +8589,137 @@ export interface operations {
       404: components["responses"]["NotFound"];
       422: components["responses"]["InvalidInput"];
       500: components["responses"]["InternalError"];
+    };
+  };
+  listPushSubscriptions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The caller's subscriptions, without key material */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+    };
+  };
+  createPushSubscription: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** Format: uri */
+          endpoint: string;
+          keys: {
+            auth: string;
+            p256dh: string;
+          };
+          filters?: {
+            /** @enum {string} */
+            severity?: "Info" | "Warning" | "Critical";
+            contract_id?: string;
+            network?: string;
+          };
+        };
+      };
+    };
+    responses: {
+      /** @description Subscription saved */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+      422: components["responses"]["InvalidInput"];
+    };
+  };
+  deletePushSubscription: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** Format: uri */
+          endpoint: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Subscription removed */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+    };
+  };
+  listPushSubscriptionsForDispatch: {
+    parameters: {
+      query?: never;
+      header: {
+        "X-Push-Secret": string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description All subscriptions with their push keys */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+    };
+  };
+  deletePushSubscriptionForDispatch: {
+    parameters: {
+      query?: never;
+      header: {
+        "X-Push-Secret": string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** Format: uri */
+          endpoint: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Subscription removed */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
     };
   };
   apiHealth: {

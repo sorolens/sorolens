@@ -48,6 +48,7 @@ type FullStore interface {
 	ExportJobStore
 	UsageStore
 	MaintenanceStore
+	PushSubscriptionStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.

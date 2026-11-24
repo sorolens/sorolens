@@ -29,6 +29,7 @@ type MockStore struct {
 	contractUpgrades      []ContractUpgrade
 	watchlist             map[string]map[string]bool
 	alertSubscriptions    []AlertSubscription
+	pushSubscriptions     []PushSubscription
 	users                 map[string]User
 	healthScores          map[string]ContractHealthScore
 	healthScoreHistory    map[string]map[time.Time]HealthScoreSample
