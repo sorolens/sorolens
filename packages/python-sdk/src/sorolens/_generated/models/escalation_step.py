@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, Self, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -15,9 +15,9 @@ class EscalationStep:
     """
     Attributes:
         order (int):
-        channel (str):
-        recipients (list[str]):
-        delay_mins (int):
+        channel (str): Delivery channel (e.g. email, slack, pagerduty).
+        recipients (list[str]): List of recipient addresses or identifiers for this step.
+        delay_mins (int): Minutes to wait before escalating to the next step.
     """
 
     order: int
@@ -55,7 +55,7 @@ class EscalationStep:
 
         channel = d.pop("channel")
 
-        recipients = d.pop("recipients")
+        recipients = cast(list[str], d.pop("recipients"))
 
         delay_mins = d.pop("delay_mins")
 

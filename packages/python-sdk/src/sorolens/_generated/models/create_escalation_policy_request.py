@@ -10,6 +10,7 @@ from typing_extensions import Self
 if TYPE_CHECKING:
     from ..models.escalation_step import EscalationStep
 
+
 T = TypeVar("T", bound="CreateEscalationPolicyRequest")
 
 
@@ -55,6 +56,7 @@ class CreateEscalationPolicyRequest:
         _steps = d.pop("steps")
         for steps_item_data in _steps:
             steps_item = EscalationStep.from_dict(steps_item_data)
+
             steps.append(steps_item)
 
         create_escalation_policy_request = cls(

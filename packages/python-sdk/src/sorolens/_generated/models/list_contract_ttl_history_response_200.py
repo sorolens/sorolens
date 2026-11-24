@@ -10,6 +10,7 @@ from typing_extensions import Self
 if TYPE_CHECKING:
     from ..models.ttl_operation import TTLOperation
 
+
 T = TypeVar("T", bound="ListContractTtlHistoryResponse200")
 
 
@@ -18,7 +19,7 @@ class ListContractTtlHistoryResponse200:
     """
     Attributes:
         operations (list[TTLOperation]):
-        next_cursor (str):
+        next_cursor (str): Opaque cursor for the next (older) page; empty when no more pages.
     """
 
     operations: list[TTLOperation]
@@ -53,6 +54,7 @@ class ListContractTtlHistoryResponse200:
         _operations = d.pop("operations")
         for operations_item_data in _operations:
             operations_item = TTLOperation.from_dict(operations_item_data)
+
             operations.append(operations_item)
 
         next_cursor = d.pop("next_cursor")

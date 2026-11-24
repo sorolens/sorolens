@@ -10,6 +10,7 @@ from typing_extensions import Self
 if TYPE_CHECKING:
     from ..models.escalation_policy import EscalationPolicy
 
+
 T = TypeVar("T", bound="ListEscalationPoliciesResponse200")
 
 
@@ -17,23 +18,28 @@ T = TypeVar("T", bound="ListEscalationPoliciesResponse200")
 class ListEscalationPoliciesResponse200:
     """
     Attributes:
-        escalation_policies (list[EscalationPolicy]):
+        policies (list[EscalationPolicy]):
+        next_cursor (str):
     """
 
-    escalation_policies: list[EscalationPolicy]
+    policies: list[EscalationPolicy]
+    next_cursor: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        escalation_policies = []
-        for escalation_policies_item_data in self.escalation_policies:
-            escalation_policies_item = escalation_policies_item_data.to_dict()
-            escalation_policies.append(escalation_policies_item)
+        policies = []
+        for policies_item_data in self.policies:
+            policies_item = policies_item_data.to_dict()
+            policies.append(policies_item)
+
+        next_cursor = self.next_cursor
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
             {
-                "escalation_policies": escalation_policies,
+                "policies": policies,
+                "next_cursor": next_cursor,
             }
         )
 
@@ -44,16 +50,18 @@ class ListEscalationPoliciesResponse200:
         from ..models.escalation_policy import EscalationPolicy
 
         d = dict(src_dict)
-        escalation_policies = []
-        _escalation_policies = d.pop("escalation_policies")
-        for escalation_policies_item_data in _escalation_policies:
-            escalation_policies_item = EscalationPolicy.from_dict(
-                escalation_policies_item_data
-            )
-            escalation_policies.append(escalation_policies_item)
+        policies = []
+        _policies = d.pop("policies")
+        for policies_item_data in _policies:
+            policies_item = EscalationPolicy.from_dict(policies_item_data)
+
+            policies.append(policies_item)
+
+        next_cursor = d.pop("next_cursor")
 
         list_escalation_policies_response_200 = cls(
-            escalation_policies=escalation_policies,
+            policies=policies,
+            next_cursor=next_cursor,
         )
 
         list_escalation_policies_response_200.additional_properties = d

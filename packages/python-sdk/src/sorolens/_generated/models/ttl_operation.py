@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Mapping
-from typing import Any, Self, TypeVar
+from typing import Any, Self, TypeVar, cast
+from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -19,20 +20,20 @@ T = TypeVar("T", bound="TTLOperation")
 class TTLOperation:
     """
     Attributes:
-        id (str):
+        id (UUID):
         contract_id (str):
         network (TTLOperationNetwork):
         tx_hash (str):
         ledger (int):
         ledger_closed_at (datetime.datetime):
         op_type (TTLOperationOpType):
-        key_xdr (str):
+        key_xdr (str): Base64-encoded LedgerKey XDR identifying the storage entry.
         inserted_at (datetime.datetime):
-        old_live_ledger (int | None | Unset):
-        new_live_ledger (int | None | Unset):
+        old_live_ledger (int | None | Unset): Live-until ledger before the operation (null for restores).
+        new_live_ledger (int | None | Unset): Live-until ledger after the operation.
     """
 
-    id: str
+    id: UUID
     contract_id: str
     network: TTLOperationNetwork
     tx_hash: str
@@ -46,7 +47,7 @@ class TTLOperation:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        id = self.id
+        id = str(self.id)
 
         contract_id = self.contract_id
 
@@ -64,9 +65,17 @@ class TTLOperation:
 
         inserted_at = self.inserted_at.isoformat()
 
-        old_live_ledger = self.old_live_ledger
+        old_live_ledger: int | None | Unset
+        if isinstance(self.old_live_ledger, Unset):
+            old_live_ledger = UNSET
+        else:
+            old_live_ledger = self.old_live_ledger
 
-        new_live_ledger = self.new_live_ledger
+        new_live_ledger: int | None | Unset
+        if isinstance(self.new_live_ledger, Unset):
+            new_live_ledger = UNSET
+        else:
+            new_live_ledger = self.new_live_ledger
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -93,7 +102,7 @@ class TTLOperation:
     @classmethod
     def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
         d = dict(src_dict)
-        id = d.pop("id")
+        id = UUID(d.pop("id"))
 
         contract_id = d.pop("contract_id")
 
@@ -111,9 +120,23 @@ class TTLOperation:
 
         inserted_at = datetime.datetime.fromisoformat(d.pop("inserted_at"))
 
-        old_live_ledger = d.pop("old_live_ledger", UNSET)
+        def _parse_old_live_ledger(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
 
-        new_live_ledger = d.pop("new_live_ledger", UNSET)
+        old_live_ledger = _parse_old_live_ledger(d.pop("old_live_ledger", UNSET))
+
+        def _parse_new_live_ledger(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        new_live_ledger = _parse_new_live_ledger(d.pop("new_live_ledger", UNSET))
 
         ttl_operation = cls(
             id=id,

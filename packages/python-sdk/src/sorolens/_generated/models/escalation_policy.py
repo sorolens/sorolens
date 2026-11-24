@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Self, TypeVar
+from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -11,6 +12,7 @@ from typing_extensions import Self
 if TYPE_CHECKING:
     from ..models.escalation_step import EscalationStep
 
+
 T = TypeVar("T", bound="EscalationPolicy")
 
 
@@ -18,14 +20,14 @@ T = TypeVar("T", bound="EscalationPolicy")
 class EscalationPolicy:
     """
     Attributes:
-        id (str):
+        id (UUID):
         name (str):
         steps (list[EscalationStep]):
         created_at (datetime.datetime):
         updated_at (datetime.datetime):
     """
 
-    id: str
+    id: UUID
     name: str
     steps: list[EscalationStep]
     created_at: datetime.datetime
@@ -33,7 +35,7 @@ class EscalationPolicy:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        id = self.id
+        id = str(self.id)
 
         name = self.name
 
@@ -65,7 +67,7 @@ class EscalationPolicy:
         from ..models.escalation_step import EscalationStep
 
         d = dict(src_dict)
-        id = d.pop("id")
+        id = UUID(d.pop("id"))
 
         name = d.pop("name")
 
@@ -73,6 +75,7 @@ class EscalationPolicy:
         _steps = d.pop("steps")
         for steps_item_data in _steps:
             steps_item = EscalationStep.from_dict(steps_item_data)
+
             steps.append(steps_item)
 
         created_at = datetime.datetime.fromisoformat(d.pop("created_at"))
