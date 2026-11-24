@@ -58,6 +58,7 @@ import type {
   RulePreview,
   RuleCatalogResponse,
   RuleLibraryResponse,
+  ResourceTrendResponse,
   SearchResponse,
   ContractUpgradeMarker,
 } from "./types";
@@ -360,6 +361,18 @@ export function getContractInvocations(
   const qs = search.toString();
   return fetchJson<InvocationsResponse>(
     `${API_URL}/api/v1/contracts/${id}/invocations${qs ? "?" + qs : ""}`
+  );
+}
+
+// getContractResourceTrend fetches the server-side daily aggregation in one
+// request (issue #600), replacing the dashboard's client-side paging.
+export function getContractResourceTrend(
+  id: string,
+  days = 30
+): Promise<ResourceTrendResponse> {
+  const search = new URLSearchParams({ days: String(days) });
+  return fetchJson<ResourceTrendResponse>(
+    `${API_URL}/api/v1/contracts/${id}/resource-trend?${search.toString()}`
   );
 }
 

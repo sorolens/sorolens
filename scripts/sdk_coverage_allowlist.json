@@ -239,6 +239,34 @@
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
         ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
+        ]
       }
     ],
     "python": [
@@ -464,6 +492,34 @@
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
         ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
+        ]
       }
     ],
     "go": [
@@ -668,6 +724,34 @@
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
         ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
+        ]
       }
     ],
     "typescript": [
@@ -863,6 +947,34 @@
         "operations": [
           "getApiKeyUsage",
           "v2GetApiKeyUsage"
+        ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
         ]
       }
     ]

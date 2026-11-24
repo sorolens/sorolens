@@ -152,12 +152,21 @@ export function CmdkSearch() {
           />
 
           <Command.List className="max-h-[60vh] overflow-y-auto p-2">
+            {error && (
+              <div
+                role="alert"
+                className="p-6 text-center text-sm text-[var(--color-danger-text)]"
+              >
+                {error}
+              </div>
+            )}
+
             <Command.Empty
               role={loading ? "status" : undefined}
               aria-busy={loading || undefined}
               className="p-6 text-center text-sm text-[var(--color-text-secondary)]"
             >
-              {loading ? "Searching..." : error ? error : "No results found."}
+              {loading ? "Searching..." : "No results found."}
             </Command.Empty>
 
             <Command.Group

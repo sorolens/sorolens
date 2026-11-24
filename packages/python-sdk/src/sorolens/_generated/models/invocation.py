@@ -8,6 +8,9 @@ from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from typing_extensions import Self
 
+from ..models.failure_category import FailureCategory
+from ..types import UNSET, Unset
+
 if TYPE_CHECKING:
     from ..models.invocation_args_decoded import InvocationArgsDecoded
 
@@ -35,6 +38,19 @@ class Invocation:
         ledger_read_byte (int):
         ledger_write_byte (int):
         application_order (int):
+        failure_category (FailureCategory | Unset): Why a failed invocation failed, derived from the Soroban host error
+            and the InvokeHostFunction result code (see docs/failure-categories.md). Set only on FAILED invocations; omitted
+            for every other status and for invocations indexed before classification existed. budget_exceeded: the
+            invocation ran out of declared resources (host error type Budget, or result RESOURCE_LIMIT_EXCEEDED /
+            INSUFFICIENT_REFUNDABLE_FEE). contract_error: the contract returned its own error code (type Contract).
+            auth_failure: authorization failed (type Auth). storage: a ledger entry was missing or archived (type Storage,
+            or result ENTRY_ARCHIVED). wasm_trap: the contract's Wasm trapped (type WasmVm). other: anything else, including
+            unknown or undecodable errors; failure_code keeps the raw value.
+        failure_code (str | Unset): Raw error behind failure_category, kept for every failed invocation: the host error
+            as "Error(<Type>, <Code>)" (for example "Error(Contract, #4)" or "Error(Budget, ExceededLimit)"), else the
+            operation result code ("INVOKE_HOST_FUNCTION_TRAPPED") or transaction result code ("txSOROBAN_INVALID"), or
+            "UNKNOWN" when nothing could be decoded. Unknown enum values are kept as numbers, for example "Error(#12, #3)".
+            Omitted with failure_category. Example: Error(Contract, #4).
     """
 
     tx_hash: str
@@ -53,6 +69,8 @@ class Invocation:
     ledger_read_byte: int
     ledger_write_byte: int
     application_order: int
+    failure_category: FailureCategory | Unset = UNSET
+    failure_code: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -88,6 +106,12 @@ class Invocation:
 
         application_order = self.application_order
 
+        failure_category: str | Unset = UNSET
+        if not isinstance(self.failure_category, Unset):
+            failure_category = self.failure_category.value
+
+        failure_code = self.failure_code
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -110,6 +134,10 @@ class Invocation:
                 "application_order": application_order,
             }
         )
+        if failure_category is not UNSET:
+            field_dict["failure_category"] = failure_category
+        if failure_code is not UNSET:
+            field_dict["failure_code"] = failure_code
 
         return field_dict
 
@@ -150,6 +178,15 @@ class Invocation:
 
         application_order = d.pop("application_order")
 
+        _failure_category = d.pop("failure_category", UNSET)
+        failure_category: FailureCategory | Unset
+        if isinstance(_failure_category, Unset):
+            failure_category = UNSET
+        else:
+            failure_category = FailureCategory(_failure_category)
+
+        failure_code = d.pop("failure_code", UNSET)
+
         invocation = cls(
             tx_hash=tx_hash,
             contract_id=contract_id,
@@ -167,6 +204,8 @@ class Invocation:
             ledger_read_byte=ledger_read_byte,
             ledger_write_byte=ledger_write_byte,
             application_order=application_order,
+            failure_category=failure_category,
+            failure_code=failure_code,
         )
 
         invocation.additional_properties = d

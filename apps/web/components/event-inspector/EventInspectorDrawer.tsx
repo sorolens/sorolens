@@ -77,13 +77,13 @@ export function EventInspectorDrawer({
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                 event.in_successful_call
-                  ? "bg-green-900/40 text-green-400"
-                  : "bg-red-900/40 text-red-400"
+                  ? "bg-[var(--color-safe-bg)] text-[var(--color-safe)]"
+                  : "bg-[var(--color-danger-bg)]/40 text-[var(--color-danger-text)]"
               }`}
             >
               {event.in_successful_call ? "SUCCESS" : "FAILED"}
             </span>
-            <span className="font-mono text-xs text-gray-400">
+            <span className="font-mono text-xs text-[var(--color-text-secondary)]">
               ID: {event.id}
             </span>
           </div>
@@ -93,7 +93,7 @@ export function EventInspectorDrawer({
             type="button"
             onClick={onClose}
             aria-label="Close event inspector"
-            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+            className="rounded-lg p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
           >
             ✕
           </button>
@@ -102,24 +102,26 @@ export function EventInspectorDrawer({
         {/* Metadata Bar */}
         <div className="grid grid-cols-2 gap-4 border-b border-[var(--color-border)] bg-black/20 px-6 py-3 text-xs">
           <div>
-            <span className="text-gray-500">Contract: </span>
-            <span className="font-mono font-medium text-gray-300">
+            <span className="text-[var(--color-text-muted)]">Contract: </span>
+            <span className="font-mono font-medium text-[var(--color-text-secondary)]">
               <MonoId value={event.contract_id} headChars={10} tailChars={8} />
             </span>
           </div>
           <div>
-            <span className="text-gray-500">Tx Hash: </span>
-            <span className="font-mono font-medium text-gray-300">
+            <span className="text-[var(--color-text-muted)]">Tx Hash: </span>
+            <span className="font-mono font-medium text-[var(--color-text-secondary)]">
               <MonoId value={event.tx_hash} headChars={8} tailChars={8} />
             </span>
           </div>
           <div>
-            <span className="text-gray-500">Ledger: </span>
-            <span className="font-mono text-gray-300">{event.ledger}</span>
+            <span className="text-[var(--color-text-muted)]">Ledger: </span>
+            <span className="font-mono text-[var(--color-text-secondary)]">
+              {event.ledger}
+            </span>
           </div>
           <div>
-            <span className="text-gray-500">Timestamp: </span>
-            <span className="text-gray-300">
+            <span className="text-[var(--color-text-muted)]">Timestamp: </span>
+            <span className="text-[var(--color-text-secondary)]">
               {formatDateTime(event.ledger_closed_at)}
             </span>
           </div>
@@ -134,7 +136,7 @@ export function EventInspectorDrawer({
             className={`border-b-2 px-4 pb-2.5 text-xs font-medium transition-colors ${
               activeTab === "tree"
                 ? "border-[var(--color-accent,#6366f1)] text-[var(--color-text-primary)]"
-                : "border-transparent text-gray-400 hover:text-gray-200"
+                : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
             }`}
           >
             Decoded ScVal Tree
@@ -146,7 +148,7 @@ export function EventInspectorDrawer({
             className={`border-b-2 px-4 pb-2.5 text-xs font-medium transition-colors ${
               activeTab === "raw"
                 ? "border-[var(--color-accent,#6366f1)] text-[var(--color-text-primary)]"
-                : "border-transparent text-gray-400 hover:text-gray-200"
+                : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
             }`}
           >
             Raw XDR & JSON
@@ -160,16 +162,16 @@ export function EventInspectorDrawer({
               {/* Topics Section */}
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
                     Topics ({topics.length})
                   </h3>
-                  <span className="text-[11px] text-gray-500">
+                  <span className="text-[11px] text-[var(--color-text-muted)]">
                     Click nodes to expand • Hover to copy path
                   </span>
                 </div>
-                <div className="rounded-lg border border-[var(--color-border)] bg-black/30 p-3 space-y-2">
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-3 space-y-2">
                   {topics.length === 0 ? (
-                    <div className="text-xs text-gray-500 italic">
+                    <div className="text-xs text-[var(--color-text-muted)] italic">
                       No topics emitted
                     </div>
                   ) : (
@@ -189,7 +191,7 @@ export function EventInspectorDrawer({
               {/* Event Value Section */}
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
                     Event Value (Payload)
                   </h3>
                   {event.value_xdr && (
@@ -199,7 +201,7 @@ export function EventInspectorDrawer({
                     />
                   )}
                 </div>
-                <div className="rounded-lg border border-[var(--color-border)] bg-black/30 p-3">
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
                   {event.value_xdr ? (
                     <ScValTree
                       label="Value"
@@ -208,7 +210,7 @@ export function EventInspectorDrawer({
                       defaultExpanded={true}
                     />
                   ) : (
-                    <div className="text-xs text-gray-500 italic">
+                    <div className="text-xs text-[var(--color-text-muted)] italic">
                       No value payload
                     </div>
                   )}
@@ -224,8 +226,8 @@ export function EventInspectorDrawer({
                     onClick={() => setRawSubTab("xdr")}
                     className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                       rawSubTab === "xdr"
-                        ? "bg-white/10 text-white"
-                        : "text-gray-400 hover:text-gray-200"
+                        ? "bg-[var(--color-bg-hover)] text-[var(--color-text-primary)]"
+                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                     }`}
                   >
                     Raw XDR
@@ -235,8 +237,8 @@ export function EventInspectorDrawer({
                     onClick={() => setRawSubTab("json")}
                     className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                       rawSubTab === "json"
-                        ? "bg-white/10 text-white"
-                        : "text-gray-400 hover:text-gray-200"
+                        ? "bg-[var(--color-bg-hover)] text-[var(--color-text-primary)]"
+                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                     }`}
                   >
                     Event JSON
@@ -253,16 +255,18 @@ export function EventInspectorDrawer({
               {rawSubTab === "xdr" ? (
                 <div className="space-y-4">
                   <div>
-                    <h4 className="mb-1 text-xs font-medium text-gray-400">
+                    <h4 className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
                       Topic XDR Payloads
                     </h4>
                     {topics.map((tXdr, i) => (
                       <div
                         key={i}
-                        className="mb-2 flex items-center justify-between rounded bg-black/40 p-2 font-mono text-xs text-gray-300"
+                        className="mb-2 flex items-center justify-between rounded bg-[var(--color-bg)] p-2 font-mono text-xs text-[var(--color-text-secondary)]"
                       >
                         <span className="truncate mr-2">
-                          <strong className="text-gray-500">[{i}]:</strong>{" "}
+                          <strong className="text-[var(--color-text-muted)]">
+                            [{i}]:
+                          </strong>{" "}
                           {tXdr}
                         </span>
                         <CopyButton text={tXdr} label={`Copy Topic ${i} XDR`} />
@@ -271,10 +275,10 @@ export function EventInspectorDrawer({
                   </div>
 
                   <div>
-                    <h4 className="mb-1 text-xs font-medium text-gray-400">
+                    <h4 className="mb-1 text-xs font-medium text-[var(--color-text-secondary)]">
                       Value XDR Payload
                     </h4>
-                    <div className="flex items-center justify-between rounded bg-black/40 p-2 font-mono text-xs text-gray-300">
+                    <div className="flex items-center justify-between rounded bg-[var(--color-bg)] p-2 font-mono text-xs text-[var(--color-text-secondary)]">
                       <span className="truncate mr-2">{event.value_xdr}</span>
                       <CopyButton
                         text={event.value_xdr}
@@ -285,7 +289,7 @@ export function EventInspectorDrawer({
                 </div>
               ) : (
                 <div>
-                  <pre className="max-h-[50vh] overflow-auto rounded bg-black/40 p-4 font-mono text-xs leading-relaxed text-gray-300">
+                  <pre className="max-h-[50vh] overflow-auto rounded bg-[var(--color-bg)] p-4 font-mono text-xs leading-relaxed text-[var(--color-text-secondary)]">
                     {fullJson}
                   </pre>
                 </div>
@@ -299,7 +303,7 @@ export function EventInspectorDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md bg-white/10 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/20"
+            className="rounded-md bg-[var(--color-bg-hover)] px-4 py-1.5 text-xs font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-hover)]"
           >
             Close
           </button>

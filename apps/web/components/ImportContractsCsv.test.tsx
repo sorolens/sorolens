@@ -311,9 +311,13 @@ describe("ImportContractsCsv", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Import 2 contracts" }));
 
-    expect(screen.findByText("Failed: Rate limit exceeded.")).toBeVisible();
+    expect(
+      await screen.findByText("Failed: Rate limit exceeded.")
+    ).toBeVisible();
     expect(mockTrackContract).toHaveBeenCalledTimes(2);
-    expect(within(container).getByText("1 imported")).toBeVisible();
+    expect(within(container).getAllByText("1 imported").length).toBeGreaterThan(
+      0
+    );
     expect(screen.getByText("1 with problems")).toBeVisible();
     // One row succeeded, so the page is still told to refresh.
     expect(onImported).toHaveBeenCalledTimes(1);

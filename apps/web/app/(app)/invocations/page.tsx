@@ -14,7 +14,9 @@ import { listInvocations } from "@/lib/api";
 import type { Invocation } from "@/lib/types";
 import { networkFilter, useNetwork } from "@/lib/network";
 import { TableSkeleton } from "@/components/Skeleton";
-import { ErrorState, errorMessage } from "@/components/ErrorState";
+import { EmptyState } from "@/components/EmptyState";
+import { errorMessage } from "@/components/ErrorState";
+import { useLocale } from "@/lib/i18n";
 import { useQueryState } from "@/hooks/useQueryState";
 import {
   parseInvocationsUrlState,
@@ -153,6 +155,7 @@ const COLUMNS: Column<Invocation>[] = [
 
 function InvocationsPage() {
   const { network } = useNetwork();
+  const { t } = useLocale();
 
   // Applied filters and the current page live in the URL (issue #618), so
   // a filtered view survives reload and can be shared. The draft inputs are
@@ -468,8 +471,9 @@ function InvocationsPage() {
 
       {/* Failed request */}
       {!loading && error && (
-        <ErrorState
-          title="Couldn't load invocations."
+        <EmptyState
+          variant="error"
+          title={t("invocations.error.title")}
           message={error}
           onRetry={() => load(cursor)}
         />
@@ -477,18 +481,24 @@ function InvocationsPage() {
 
       {/* Empty state */}
       {!loading && !error && sorted.length === 0 && (
-        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-16 text-center">
-          <p className="text-lg font-medium text-[var(--color-text-primary)]">
-            {filtersActive
-              ? "No invocations match your filters"
-              : "No invocations indexed yet"}
-          </p>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            {filtersActive
-              ? "Try widening the date range or clearing the contract and function filters."
-              : "Invocations appear here once the indexer has traced activity for tracked contracts."}
-          </p>
-        </div>
+        <EmptyState
+          variant={filtersActive ? "no-results" : "first-run"}
+          title={
+            filtersActive
+              ? t("invocations.empty.noResults.title")
+              : t("invocations.empty.firstRun.title")
+          }
+          description={
+            filtersActive
+              ? t("invocations.empty.noResults.body")
+              : t("invocations.empty.firstRun.body")
+          }
+          action={
+            filtersActive
+              ? { label: t("empty.clearFilters"), onClick: handleClear }
+              : { label: t("empty.trackContract"), href: "/contracts" }
+          }
+        />
       )}
 
       {/* Data table */}
@@ -505,9 +515,11 @@ function InvocationsPage() {
             window.location.href = `/contracts/${inv.contract_id}`;
           }}
           emptyState={
-            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-8 py-12 text-center text-sm text-[var(--color-text-secondary)]">
-              No invocations match your filters.
-            </div>
+            <EmptyState
+              variant="no-results"
+              compact
+              title={t("invocations.empty.noResults.title")}
+            />
           }
         />
       )}

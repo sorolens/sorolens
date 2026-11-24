@@ -183,6 +183,18 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 {t("nav.playground")}
               </Link>
               <Link
+                href="/docs"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                Docs
+              </Link>
+              <Link
+                href="/about"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                About
+              </Link>
+              <Link
                 href="/settings"
                 aria-current={active === "/settings" ? "page" : undefined}
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
@@ -204,6 +216,18 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
         <AppShortcuts />
         <footer className="mt-12 border-t border-[var(--color-border)] pt-6 text-sm text-[var(--color-text-secondary)]">
           {t("shell.community")}
+          <Link
+            href="/docs"
+            className="ml-3 hover:text-[var(--color-text-primary)]"
+          >
+            Docs
+          </Link>
+          <Link
+            href="/about"
+            className="ml-3 hover:text-[var(--color-text-primary)]"
+          >
+            About
+          </Link>
           <Link
             href="/status"
             className="ml-3 hover:text-[var(--color-text-primary)]"

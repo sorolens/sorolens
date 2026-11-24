@@ -97,8 +97,8 @@ func newBufferedResponseWriter() *bufferedResponseWriter {
 	return &bufferedResponseWriter{code: http.StatusOK, header: make(http.Header)}
 }
 
-func (b *bufferedResponseWriter) Header() http.Header        { return b.header }
-func (b *bufferedResponseWriter) WriteHeader(code int)       { b.code = code }
+func (b *bufferedResponseWriter) Header() http.Header         { return b.header }
+func (b *bufferedResponseWriter) WriteHeader(code int)        { b.code = code }
 func (b *bufferedResponseWriter) Write(p []byte) (int, error) { return b.body.Write(p) }
 
 // flush copies all buffered headers, status, and body to dst.

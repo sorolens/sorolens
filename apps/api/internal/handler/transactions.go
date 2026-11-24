@@ -23,12 +23,12 @@ type transactionResponse struct {
 
 // ledgerResponse is the body of GET /api/v1/ledgers/{sequence}.
 type ledgerResponse struct {
-	Sequence        uint32                           `json:"sequence"`
-	ClosedAt        string                           `json:"closed_at,omitempty"`
-	TxCount         int64                            `json:"tx_count"`
-	InvocationCount int64                            `json:"invocation_count"`
-	FailedCount     int64                            `json:"failed_count"`
-	EventCount      int64                            `json:"event_count"`
+	Sequence        uint32                            `json:"sequence"`
+	ClosedAt        string                            `json:"closed_at,omitempty"`
+	TxCount         int64                             `json:"tx_count"`
+	InvocationCount int64                             `json:"invocation_count"`
+	FailedCount     int64                             `json:"failed_count"`
+	EventCount      int64                             `json:"event_count"`
 	TopContracts    []contractActivitySummaryResponse `json:"top_contracts"`
 }
 
