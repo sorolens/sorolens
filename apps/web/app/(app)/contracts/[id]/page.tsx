@@ -40,6 +40,7 @@ import { getResourceTrend } from "@/lib/resourceTrend";
 import { EventsTable } from "@/components/EventsTable";
 import { ErrorState, errorMessage } from "@/components/ErrorState";
 import { StoragePanel } from "@/components/StoragePanel";
+import { TTLPlannerPanel } from "@/components/TTLPlannerPanel";
 import { ContractNotesPanel } from "@/components/ContractNotesPanel";
 import { SnapshotPanel } from "@/components/SnapshotPanel";
 import { HealthScoreCard } from "@/components/HealthScoreCard";
@@ -797,6 +798,11 @@ function ContractDetailContent({ id }: { id: string }) {
                 currentLedger={stats?.last_synced_ledger ?? 0}
                 onLoadMore={handleLoadMoreStorage}
                 hasMore={storageHasMore}
+              />
+              <TTLPlannerPanel
+                entries={storage}
+                currentLedger={stats?.last_synced_ledger ?? 0}
+                network={contract?.network ?? ""}
               />
               {storageMoreError && (
                 <ErrorState

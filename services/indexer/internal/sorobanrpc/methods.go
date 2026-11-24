@@ -96,6 +96,7 @@ type wireLedgerEntry struct {
 	Key                   string `json:"key"`
 	XDR                   string `json:"xdr"`
 	LastModifiedLedgerSeq uint32 `json:"lastModifiedLedgerSeq"`
+	LiveUntilLedgerSeq    uint32 `json:"liveUntilLedgerSeq,omitempty"`
 }
 
 type wireLedgerEntriesResult struct {
@@ -224,6 +225,7 @@ func (c *Client) GetLedgerEntries(ctx context.Context, keys []string) (*poller.G
 			Key:                   e.Key,
 			XDR:                   e.XDR,
 			LastModifiedLedgerSeq: e.LastModifiedLedgerSeq,
+			LiveUntilLedgerSeq:    e.LiveUntilLedgerSeq,
 		})
 		found[e.Key] = true
 	}
