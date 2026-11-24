@@ -254,6 +254,21 @@
           "getContractChangelogBadge",
           "getContractChangelogFeed"
         ]
+      },
+      {
+        "reason": "Web Push subscriptions (issue #592) are registered by the dashboard's service worker and read by the internal alert dispatcher with a shared secret; they are not part of the hand-written SDK surface.",
+        "operations": [
+          "createPushSubscription",
+          "deletePushSubscription",
+          "deletePushSubscriptionForDispatch",
+          "listPushSubscriptions",
+          "listPushSubscriptionsForDispatch",
+          "v2CreatePushSubscription",
+          "v2DeletePushSubscription",
+          "v2DeletePushSubscriptionForDispatch",
+          "v2ListPushSubscriptions",
+          "v2ListPushSubscriptionsForDispatch"
+        ]
       }
     ],
     "python": [
@@ -494,6 +509,21 @@
           "getContractChangelogBadge",
           "getContractChangelogFeed"
         ]
+      },
+      {
+        "reason": "Web Push subscriptions (issue #592) are registered by the dashboard's service worker and read by the internal alert dispatcher with a shared secret; they are not part of the hand-written SDK surface.",
+        "operations": [
+          "createPushSubscription",
+          "deletePushSubscription",
+          "deletePushSubscriptionForDispatch",
+          "listPushSubscriptions",
+          "listPushSubscriptionsForDispatch",
+          "v2CreatePushSubscription",
+          "v2DeletePushSubscription",
+          "v2DeletePushSubscriptionForDispatch",
+          "v2ListPushSubscriptions",
+          "v2ListPushSubscriptionsForDispatch"
+        ]
       }
     ],
     "go": [
@@ -713,6 +743,21 @@
           "getContractChangelogBadge",
           "getContractChangelogFeed"
         ]
+      },
+      {
+        "reason": "Web Push subscriptions (issue #592) are registered by the dashboard's service worker and read by the internal alert dispatcher with a shared secret; they are not part of the hand-written SDK surface.",
+        "operations": [
+          "createPushSubscription",
+          "deletePushSubscription",
+          "deletePushSubscriptionForDispatch",
+          "listPushSubscriptions",
+          "listPushSubscriptionsForDispatch",
+          "v2CreatePushSubscription",
+          "v2DeletePushSubscription",
+          "v2DeletePushSubscriptionForDispatch",
+          "v2ListPushSubscriptions",
+          "v2ListPushSubscriptionsForDispatch"
+        ]
       }
     ],
     "typescript": [
@@ -923,6 +968,21 @@
           "getContractChangelog",
           "getContractChangelogBadge",
           "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "Web Push subscriptions (issue #592) are registered by the dashboard's service worker and read by the internal alert dispatcher with a shared secret; they are not part of the hand-written SDK surface.",
+        "operations": [
+          "createPushSubscription",
+          "deletePushSubscription",
+          "deletePushSubscriptionForDispatch",
+          "listPushSubscriptions",
+          "listPushSubscriptionsForDispatch",
+          "v2CreatePushSubscription",
+          "v2DeletePushSubscription",
+          "v2DeletePushSubscriptionForDispatch",
+          "v2ListPushSubscriptions",
+          "v2ListPushSubscriptionsForDispatch"
         ]
       }
     ]
