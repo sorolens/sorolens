@@ -17,5 +17,5 @@ ALTER TABLE events
             )
         ) STORED;
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_events_event_tsv
+CREATE INDEX IF NOT EXISTS idx_events_event_tsv
     ON events USING GIN (event_tsv);

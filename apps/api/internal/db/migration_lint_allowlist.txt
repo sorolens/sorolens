@@ -11,3 +11,4 @@
 000036_api_key_user_id.up.sql index-not-concurrent Partial index on api_keys, a small table, over a column added NULL in the same migration. Applied before the policy (#845).
 000039_api_key_expires_at.up.sql index-not-concurrent Partial index on api_keys, a small table, over a column added NULL in the same migration. Merged before the policy (#845).
 000046_trigram_and_composite_indexes.up.sql index-not-concurrent events is partitioned (000005); PostgreSQL rejects CONCURRENTLY on a partitioned parent (#762).
+000054_event_fulltext_search.up.sql index-not-concurrent events is partitioned (000005); PostgreSQL rejects CONCURRENTLY on a partitioned parent, so the GIN index is built on the parent.

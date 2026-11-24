@@ -5,22 +5,31 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { TableSkeleton } from "@/components/Skeleton";
-import { getDelivery, listDeliveries, retryDelivery, ApiError } from "@/lib/api";
+import {
+  getDelivery,
+  listDeliveries,
+  retryDelivery,
+  ApiError,
+} from "@/lib/api";
 import { getUserId } from "@/lib/user";
 import type { WebhookDelivery } from "@/lib/types";
 
 // ---- status badge ----------------------------------------------------------
 
 const STATUS_CLASSES: Record<string, string> = {
-  delivered: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  delivered:
+    "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  pending:
+    "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
 };
 
 function StatusBadge({ status }: { status: string }) {
   const cls = STATUS_CLASSES[status] ?? "bg-gray-100 text-gray-800";
   return (
-    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${cls}`}>
+    <span
+      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${cls}`}
+    >
       {status}
     </span>
   );
@@ -100,26 +109,32 @@ function DeliveryDrawer({
         </div>
 
         {loading && (
-          <div className="p-6 text-sm text-[var(--color-text-secondary)]">Loading…</div>
+          <div className="p-6 text-sm text-[var(--color-text-secondary)]">
+            Loading…
+          </div>
         )}
-        {error && (
-          <div className="p-6 text-sm text-red-500">{error}</div>
-        )}
+        {error && <div className="p-6 text-sm text-red-500">{error}</div>}
         {delivery && (
           <div className="space-y-6 p-6">
             {/* Summary row */}
             <div className="flex flex-wrap gap-4 text-sm">
               <div>
-                <span className="text-[var(--color-text-secondary)]">Status </span>
+                <span className="text-[var(--color-text-secondary)]">
+                  Status{" "}
+                </span>
                 <StatusBadge status={delivery.status} />
               </div>
               <div>
-                <span className="text-[var(--color-text-secondary)]">Attempts </span>
+                <span className="text-[var(--color-text-secondary)]">
+                  Attempts{" "}
+                </span>
                 <span className="font-mono">{delivery.attempt_number}</span>
               </div>
               {delivery.response_status != null && (
                 <div>
-                  <span className="text-[var(--color-text-secondary)]">HTTP </span>
+                  <span className="text-[var(--color-text-secondary)]">
+                    HTTP{" "}
+                  </span>
                   <span className="font-mono">{delivery.response_status}</span>
                 </div>
               )}
@@ -224,8 +239,15 @@ export default function DeliveriesPage() {
       setLoading(true);
       setLoadError(null);
       try {
-        const res = await listDeliveries(subscriptionId, nextCursor, 50, userId);
-        setDeliveries((prev) => (nextCursor ? [...prev, ...res.deliveries] : res.deliveries));
+        const res = await listDeliveries(
+          subscriptionId,
+          nextCursor,
+          50,
+          userId
+        );
+        setDeliveries((prev) =>
+          nextCursor ? [...prev, ...res.deliveries] : res.deliveries
+        );
         setCursor(res.next_cursor);
         setHasMore(!!res.next_cursor);
       } catch (e) {

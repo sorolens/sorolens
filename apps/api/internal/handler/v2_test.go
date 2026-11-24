@@ -375,6 +375,12 @@ func TestV2CoversEveryV1Route(t *testing.T) {
 		"GET /api/v1/contracts/{id}/changelog":       true,
 		"GET /api/v1/contracts/{id}/changelog/feed":  true,
 		"GET /api/v1/contracts/{id}/changelog/badge": true,
+		// Event value search (issue #798) and webhook delivery log (issue
+		// #828): v1-only until a v2 envelope is specified.
+		"GET /api/v1/events/search":                                              true,
+		"GET /api/v1/watchdog/subscriptions/{id}/deliveries":                     true,
+		"GET /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}":        true,
+		"POST /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}/retry": true,
 	}
 
 	var missing []string
