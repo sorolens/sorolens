@@ -188,9 +188,14 @@ func (h *Handler) CreatePushSubscription(w http.ResponseWriter, r *http.Request)
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
 		return
 	}
-	if err := h.Store.UpsertPushSubscription(r.Context(), sub); err != nil {
+	saved, err := h.Store.UpsertPushSubscription(r.Context(), sub)
+	if err != nil {
 		h.Logger.Error("upsert push subscription", "err", err)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to save push subscription")
+		return
+	}
+	if !saved {
+		writeError(w, r, http.StatusConflict, CodeConflict, "push endpoint is registered to another user")
 		return
 	}
 	writeJSON(w, http.StatusCreated, pushSubscriptionResponse{

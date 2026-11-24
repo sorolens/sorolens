@@ -28,32 +28,39 @@ type PushSubscription struct {
 // reserved for the internal dispatcher, which authenticates with the shared
 // dispatch secret rather than a user session.
 type PushSubscriptionStore interface {
-	UpsertPushSubscription(ctx context.Context, sub PushSubscription) error
+	UpsertPushSubscription(ctx context.Context, sub PushSubscription) (bool, error)
 	ListPushSubscriptions(ctx context.Context, userID string) ([]PushSubscription, error)
 	DeletePushSubscription(ctx context.Context, userID, endpoint string) (bool, error)
 }
 
-func (s *postgresStore) UpsertPushSubscription(ctx context.Context, sub PushSubscription) error {
+// UpsertPushSubscription inserts the subscription, or refreshes an existing row
+// for the same endpoint only when the caller already owns it. It returns false
+// when the endpoint belongs to a different user, so one account can never take
+// over another account's endpoint or keys.
+func (s *postgresStore) UpsertPushSubscription(ctx context.Context, sub PushSubscription) (bool, error) {
 	filters := sub.Filters
 	if filters == nil {
 		filters = map[string]any{}
 	}
 	raw, err := json.Marshal(filters)
 	if err != nil {
-		return err
+		return false, err
 	}
-	_, err = s.pool.Exec(ctx, `
+	tag, err := s.pool.Exec(ctx, `
 		INSERT INTO push_subscriptions
 			(id, endpoint, auth_key, p256dh_key, user_id, filters, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 		ON CONFLICT (endpoint) DO UPDATE SET
 			auth_key    = EXCLUDED.auth_key,
 			p256dh_key  = EXCLUDED.p256dh_key,
-			user_id     = EXCLUDED.user_id,
 			filters     = EXCLUDED.filters,
-			updated_at  = NOW()`,
+			updated_at  = NOW()
+		WHERE push_subscriptions.user_id = EXCLUDED.user_id`,
 		sub.ID, sub.Endpoint, sub.AuthKey, sub.P256DHKey, sub.UserID, raw)
-	return err
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 func (s *postgresStore) ListPushSubscriptions(ctx context.Context, userID string) ([]PushSubscription, error) {

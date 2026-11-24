@@ -15,16 +15,19 @@ func (m *MockStore) pushStore() *[]PushSubscription {
 	return &m.pushSubscriptions
 }
 
-func (m *MockStore) UpsertPushSubscription(_ context.Context, sub PushSubscription) error {
+func (m *MockStore) UpsertPushSubscription(_ context.Context, sub PushSubscription) (bool, error) {
 	subs := m.pushStore()
 	for i := range *subs {
 		if (*subs)[i].Endpoint == sub.Endpoint {
+			if (*subs)[i].UserID != sub.UserID {
+				return false, nil
+			}
 			if sub.CreatedAt.IsZero() {
 				sub.CreatedAt = (*subs)[i].CreatedAt
 			}
 			sub.UpdatedAt = time.Now().UTC()
 			(*subs)[i] = sub
-			return nil
+			return true, nil
 		}
 	}
 	if sub.CreatedAt.IsZero() {
@@ -32,7 +35,7 @@ func (m *MockStore) UpsertPushSubscription(_ context.Context, sub PushSubscripti
 	}
 	sub.UpdatedAt = sub.CreatedAt
 	*subs = append(*subs, sub)
-	return nil
+	return true, nil
 }
 
 func (m *MockStore) ListPushSubscriptions(_ context.Context, userID string) ([]PushSubscription, error) {
@@ -58,5 +61,5 @@ func (m *MockStore) DeletePushSubscription(_ context.Context, userID, endpoint s
 
 // AddPushSubscription seeds a subscription in tests.
 func (m *MockStore) AddPushSubscription(sub PushSubscription) {
-	_ = m.UpsertPushSubscription(context.Background(), sub)
+	_, _ = m.UpsertPushSubscription(context.Background(), sub)
 }

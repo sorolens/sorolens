@@ -198,3 +198,43 @@ func TestPushDispatchRequiresSecret(t *testing.T) {
 		t.Fatalf("dispatch delete left rows behind: %+v", subs)
 	}
 }
+
+// TestPushSubscriptionCannotBeHijacked: re-registering an endpoint that another
+// user owns must be rejected and must not change its owner or keys.
+func TestPushSubscriptionCannotBeHijacked(t *testing.T) {
+	ms := seedScopedKeyStore(t)
+	srv := newTestHandler(ms, true, true)
+	endpoint := "https://fcm.googleapis.com/fcm/send/victim"
+	body := marshalBody(t, pushTestSubscription(endpoint))
+
+	w := doPushRequest(srv, http.MethodPost, "/api/v1/push/subscriptions", contributorUser, body, nil)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("owner create: want 201, got %d (%s)", w.Code, w.Body.String())
+	}
+	before, _ := ms.ListPushSubscriptions(t.Context(), contributorUser)
+	if len(before) != 1 {
+		t.Fatalf("want 1 owned subscription, got %+v", before)
+	}
+
+	attacker := pushTestSubscription(endpoint)
+	attacker["keys"] = map[string]string{
+		"auth":   base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{9}, 16)),
+		"p256dh": base64.RawURLEncoding.EncodeToString(append([]byte{4}, bytes.Repeat([]byte{8}, 64)...)),
+	}
+	w = doPushRequest(srv, http.MethodPost, "/api/v1/push/subscriptions", adminUser, marshalBody(t, attacker), nil)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("takeover attempt: want 409, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	after, _ := ms.ListPushSubscriptions(t.Context(), "")
+	if len(after) != 1 || after[0].UserID != contributorUser ||
+		after[0].AuthKey != before[0].AuthKey || after[0].P256DHKey != before[0].P256DHKey {
+		t.Fatalf("subscription was modified by another user: %+v", after)
+	}
+
+	// The owner can still refresh their own subscription.
+	w = doPushRequest(srv, http.MethodPost, "/api/v1/push/subscriptions", contributorUser, body, nil)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("owner refresh: want 201, got %d", w.Code)
+	}
+}
