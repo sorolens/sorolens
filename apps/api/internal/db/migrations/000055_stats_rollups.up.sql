@@ -1,5 +1,5 @@
 -- ============================================================
--- 000053_stats_rollups
+-- 000055_stats_rollups
 --
 -- Pre-aggregated hourly and daily rollup tables for stats endpoints (issue #788).
 -- The indexer writes to these incrementally after each committed window;
