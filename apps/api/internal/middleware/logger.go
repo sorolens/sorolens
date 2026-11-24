@@ -66,7 +66,7 @@ func Logger(logger *slog.Logger) func(http.Handler) http.Handler {
 				"method", r.Method,
 				"route_pattern", route,
 				"client_ip", clientIP(r),
-				"user_agent", r.UserAgent(),
+				"user_agent", RedactUserAgent(r.UserAgent()),
 				"response_bytes", rec.bytes,
 				"status", rec.status,
 				"duration_ms", time.Since(start).Milliseconds(),

@@ -2757,6 +2757,224 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/transactions/{hash}": {
+      get: {
+        operationId: "getTransaction",
+        summary: "Get transaction details",
+        tags: ["Transactions"],
+        parameters: [
+          {
+            name: "hash",
+            in: "path",
+            required: true,
+            description: "64-character lowercase hex transaction hash.",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v2/transactions/{hash}": {
+      get: {
+        operationId: "getTransactionV2",
+        summary: "Get transaction details (v2)",
+        tags: ["Transactions"],
+        parameters: [
+          {
+            name: "hash",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/ledgers/{sequence}": {
+      get: {
+        operationId: "getLedger",
+        summary: "Get ledger summary",
+        tags: ["Ledgers"],
+        parameters: [
+          {
+            name: "sequence",
+            in: "path",
+            required: true,
+            description: "Ledger sequence number.",
+            type: "integer",
+          },
+          {
+            name: "network",
+            in: "query",
+            required: false,
+            description: "Network filter; empty means all networks.",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v2/ledgers/{sequence}": {
+      get: {
+        operationId: "getLedgerV2",
+        summary: "Get ledger summary (v2)",
+        tags: ["Ledgers"],
+        parameters: [
+          {
+            name: "sequence",
+            in: "path",
+            required: true,
+            type: "integer",
+          },
+          {
+            name: "network",
+            in: "query",
+            required: false,
+            description: "Network filter; empty means all networks.",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/transfers": {
+      get: {
+        operationId: "listTokenTransfers",
+        summary: "List SEP-41 token transfers",
+        tags: ["Tokens"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            description: "Opaque pagination cursor from a previous response.",
+            type: "string",
+          },
+          {
+            name: "network",
+            in: "query",
+            required: false,
+            description: "Network filter; empty means all networks.",
+            type: "string",
+          },
+          {
+            name: "type",
+            in: "query",
+            required: false,
+            description: "Filter by transfer type.",
+            type: "string",
+          },
+          {
+            name: "from",
+            in: "query",
+            required: false,
+            description: "Lower ledger bound (inclusive).",
+            type: "integer",
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description: "Upper ledger bound (inclusive).",
+            type: "integer",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            type: "integer",
+            default: "50",
+          },
+        ],
+      },
+    },
+    "/api/v2/contracts/{id}/transfers": {
+      get: {
+        operationId: "listTokenTransfersV2",
+        summary: "List SEP-41 token transfers (v2)",
+        tags: ["Tokens"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "network",
+            in: "query",
+            required: false,
+            description: "Network filter; empty means all networks.",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/contracts/{id}/holders": {
+      get: {
+        operationId: "listTokenHolders",
+        summary: "List SEP-41 token holders",
+        tags: ["Tokens"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "network",
+            in: "query",
+            required: false,
+            description: "Network filter; empty means all networks.",
+            type: "string",
+          },
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            description:
+              "Holder address of the last entry on the previous page.",
+            type: "string",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            type: "integer",
+            default: "50",
+          },
+        ],
+      },
+    },
+    "/api/v2/contracts/{id}/holders": {
+      get: {
+        operationId: "listTokenHoldersV2",
+        summary: "List SEP-41 token holders (v2)",
+        tags: ["Tokens"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "network",
+            in: "query",
+            required: false,
+            description: "Network filter; empty means all networks.",
+            type: "string",
+          },
+        ],
+      },
+    },
     "/api/v1/search": {
       get: {
         operationId: "get_/api/v1/search",

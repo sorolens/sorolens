@@ -109,15 +109,16 @@ func (f *fakeRPC) GetLedgerEntries(_ context.Context, keys []string) (*GetLedger
 // ---- fake Store -----------------------------------------------------------
 
 type fakeStore struct {
-	mu           sync.Mutex
-	contracts    []Contract
-	syncStates   map[string]SyncState
-	events       []Event
-	invocations  []Invocation
-	upgrades     []ContractUpgrade
-	wasmHashes   map[string]string
-	syncErr      error
-	listErr      error
+	mu             sync.Mutex
+	contracts      []Contract
+	syncStates     map[string]SyncState
+	events         []Event
+	invocations    []Invocation
+	upgrades       []ContractUpgrade
+	wasmHashes     map[string]string
+	storageEntries []StorageEntry // issue #503
+	syncErr        error
+	listErr        error
 	hourly       map[string][]HourlyActivity // contractID -> buckets
 	alerts       []Alert
 	insertErr    error
@@ -354,6 +355,40 @@ func (f *fakeStore) UpsertContractHealthScore(_ context.Context, s ContractHealt
 }
 
 func (f *fakeStore) RecordTTLOperation(_ context.Context, _ TTLOperation) error { return nil }
+
+func (f *fakeStore) UpsertStorageEntries(_ context.Context, entries []StorageEntry) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.storageEntries = append(f.storageEntries, entries...)
+	return nil
+}
+
+func (f *fakeStore) ListStorageKeys(_ context.Context, contractID string) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var keys []string
+	for _, e := range f.storageEntries {
+		if e.ContractID == contractID && e.Status == "live" {
+			keys = append(keys, e.KeyXDR)
+		}
+	}
+	return keys, nil
+}
+
+func (f *fakeStore) MarkStorageEntriesArchived(_ context.Context, contractID string, activeKeys []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	active := make(map[string]bool, len(activeKeys))
+	for _, k := range activeKeys {
+		active[k] = true
+	}
+	for i := range f.storageEntries {
+		if f.storageEntries[i].ContractID == contractID && !active[f.storageEntries[i].KeyXDR] {
+			f.storageEntries[i].Status = "archived"
+		}
+	}
+	return nil
+}
 
 // ---- fake RedisClient -----------------------------------------------------
 

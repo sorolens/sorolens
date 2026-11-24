@@ -51,8 +51,10 @@ type MockStore struct {
 	maintenanceWindows    map[int64]MaintenanceWindow
 	maintenanceWindowSeq  int64
 	// maintenanceMu guards maintenanceWindows and maintenanceWindowSeq.
-	maintenanceMu  sync.Mutex
-	contractTokens map[string]TokenMetadata
+	maintenanceMu       sync.Mutex
+	contractTokens      map[string]TokenMetadata
+	tokenTransfers      []TokenTransfer
+	tokenHolderBalances map[string]*TokenHolder
 	*MockExportJobStore
 	escalationStore *MockEscalationPolicyStore
 	ttlHistoryStore *MockTTLHistoryStore
@@ -729,6 +731,81 @@ func (m *MockStore) GetCallEdges(_ context.Context, txHash string) ([]CallEdge, 
 // AddCallEdge is a test helper that seeds a call graph edge directly.
 func (m *MockStore) AddCallEdge(e CallEdge) {
 	m.callEdges = append(m.callEdges, e)
+}
+
+func (m *MockStore) GetEventsByTxHash(_ context.Context, txHash string) ([]Event, error) {
+	if m.ListEventsErr != nil {
+		return nil, m.ListEventsErr
+	}
+	var out []Event
+	for _, e := range m.events {
+		if strings.EqualFold(e.TxHash, txHash) {
+			out = append(out, e)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Ledger != out[j].Ledger {
+			return out[i].Ledger < out[j].Ledger
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func (m *MockStore) GetLedgerSummary(_ context.Context, sequence uint32, network string) (LedgerSummary, error) {
+	var invCount, failedCount int64
+	var closedAt time.Time
+	txHashes := map[string]struct{}{}
+	for _, inv := range m.invocations {
+		if inv.Ledger != sequence {
+			continue
+		}
+		if network != "" && inv.Network != network {
+			continue
+		}
+		txHashes[inv.TxHash] = struct{}{}
+		invCount++
+		if inv.Status == "FAILED" {
+			failedCount++
+		}
+		if inv.LedgerClosedAt.After(closedAt) {
+			closedAt = inv.LedgerClosedAt
+		}
+	}
+	var eventCount int64
+	contractEventCounts := map[string]int64{}
+	for _, e := range m.events {
+		if e.Ledger != sequence {
+			continue
+		}
+		if network != "" && e.Network != network {
+			continue
+		}
+		eventCount++
+		contractEventCounts[e.ContractID]++
+	}
+	if int64(len(txHashes)) == 0 && eventCount == 0 {
+		return LedgerSummary{}, ErrNotFound
+	}
+	sum := LedgerSummary{
+		Sequence:        sequence,
+		ClosedAt:        closedAt,
+		TxCount:         int64(len(txHashes)),
+		InvocationCount: invCount,
+		FailedCount:     failedCount,
+		EventCount:      eventCount,
+		TopContracts:    []ContractActivitySummary{},
+	}
+	for cid, ec := range contractEventCounts {
+		sum.TopContracts = append(sum.TopContracts, ContractActivitySummary{ContractID: cid, EventCount: ec})
+	}
+	sort.Slice(sum.TopContracts, func(i, j int) bool {
+		return sum.TopContracts[i].EventCount > sum.TopContracts[j].EventCount
+	})
+	if len(sum.TopContracts) > 10 {
+		sum.TopContracts = sum.TopContracts[:10]
+	}
+	return sum, nil
 }
 
 func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error) {
@@ -1643,6 +1720,11 @@ func (m *MockStore) SearchFunctions(_ context.Context, query string, limit int) 
 		matched = matched[:limit]
 	}
 	return matched, nil
+}
+
+// IncrementRollups is a no-op stub for the mock store (issue #788).
+func (m *MockStore) IncrementRollups(_ context.Context, _, _ string, _ time.Time, _, _, _ int) error {
+	return nil
 }
 
 // ---- ContractTokenStore -----------------------------------------------------

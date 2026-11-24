@@ -204,3 +204,115 @@ func TestCacheDisabled(t *testing.T) {
 		}
 	}
 }
+
+// staleHandler returns 503 always; used to simulate a down database.
+func staleHandler(status int, body string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	})
+}
+
+func TestCacheWithStaleServesStaleOn5xx(t *testing.T) {
+	c, mr := newRedisCache(t)
+	const ns = "test-stale-5xx"
+	const ttl = 5 * time.Second
+	const staleTTL = 30 * time.Second
+
+	var calls atomic.Int32
+	freshHandler := countingHandler(&calls, http.StatusOK)
+	h := CacheWithStale(c, ns, ttl, staleTTL, nil)(freshHandler)
+
+	// First call: miss, populates both fresh and stale keys.
+	first := get(h, "/api/v1/contracts")
+	if first.Code != http.StatusOK || first.Header().Get("X-Cache") != "MISS" {
+		t.Fatalf("first: code=%d X-Cache=%q", first.Code, first.Header().Get("X-Cache"))
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("handler called %d times before TTL expiry", calls.Load())
+	}
+	// Fresh key exists with ttl; stale key exists with staleTTL.
+	freshKey := cacheKeyPrefix + ns + ":GET /api/v1/contracts?"
+	if mr.TTL(freshKey) != ttl {
+		t.Errorf("fresh TTL: got %v want %v", mr.TTL(freshKey), ttl)
+	}
+	staleKey := freshKey + staleKeySuffix
+	if mr.TTL(staleKey) != staleTTL {
+		t.Errorf("stale TTL: got %v want %v", mr.TTL(staleKey), staleTTL)
+	}
+
+	// Fresh TTL expires; now a 5xx upstream should serve stale.
+	mr.FastForward(ttl + time.Second)
+
+	staleBefore := testutil.ToFloat64(cacheStale.WithLabelValues(ns))
+	down := CacheWithStale(c, ns, ttl, staleTTL, nil)(staleHandler(http.StatusServiceUnavailable, `{"error":"db down"}`))
+	staleResp := get(down, "/api/v1/contracts")
+	if staleResp.Code != http.StatusOK {
+		t.Fatalf("stale response code: %d", staleResp.Code)
+	}
+	if staleResp.Header().Get("X-Cache") != "STALE" {
+		t.Errorf("X-Cache header: %q", staleResp.Header().Get("X-Cache"))
+	}
+	if staleResp.Header().Get("Warning") != `110 - "Response is Stale"` {
+		t.Errorf("Warning header: %q", staleResp.Header().Get("Warning"))
+	}
+	// Body should be the original fresh response, not the error.
+	if staleResp.Body.String() != `{"call":1}` {
+		t.Errorf("stale body: %s", staleResp.Body.String())
+	}
+	if got := testutil.ToFloat64(cacheStale.WithLabelValues(ns)) - staleBefore; got != 1 {
+		t.Errorf("stale counter: +%v", got)
+	}
+}
+
+func TestCacheWithStaleNotServedAfterStaleTTLExpires(t *testing.T) {
+	c, mr := newRedisCache(t)
+	const ns = "test-stale-exp"
+	const ttl = 5 * time.Second
+	const staleTTL = 10 * time.Second
+
+	var calls atomic.Int32
+	h := CacheWithStale(c, ns, ttl, staleTTL, nil)(countingHandler(&calls, http.StatusOK))
+	get(h, "/api/v1/contracts")
+
+	// Both TTLs expire.
+	mr.FastForward(staleTTL + time.Second)
+
+	down := CacheWithStale(c, ns, ttl, staleTTL, nil)(staleHandler(http.StatusServiceUnavailable, `{"error":"db down"}`))
+	w := get(down, "/api/v1/contracts")
+	// No stale copy left; must forward the 503.
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", w.Code)
+	}
+	if w.Header().Get("X-Cache") != "MISS" {
+		t.Errorf("X-Cache: %q", w.Header().Get("X-Cache"))
+	}
+}
+
+func TestCacheWithStaleNeverServedForLabelsNamespace(t *testing.T) {
+	// CacheNamespaceLabels is per-user; stale must never be served.
+	c, mr := newRedisCache(t)
+	const ttl = 5 * time.Second
+	const staleTTL = 30 * time.Second
+
+	var calls atomic.Int32
+	h := CacheWithStale(c, CacheNamespaceLabels, ttl, staleTTL, nil)(countingHandler(&calls, http.StatusOK))
+	get(h, "/api/v1/labels")
+	mr.FastForward(ttl + time.Second)
+
+	// Even though a 5xx arrives, we must not serve stale.
+	down := CacheWithStale(c, CacheNamespaceLabels, ttl, staleTTL, nil)(staleHandler(http.StatusInternalServerError, `{"error":"db down"}`))
+	w := get(down, "/api/v1/labels")
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("labels namespace: expected 500, got %d", w.Code)
+	}
+	if w.Header().Get("X-Cache") == "STALE" {
+		t.Error("labels namespace must never serve stale")
+	}
+	// Stale key must not exist in Redis for labels.
+	staleKey := cacheKeyPrefix + CacheNamespaceLabels + ":GET /api/v1/labels?" + staleKeySuffix
+	if mr.Exists(staleKey) {
+		t.Error("stale key must not be written for labels namespace")
+	}
+}

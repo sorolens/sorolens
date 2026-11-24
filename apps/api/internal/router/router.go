@@ -276,6 +276,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, cacheContracts).Get("/contracts/{id}", h.GetContract)
 		get("/contracts/{id}/events", h.ListEvents)
 		get("/contracts/{id}/events.csv", h.ExportEventsCSV)
+		// SEP-41 token transfer tracking and holder balances (issue #801).
+		get("/contracts/{id}/transfers", h.ListTokenTransfers)
+		get("/contracts/{id}/holders", h.ListTokenHolders)
 		get("/contracts/{id}/invocations/stats", h.ContractInvocationStats)
 		get("/contracts/{id}/invocations", h.ListInvocations)
 		get("/contracts/{id}/invocations/{tx_hash}", h.GetInvocation)
@@ -285,6 +288,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Cross-contract call graph. Rooted at the invocations row for the
 		// transaction, so a trace is reachable straight from an invocation.
 		get("/invocations/{tx_hash}/trace", h.GetInvocationTrace)
+
+		// Transaction and ledger aggregate endpoints (issue #786): one round-trip
+		// that joins invocations, events, and the call trace for a transaction;
+		// and a ledger-level summary with tx/invocation/event counts.
+		get("/transactions/{hash}", h.GetTransaction)
+		get("/ledgers/{sequence}", h.GetLedger)
 		get("/contracts/{id}/storage", h.ListStorageEntries)
 		get("/contracts/{id}/resource-trend", h.ContractResourceTrend)
 		get("/contracts/{id}/stats", h.ContractStats)
@@ -507,6 +516,12 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/event-schemas", h.GetContractEventSchemas)
 		get("/contracts/{id}/stream", h.V2StreamEvents)
 		get("/contracts/{id}/graph", h.V2ContractGraph)
+		// SEP-41 token tracking (issue #801): same handlers as v1.
+		get("/contracts/{id}/transfers", h.ListTokenTransfers)
+		get("/contracts/{id}/holders", h.ListTokenHolders)
+		// Transaction and ledger aggregate endpoints (issue #786): same handlers as v1.
+		get("/transactions/{hash}", h.GetTransaction)
+		get("/ledgers/{sequence}", h.GetLedger)
 
 		// API key request usage and quota tracking (issue #792).
 		get("/usage", h.GetUsage)
