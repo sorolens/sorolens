@@ -127,9 +127,21 @@ func handleIdempotency(s store.IdempotencyStore, logger *slog.Logger, next http.
 		return
 	}
 
-	// Fresh claim: execute the handler and capture its response.
+	// Fresh claim: execute the handler and capture its response. If the handler
+	// panics (or we otherwise never complete the key), release the claim so the
+	// key does not stay in-flight and block every retry with 409 for 24 hours.
 	state := &idempotencyState{}
 	r = r.WithContext(context.WithValue(r.Context(), idempotencyStateKey{}, state))
+	completed := false
+	defer func() {
+		if completed {
+			return
+		}
+		// The request context may already be cancelled; use a detached one.
+		if err := s.ReleaseIdempotencyKey(context.WithoutCancel(r.Context()), apiKeyID, key); err != nil {
+			logger.Error("release idempotency key", "err", err)
+		}
+	}()
 
 	rw := &responseCapture{ResponseWriter: w, status: http.StatusOK}
 	next.ServeHTTP(rw, r)
@@ -146,6 +158,7 @@ func handleIdempotency(s store.IdempotencyStore, logger *slog.Logger, next http.
 	if err := s.CompleteIdempotencyKey(context.WithoutCancel(r.Context()), apiKeyID, key, status, headers, bodyToStore); err != nil {
 		logger.Error("complete idempotency key", "err", err)
 	}
+	completed = true
 }
 
 // responseCapture wraps http.ResponseWriter, capturing the status and body.

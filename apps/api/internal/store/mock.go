@@ -1833,6 +1833,14 @@ func (m *MockStore) CompleteIdempotencyKey(_ context.Context, apiKeyID, key stri
 	return ErrNotFound
 }
 
+func (m *MockStore) ReleaseIdempotencyKey(_ context.Context, apiKeyID, key string) error {
+	k := apiKeyID + ":" + key
+	if rec, ok := m.idempotencyKeys[k]; ok && rec.InFlight {
+		delete(m.idempotencyKeys, k)
+	}
+	return nil
+}
+
 func (m *MockStore) DeleteExpiredIdempotencyKeys(_ context.Context) (int64, error) {
 	now := time.Now()
 	var deleted int64

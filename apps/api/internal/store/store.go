@@ -314,6 +314,11 @@ type IdempotencyStore interface {
 	// in-flight.
 	CompleteIdempotencyKey(ctx context.Context, apiKeyID, key string, status int, headers map[string]string, body string) error
 
+	// ReleaseIdempotencyKey deletes an in-flight claim that will never be
+	// completed (for example because the handler panicked) so the key can be
+	// used again. Completed records are left untouched.
+	ReleaseIdempotencyKey(ctx context.Context, apiKeyID, key string) error
+
 	// DeleteExpiredIdempotencyKeys removes records past their expiry.
 	DeleteExpiredIdempotencyKeys(ctx context.Context) (int64, error)
 }

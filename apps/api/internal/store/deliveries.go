@@ -193,6 +193,14 @@ func (s *postgresStore) CompleteIdempotencyKey(ctx context.Context, apiKeyID, ke
 	return err
 }
 
+func (s *postgresStore) ReleaseIdempotencyKey(ctx context.Context, apiKeyID, key string) error {
+	_, err := s.pool.Exec(ctx, `
+		DELETE FROM idempotency_keys
+		WHERE api_key_id = $1 AND idempotency_key = $2 AND in_flight`,
+		apiKeyID, key)
+	return err
+}
+
 func (s *postgresStore) DeleteExpiredIdempotencyKeys(ctx context.Context) (int64, error) {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM idempotency_keys WHERE expires_at < NOW()`)
 	if err != nil {
