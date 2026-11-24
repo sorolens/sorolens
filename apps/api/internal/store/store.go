@@ -293,8 +293,10 @@ type DeliveryStore interface {
 	UpsertDelivery(ctx context.Context, d WebhookDelivery) error
 
 	// RetryDelivery marks a delivery for immediate retry and increments the
-	// attempt counter. Returns ErrNotFound if id is unknown.
-	RetryDelivery(ctx context.Context, id string) (WebhookDelivery, error)
+	// attempt counter, but only if the delivery belongs to subscriptionID.
+	// Returns ErrNotFound if id is unknown or belongs to another subscription;
+	// in that case nothing is written.
+	RetryDelivery(ctx context.Context, subscriptionID, id string) (WebhookDelivery, error)
 }
 
 // IdempotencyStore is the read/write surface for idempotency keys (issue #784).

@@ -1779,9 +1779,9 @@ func (m *MockStore) UpsertDelivery(_ context.Context, d WebhookDelivery) error {
 	return nil
 }
 
-func (m *MockStore) RetryDelivery(_ context.Context, id string) (WebhookDelivery, error) {
+func (m *MockStore) RetryDelivery(_ context.Context, subscriptionID, id string) (WebhookDelivery, error) {
 	for i, d := range m.deliveries {
-		if d.ID == id {
+		if d.ID == id && d.SubscriptionID == subscriptionID {
 			m.deliveries[i].Status = "pending"
 			m.deliveries[i].AttemptNumber++
 			m.deliveries[i].NextRetryAt = nil

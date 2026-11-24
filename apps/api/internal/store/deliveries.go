@@ -110,7 +110,7 @@ func (s *postgresStore) UpsertDelivery(ctx context.Context, d WebhookDelivery) e
 	return err
 }
 
-func (s *postgresStore) RetryDelivery(ctx context.Context, id string) (WebhookDelivery, error) {
+func (s *postgresStore) RetryDelivery(ctx context.Context, subscriptionID, id string) (WebhookDelivery, error) {
 	row := s.pool.QueryRow(ctx, `
 		UPDATE webhook_deliveries
 		SET status         = 'pending',
@@ -118,8 +118,8 @@ func (s *postgresStore) RetryDelivery(ctx context.Context, id string) (WebhookDe
 		    next_retry_at  = NULL,
 		    last_error     = NULL,
 		    updated_at     = NOW()
-		WHERE id = $1
-		RETURNING `+deliveryColumns, id)
+		WHERE id = $1 AND subscription_id = $2
+		RETURNING `+deliveryColumns, id, subscriptionID)
 	d, err := scanDelivery(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return WebhookDelivery{}, ErrNotFound

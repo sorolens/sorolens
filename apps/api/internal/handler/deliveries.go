@@ -109,8 +109,39 @@ func (h *Handler) GetDelivery(w http.ResponseWriter, r *http.Request) {
 // to now and incrementing the attempt counter. Only contributor+ callers may
 // trigger a retry (issue #828). Returns the updated delivery.
 func (h *Handler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
+	subID := chi.URLParam(r, "id")
 	id := chi.URLParam(r, "deliveryID")
-	d, err := h.Store.RetryDelivery(r.Context(), id)
+
+	// Check everything before any write: the subscription must exist and the
+	// delivery must belong to it. Anything else is a 404 so ids belonging to
+	// other subscriptions are not disclosed or modified.
+	if _, err := h.Store.GetSubscription(r.Context(), subID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, r, http.StatusNotFound, CodeNotFound, "delivery not found")
+			return
+		}
+		h.Logger.Error("retry delivery: get subscription", "err", err, "subscription_id", subID)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to retry delivery")
+		return
+	}
+	existing, err := h.Store.GetDelivery(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, r, http.StatusNotFound, CodeNotFound, "delivery not found")
+			return
+		}
+		h.Logger.Error("retry delivery: get delivery", "err", err, "id", id)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to retry delivery")
+		return
+	}
+	if existing.SubscriptionID != subID {
+		writeError(w, r, http.StatusNotFound, CodeNotFound, "delivery not found")
+		return
+	}
+
+	// The store update is itself scoped to the subscription, closing the gap
+	// between the check above and the write.
+	d, err := h.Store.RetryDelivery(r.Context(), subID, id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, r, http.StatusNotFound, CodeNotFound, "delivery not found")
@@ -118,12 +149,6 @@ func (h *Handler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
 		}
 		h.Logger.Error("retry delivery", "err", err, "id", id)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to retry delivery")
-		return
-	}
-	// Verify the delivery belongs to the subscription in the URL.
-	subID := chi.URLParam(r, "id")
-	if d.SubscriptionID != subID {
-		writeError(w, r, http.StatusNotFound, CodeNotFound, "delivery not found")
 		return
 	}
 	writeJSON(w, http.StatusAccepted, deliveryFromStore(d, false))
