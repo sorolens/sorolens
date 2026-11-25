@@ -152,10 +152,25 @@ const VEC_U32 = "AAAAEAAAAAIAAAADAAAABQAAAAMAAAAG"; // [5, 6]
 const MAP_ONE = "AAAAEQAAAAEAAAAPAAAAAWsAAAAAAAADAAAABw=="; // { k: 7 }
 
 // ScVal address: i32 discriminant 18 (SCV_ADDRESS) followed by the SCAddress
-// union (4-byte ScAddressType discriminant + 32-byte payload).
-const ADDR_ACCOUNT = "AAAAEgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+// union (4-byte ScAddressType discriminant + arm-dependent payload).
+const ADDR_ACCOUNT =
+  "AAAAEgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const ADDR_CONTRACT =
   "AAAAEgAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+const ADDR_MUXED =
+  "AAAAEgAAAAIAAAEAIiIiIiIiIiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMw==";
+const ADDR_MUXED_ED25519 =
+  "AAAAEgAAAAIAAAAAREREREREREREREREREREREREREREREREREREREREREQ=";
+const ADDR_CLAIMABLE_BALANCE =
+  "AAAAEgAAAAMAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=";
+const ADDR_LIQUIDITY_POOL =
+  "AAAAEgAAAARmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZg==";
+// A vec of two identical account addresses, and a vec of an address followed
+// by a u32: both catch a misaligned payload read on the first element.
+const VEC_TWO_ACCOUNTS =
+  "AAAAEAAAAAIAAAASAAAAAAAAAAAREREREREREREREREREREREREREREREREREREREREREQAAABIAAAAAAAAAABERERERERERERERERERERERERERERERERERERERERER";
+const VEC_ACCOUNT_U32 =
+  "AAAAEAAAAAIAAAASAAAAAAAAAAAREREREREREREREREREREREREREREREREREREREREREQAAAAMAAAAq";
 
 const ZERO_HEX_32 = "0".repeat(64);
 
@@ -214,5 +229,35 @@ describe("decodeScVal - address", () => {
 
   it("decodes a contract address", () => {
     expect(decodeScVal(ADDR_CONTRACT)).toBe("<contract:" + ZERO_HEX_32 + ">");
+  });
+
+  it("decodes a muxed account address", () => {
+    expect(decodeScVal(ADDR_MUXED)).toBe(
+      "<muxed:" + "22".repeat(8) + ":" + "33".repeat(32) + ">"
+    );
+  });
+
+  it("decodes a muxed ed25519 address (id-less arm)", () => {
+    expect(decodeScVal(ADDR_MUXED_ED25519)).toBe(
+      "<muxed:" + "44".repeat(32) + ">"
+    );
+  });
+
+  it("decodes a claimable-balance address", () => {
+    expect(decodeScVal(ADDR_CLAIMABLE_BALANCE)).toBe(
+      "<claimable_balance:" + "55".repeat(32) + ">"
+    );
+  });
+
+  it("decodes a liquidity-pool address", () => {
+    expect(decodeScVal(ADDR_LIQUIDITY_POOL)).toBe(
+      "<liquidity_pool:" + "66".repeat(32) + ">"
+    );
+  });
+
+  it("decodes a vec of addresses without corrupting later elements", () => {
+    const addr = "<account:" + "11".repeat(32) + ">";
+    expect(decodeScVal(VEC_TWO_ACCOUNTS)).toEqual([addr, addr]);
+    expect(decodeScVal(VEC_ACCOUNT_U32)).toEqual([addr, 42]);
   });
 });

@@ -201,15 +201,54 @@ function readScVal(bytes: Uint8Array, offset: number): [unknown, number] {
 
     case 18: {
       // SCV_ADDRESS
-      // XDR union SCAddress: 4-byte ScAddressType discriminant + 32-byte payload.
+      // XDR union SCAddress: 4-byte ScAddressType discriminant + payload whose
+      // size depends on the arm. Only contract and liquidity-pool addresses are
+      // a bare 32-byte value; the other arms carry their own union
+      // discriminants.
       const [addrType, typeOff] = readI32(bytes, off);
-      const addrBytes = bytes.slice(typeOff, typeOff + 32);
-      if (addrType === 0) {
-        // ScAddressType::SC_ADDRESS_TYPE_ACCOUNT - G... address
-        return ["<account:" + bytesToHex(addrBytes) + ">", typeOff + 32];
+      switch (addrType) {
+        case 0: {
+          // SC_ADDRESS_TYPE_ACCOUNT - PublicKey union (4-byte type + 32-byte key)
+          const [, keyOff] = readI32(bytes, typeOff);
+          const [key, end] = readFixed(bytes, keyOff, 32);
+          return ["<account:" + bytesToHex(key) + ">", end];
+        }
+        case 1: {
+          // SC_ADDRESS_TYPE_CONTRACT - 32-byte contract id
+          const [id, end] = readFixed(bytes, typeOff, 32);
+          return ["<contract:" + bytesToHex(id) + ">", end];
+        }
+        case 2: {
+          // SC_ADDRESS_TYPE_MUXED_ACCOUNT - MuxedAccount union: 4-byte KeyType
+          // discriminant, then uint64 id + uint256 key (KEY_TYPE_MUXED_ED25519)
+          // or uint256 key alone (KEY_TYPE_ED25519).
+          const [keyType, keyOff] = readI32(bytes, typeOff);
+          if (keyType === 256) {
+            const [id, idEnd] = readFixed(bytes, keyOff, 8);
+            const [key, end] = readFixed(bytes, idEnd, 32);
+            return ["<muxed:" + bytesToHex(id) + ":" + bytesToHex(key) + ">", end];
+          }
+          if (keyType === 0) {
+            const [key, end] = readFixed(bytes, keyOff, 32);
+            return ["<muxed:" + bytesToHex(key) + ">", end];
+          }
+          return [`<muxed_key_type:${keyType}>`, bytes.length];
+        }
+        case 3: {
+          // SC_ADDRESS_TYPE_CLAIMABLE_BALANCE - ClaimableBalanceID union
+          // (4-byte type + 32-byte hash)
+          const [, hashOff] = readI32(bytes, typeOff);
+          const [hash, end] = readFixed(bytes, hashOff, 32);
+          return ["<claimable_balance:" + bytesToHex(hash) + ">", end];
+        }
+        case 4: {
+          // SC_ADDRESS_TYPE_LIQUIDITY_POOL - 32-byte pool id
+          const [id, end] = readFixed(bytes, typeOff, 32);
+          return ["<liquidity_pool:" + bytesToHex(id) + ">", end];
+        }
+        default:
+          return [`<unknown_address_type:${addrType}>`, bytes.length];
       }
-      // ScAddressType::SC_ADDRESS_TYPE_CONTRACT - C... address
-      return ["<contract:" + bytesToHex(addrBytes) + ">", typeOff + 32];
     }
 
     case 19: {
@@ -333,12 +372,23 @@ function readAddress(bytes: Uint8Array, offset: number): [string, number] {
       return [encodeStrKey(STRKEY_CONTRACT, id), end];
     }
     case 2: {
-      // SC_ADDRESS_TYPE_MUXED_ACCOUNT: uint64 id, then ed25519 key
-      const [idBytes, keyOff] = readFixed(bytes, off, 8);
-      const [key, end] = readFixed(bytes, keyOff, 32);
+      // SC_ADDRESS_TYPE_MUXED_ACCOUNT: MuxedAccount union — 4-byte KeyType
+      // discriminant, then uint64 id + uint256 key (KEY_TYPE_MUXED_ED25519)
+      // or uint256 key alone (KEY_TYPE_ED25519, id = 0).
+      const [keyType, keyOff] = readI32(bytes, off);
       const payload = new Uint8Array(40);
-      payload.set(key);
-      payload.set(idBytes, 32);
+      let end: number;
+      if (keyType === 256) {
+        const [id, idEnd] = readFixed(bytes, keyOff, 8);
+        const [key, keyEnd] = readFixed(bytes, idEnd, 32);
+        payload.set(key);
+        payload.set(id, 32);
+        end = keyEnd;
+      } else {
+        const [key, keyEnd] = readFixed(bytes, keyOff, 32);
+        payload.set(key);
+        end = keyEnd;
+      }
       return [encodeStrKey(STRKEY_MUXED, payload), end];
     }
     case 3: {

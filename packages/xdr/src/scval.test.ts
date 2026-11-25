@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decode, decodeWithSpec, type SpecType } from "./index";
+import { decode, decodeWithSpec, encodeStrKey, type SpecType } from "./index";
 
 // ── A minimal ScVal XDR encoder for building fixtures ───────────────────────
 
@@ -60,6 +60,13 @@ const sc = {
   ],
   account: (key: number[]) => [...u32(18), ...u32(0), ...u32(0), ...key],
   contract: (id: number[]) => [...u32(18), ...u32(1), ...id],
+  muxed: (id: number[], key: number[]) => [
+    ...u32(18),
+    ...u32(2),
+    ...u32(256),
+    ...id,
+    ...key,
+  ],
   instance: (wasmHash: number[], storage: [number[], number[]][]) => [
     ...u32(19),
     ...u32(0),
@@ -169,6 +176,18 @@ describe("decode - every ScVal type", () => {
     expect(decode(b64(sc.contract(ZERO32))).value).toBe(
       "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4"
     );
+  });
+
+  it("decodes a muxed account address as an M... StrKey", () => {
+    const id = new Array(8).fill(0x22);
+    const key = new Array(32).fill(0x33);
+    const decoded = decode(b64(sc.muxed(id, key)));
+    expect(decoded.type).toBe("address");
+    // Recompute the expected M... independently: StrKey payload is the
+    // 32-byte ed25519 key followed by the 8-byte uint64 id.
+    const payload = new Uint8Array([...key, ...id]);
+    const expected = encodeStrKey(12 << 3, payload);
+    expect(decoded.value).toBe(expected);
   });
 
   it("decodes nested vecs and maps", () => {
