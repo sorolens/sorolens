@@ -176,6 +176,8 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// that lacks the minimum role regardless of API key scopes.
 		contributor := middleware.RequireRole(h.Logger, middleware.RoleContributor)
 		admin := middleware.RequireRole(h.Logger, middleware.RoleAdmin)
+		// Idempotency-Key replay for mutating endpoints (issue #784).
+		idempotency := middleware.Idempotency(h.Store, h.Logger)
 
 		// Request timeouts (issue #154). The SSE stream is registered first
 		// with its own long deadline; r is then rebound so every route
@@ -203,6 +205,8 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 
 		// Cross-contract events explorer feed (issue #97).
 		get("/events", h.ListAllEvents)
+		// Full-text search over decoded event topics and values (issue #798).
+		get("/events/search", h.SearchEventValues)
 
 		// Alert deduplication, grouping and lifecycle (issues #269, #789).
 		// GET /api/v1/alerts          — grouped view (default)
@@ -260,7 +264,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// check (issue #140). It is a POST purely to keep the path
 		// unambiguous against /contracts/{id}; it never writes.
 		r.With(scope).Post("/contracts/validate", h.ValidateContract)
-		r.With(scope, contributor, purgeContracts).Post("/contracts", h.RegisterContract)
+		r.With(scope, contributor, purgeContracts, idempotency).Post("/contracts", h.RegisterContract)
 		// Bulk untrack/tag over a selection (#176). Like registration it mutates
 		// shared state, so it needs the same contributor role, and it purges both
 		// caches since it can untrack contracts and retag them.
@@ -346,7 +350,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// only the keys it owns; the handlers bind creation to the verified
 		// user and hide keys owned by anyone else.
 		r.With(scope, contributor).Get("/me/api-keys", h.ListMyAPIKeys)
-		r.With(scope, contributor).Post("/me/api-keys", h.CreateMyAPIKey)
+		r.With(scope, contributor, idempotency).Post("/me/api-keys", h.CreateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
 
 		// Persistent Web Push subscriptions (issue #592). The dispatch routes
@@ -359,7 +363,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope).Delete("/push/subscriptions/dispatch", h.DeletePushSubscriptionForDispatch)
 
 		// Asynchronous export jobs (issue #785)
-		r.With(scope).Post("/exports", h.CreateExport)
+		r.With(scope, idempotency).Post("/exports", h.CreateExport)
 		get("/exports/{id}", h.GetExport)
 		r.With(scope).Delete("/exports/{id}", h.DeleteExport)
 		r.Get("/exports/{id}/download", h.DownloadExport)
@@ -438,20 +442,25 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Email digest subscriptions (issue #330). Self-service by email with
 		// no login: the one-click unsubscribe link must work straight from an
 		// inbox, so these are public like the rest of the read/write surface.
-		r.With(scope).Post("/reports/subscriptions", h.CreateReportSubscription)
+		r.With(scope, idempotency).Post("/reports/subscriptions", h.CreateReportSubscription)
 		get("/reports/subscriptions", h.ListReportSubscriptions)
 		r.With(scope).Delete("/reports/subscriptions/{id}", h.DeleteReportSubscription)
 		get("/reports/unsubscribe", h.UnsubscribeReport)
 
 		// Alert notification subscriptions (issue #127). They hold
 		// integration secrets, so reading them also needs contributor.
-		r.With(scope, contributor).Post("/watchdog/subscriptions", h.CreateSubscription)
+		r.With(scope, contributor, idempotency).Post("/watchdog/subscriptions", h.CreateSubscription)
 		r.With(scope, contributor).Get("/watchdog/subscriptions", h.ListSubscriptions)
 		r.With(scope, contributor).Delete("/watchdog/subscriptions/{id}", h.DeleteSubscription)
 		// Signing-secret reveal/rotate touch signing key material, so they are
 		// admin-gated on top of the scope check.
 		r.With(scope, admin).Get("/watchdog/subscriptions/{id}/signing-secret", h.GetSubscriptionSigningSecret)
 		r.With(scope, admin).Post("/watchdog/subscriptions/{id}/rotate", h.RotateSubscriptionSigningSecret)
+
+		// Webhook delivery log and manual retry (issue #828).
+		r.With(scope, contributor).Get("/watchdog/subscriptions/{id}/deliveries", h.ListDeliveries)
+		r.With(scope, contributor).Get("/watchdog/subscriptions/{id}/deliveries/{deliveryID}", h.GetDelivery)
+		r.With(scope, contributor).Post("/watchdog/subscriptions/{id}/deliveries/{deliveryID}/retry", h.RetryDelivery)
 	})
 
 	// API v2 (issue #144). A parallel namespace carrying the same resources
@@ -467,6 +476,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		scope := middleware.RequireScopes(h.Logger)
 		contributor := middleware.RequireRole(h.Logger, middleware.RoleContributor)
 		admin := middleware.RequireRole(h.Logger, middleware.RoleAdmin)
+		idempotency := middleware.Idempotency(h.Store, h.Logger)
 
 		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
 
@@ -479,7 +489,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/integrations", h.ListIntegrations)
 		r.With(scope, contributor).Post("/integrations/{id}/test", h.TestIntegration)
 		r.With(scope, contributor).Get("/me/api-keys", h.ListMyAPIKeys)
-		r.With(scope, contributor).Post("/me/api-keys", h.CreateMyAPIKey)
+		r.With(scope, contributor, idempotency).Post("/me/api-keys", h.CreateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
 
 		// Persistent Web Push subscriptions (issue #592). v2 is a passthrough
@@ -491,7 +501,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope).Delete("/push/subscriptions/dispatch", h.DeletePushSubscriptionForDispatch)
 
 		// Asynchronous export jobs (issue #785)
-		r.With(scope).Post("/exports", h.CreateExport)
+		r.With(scope, idempotency).Post("/exports", h.CreateExport)
 		get("/exports/{id}", h.GetExport)
 		r.With(scope).Delete("/exports/{id}", h.DeleteExport)
 		r.Get("/exports/{id}/download", h.DownloadExport)

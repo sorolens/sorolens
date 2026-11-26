@@ -52,6 +52,8 @@ type MockStore struct {
 	maintenanceWindows    map[int64]MaintenanceWindow
 	maintenanceWindowSeq  int64
 	contractTokens        map[string]TokenMetadata
+	deliveries            []WebhookDelivery
+	idempotencyKeys       map[string]IdempotencyRecord
 	tokenTransfers        []TokenTransfer
 	tokenHolderBalances   map[string]*TokenHolder
 	*MockExportJobStore
@@ -178,6 +180,8 @@ func NewMockStore() *MockStore {
 		labels:                make([]Label, 0),
 		watchedAccounts:       make(map[string]WatchedAccount),
 		contractTokens:        make(map[string]TokenMetadata),
+		deliveries:            make([]WebhookDelivery, 0),
+		idempotencyKeys:       make(map[string]IdempotencyRecord),
 		MockExportJobStore:    NewMockExportJobStore(),
 	}
 }
@@ -938,6 +942,8 @@ func invocationWindowStats(invocations []Invocation) InvocationWindowStats {
 	}
 	fees := make([]float64, 0, len(invocations))
 	cpus := make([]float64, 0, len(invocations))
+	inclFees := make([]float64, 0, len(invocations))
+	resFees := make([]float64, 0, len(invocations))
 	for _, inv := range invocations {
 		if inv.Status != "SUCCESS" {
 			stats.FailedInvocations++
@@ -949,6 +955,17 @@ func invocationWindowStats(invocations []Invocation) InvocationWindowStats {
 		cpus = append(cpus, float64(inv.CPUInsn))
 		stats.AvgFee += float64(inv.ResourceFeeCharged)
 		stats.AvgCPU += float64(inv.CPUInsn)
+		if inv.InclusionFee != nil {
+			inclFees = append(inclFees, float64(*inv.InclusionFee))
+			stats.AvgInclusionFee += float64(*inv.InclusionFee)
+		}
+		if inv.ResourceFee != nil {
+			resFees = append(resFees, float64(*inv.ResourceFee))
+			stats.AvgResourceFee += float64(*inv.ResourceFee)
+		}
+		if inv.FeeRefund != nil {
+			stats.TotalFeeRefund += float64(*inv.FeeRefund)
+		}
 	}
 	if stats.InvocationCount > 0 {
 		stats.FailureRate = float64(stats.FailedInvocations) / float64(stats.InvocationCount)
@@ -956,6 +973,14 @@ func invocationWindowStats(invocations []Invocation) InvocationWindowStats {
 		stats.AvgCPU /= float64(stats.InvocationCount)
 		stats.P95Fee = percentile95(fees)
 		stats.P95CPU = percentile95(cpus)
+	}
+	if len(inclFees) > 0 {
+		stats.AvgInclusionFee /= float64(len(inclFees))
+		stats.P95InclusionFee = percentile95(inclFees)
+	}
+	if len(resFees) > 0 {
+		stats.AvgResourceFee /= float64(len(resFees))
+		stats.P95ResourceFee = percentile95(resFees)
 	}
 	return stats
 }
@@ -1678,6 +1703,49 @@ func (m *MockStore) SearchEvents(_ context.Context, query string, limit int) ([]
 	return matched, nil
 }
 
+// SearchEventValues implements store.Store.SearchEventValues (issue #798).
+// In-memory mock: searches decoded topic and value text (JSON representation)
+// for the query string, newest-first with simple cursor pagination.
+func (m *MockStore) SearchEventValues(_ context.Context, query, cursor string, limit int) ([]Event, string, error) {
+	if query == "" {
+		return []Event{}, "", nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	pattern := strings.ToLower(query)
+
+	var matched []Event
+	pastCursor := cursor == ""
+	for _, e := range m.events {
+		if cursor != "" && !pastCursor {
+			if e.ID == cursor {
+				pastCursor = true
+			}
+			continue
+		}
+		topicJSON, _ := json.Marshal(e.TopicDecoded)
+		valueJSON, _ := json.Marshal(e.ValueDecoded)
+		combined := strings.ToLower(string(topicJSON) + " " + string(valueJSON))
+		if strings.Contains(combined, pattern) {
+			matched = append(matched, e)
+		}
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		if !matched[i].LedgerClosedAt.Equal(matched[j].LedgerClosedAt) {
+			return matched[i].LedgerClosedAt.After(matched[j].LedgerClosedAt)
+		}
+		return matched[i].ID > matched[j].ID
+	})
+
+	var nextCursor string
+	if len(matched) > limit {
+		nextCursor = matched[limit-1].ID
+		matched = matched[:limit]
+	}
+	return matched, nextCursor, nil
+}
+
 // SearchFunctions implements store.Store.SearchFunctions (issue #159),
 // mirroring the postgresStore semantics: matches are deduplicated to the
 // most recent invocation per function name, then sorted newest-first
@@ -1742,3 +1810,131 @@ func (m *MockStore) GetContractToken(_ context.Context, contractID string) (Toke
 	}
 	return tok, nil
 }
+
+// ---- DeliveryStore ----------------------------------------------------------
+
+func (m *MockStore) ListDeliveries(_ context.Context, subscriptionID, cursor string, limit int) ([]WebhookDelivery, string, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	var out []WebhookDelivery
+	for _, d := range m.deliveries {
+		if d.SubscriptionID != subscriptionID {
+			continue
+		}
+		if cursor != "" && d.ID >= cursor {
+			continue
+		}
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
+		}
+		return out[i].ID > out[j].ID
+	})
+	var nextCursor string
+	if len(out) > limit {
+		nextCursor = out[limit-1].ID
+		out = out[:limit]
+	}
+	return out, nextCursor, nil
+}
+
+func (m *MockStore) GetDelivery(_ context.Context, id string) (WebhookDelivery, error) {
+	for _, d := range m.deliveries {
+		if d.ID == id {
+			return d, nil
+		}
+	}
+	return WebhookDelivery{}, ErrNotFound
+}
+
+func (m *MockStore) UpsertDelivery(_ context.Context, d WebhookDelivery) error {
+	for i, existing := range m.deliveries {
+		if existing.ID == d.ID {
+			m.deliveries[i] = d
+			return nil
+		}
+	}
+	m.deliveries = append(m.deliveries, d)
+	return nil
+}
+
+func (m *MockStore) RetryDelivery(_ context.Context, subscriptionID, id string) (WebhookDelivery, error) {
+	for i, d := range m.deliveries {
+		if d.ID == id && d.SubscriptionID == subscriptionID {
+			m.deliveries[i].Status = "pending"
+			m.deliveries[i].AttemptNumber++
+			m.deliveries[i].NextRetryAt = nil
+			m.deliveries[i].LastError = nil
+			return m.deliveries[i], nil
+		}
+	}
+	return WebhookDelivery{}, ErrNotFound
+}
+
+// ---- IdempotencyStore -------------------------------------------------------
+
+func (m *MockStore) ClaimIdempotencyKey(_ context.Context, apiKeyID, key, bodyFingerprint string) (IdempotencyRecord, bool, error) {
+	k := apiKeyID + ":" + key
+	if rec, ok := m.idempotencyKeys[k]; ok {
+		return rec, false, nil
+	}
+	rec := IdempotencyRecord{
+		APIKeyID:        apiKeyID,
+		IdempotencyKey:  key,
+		BodyFingerprint: bodyFingerprint,
+		ResponseHeaders: map[string]string{},
+		InFlight:        true,
+		CreatedAt:       time.Now(),
+		ExpiresAt:       time.Now().Add(24 * time.Hour),
+	}
+	m.idempotencyKeys[k] = rec
+	return rec, true, nil
+}
+
+func (m *MockStore) GetIdempotencyRecord(_ context.Context, apiKeyID, key string) (IdempotencyRecord, error) {
+	k := apiKeyID + ":" + key
+	if rec, ok := m.idempotencyKeys[k]; ok {
+		return rec, nil
+	}
+	return IdempotencyRecord{}, ErrNotFound
+}
+
+func (m *MockStore) CompleteIdempotencyKey(_ context.Context, apiKeyID, key string, status int, headers map[string]string, body string) error {
+	k := apiKeyID + ":" + key
+	if rec, ok := m.idempotencyKeys[k]; ok {
+		rec.ResponseStatus = status
+		rec.ResponseHeaders = headers
+		rec.ResponseBody = body
+		rec.InFlight = false
+		m.idempotencyKeys[k] = rec
+		return nil
+	}
+	return ErrNotFound
+}
+
+func (m *MockStore) ReleaseIdempotencyKey(_ context.Context, apiKeyID, key string) error {
+	k := apiKeyID + ":" + key
+	if rec, ok := m.idempotencyKeys[k]; ok && rec.InFlight {
+		delete(m.idempotencyKeys, k)
+	}
+	return nil
+}
+
+func (m *MockStore) DeleteExpiredIdempotencyKeys(_ context.Context) (int64, error) {
+	now := time.Now()
+	var deleted int64
+	newKeys := make(map[string]IdempotencyRecord)
+	for k, rec := range m.idempotencyKeys {
+		if rec.ExpiresAt.After(now) {
+			newKeys[k] = rec
+		} else {
+			deleted++
+		}
+	}
+	m.idempotencyKeys = newKeys
+	return deleted, nil
+}
+

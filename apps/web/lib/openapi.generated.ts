@@ -2746,6 +2746,37 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/events/search": {
+      get: {
+        operationId: "searchEventValues",
+        summary: "Full-text search over decoded event values",
+        tags: ["Events"],
+        parameters: [
+          {
+            name: "q",
+            in: "query",
+            required: true,
+            description:
+              "Full-text search query (simple dictionary, prefix matching).",
+            type: "string",
+          },
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            description: "Opaque pagination cursor from a previous response.",
+            type: "string",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            type: "integer",
+            default: "50",
+          },
+        ],
+      },
+    },
     "/api/v1/invocations": {
       get: {
         operationId: "listAllInvocations",
@@ -3367,6 +3398,82 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             name: "id",
             in: "path",
             required: true,
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/watchdog/subscriptions/{id}/deliveries": {
+      get: {
+        operationId: "listWebhookDeliveries",
+        summary: "List webhook deliveries for a subscription",
+        tags: ["Notifications"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Subscription ID",
+            type: "string",
+          },
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            description: "Opaque pagination cursor from a previous response.",
+            type: "string",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            type: "integer",
+            default: "50",
+          },
+        ],
+      },
+    },
+    "/api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}": {
+      get: {
+        operationId: "getWebhookDelivery",
+        summary: "Get a single webhook delivery record",
+        tags: ["Notifications"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Subscription ID",
+            type: "string",
+          },
+          {
+            name: "deliveryID",
+            in: "path",
+            required: true,
+            description: "Delivery ID",
+            type: "string",
+          },
+        ],
+      },
+    },
+    "/api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}/retry": {
+      post: {
+        operationId: "retryWebhookDelivery",
+        summary: "Manually retry a failed webhook delivery",
+        tags: ["Notifications"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Subscription ID",
+            type: "string",
+          },
+          {
+            name: "deliveryID",
+            in: "path",
+            required: true,
+            description: "Delivery ID",
             type: "string",
           },
         ],

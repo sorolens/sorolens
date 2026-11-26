@@ -587,6 +587,27 @@ export interface SubscriptionsResponse {
   subscriptions: AlertSubscription[];
 }
 
+export type DeliveryStatus = "pending" | "delivered" | "failed";
+
+export interface WebhookDelivery {
+  id: string;
+  subscription_id: string;
+  attempt_number: number;
+  status: DeliveryStatus;
+  signed_payload?: Record<string, unknown>;
+  response_status?: number;
+  response_body?: string;
+  last_error?: string;
+  next_retry_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeliveriesResponse {
+  deliveries: WebhookDelivery[];
+  next_cursor: string;
+}
+
 // ---- groups (contract portfolios) ------------------------------------------
 
 export interface Group {
