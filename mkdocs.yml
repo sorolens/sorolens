@@ -132,6 +132,7 @@ nav:
       - Plugins: cli-plugins.md
   - Operations:
       - Runbook: runbook.md
+      - Ledger verification runbook: operations/runbook.md
       - Metrics: metrics.md
       - Observability stack: observability.md
       - Backups and PITR: backups.md
