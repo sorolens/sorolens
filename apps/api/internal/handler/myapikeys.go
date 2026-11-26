@@ -127,6 +127,8 @@ func (h *Handler) CreateMyAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The response carries the plaintext key: never persist or replay it.
+	middleware.RedactIdempotentResponse(r)
 	writeJSON(w, http.StatusCreated, createAPIKeyResponse{
 		apiKeyResponse: apiKeyFromStore(key),
 		Key:            token,

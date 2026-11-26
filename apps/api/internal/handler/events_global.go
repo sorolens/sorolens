@@ -10,6 +10,42 @@ import (
 	"github.com/sorolens/sorolens/apps/api/internal/timerange"
 )
 
+// SearchEventValues handles GET /api/v1/events/search?q=&cursor=&limit=.
+//
+// It searches decoded event topic and value data using the full-text index
+// (issue #798), so a user can paste a contract address, token symbol or amount
+// and find matching events.  Results are newest-first and cursor-paginated.
+// The hard cap is 200 results per page; the default page size is 50.
+func (h *Handler) SearchEventValues(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "q is required")
+		return
+	}
+	rawCursor, ok := cursor.Decode(r.URL.Query().Get("cursor"))
+	if !ok {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid cursor")
+		return
+	}
+
+	events, nextRaw, err := h.Store.SearchEventValues(r.Context(), q, rawCursor, pageLimit(r, DefaultPageSize))
+	if err != nil {
+		h.Logger.Error("search event values", "err", err, "q", q)
+		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to search events")
+		return
+	}
+
+	resp := make([]eventResponse, len(events))
+	for i, e := range events {
+		resp[i] = eventFromStore(e)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"events":      resp,
+		"next_cursor": cursor.Encode(nextRaw),
+		"query":       q,
+	})
+}
+
 // validEventTypes are the Soroban event types accepted by the ?type= filter.
 var validEventTypes = map[string]bool{
 	"contract":   true,
