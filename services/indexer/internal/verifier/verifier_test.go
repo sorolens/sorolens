@@ -5,24 +5,17 @@ import (
 	"testing"
 )
 
-func TestVerifier_CleanRange(t *testing.T) {
+// VerifyRange needs a database pool; without one it must return an error
+// rather than panic. A clean-range test requires a live Postgres and is
+// covered by integration tests.
+func TestVerifier_RequiresDB(t *testing.T) {
 	v := NewVerifier(nil, nil)
-	ctx := context.Background()
-	results, err := v.VerifyRange(ctx, VerifyOptions{
+	results, err := v.VerifyRange(context.Background(), VerifyOptions{
 		Network:     "testnet",
 		StartLedger: 100,
 		EndLedger:   105,
-		Repair:      false,
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(results) != 6 {
-		t.Fatalf("expected 6 results, got %d", len(results))
-	}
-	for _, r := range results {
-		if !r.Match {
-			t.Errorf("expected match for ledger %d", r.LedgerSeq)
-		}
+	if err == nil {
+		t.Fatalf("expected error for nil db, got results %v", results)
 	}
 }

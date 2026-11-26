@@ -2,6 +2,7 @@ package verifier
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -9,14 +10,14 @@ import (
 )
 
 type LedgerChecksum struct {
-	LedgerSeq       int64  `json:"ledger_seq"`
-	RpcEventCount   int    `json:"rpc_event_count"`
-	DbEventCount    int    `json:"db_event_count"`
-	RpcTxCount      int    `json:"rpc_tx_count"`
-	DbTxCount       int    `json:"db_tx_count"`
-	RpcHash         string `json:"rpc_hash"`
-	DbHash          string `json:"db_hash"`
-	Match           bool   `json:"match"`
+	LedgerSeq     int64  `json:"ledger_seq"`
+	RpcEventCount int    `json:"rpc_event_count"`
+	DbEventCount  int    `json:"db_event_count"`
+	RpcTxCount    int    `json:"rpc_tx_count"`
+	DbTxCount     int    `json:"db_tx_count"`
+	RpcHash       string `json:"rpc_hash"`
+	DbHash        string `json:"db_hash"`
+	Match         bool   `json:"match"`
 }
 
 type VerifyOptions struct {
@@ -37,6 +38,9 @@ func NewVerifier(db *pgxpool.Pool, rpc *sorobanrpc.Client) *Verifier {
 }
 
 func (v *Verifier) VerifyRange(ctx context.Context, opts VerifyOptions) ([]LedgerChecksum, error) {
+	if v == nil || v.db == nil {
+		return nil, errors.New("verifier: database pool is required")
+	}
 	var results []LedgerChecksum
 	var ticker *time.Ticker
 	if opts.RateLimitPerS > 0 {
@@ -57,15 +61,15 @@ func (v *Verifier) VerifyRange(ctx context.Context, opts VerifyOptions) ([]Ledge
 		// Fetch from DB counts/hashes
 		var dbEvents, dbTxs int
 		var dbHash string
-	err := v.db.QueryRow(ctx, `SELECT count(*), coalesce(sum(length(tx_hash)), 0) FROM events WHERE ledger = $1`, seq).Scan(&dbEvents, &dbHash)
-	if err != nil {
-		dbEvents = 0
-		dbHash = ""
-	}
-	err = v.db.QueryRow(ctx, `SELECT count(*) FROM invocations i JOIN events e ON e.tx_hash = i.tx_hash WHERE e.ledger = $1`, seq).Scan(&dbTxs)
-	if err != nil {
-		dbTxs = 0
-	}
+		err := v.db.QueryRow(ctx, `SELECT count(*), coalesce(sum(length(tx_hash)), 0) FROM events WHERE ledger = $1`, seq).Scan(&dbEvents, &dbHash)
+		if err != nil {
+			dbEvents = 0
+			dbHash = ""
+		}
+		err = v.db.QueryRow(ctx, `SELECT count(*) FROM invocations i JOIN events e ON e.tx_hash = i.tx_hash WHERE e.ledger = $1`, seq).Scan(&dbTxs)
+		if err != nil {
+			dbTxs = 0
+		}
 
 		// Fetch from RPC (simulated via client if available or mock fallback)
 		rpcEvents := dbEvents
