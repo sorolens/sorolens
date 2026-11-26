@@ -109,6 +109,16 @@ var routeScopes = map[string]string{
 	"GET /api/v1/watchdog/contracts/{id}/health": ScopeReadWatchdog,
 	"GET /api/v1/watchdog/contracts/{id}/alerts": ScopeReadWatchdog,
 
+	// Alert escalation policies (issue #791).
+	"GET /api/v1/escalation-policies":        ScopeReadContracts,
+	"POST /api/v1/escalation-policies":       ScopeWriteContracts,
+	"GET /api/v1/escalation-policies/{id}":   ScopeReadContracts,
+	"PUT /api/v1/escalation-policies/{id}":   ScopeWriteContracts,
+	"DELETE /api/v1/escalation-policies/{id}": ScopeWriteContracts,
+
+	// TTL history (issue #804).
+	"GET /api/v1/contracts/{id}/ttl-history": ScopeReadContracts,
+
 	// Subscriptions are watchdog-scoped for reads and write-scoped for
 	// mutations (with a contributor role via the router). The signing-secret
 	// reveal/rotate endpoints touch key material and stay admin-gated.

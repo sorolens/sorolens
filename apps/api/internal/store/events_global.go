@@ -20,6 +20,12 @@ type GlobalEventFilters struct {
 	// Since and Until bound ledger_closed_at (inclusive). Zero means open.
 	Since time.Time
 	Until time.Time
+	// FilterSQL is a pre-compiled parameterised SQL fragment produced by the
+	// evfilter package (issue #787). It is appended to the WHERE clause with
+	// AND. The fragment must already be SQL-safe (parameterised); FilterArgs
+	// carries the corresponding bind values.
+	FilterSQL  string
+	FilterArgs []any
 }
 
 // GlobalEventStore lists events across every tracked contract.
@@ -41,8 +47,19 @@ func (s *postgresStore) ListAllEvents(ctx context.Context, cursor string, limit 
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	// Event IDs are RPC paging tokens (TOID based), so ordering by ID is
-	// ledger order and a keyset cursor on ID is stable under inserts.
+	// $1–$6: fixed WHERE predicates. Filter args ($7…) are appended after
+	// those; the LIMIT placeholder is computed dynamically so it always sits
+	// after the filter args.
+	args := []any{cursor, likePrefix(f.ContractID), f.Type, f.Network,
+		optionalTime(f.Since), optionalTime(f.Until)}
+	dynamic := ""
+	if f.FilterSQL != "" {
+		dynamic = f.FilterSQL
+		args = append(args, f.FilterArgs...)
+	}
+	limitPlaceholder := fmt.Sprintf("$%d", len(args)+1)
+	args = append(args, limit+1)
+
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
@@ -53,11 +70,10 @@ func (s *postgresStore) ListAllEvents(ctx context.Context, cursor string, limit 
 		  AND ($3 = '' OR type = $3)
 		  AND ($4 = '' OR network = $4)
 		  AND ($5::timestamptz IS NULL OR ledger_closed_at >= $5)
-		  AND ($6::timestamptz IS NULL OR ledger_closed_at <= $6)
+		  AND ($6::timestamptz IS NULL OR ledger_closed_at <= $6)`+dynamic+`
 		ORDER BY id DESC
-		LIMIT $7`,
-		cursor, likePrefix(f.ContractID), f.Type, f.Network,
-		optionalTime(f.Since), optionalTime(f.Until), limit+1,
+		LIMIT `+limitPlaceholder,
+		args...,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("list all events: %w", err)

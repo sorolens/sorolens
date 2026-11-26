@@ -24,6 +24,7 @@ def _get_kwargs(
     to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
+    filter_: str | Unset = UNSET,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
@@ -65,6 +66,8 @@ def _get_kwargs(
     if not isinstance(until, Unset):
         json_until = until.isoformat()
     params["until"] = json_until
+
+    params["filter"] = filter_
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -124,6 +127,7 @@ def sync_detailed(
     to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
+    filter_: str | Unset = UNSET,
 ) -> Response[Error | ListAllEventsResponse200]:
     """List events across all tracked contracts
 
@@ -139,6 +143,7 @@ def sync_detailed(
         to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         until (datetime.datetime | Unset):
+        filter_ (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -158,6 +163,7 @@ def sync_detailed(
         to=to,
         since=since,
         until=until,
+        filter_=filter_,
     )
 
     response = client.get_httpx_client().request(
@@ -179,6 +185,7 @@ def sync(
     to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
+    filter_: str | Unset = UNSET,
 ) -> Error | ListAllEventsResponse200 | None:
     """List events across all tracked contracts
 
@@ -194,6 +201,7 @@ def sync(
         to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         until (datetime.datetime | Unset):
+        filter_ (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -214,6 +222,7 @@ def sync(
         to=to,
         since=since,
         until=until,
+        filter_=filter_,
     ).parsed
 
 
@@ -229,6 +238,7 @@ async def asyncio_detailed(
     to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
+    filter_: str | Unset = UNSET,
 ) -> Response[Error | ListAllEventsResponse200]:
     """List events across all tracked contracts
 
@@ -244,6 +254,7 @@ async def asyncio_detailed(
         to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         until (datetime.datetime | Unset):
+        filter_ (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -263,6 +274,7 @@ async def asyncio_detailed(
         to=to,
         since=since,
         until=until,
+        filter_=filter_,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -282,6 +294,7 @@ async def asyncio(
     to: datetime.datetime | Unset = UNSET,
     since: datetime.datetime | Unset = UNSET,
     until: datetime.datetime | Unset = UNSET,
+    filter_: str | Unset = UNSET,
 ) -> Error | ListAllEventsResponse200 | None:
     """List events across all tracked contracts
 
@@ -297,6 +310,7 @@ async def asyncio(
         to (datetime.datetime | Unset):
         since (datetime.datetime | Unset):
         until (datetime.datetime | Unset):
+        filter_ (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -318,5 +332,6 @@ async def asyncio(
             to=to,
             since=since,
             until=until,
+            filter_=filter_,
         )
     ).parsed

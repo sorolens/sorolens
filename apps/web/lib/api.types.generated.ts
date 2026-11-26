@@ -2720,6 +2720,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/contracts/{id}/ttl-history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List TTL extension and restore operations for a contract
+     * @description Returns ExtendFootprintTTL and RestoreFootprint operations recorded by the
+     *     indexer for this contract, newest first (issue #804).
+     */
+    get: operations["listContractTTLHistory"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/stream/events": {
     parameters: {
       query?: never;
@@ -3065,6 +3086,43 @@ export interface paths {
     post?: never;
     /** Delete a maintenance window */
     delete: operations["deleteMaintenanceWindow"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/escalation-policies": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List alert escalation policies */
+    get: operations["listEscalationPolicies"];
+    put?: never;
+    /** Create an alert escalation policy */
+    post: operations["createEscalationPolicy"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/escalation-policies/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get an escalation policy by ID */
+    get: operations["getEscalationPolicy"];
+    /** Update an escalation policy */
+    put: operations["updateEscalationPolicy"];
+    post?: never;
+    /** Delete an escalation policy */
+    delete: operations["deleteEscalationPolicy"];
     options?: never;
     head?: never;
     patch?: never;
@@ -3929,6 +3987,57 @@ export interface components {
       recurrence: "none" | "daily" | "weekly";
       /** @default true */
       suppress_notifications: boolean;
+    };
+    EscalationStep: {
+      order: number;
+      /** @description Delivery channel (e.g. email, slack, pagerduty). */
+      channel: string;
+      /** @description List of recipient addresses or identifiers for this step. */
+      recipients: string[];
+      /** @description Minutes to wait before escalating to the next step. */
+      delay_mins: number;
+    };
+    EscalationPolicy: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      steps: components["schemas"]["EscalationStep"][];
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    CreateEscalationPolicyRequest: {
+      name: string;
+      steps: components["schemas"]["EscalationStep"][];
+    };
+    TTLOperation: {
+      /** Format: uuid */
+      id: string;
+      contract_id: string;
+      /** @enum {string} */
+      network: "mainnet" | "testnet" | "futurenet" | "standalone";
+      tx_hash: string;
+      /** Format: int64 */
+      ledger: number;
+      /** Format: date-time */
+      ledger_closed_at: string;
+      /** @enum {string} */
+      op_type: "extend_ttl" | "restore_footprint";
+      /** @description Base64-encoded LedgerKey XDR identifying the storage entry. */
+      key_xdr: string;
+      /**
+       * Format: int64
+       * @description Live-until ledger before the operation (null for restores).
+       */
+      old_live_ledger?: number | null;
+      /**
+       * Format: int64
+       * @description Live-until ledger after the operation.
+       */
+      new_live_ledger?: number | null;
+      /** Format: date-time */
+      inserted_at: string;
     };
     MonitoredContract: {
       contract_id: string;
@@ -9180,6 +9289,13 @@ export interface operations {
          * @description Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).
          */
         until?: string;
+        /**
+         * @description Advanced filter expression (issue #787). Supports topic equality
+         *     (`topic[N]=VALUE`) and decoded-value numeric comparisons
+         *     (`value.field>=number`). Multiple clauses may be combined with `;`.
+         * @example topic[0]=transfer;value.amount>=1000
+         */
+        filter?: string;
       };
       header?: never;
       path?: never;
@@ -9934,6 +10050,40 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  listContractTTLHistory: {
+    parameters: {
+      query?: {
+        /** @description Opaque pagination cursor from a previous response. */
+        cursor?: components["parameters"]["Cursor"];
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        /** @description Contract ID (starts with C). */
+        id: components["parameters"]["ContractID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Page of TTL operations */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            operations: components["schemas"]["TTLOperation"][];
+            /** @description Opaque cursor for the next (older) page; empty when no more pages. */
+            next_cursor: string;
+          };
+        };
+      };
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   streamAllEvents: {
     parameters: {
       query?: {
@@ -10582,6 +10732,141 @@ export interface operations {
       403: components["responses"]["ForbiddenRole"];
       404: components["responses"]["NotFound"];
       422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listEscalationPolicies: {
+    parameters: {
+      query?: {
+        /** @description Opaque pagination cursor from a previous response. */
+        cursor?: components["parameters"]["Cursor"];
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of escalation policies */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            policies: components["schemas"]["EscalationPolicy"][];
+            next_cursor: string;
+          };
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  createEscalationPolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateEscalationPolicyRequest"];
+      };
+    };
+    responses: {
+      /** @description Escalation policy created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EscalationPolicy"];
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getEscalationPolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Escalation policy details */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EscalationPolicy"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  updateEscalationPolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateEscalationPolicyRequest"];
+      };
+    };
+    responses: {
+      /** @description Updated escalation policy */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EscalationPolicy"];
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      404: components["responses"]["NotFound"];
+      422: components["responses"]["InvalidInput"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  deleteEscalationPolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Escalation policy deleted */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["ForbiddenRole"];
+      404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
   };

@@ -51,12 +51,16 @@ type MockStore struct {
 	watchedAccounts       map[string]WatchedAccount
 	maintenanceWindows    map[int64]MaintenanceWindow
 	maintenanceWindowSeq  int64
-	contractTokens        map[string]TokenMetadata
-	deliveries            []WebhookDelivery
-	idempotencyKeys       map[string]IdempotencyRecord
-	tokenTransfers        []TokenTransfer
-	tokenHolderBalances   map[string]*TokenHolder
+	// maintenanceMu guards maintenanceWindows and maintenanceWindowSeq.
+	maintenanceMu       sync.Mutex
+	contractTokens      map[string]TokenMetadata
+	tokenTransfers      []TokenTransfer
+	tokenHolderBalances map[string]*TokenHolder
+	deliveries          []WebhookDelivery
+	idempotencyKeys     map[string]IdempotencyRecord
 	*MockExportJobStore
+	escalationStore *MockEscalationPolicyStore
+	ttlHistoryStore *MockTTLHistoryStore
 
 	// auditMu guards auditEvents: the audit middleware writes asynchronously.
 	auditMu      sync.Mutex
@@ -183,6 +187,8 @@ func NewMockStore() *MockStore {
 		deliveries:            make([]WebhookDelivery, 0),
 		idempotencyKeys:       make(map[string]IdempotencyRecord),
 		MockExportJobStore:    NewMockExportJobStore(),
+		escalationStore:       newMockEscalationPolicyStore(),
+		ttlHistoryStore:       newMockTTLHistoryStore(),
 	}
 }
 
@@ -1789,6 +1795,7 @@ func (m *MockStore) SearchFunctions(_ context.Context, query string, limit int) 
 func (m *MockStore) IncrementRollups(_ context.Context, _, _ string, _ time.Time, _, _, _ int) error {
 	return nil
 }
+
 // ---- ContractTokenStore -----------------------------------------------------
 
 func (m *MockStore) UpsertContractToken(_ context.Context, contractID string, tok TokenMetadata) error {
@@ -1937,4 +1944,3 @@ func (m *MockStore) DeleteExpiredIdempotencyKeys(_ context.Context) (int64, erro
 	m.idempotencyKeys = newKeys
 	return deleted, nil
 }
-

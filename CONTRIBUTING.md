@@ -668,3 +668,66 @@ Install PostgreSQL or add the PostgreSQL `bin` folder (for example `C:\Program F
 ```powershell
 psql --version
 ```
+
+## Adding a new API route
+
+Every new route in `apps/api/internal/router/router.go` must have a matching
+entry in `apps/api/internal/router/rbac_policy.yaml` before the PR is merged.
+The `TestRBACAuthorizationMatrix` test (issue #795) walks the chi router and
+the policy file and fails if either has a route the other does not.
+
+### Steps
+
+1. **Add the route** to `router.go` with the appropriate scope and role middleware:
+   ```go
+   // Open read (scope only):
+   get("/my-new-resource", h.ListMyNewResource)
+   // Contributor mutation:
+   r.With(scope, contributor).Post("/my-new-resource", h.CreateMyNewResource)
+   // Admin-only:
+   r.With(scope, admin).Get("/admin/my-resource", h.AdminMyResource)
+   ```
+
+2. **Add the policy entry** to `rbac_policy.yaml`:
+   ```yaml
+   - method: GET
+     pattern: /my-new-resource
+     anonymous: 200
+     viewer: 200
+     contributor: 200
+     admin: 200
+
+   - method: POST
+     pattern: /my-new-resource
+     anonymous: 401
+     viewer: 403
+     contributor: 200
+     admin: 200
+   ```
+
+   Policy codes follow the `RequireRole` middleware convention:
+   - `401` — no identity in context (unauthenticated)
+   - `403` — authenticated but below the minimum role
+   - `200` — the authorization layer passes; the handler may return any status
+
+3. **Run the matrix test** locally to confirm:
+   ```bash
+   cd apps/api && go test ./internal/router/ -run TestRBACAuthorizationMatrix -v
+   ```
+
+4. **If the route is v1-only** (no v2 twin yet), add it to the `v2NotPorted`
+   map in `apps/api/internal/handler/v2_test.go` with a short comment
+   explaining why.
+
+5. **Update `docs/openapi.yaml`** with the new path and schema, then
+   regenerate the Go client:
+   ```bash
+   cd packages/go-client && oapi-codegen --config oapi-codegen.yaml ../../docs/openapi.yaml
+   ```
+
+6. **Run the SDK coverage check**:
+   ```bash
+   python3 scripts/check_sdk_coverage.py
+   ```
+   New operations that are not yet exposed by a hand-written SDK must be added
+   to `scripts/sdk_coverage_allowlist.json` with a reason.

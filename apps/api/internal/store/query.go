@@ -49,6 +49,8 @@ type FullStore interface {
 	UsageStore
 	MaintenanceStore
 	PushSubscriptionStore
+	EscalationPolicyStore
+	TTLHistoryStore
 	DeliveryStore
 	IdempotencyStore
 	TokenTransferStore

@@ -2743,6 +2743,14 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
               "Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).",
             type: "string",
           },
+          {
+            name: "filter",
+            in: "query",
+            required: false,
+            description:
+              "Advanced filter expression (issue #787). Supports topic equality\n(`topic[N]=VALUE`) and decoded-value numeric comparisons\n(`value.field>=number`). Multiple clauses may be combined with `;`.\n",
+            type: "string",
+          },
         ],
       },
     },
@@ -3323,6 +3331,36 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v1/contracts/{id}/ttl-history": {
+      get: {
+        operationId: "listContractTTLHistory",
+        summary: "List TTL extension and restore operations for a contract",
+        tags: ["Contracts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Contract ID (starts with C).",
+            type: "string",
+          },
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            description: "Opaque pagination cursor from a previous response.",
+            type: "string",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            type: "integer",
+            default: "50",
+          },
+        ],
+      },
+    },
     "/api/v1/stream/events": {
       get: {
         operationId: "streamAllEvents",
@@ -3704,6 +3742,82 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
             required: true,
             description: "Maintenance window ID",
             type: "integer",
+          },
+        ],
+      },
+    },
+    "/api/v1/escalation-policies": {
+      get: {
+        operationId: "listEscalationPolicies",
+        summary: "List alert escalation policies",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            description: "Opaque pagination cursor from a previous response.",
+            type: "string",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            type: "integer",
+            default: "50",
+          },
+        ],
+      },
+      post: {
+        operationId: "createEscalationPolicy",
+        summary: "Create an alert escalation policy",
+        tags: ["Alerts"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/escalation-policies/{id}": {
+      get: {
+        operationId: "getEscalationPolicy",
+        summary: "Get an escalation policy by ID",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+      },
+      put: {
+        operationId: "updateEscalationPolicy",
+        summary: "Update an escalation policy",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
+          },
+        ],
+        requestBody: {
+          example: "{}",
+        },
+      },
+      delete: {
+        operationId: "deleteEscalationPolicy",
+        summary: "Delete an escalation policy",
+        tags: ["Alerts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            type: "string",
           },
         ],
       },
