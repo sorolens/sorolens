@@ -278,6 +278,25 @@ export interface LabelResolution {
   scope: string;
 }
 
+export type LabelScope = "public" | "workspace";
+
+/** A readable account/contract name from the label registry. */
+export interface LabelEntry {
+  label: string;
+  value: string;
+  scope: LabelScope | string;
+}
+
+export interface LabelsResponse {
+  labels: LabelEntry[];
+}
+
+export interface CreateLabelRequest {
+  label: string;
+  value: string;
+  scope: LabelScope;
+}
+
 export type TimeWindow = "24h" | "7d" | "30d" | "all";
 
 // ---- watchdog --------------------------------------------------------------

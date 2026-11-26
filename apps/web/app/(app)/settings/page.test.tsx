@@ -38,6 +38,12 @@ vi.mock("@/lib/network", () => ({
 }));
 
 vi.mock("@/lib/apiKeys", () => ({
+  API_KEY_SCOPES: [
+    { value: "read:contracts", label: "Read contracts", description: "" },
+    { value: "read:watchdog", label: "Read watchdog", description: "" },
+    { value: "write:contracts", label: "Write contracts", description: "" },
+  ],
+  DEFAULT_KEY_SCOPES: ["read:contracts", "read:watchdog"],
   listMyApiKeys: () => listMyApiKeys(),
   createMyApiKey: (...args: unknown[]) => createMyApiKey(...args),
   revokeMyApiKey: (id: string) => revokeMyApiKey(id),

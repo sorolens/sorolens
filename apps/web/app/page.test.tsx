@@ -120,6 +120,55 @@ describe("Landing page dashboard links", () => {
       "href",
       "/watchdog/reports"
     );
+    expect(
+      explore.getByRole("link", { name: "API playground" })
+    ).toHaveAttribute("href", "/playground");
+    expect(
+      explore.getByRole("link", { name: "Documentation" })
+    ).toHaveAttribute("href", "/docs");
+  });
+});
+
+/**
+ * A visitor should be able to try the product without reading the README:
+ * the landing page shows real screenshots and copyable CLI/API snippets.
+ */
+describe("Landing page quickstart and screenshots", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("offers copyable CLI and API snippets with next steps", async () => {
+    const { default: Home } = await import("@/app/page");
+    render(<Home />);
+
+    expect(
+      screen.getByRole("button", { name: "Copy CLI quickstart" })
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Copy API request" })
+    ).toBeVisible();
+    expect(screen.getByText(/sorolens track/)).toBeVisible();
+    expect(screen.getByText(/api\/v1\/contracts/)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Getting started guide" })
+    ).toHaveAttribute("href", "/docs/getting-started");
+    expect(
+      screen.getByRole("link", { name: "Open the API playground" })
+    ).toHaveAttribute("href", "/playground");
+  });
+
+  it("shows real product screenshots with descriptive alt text", async () => {
+    const { default: Home } = await import("@/app/page");
+    render(<Home />);
+
+    const shots = screen.getAllByTestId("landing-screenshot");
+    expect(shots).toHaveLength(3);
+    for (const shot of shots) {
+      const image = within(shot).getByRole("img");
+      expect(image).toHaveAttribute("alt");
+      expect(image.getAttribute("alt")).not.toBe("");
+    }
   });
 });
 

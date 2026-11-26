@@ -47,6 +47,7 @@ type APIStore interface {
 	store.UsageStore
 	store.MaintenanceStore
 	store.ContractTokenStore
+	store.PushSubscriptionStore
 	store.DeliveryStore
 	store.IdempotencyStore
 	store.TokenTransferStore
