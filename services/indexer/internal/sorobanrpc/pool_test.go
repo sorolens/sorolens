@@ -1,7 +1,6 @@
 package sorobanrpc
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -26,15 +25,11 @@ func TestProviderPool_CircuitBreakerAndRecovery(t *testing.T) {
 		{URL: srv2.URL, Weight: 1},
 	})
 
-	// Trigger failures on srv1 to trip circuit breaker
+	// Record consecutive failures directly on srv1 to trip its circuit
+	// breaker. Selection-driven failures are non-deterministic because the
+	// pool steers away from srv1 after the first failure.
 	for i := 0; i < 3; i++ {
-		client, err := pool.SelectBestClient(0)
-		if err != nil {
-			t.Fatalf("select client: %v", err)
-		}
-		start := time.Now()
-		_, err = client.GetLatestLedger(context.Background())
-		pool.RecordResult(client.Endpoint(), time.Since(start), errors.New("fail"))
+		pool.RecordResult(srv1.URL, time.Millisecond, errors.New("fail"))
 	}
 
 	metrics := pool.Metrics()
@@ -45,8 +40,7 @@ func TestProviderPool_CircuitBreakerAndRecovery(t *testing.T) {
 		}
 	}
 	if !foundTripped {
-		T := t
-		T.Fatalf("expected srv1 to be tripped, metrics: %+v", metrics)
+		t.Fatalf("expected srv1 to be tripped, metrics: %+v", metrics)
 	}
 
 	// Next selection should prefer srv2
