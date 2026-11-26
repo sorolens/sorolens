@@ -28,6 +28,7 @@ const (
 	CacheNamespaceContracts = "contracts"
 	CacheNamespaceWatchdog  = "watchdog"
 	CacheNamespaceLabels    = "labels"
+	CacheNamespaceStats     = "stats"
 )
 
 // cacheKeyPrefix is the Redis key prefix for cached responses; keys are
@@ -48,7 +49,7 @@ var cachePurges = prometheus.NewCounterVec(prometheus.CounterOpts{
 
 // CacheCollectors returns the cache metrics for registration on /metrics.
 func CacheCollectors() []prometheus.Collector {
-	return []prometheus.Collector{cacheRequests, cachePurges}
+	return []prometheus.Collector{cacheRequests, cachePurges, cacheStale}
 }
 
 // cacheKey identifies a response by method, path and canonical (sorted)
@@ -67,15 +68,66 @@ func cacheKey(namespace string, r *http.Request) string {
 	return key + r.Method + " " + r.URL.Path + "?" + r.URL.Query().Encode()
 }
 
+// staleKeySuffix is appended to a cache key to store the stale fallback copy.
+const staleKeySuffix = ":stale"
+
+// cacheStale counts stale responses served when the upstream is unavailable.
+var cacheStale = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "sorolens_api_cache_stale_total",
+	Help: "Stale cache responses served due to upstream unavailability, by namespace.",
+}, []string{"namespace"})
+
 // Cache returns middleware that serves GET responses for the namespace from
 // c, caching successful (200) responses for ttl. A nil cache or zero ttl
 // disables it. Cache errors fail open: the request is served by the handler.
 // Responses carry X-Cache: HIT or MISS.
 func Cache(c ResponseCache, namespace string, ttl time.Duration, logger *slog.Logger) func(http.Handler) http.Handler {
+	return CacheWithStale(c, namespace, ttl, 0, logger)
+}
+
+// bufferedResponseWriter captures the status code, headers, and body written by
+// a handler so the middleware can inspect the result before forwarding it.
+type bufferedResponseWriter struct {
+	code   int
+	header http.Header
+	body   bytes.Buffer
+}
+
+func newBufferedResponseWriter() *bufferedResponseWriter {
+	return &bufferedResponseWriter{code: http.StatusOK, header: make(http.Header)}
+}
+
+func (b *bufferedResponseWriter) Header() http.Header         { return b.header }
+func (b *bufferedResponseWriter) WriteHeader(code int)        { b.code = code }
+func (b *bufferedResponseWriter) Write(p []byte) (int, error) { return b.body.Write(p) }
+
+// flush copies all buffered headers, status, and body to dst.
+func (b *bufferedResponseWriter) flush(dst http.ResponseWriter) {
+	for k, vv := range b.header {
+		for _, v := range vv {
+			dst.Header().Add(k, v)
+		}
+	}
+	dst.WriteHeader(b.code)
+	_, _ = dst.Write(b.body.Bytes())
+}
+
+// CacheWithStale is like Cache but also keeps a stale copy of each fresh entry
+// for staleTTL. When the upstream handler returns a 5xx response and a stale
+// copy exists, the stale body is served instead with:
+//
+//	Warning: 110 - "Response is Stale"
+//	X-Cache: STALE
+//
+// Stale serving is never applied to the CacheNamespaceLabels namespace because
+// it carries per-user data that must never bleed across identities.
+// A zero or negative staleTTL disables stale serving.
+func CacheWithStale(c ResponseCache, namespace string, ttl, staleTTL time.Duration, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if c == nil || ttl <= 0 {
 			return next
 		}
+		allowStale := staleTTL > 0 && namespace != CacheNamespaceLabels
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodGet {
 				next.ServeHTTP(w, r)
@@ -96,20 +148,46 @@ func Cache(c ResponseCache, namespace string, ttl time.Duration, logger *slog.Lo
 			}
 			cacheRequests.WithLabelValues(namespace, "miss").Inc()
 
-			w.Header().Set("X-Cache", "MISS")
-			var buf bytes.Buffer
-			ww := chiMiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
-			ww.Tee(&buf)
-			next.ServeHTTP(ww, r)
+			// Buffer the handler's response so we can inspect the status code
+			// before deciding whether to forward it or serve a stale copy.
+			buf := newBufferedResponseWriter()
+			buf.header.Set("X-Cache", "MISS")
+			next.ServeHTTP(buf, r)
 
-			if ww.Status() != http.StatusOK || buf.Len() == 0 {
+			if buf.code >= 500 && allowStale {
+				// Upstream is unavailable; try the stale copy.
+				staleBody, staleOK, staleErr := c.Get(r.Context(), key+staleKeySuffix)
+				if staleErr != nil && logger != nil {
+					logger.Warn("stale cache get failed", "err", staleErr, "namespace", namespace)
+				}
+				if staleOK && len(staleBody) > 0 {
+					cacheStale.WithLabelValues(namespace).Inc()
+					w.Header().Set("Content-Type", "application/json")
+					w.Header().Set("X-Cache", "STALE")
+					w.Header().Set("Warning", `110 - "Response is Stale"`)
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write(staleBody)
+					return
+				}
+			}
+
+			// Forward the buffered response verbatim (X-Cache: MISS is in buf.header).
+			buf.flush(w)
+
+			if buf.code != http.StatusOK || buf.body.Len() == 0 {
 				return
 			}
 			// Detach from the request context: the client may already be gone.
 			ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), time.Second)
 			defer cancel()
-			if err := c.Set(ctx, key, buf.Bytes(), ttl); err != nil && logger != nil {
+			bodyBytes := buf.body.Bytes()
+			if err := c.Set(ctx, key, bodyBytes, ttl); err != nil && logger != nil {
 				logger.Warn("cache set failed", "err", err, "namespace", namespace)
+			}
+			if allowStale {
+				if err := c.Set(ctx, key+staleKeySuffix, bodyBytes, staleTTL); err != nil && logger != nil {
+					logger.Warn("stale cache set failed", "err", err, "namespace", namespace)
+				}
 			}
 		})
 	}

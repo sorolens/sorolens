@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/sorolens/sorolens/services/indexer/internal/coordinator"
 	"github.com/sorolens/sorolens/services/indexer/internal/expiryalert"
+	"github.com/sorolens/sorolens/services/indexer/internal/lock"
 	"github.com/sorolens/sorolens/services/indexer/internal/metrics"
 	"github.com/sorolens/sorolens/services/indexer/internal/pgstore"
 	"github.com/sorolens/sorolens/services/indexer/internal/poller"
@@ -25,8 +27,20 @@ import (
 	"github.com/sorolens/sorolens/services/indexer/internal/watchdog"
 )
 
+// Set by the image build through Go linker flags.
+var (
+	version = "dev"
+	gitSHA  = "dev"
+	builtAt = "dev"
+)
+
 func main() {
 	defer reportPanic()
+
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Printf("sorolens-indexer %s (%s, %s)\n", version, gitSHA, builtAt)
+		return
+	}
 
 	tp, _ := poller.InitTracer()
 	if tp != nil {
@@ -38,7 +52,8 @@ func main() {
 	pollInterval := flag.Duration("poll-interval", 5*time.Minute, "Sleep between passes (continuous mode)")
 	ledgerWindow := flag.Uint("ledger-window", 120960, "Ledger window per getEvents call")
 	backfillWindow := flag.Uint("backfill-window", uint(envInt("INDEXER_BACKFILL_WINDOW", int(poller.DefaultBackfillWindow))), "Ledgers scanned per new-contract backfill step")
-	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics HTTP server (empty disables it)")
+	metricsAddr := flag.String("metrics-addr", envString("INDEXER_METRICS_ADDR", ":9100"), "Address for the Prometheus /metrics, /healthz and /readyz HTTP server (empty disables it)")
+	redisURL := flag.String("redis-url", envString("REDIS_URL", "redis://localhost:6379"), "Redis URL for the run lock (empty disables locking, falls back to stub)")
 	// INDEXER_CONCURRENCY (or the older INDEXER_WORKERS) is how many contracts
 	// one pass indexes concurrently; defaults to the number of usable CPUs.
 	concurrency := flag.Int("concurrency", envInt("INDEXER_CONCURRENCY", envInt("INDEXER_WORKERS", runtime.GOMAXPROCS(0))), "Bounded worker pool concurrency for contract processing")
@@ -69,6 +84,8 @@ func main() {
 			defer sentry.Flush(2 * time.Second)
 		}
 	}
+
+	log.Info("indexer build", "version", version, "git_sha", gitSHA, "built_at", builtAt)
 
 	cfg := poller.Config{
 		Workers:              workers,
@@ -119,7 +136,22 @@ func main() {
 		}
 		return
 	}
-	redis := &stubRedis{}
+
+	// Redis: the run lock. A missing or unreachable Redis stops the indexer
+	// at startup so two runners can never process the same ledgers.
+	var redis poller.RedisClient = &stubRedis{}
+	var redisLock *lock.Lock
+	if *redisURL != "" {
+		rl, err := lock.New(*redisURL)
+		if err != nil {
+			log.Error("indexer: redis unavailable", "err", err)
+			os.Exit(1)
+		}
+		defer rl.Close()
+		redisLock = rl
+		redis = rl
+		log.Info("indexer: redis run lock connected", "url", *redisURL)
+	}
 
 	// Wire watchdog interceptor. pgstore does not implement the watchdog
 	// surface yet, so wdStore stays nil and the interceptor no-ops; the
@@ -172,11 +204,15 @@ func main() {
 	}
 
 	// Prometheus metrics (issue #198): the indexer exposes per-network lag on
-	// /metrics. The server is best-effort — a bind failure is logged but does
-	// not stop indexing.
+	// /metrics, plus /healthz and /readyz for orchestrators. The server is
+	// best-effort — a bind failure is logged but does not stop indexing.
 	recorder := metrics.New()
 	p.SetMetrics(recorder)
-	metricsSrv := startMetricsServer(*metricsAddr, recorder.Handler(), log)
+	hc := &healthChecker{postgres: st.Pool()}
+	if redisLock != nil {
+		hc.redis = redisLock
+	}
+	metricsSrv := startMetricsServer(*metricsAddr, recorder.Handler(), hc, log)
 	defer func() {
 		if metricsSrv == nil {
 			return
@@ -380,14 +416,47 @@ func (w *watchdogInterceptor) GetEvents(ctx context.Context, start, end uint32, 
 
 // ---- stub adapters ---------------------------------------------------------
 
-// stubRedis always grants the advisory lock. Redis-backed locking is not
-// wired yet, so run a single indexer per contract set.
+// stubRedis always grants the advisory lock. Used when REDIS_URL is unset so
+// a single indexer can run without Redis.
 type stubRedis struct{}
 
 func (r *stubRedis) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
 	return true, nil
 }
-func (r *stubRedis) Del(ctx context.Context, key string) error { return nil }
+func (r *stubRedis) Del(ctx context.Context, key, expectedValue string) error { return nil }
+func (r *stubRedis) Renew(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error) {
+	return true, nil
+}
+
+// pinger is the dependency surface the health checks need. Both *lock.Lock
+// (Redis) and *pgxpool.Pool (Postgres) satisfy it.
+type pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// healthChecker reports dependency state for /healthz and /readyz.
+// A service is healthy when both Redis (when configured) and Postgres respond
+// to a ping.
+type healthChecker struct {
+	redis    pinger // nil when locking is disabled (stub)
+	postgres pinger
+}
+
+// check pings Redis and Postgres and returns a combined error if either is
+// unreachable. It is best-effort: one failing dependency is reported but the
+// other is still checked.
+func (h *healthChecker) check(ctx context.Context) error {
+	var errs []error
+	if h.redis != nil {
+		if err := h.redis.Ping(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("redis: %w", err))
+		}
+	}
+	if err := h.postgres.Ping(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("postgres: %w", err))
+	}
+	return errors.Join(errs...)
+}
 
 // reportPanic reports a recovered panic to Sentry (a no-op when Sentry was
 // not initialized), flushes, then re-panics so the process still crashes and
@@ -402,28 +471,61 @@ func reportPanic() {
 	}
 }
 
-// startMetricsServer serves the Prometheus /metrics endpoint on addr and
-// returns the server so the caller can shut it down. It returns nil when addr
-// is empty, which disables the endpoint. Startup errors are logged rather than
-// fatal so a port clash never takes the indexer down.
-func startMetricsServer(addr string, h http.Handler, log *slog.Logger) *http.Server {
+// startMetricsServer serves Prometheus /metrics plus /healthz and /readyz on
+// addr and returns the server so the caller can shut it down. It returns nil
+// when addr is empty, which disables the endpoint. Startup errors are logged
+// rather than fatal so a port clash never takes the indexer down.
+func startMetricsServer(addr string, h http.Handler, hc *healthChecker, log *slog.Logger) *http.Server {
 	if addr == "" {
 		return nil
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", h)
+	mux.HandleFunc("/healthz", hc.serveHealthz)
+	mux.HandleFunc("/readyz", hc.serveReadyz)
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
-		log.Info("indexer metrics listening", "addr", addr, "path", "/metrics")
+		log.Info("indexer metrics listening", "addr", addr,
+			"paths", []string{"/metrics", "/healthz", "/readyz"})
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("indexer metrics server", "addr", addr, "err", err)
 		}
 	}()
 	return srv
+}
+
+// healthResponse is the JSON body served by /healthz and /readyz. Error is
+// omitted on success; encoding/json escapes it, so dependency error text with
+// quotes, backslashes or newlines still produces a valid JSON document.
+type healthResponse struct {
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+func (h *healthChecker) serveHealthz(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	status := http.StatusOK
+	resp := healthResponse{Status: "ok"}
+	if err := h.check(ctx); err != nil {
+		status = http.StatusServiceUnavailable
+		resp = healthResponse{Status: "fail", Error: err.Error()}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func (h *healthChecker) serveReadyz(w http.ResponseWriter, r *http.Request) {
+	// readyz uses the same dependency checks as healthz: when the indexer can
+	// reach Redis and Postgres it is ready to serve traffic.
+	h.serveHealthz(w, r)
 }
 
 // envString reads a string env var with a default.

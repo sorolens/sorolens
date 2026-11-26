@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"time"
+
+	"github.com/sorolens/sorolens/apps/api/internal/allowlist"
 )
 
 // Scope values understood by the API. A key may hold any combination.
@@ -44,6 +46,16 @@ type APIKey struct {
 	// RotatedAt is when the key's secret was last regenerated in place,
 	// or nil if it has never been rotated.
 	RotatedAt *time.Time
+	// MonthlyQuota is the optional hard quota on monthly requests (issue #792).
+	MonthlyQuota *int
+	// AllowedCIDRs restricts the key to these source networks (issue #793).
+	// Empty means any address. Entries are normalized CIDR ranges; a bare IP
+	// is stored as a single-host range.
+	AllowedCIDRs []string
+	// AllowedOrigins restricts the key to these browser Origins (issue #793).
+	// Empty means any origin; a request without an Origin header is not a
+	// browser cross-origin request and is unaffected.
+	AllowedOrigins []string
 }
 
 // Revoked reports whether the key has been revoked.
@@ -81,6 +93,15 @@ func HashKey(token string) string {
 
 // ErrInvalidScope is returned when a key is created with an unknown scope.
 var ErrInvalidScope = errors.New("store: invalid scope")
+
+// ErrInvalidCIDR and ErrInvalidOrigin report an allowed_cidrs or
+// allowed_origins entry that failed validation (issue #793). They wrap the
+// allowlist package's sentinels so handlers can map them to a 422 without
+// importing the validation package themselves.
+var (
+	ErrInvalidCIDR   = allowlist.ErrInvalidCIDR
+	ErrInvalidOrigin = allowlist.ErrInvalidOrigin
+)
 
 // APIKeyStore is the data-access surface for scoped API keys.
 type APIKeyStore interface {

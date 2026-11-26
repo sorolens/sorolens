@@ -22,6 +22,17 @@ type Contract struct {
 	// Backfill is the saved position of the contract's new-contract backfill.
 	// GetContract fills it; it is nil until the indexer starts the backfill.
 	Backfill *BackfillProgress
+	// Token holds enriched token metadata when the contract is a Stellar Asset Contract.
+	Token *TokenMetadata
+}
+
+// TokenMetadata holds token metadata for Stellar Asset Contract (SAC) instances.
+type TokenMetadata struct {
+	AssetCode string `json:"asset_code"`
+	Issuer    string `json:"issuer"`
+	Decimals  uint32 `json:"decimals"`
+	Symbol    string `json:"symbol"`
+	Name      string `json:"name"`
 }
 
 // BackfillProgress is how far the indexer has walked a contract's backfill
@@ -102,6 +113,17 @@ type Invocation struct {
 	LedgerWriteByte    int64
 	ApplicationOrder   int
 	InsertedAt         time.Time
+	// FailureCategory and FailureCode classify a FAILED invocation by its
+	// host error (issue #806). Both are empty for other statuses and for rows
+	// indexed before classification existed.
+	FailureCategory string
+	FailureCode     string
+	// Fee breakdown fields (issue #805). All values are stroops (integer
+	// 1/10 000 000 XLM). Fields are nil for rows indexed before this feature.
+	InclusionFee           *int64
+	ResourceFee            *int64
+	ResourceFeeRefundable  *int64
+	FeeRefund              *int64
 }
 
 // CallEdge is one parent -> child invocation edge of a transaction's
@@ -180,6 +202,7 @@ type GlobalStats struct {
 	TotalEvents         int64
 	TotalInvocations    int64
 	TotalStorageEntries int64
+	Approximate         bool
 }
 
 // AlertSubscription represents a webhook subscription for watchdog alerts.
@@ -327,4 +350,36 @@ type ContractVerification struct {
 	SubmittedAt    time.Time
 	VerifiedAt     *time.Time
 	UpdatedAt      time.Time
+}
+
+// WebhookDelivery records one delivery attempt for an alert subscription
+// (issue #828).
+type WebhookDelivery struct {
+	ID             string
+	SubscriptionID string
+	AttemptNumber  int
+	// Status is pending | delivered | failed.
+	Status         string
+	// SignedPayload is the JSONB payload that was (or will be) sent.
+	SignedPayload   []byte
+	ResponseStatus  *int
+	ResponseBody    *string
+	LastError       *string
+	NextRetryAt     *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+// IdempotencyRecord stores the saved response for a (api_key_id, key) pair
+// (issue #784).
+type IdempotencyRecord struct {
+	APIKeyID        string
+	IdempotencyKey  string
+	BodyFingerprint string
+	ResponseStatus  int
+	ResponseHeaders map[string]string
+	ResponseBody    string
+	InFlight        bool
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
 }

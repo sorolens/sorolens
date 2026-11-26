@@ -58,8 +58,11 @@ import type {
   RulePreview,
   RuleCatalogResponse,
   RuleLibraryResponse,
+  ResourceTrendResponse,
   SearchResponse,
   ContractUpgradeMarker,
+  DeliveriesResponse,
+  WebhookDelivery,
 } from "./types";
 import type { ContractVersionEntry } from "@sorolens/ui";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
@@ -360,6 +363,18 @@ export function getContractInvocations(
   const qs = search.toString();
   return fetchJson<InvocationsResponse>(
     `${API_URL}/api/v1/contracts/${id}/invocations${qs ? "?" + qs : ""}`
+  );
+}
+
+// getContractResourceTrend fetches the server-side daily aggregation in one
+// request (issue #600), replacing the dashboard's client-side paging.
+export function getContractResourceTrend(
+  id: string,
+  days = 30
+): Promise<ResourceTrendResponse> {
+  const search = new URLSearchParams({ days: String(days) });
+  return fetchJson<ResourceTrendResponse>(
+    `${API_URL}/api/v1/contracts/${id}/resource-trend?${search.toString()}`
   );
 }
 
@@ -1057,5 +1072,43 @@ export function deleteContractNote(
       method: "DELETE",
       headers: sessionHeaders(userId),
     }
+  );
+}
+
+// ---- webhook deliveries (#828) ---------------------------------------------
+
+export function listDeliveries(
+  subscriptionId: string,
+  cursor = "",
+  limit = 50,
+  userId?: string
+): Promise<DeliveriesResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return fetchJson<DeliveriesResponse>(
+    `${API_URL}/api/v1/watchdog/subscriptions/${encodeURIComponent(subscriptionId)}/deliveries?${params}`,
+    { headers: userHeaders(userId) }
+  );
+}
+
+export function getDelivery(
+  subscriptionId: string,
+  deliveryId: string,
+  userId?: string
+): Promise<WebhookDelivery> {
+  return fetchJson<WebhookDelivery>(
+    `${API_URL}/api/v1/watchdog/subscriptions/${encodeURIComponent(subscriptionId)}/deliveries/${encodeURIComponent(deliveryId)}`,
+    { headers: userHeaders(userId) }
+  );
+}
+
+export async function retryDelivery(
+  subscriptionId: string,
+  deliveryId: string,
+  userId?: string
+): Promise<WebhookDelivery> {
+  return fetchJson<WebhookDelivery>(
+    `${API_URL}/api/v1/watchdog/subscriptions/${encodeURIComponent(subscriptionId)}/deliveries/${encodeURIComponent(deliveryId)}/retry`,
+    { method: "POST", headers: userHeaders(userId) }
   );
 }

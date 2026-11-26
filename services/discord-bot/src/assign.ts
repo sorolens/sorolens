@@ -172,16 +172,47 @@ export async function activeGrantCount(
   let active = 0;
   for (const g of deps.listGrantsFor(discordId)) {
     const issue = await deps.getIssue(deps.repo, g.issueNumber);
-    const stillTheirs =
-      issue !== null &&
-      issue.state === "open" &&
-      issue.assignees.some(
-        (a) => a.toLowerCase() === g.githubLogin.toLowerCase()
-      );
-    if (stillTheirs) active++;
+    if (isLiveGrant(issue, g.githubLogin)) active++;
     else deps.releaseIssue(g.issueNumber);
   }
   return active;
+}
+
+/** A bot grant still holds while its issue is open and assigned to that login. */
+function isLiveGrant(issue: IssueInfo | null, login: string): boolean {
+  return (
+    issue !== null &&
+    issue.state === "open" &&
+    issue.assignees.some((a) => a.toLowerCase() === login.toLowerCase())
+  );
+}
+
+/**
+ * Drop the bot's records for these issues when GitHub says they are no
+ * longer live (issue closed, or no longer assigned to that person), so the
+ * issues can be handed out again. Issues GitHub can't be asked about right
+ * now are left as they are. Returns the issues that were freed.
+ */
+export async function pruneStaleGrants(
+  issues: readonly number[],
+  deps: Pick<AssignDeps, "repo" | "getGrant" | "getIssue" | "releaseIssue">
+): Promise<number[]> {
+  const freed: number[] = [];
+  for (const n of issues) {
+    const grant = deps.getGrant(n);
+    if (!grant) continue;
+    let issue: IssueInfo | null;
+    try {
+      issue = await deps.getIssue(deps.repo, n);
+    } catch (err) {
+      console.warn(`assign: could not check #${n} on GitHub`, err);
+      continue;
+    }
+    if (!isLiveGrant(issue, grant.githubLogin) && deps.releaseIssue(n)) {
+      freed.push(n);
+    }
+  }
+  return freed;
 }
 
 export async function processApplication(
@@ -280,7 +311,13 @@ async function assignOne(
   );
   if (mine) return fail("is already assigned to you");
 
-  const grant = deps.getGrant(n);
+  let grant = deps.getGrant(n);
+  // Someone else's grant only blocks the issue while it is still theirs on
+  // GitHub; a stale one (they were unassigned) is cleared.
+  if (grant && grant.discordId !== discordId && !isLiveGrant(issue, grant.githubLogin)) {
+    deps.releaseIssue(n);
+    grant = null;
+  }
   if (grant && grant.discordId !== discordId) return fail("is already taken");
   // Assigned outside the bot: nobody can get it through here any more.
   if (issue.assignees.length > 0) return drop("is already taken");

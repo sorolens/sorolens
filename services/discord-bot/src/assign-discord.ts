@@ -39,6 +39,7 @@ import {
   formatIssueList,
   parseIssueList,
   processApplication,
+  pruneStaleGrants,
   type AssignDeps,
 } from "./assign.js";
 import type { Config } from "./config.js";
@@ -153,9 +154,9 @@ export async function handleAssignCommand(
     case "assign-setup":
       return handleSetup(interaction);
     case "assign-issues":
-      return handleIssues(interaction);
+      return handleIssues(interaction, config);
     case "assign-toggle":
-      return handleToggle(interaction);
+      return handleToggle(interaction, config);
     case "assign-status":
       return handleStatus(interaction, config);
     case "assign-release":
@@ -210,7 +211,26 @@ async function handleSetup(interaction: ChatInputCommandInteraction) {
   });
 }
 
-async function handleIssues(interaction: ChatInputCommandInteraction) {
+/**
+ * Check the bot's records for the issues in the list against GitHub and
+ * drop the stale ones, so issues people were unassigned from count as free.
+ */
+async function freeStaleIssues(config: Config): Promise<string> {
+  const freed = await pruneStaleGrants(listPool(), {
+    repo: config.githubRepo,
+    getGrant,
+    getIssue,
+    releaseIssue,
+  });
+  return freed.length
+    ? `\nFreed ${freed.length} issue(s) no longer assigned on GitHub: ${formatIssueList(freed)}`
+    : "";
+}
+
+async function handleIssues(
+  interaction: ChatInputCommandInteraction,
+  config: Config
+) {
   const sub = interaction.options.getSubcommand();
   let note = "";
   if (sub === "add" || sub === "remove") {
@@ -224,21 +244,26 @@ async function handleIssues(interaction: ChatInputCommandInteraction) {
       });
       return;
     }
-    note =
-      sub === "add"
-        ? `Added ${addToPool(nums)} issue(s).`
-        : `Removed ${removeFromPool(nums)} issue(s).`;
+    if (sub === "add") {
+      // Checking GitHub can take longer than Discord's 3s reply window.
+      await interaction.deferReply({ flags: EPHEMERAL });
+      note = `Added ${addToPool(nums)} issue(s).${await freeStaleIssues(config)}`;
+    } else {
+      note = `Removed ${removeFromPool(nums)} issue(s).`;
+    }
   } else if (sub === "clear") {
     note = `Removed ${clearPool()} issue(s).`;
   }
   const pool = listPool();
-  await interaction.reply({
-    content: `${note}\n**Issues open (${pool.length}):** ${formatIssueList(pool)}`.trim(),
-    flags: EPHEMERAL,
-  });
+  const content = `${note}\n**Issues open (${pool.length}):** ${formatIssueList(pool)}`.trim();
+  if (interaction.deferred) await interaction.editReply({ content });
+  else await interaction.reply({ content, flags: EPHEMERAL });
 }
 
-async function handleToggle(interaction: ChatInputCommandInteraction) {
+async function handleToggle(
+  interaction: ChatInputCommandInteraction,
+  config: Config
+) {
   const on = interaction.options.getString("state", true) === "on";
   const s = getAssignSettings();
   if (on && !s.channelId) {
@@ -248,15 +273,17 @@ async function handleToggle(interaction: ChatInputCommandInteraction) {
     });
     return;
   }
+  await interaction.deferReply({ flags: EPHEMERAL });
+  // Before announcing, free issues whose bot record is stale on GitHub.
+  let note = on ? await freeStaleIssues(config) : "";
   const settings = updateAssignSettings(
     on ? { enabled: true, openedAt: Date.now() } : { enabled: false }
   );
   const left = remainingIssues({ listPool, getGrant });
-  let note = "";
   if (on && left.length === 0) {
-    note = "\nNote: no issues are left to give out. Add some with `/assign-issues add`.";
+    note += "\nNote: no issues are left to give out. Add some with `/assign-issues add`.";
   } else if (on) {
-    note = `\n${left.length} issue(s) can be picked. Only messages sent from now on count, and applications close by themselves when all are taken.`;
+    note += `\n${left.length} issue(s) can be picked. Only messages sent from now on count, and applications close by themselves when all are taken.`;
   }
 
   // Announce in the apply channel so members know how to apply.
@@ -276,9 +303,8 @@ async function handleToggle(interaction: ChatInputCommandInteraction) {
     note += "\n(I couldn't post in the channel: check my permissions there.)";
   }
 
-  await interaction.reply({
+  await interaction.editReply({
     content: `Issue applications are now **${on ? "ON" : "OFF"}**.${note}`,
-    flags: EPHEMERAL,
   });
 }
 
@@ -303,12 +329,26 @@ async function handleStatus(
 }
 
 async function handleRelease(interaction: ChatInputCommandInteraction) {
-  const n = interaction.options.getInteger("issue", true);
-  const released = releaseIssue(n);
+  let nums: number[];
+  try {
+    nums = parseIssueList(interaction.options.getString("issues", true));
+  } catch (err) {
+    await interaction.reply({
+      content: err instanceof Error ? err.message : "Invalid issue list.",
+      flags: EPHEMERAL,
+    });
+    return;
+  }
+  const released = nums.filter((n) => releaseIssue(n));
+  const skipped = nums.filter((n) => !released.includes(n));
+  const lines = [
+    released.length
+      ? `Released ${formatIssueList(released)}: no longer counted toward anyone's max and free to give out again. Anything still assigned on GitHub stays assigned; unassign it there if needed.`
+      : "",
+    skipped.length ? `Not given out by the bot: ${formatIssueList(skipped)}` : "",
+  ];
   await interaction.reply({
-    content: released
-      ? `#${n} no longer counts toward anyone's max. It is still assigned on GitHub; unassign it there if needed.`
-      : `#${n} wasn't given out by the bot.`,
+    content: lines.filter(Boolean).join("\n"),
     flags: EPHEMERAL,
   });
 }

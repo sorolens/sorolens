@@ -93,9 +93,22 @@ cursors, Wasm upgrades, the Wasm cache, health scores, and anomaly alerts
 through `services/indexer/internal/pgstore`. Every batch insert ignores rows
 that already exist, so re-indexing a ledger window is safe.
 
+A `FAILED` invocation is stored with a failure category and its raw error code,
+decoded from the transaction result and the diagnostic events. The categories
+and how host errors map to them are described in
+[Failure categories](failure-categories.md).
+
 The store tests run when `POSTGRES_TEST_URL` points at a migrated database:
 
 ```bash
 POSTGRES_TEST_URL=postgres://sorolens:sorolens@localhost:5432/sorolens?sslmode=disable \
   go test ./services/indexer/internal/pgstore/...
 ```
+
+## Redis run lock
+
+| Variable   | Default                   | Description                                                                                                                                                                 |
+| ---------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REDIS_URL` | `redis://localhost:6379` | Redis URL for the per-contract run lock. The indexer acquires a Redis lock (`SET key <random token> NX PX <ttl>`) before indexing each contract, renews it while the run is active, and releases it with a compare-and-delete Lua script so one runner never deletes another's lock. An unset or empty `REDIS_URL` falls back to this default, so locking stays enabled. To disable locking (and fall back to the always-grant stub), pass an explicitly empty flag: `-redis-url=""`; then only one indexer should run per contract set. |
+
+When the URL is non-empty (including the default), Redis is checked at startup and an unreachable server makes the indexer exit with a non-zero status, so two runners can never process the same ledgers. When locking is disabled with `-redis-url=""`, no Redis connection is attempted.

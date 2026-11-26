@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sorolens/sorolens/apps/api/failurecategory"
 )
 
 // FullStore combines every store interface: all of them are implemented by
@@ -17,12 +18,14 @@ import (
 type FullStore interface {
 	Store
 	ContractBulkStore
+	ContractTokenStore
 	QueryStore
 	LiveStore
 	ArchiveStore
 	WatchdogStore
 	ContractUpgradeStore
 	ContractSpecStore
+	ContractEventSchemaStore
 	ContractTagStore
 	ContractNoteStore
 	HealthScoreStore
@@ -43,11 +46,25 @@ type FullStore interface {
 	WatchedAccountStore
 	AuditStore
 	ExportJobStore
+	UsageStore
+	MaintenanceStore
+	DeliveryStore
+	IdempotencyStore
+	TokenTransferStore
 }
 
 // NewFullStore returns a FullStore backed by the given pool.
 func NewFullStore(pool *pgxpool.Pool) FullStore {
 	return &postgresStore{pool: pool}
+}
+
+// NewStoreWithReplica returns a FullStore backed by a primary pool and a replica read pool with lag guarding.
+func NewStoreWithReplica(primaryPool, readPool *pgxpool.Pool, guard *ReplicaLagGuard) FullStore {
+	return &postgresStore{
+		pool:            primaryPool,
+		readPool:        readPool,
+		replicaLagGuard: guard,
+	}
 }
 
 // EventFilters holds optional query filters for listing events.
@@ -78,6 +95,10 @@ type InvocationFilters struct {
 	// date-range filter.
 	Since *time.Time
 	Until *time.Time
+	// FailureCategory restricts the listing to failed invocations of one
+	// category (issue #806). The handler validates it against
+	// failurecategory.All.
+	FailureCategory string
 }
 
 // StorageFilters holds optional query filters for listing storage entries.
@@ -108,6 +129,16 @@ type InvocationWindowStats struct {
 	P95Fee            float64
 	AvgCPU            float64
 	P95CPU            float64
+	// FailuresByCategory counts the window's classified failures per
+	// failurecategory value (issue #806). Every category is present, with
+	// zero when it has no failures.
+	FailuresByCategory map[string]int64
+	// Fee breakdown aggregates (issue #805).
+	AvgInclusionFee float64
+	P95InclusionFee float64
+	AvgResourceFee  float64
+	P95ResourceFee  float64
+	TotalFeeRefund  float64
 }
 
 // ContractInvocationStats contains the fixed windows exposed by the contract
@@ -139,6 +170,36 @@ type DailyAggregate struct {
 	Events      float64
 }
 
+// LedgerSummary holds aggregate data for a single ledger sequence.
+type LedgerSummary struct {
+	Sequence        uint32                    `json:"sequence"`
+	ClosedAt        time.Time                 `json:"closed_at"`
+	TxCount         int64                     `json:"tx_count"`
+	InvocationCount int64                     `json:"invocation_count"`
+	FailedCount     int64                     `json:"failed_count"`
+	EventCount      int64                     `json:"event_count"`
+	TopContracts    []ContractActivitySummary `json:"top_contracts"`
+}
+
+// ContractActivitySummary is one entry in LedgerSummary.TopContracts.
+type ContractActivitySummary struct {
+	ContractID  string `json:"contract_id"`
+	EventCount  int64  `json:"event_count"`
+	InvokeCount int64  `json:"invocation_count"`
+}
+
+// ResourceTrendBucket is one UTC day of averaged per-invocation resource
+// usage for a contract. It backs GET /api/v1/contracts/{id}/resource-trend
+// (issue #600), replacing the dashboard's client-side paging over raw
+// invocations.
+type ResourceTrendBucket struct {
+	Day        time.Time // midnight UTC
+	AvgCPUInsn float64
+	AvgMemByte float64
+	AvgFee     float64
+	Count      int64
+}
+
 // QueryStore provides read-only querying methods needed by the HTTP API.
 type QueryStore interface {
 	ListEvents(ctx context.Context, contractID, cursor string, limit int, f EventFilters) ([]Event, string, error)
@@ -164,6 +225,15 @@ type QueryStore interface {
 	// newest row. It returns the next page's cursor components, which are zero
 	// and empty when the page returned is the last one.
 	ListAllInvocations(ctx context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error)
+
+	// GetEventsByTxHash returns all events emitted in the given transaction,
+	// ordered ledger ASC, id ASC. Returns an empty slice (not ErrNotFound) when
+	// no events are recorded for that tx_hash.
+	GetEventsByTxHash(ctx context.Context, txHash string) ([]Event, error)
+
+	// GetLedgerSummary returns aggregated stats for the given ledger sequence.
+	// Returns ErrNotFound when the ledger has no indexed data.
+	GetLedgerSummary(ctx context.Context, sequence uint32, network string) (LedgerSummary, error)
 	ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error)
 	GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error)
 	GetContractInvocationStats(ctx context.Context, contractID string) (ContractInvocationStats, error)
@@ -174,6 +244,11 @@ type QueryStore interface {
 	// "latest invocation" lookups (e.g. the dashboard summary) without walking
 	// the ascending paginated list.
 	RecentInvocations(ctx context.Context, contractID string, limit int) ([]Invocation, error)
+
+	// GetResourceTrend returns one bucket per UTC day for the trailing `days`
+	// days, oldest first. Days without invocations yield a zero bucket so the
+	// chart gets a contiguous series in a single request.
+	GetResourceTrend(ctx context.Context, contractID string, days int) ([]ResourceTrendBucket, error)
 
 	// StreamEventsCSV streams contract events as CSV without buffering all rows.
 	// The caller is responsible for setting appropriate HTTP headers.
@@ -206,8 +281,10 @@ type QueryStore interface {
 // ---- ListEvents --------------------------------------------------------------
 
 func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor string, limit int, f EventFilters) ([]Event, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	// The topic filter is appended only when set so the planner always sees a
 	// plain `topic_decoded @> $n::jsonb` predicate and can use the GIN index
@@ -225,7 +302,7 @@ func (s *postgresStore) ListEvents(ctx context.Context, contractID, cursor strin
 		dynamicClauses += fmt.Sprintf("  AND in_successful_call = $%d\n", len(args))
 	}
 
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
 		       in_successful_call, inserted_at
@@ -297,7 +374,7 @@ func topicFilterJSON(topic string) string {
 }
 
 func (s *postgresStore) StreamEventsCSV(ctx context.Context, contractID string, f EventFilters, w io.Writer) (err error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
 		       in_successful_call, inserted_at
@@ -352,7 +429,7 @@ func (s *postgresStore) RecentEvents(ctx context.Context, contractID string, lim
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
 		       in_successful_call, inserted_at
@@ -395,7 +472,7 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 		       COALESCE(function_name, ''),
 		       COALESCE(args_decoded, '{}'::jsonb),
@@ -407,7 +484,10 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
-		       inserted_at
+		       inserted_at,
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, ''),
+		       inclusion_fee, resource_fee, resource_fee_refundable, fee_refund
 		FROM invocations
 		WHERE contract_id = $1
 		ORDER BY ledger DESC, tx_hash DESC
@@ -428,6 +508,8 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.FailureCategory, &inv.FailureCode,
+			&inv.InclusionFee, &inv.ResourceFee, &inv.ResourceFeeRefundable, &inv.FeeRefund,
 		); err != nil {
 			return nil, err
 		}
@@ -438,11 +520,61 @@ func (s *postgresStore) RecentInvocations(ctx context.Context, contractID string
 	return out, rows.Err()
 }
 
-func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor string, limit int, f InvocationFilters) ([]Invocation, string, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
+// GetResourceTrend aggregates invocations by UTC day in Postgres. The
+// generate_series left join keeps empty days in the result, so callers never
+// have to fill gaps and the chart needs exactly one request.
+func (s *postgresStore) GetResourceTrend(ctx context.Context, contractID string, days int) ([]ResourceTrendBucket, error) {
+	if days <= 0 {
+		days = 30
+	}
+	if days > 365 {
+		days = 365
 	}
 	rows, err := s.pool.Query(ctx, `
+		WITH days AS (
+			SELECT generate_series(
+				date_trunc('day', NOW() - (($2 - 1) * INTERVAL '1 day')),
+				date_trunc('day', NOW()),
+				INTERVAL '1 day'
+			) AS day
+		)
+		SELECT d.day,
+		       COALESCE(AVG(i.cpu_insn), 0)::float8,
+		       COALESCE(AVG(i.mem_byte), 0)::float8,
+		       COALESCE(AVG(i.resource_fee_charged), 0)::float8,
+		       COUNT(i.tx_hash)
+		FROM days d
+		LEFT JOIN invocations i
+		  ON i.contract_id = $1
+		 AND i.ledger_closed_at >= d.day
+		 AND i.ledger_closed_at < d.day + INTERVAL '1 day'
+		GROUP BY d.day
+		ORDER BY d.day ASC`,
+		contractID, days,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get resource trend: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]ResourceTrendBucket, 0, days)
+	for rows.Next() {
+		var bucket ResourceTrendBucket
+		if err := rows.Scan(&bucket.Day, &bucket.AvgCPUInsn, &bucket.AvgMemByte, &bucket.AvgFee, &bucket.Count); err != nil {
+			return nil, fmt.Errorf("scan resource trend: %w", err)
+		}
+		out = append(out, bucket)
+	}
+	return out, rows.Err()
+}
+
+func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor string, limit int, f InvocationFilters) ([]Invocation, string, error) {
+	if limit <= 0 {
+		limit = 50
+	} else if limit > 200 {
+		limit = 200
+	}
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 		       COALESCE(function_name, ''),
 		       COALESCE(args_decoded, '{}'::jsonb),
@@ -454,7 +586,10 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
-		       inserted_at
+		       inserted_at,
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, ''),
+		       inclusion_fee, resource_fee, resource_fee_refundable, fee_refund
 		FROM invocations
 		WHERE contract_id = $1
 		  AND ($2 = '' OR tx_hash > $2)
@@ -463,9 +598,10 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 		  AND ($5 = '' OR function_name = $5)
 		  AND ($6 = 0   OR ledger >= $6)
 		  AND ($7 = 0   OR ledger <= $7)
+		  AND ($8 = ''  OR failure_category = $8)
 		ORDER BY ledger ASC, tx_hash ASC
-		LIMIT $8`,
-		contractID, cursor, f.Network, f.Status, f.FunctionName, f.From, f.To, limit+1,
+		LIMIT $9`,
+		contractID, cursor, f.Network, f.Status, f.FunctionName, f.From, f.To, f.FailureCategory, limit+1,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("list invocations: %w", err)
@@ -481,6 +617,8 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.FailureCategory, &inv.FailureCode,
+			&inv.InclusionFee, &inv.ResourceFee, &inv.ResourceFeeRefundable, &inv.FeeRefund,
 		); err != nil {
 			return nil, "", err
 		}
@@ -503,7 +641,7 @@ func (s *postgresStore) ListInvocations(ctx context.Context, contractID, cursor 
 // ---- GetInvocation ----------------------------------------------------------
 
 func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invocation, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 		       COALESCE(function_name, ''),
 		       COALESCE(args_decoded, '{}'::jsonb),
@@ -515,7 +653,10 @@ func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invoc
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
-		       inserted_at
+		       inserted_at,
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, ''),
+		       inclusion_fee, resource_fee, resource_fee_refundable, fee_refund
 		FROM invocations
 		WHERE tx_hash = $1`, txHash)
 
@@ -526,6 +667,8 @@ func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invoc
 		&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 		&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 		&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+		&inv.FailureCategory, &inv.FailureCode,
+		&inv.InclusionFee, &inv.ResourceFee, &inv.ResourceFeeRefundable, &inv.FeeRefund,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Invocation{}, ErrNotFound
@@ -541,7 +684,7 @@ func (s *postgresStore) GetInvocation(ctx context.Context, txHash string) (Invoc
 // ---- GetInvocationWithEvents ------------------------------------------------
 
 func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID, txHash string) (Invocation, []Event, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT i.tx_hash, i.contract_id, i.network, i.ledger, i.ledger_closed_at, i.status,
 		       COALESCE(i.function_name, ''),
 		       COALESCE(i.args_decoded, '{}'::jsonb),
@@ -554,6 +697,8 @@ func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID,
 		       COALESCE(i.ledger_write_byte, 0),
 		       COALESCE(i.application_order, 0),
 		       i.inserted_at,
+		       COALESCE(i.failure_category, ''), COALESCE(i.failure_code, ''),
+		       i.inclusion_fee, i.resource_fee, i.resource_fee_refundable, i.fee_refund,
 		       e.id, e.contract_id, e.network, e.ledger, e.ledger_closed_at, e.tx_hash, e.type,
 		       e.topic_xdr, e.value_xdr, e.topic_decoded, e.value_decoded,
 		       e.in_successful_call, e.inserted_at
@@ -585,6 +730,8 @@ func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID,
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.FailureCategory, &inv.FailureCode,
+			&inv.InclusionFee, &inv.ResourceFee, &inv.ResourceFeeRefundable, &inv.FeeRefund,
 			&evID, &evContractID, &evNetwork, &evLedger, &evLedgerClosedAt, &evTxHash, &evType,
 			&evTopicXDR, &evValueXDR, &evTopicDec, &evValDec,
 			&evInSuccessfulCall, &evInsertedAt,
@@ -651,7 +798,7 @@ func (s *postgresStore) GetInvocationWithEvents(ctx context.Context, contractID,
 const maxCallEdges = 5000
 
 func (s *postgresStore) GetCallEdges(ctx context.Context, txHash string) ([]CallEdge, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT tx_hash, parent_span_id, child_span_id, callee_contract_id, function_name,
 		       cpu, mem, fee_share, depth, network, ledger, ledger_closed_at, inserted_at
 		FROM call_edges
@@ -701,10 +848,12 @@ func (s *postgresStore) GetCallEdges(ctx context.Context, txHash string) ([]Call
 // cursor is (ledger, tx_hash), which is exactly the ORDER BY tuple, so pages
 // stay stable while the indexer appends newer rows.
 func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 		       COALESCE(function_name, ''),
 		       COALESCE(args_decoded, '{}'::jsonb),
@@ -716,7 +865,10 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 		       COALESCE(ledger_read_byte, 0),
 		       COALESCE(ledger_write_byte, 0),
 		       COALESCE(application_order, 0),
-		       inserted_at
+		       inserted_at,
+		       COALESCE(failure_category, ''),
+		       COALESCE(failure_code, ''),
+		       inclusion_fee, resource_fee, resource_fee_refundable, fee_refund
 		FROM invocations
 		WHERE ($1 = '' OR contract_id = $1)
 		  AND ($2 = '' OR network = $2)
@@ -727,10 +879,11 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 		  AND ($7::timestamptz IS NULL OR ledger_closed_at >= $7)
 		  AND ($8::timestamptz IS NULL OR ledger_closed_at <= $8)
 		  AND ($9 = 0   OR (ledger, tx_hash) < ($9, $10))
+		  AND ($11 = '' OR failure_category = $11)
 		ORDER BY ledger DESC, tx_hash DESC
-		LIMIT $11`,
+		LIMIT $12`,
 		f.ContractID, f.Network, f.Status, f.FunctionName, f.From, f.To,
-		f.Since, f.Until, cursorLedger, cursorTxHash, limit+1,
+		f.Since, f.Until, cursorLedger, cursorTxHash, f.FailureCategory, limit+1,
 	)
 	if err != nil {
 		return nil, 0, "", fmt.Errorf("list all invocations: %w", err)
@@ -746,6 +899,8 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 			&inv.FunctionName, &argsDec, &resultDec, &inv.ResultXDR,
 			&inv.ResourceFeeCharged, &inv.CPUInsn, &inv.MemByte,
 			&inv.LedgerReadByte, &inv.LedgerWriteByte, &inv.ApplicationOrder, &inv.InsertedAt,
+			&inv.FailureCategory, &inv.FailureCode,
+			&inv.InclusionFee, &inv.ResourceFee, &inv.ResourceFeeRefundable, &inv.FeeRefund,
 		); err != nil {
 			return nil, 0, "", err
 		}
@@ -771,10 +926,12 @@ func (s *postgresStore) ListAllInvocations(ctx context.Context, cursorLedger uin
 // ---- ListStorageEntries -----------------------------------------------------
 
 func (s *postgresStore) ListStorageEntries(ctx context.Context, contractID, cursor string, limit int, f StorageFilters) ([]StorageEntry, string, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT contract_id, network, key_xdr, key_decoded, value_xdr, value_decoded,
 		       durability, live_until_ledger, last_modified_ledger, status, last_seen_at
 		FROM storage_entries
@@ -833,7 +990,7 @@ func windowToInterval(window string) string {
 
 func (s *postgresStore) GetContractStats(ctx context.Context, contractID, window string) (ContractStats, error) {
 	interval := windowToInterval(window)
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM events          WHERE contract_id = $1) AS event_count,
 			(SELECT COUNT(*) FROM invocations     WHERE contract_id = $1) AS invocation_count,
@@ -873,6 +1030,13 @@ func (s *postgresStore) GetContractInvocationStats(ctx context.Context, contract
 			COALESCE(AVG(cpu_insn) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours'), 0)::float8,
 			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY cpu_insn::float8)
 				FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours'), 0)::float8,
+			COALESCE(AVG(inclusion_fee) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours'), 0)::float8,
+			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY inclusion_fee::float8)
+				FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours'), 0)::float8,
+			COALESCE(AVG(resource_fee) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours'), 0)::float8,
+			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY resource_fee::float8)
+				FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours'), 0)::float8,
+			COALESCE(SUM(fee_refund) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours'), 0)::float8,
 
 			COUNT(*) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days'),
 			COUNT(*) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days' AND status <> 'SUCCESS'),
@@ -886,6 +1050,13 @@ func (s *postgresStore) GetContractInvocationStats(ctx context.Context, contract
 			COALESCE(AVG(cpu_insn) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days'), 0)::float8,
 			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY cpu_insn::float8)
 				FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days'), 0)::float8,
+			COALESCE(AVG(inclusion_fee) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days'), 0)::float8,
+			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY inclusion_fee::float8)
+				FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days'), 0)::float8,
+			COALESCE(AVG(resource_fee) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days'), 0)::float8,
+			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY resource_fee::float8)
+				FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days'), 0)::float8,
+			COALESCE(SUM(fee_refund) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days'), 0)::float8,
 
 			COUNT(*),
 			COUNT(*) FILTER (WHERE status <> 'SUCCESS'),
@@ -893,25 +1064,96 @@ func (s *postgresStore) GetContractInvocationStats(ctx context.Context, contract
 			COALESCE(AVG(resource_fee_charged), 0)::float8,
 			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY resource_fee_charged::float8), 0)::float8,
 			COALESCE(AVG(cpu_insn), 0)::float8,
-			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY cpu_insn::float8), 0)::float8
+			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY cpu_insn::float8), 0)::float8,
+			COALESCE(AVG(inclusion_fee), 0)::float8,
+			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY inclusion_fee::float8), 0)::float8,
+			COALESCE(AVG(resource_fee), 0)::float8,
+			COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY resource_fee::float8), 0)::float8,
+			COALESCE(SUM(fee_refund), 0)::float8
 		FROM invocations
 		WHERE contract_id = $1
 		  AND ledger_closed_at >= NOW() - INTERVAL '30 days'
 		  AND ledger_closed_at <= NOW()`
 
 	var stats ContractInvocationStats
-	err := s.pool.QueryRow(ctx, query, contractID).Scan(
+	err := s.readDB(ctx).QueryRow(ctx, query, contractID).Scan(
 		&stats.Last24Hours.InvocationCount, &stats.Last24Hours.FailedInvocations, &stats.Last24Hours.FailureRate,
 		&stats.Last24Hours.AvgFee, &stats.Last24Hours.P95Fee, &stats.Last24Hours.AvgCPU, &stats.Last24Hours.P95CPU,
+		&stats.Last24Hours.AvgInclusionFee, &stats.Last24Hours.P95InclusionFee,
+		&stats.Last24Hours.AvgResourceFee, &stats.Last24Hours.P95ResourceFee, &stats.Last24Hours.TotalFeeRefund,
 		&stats.Last7Days.InvocationCount, &stats.Last7Days.FailedInvocations, &stats.Last7Days.FailureRate,
 		&stats.Last7Days.AvgFee, &stats.Last7Days.P95Fee, &stats.Last7Days.AvgCPU, &stats.Last7Days.P95CPU,
+		&stats.Last7Days.AvgInclusionFee, &stats.Last7Days.P95InclusionFee,
+		&stats.Last7Days.AvgResourceFee, &stats.Last7Days.P95ResourceFee, &stats.Last7Days.TotalFeeRefund,
 		&stats.Last30Days.InvocationCount, &stats.Last30Days.FailedInvocations, &stats.Last30Days.FailureRate,
 		&stats.Last30Days.AvgFee, &stats.Last30Days.P95Fee, &stats.Last30Days.AvgCPU, &stats.Last30Days.P95CPU,
+		&stats.Last30Days.AvgInclusionFee, &stats.Last30Days.P95InclusionFee,
+		&stats.Last30Days.AvgResourceFee, &stats.Last30Days.P95ResourceFee, &stats.Last30Days.TotalFeeRefund,
 	)
 	if err != nil {
 		return ContractInvocationStats{}, fmt.Errorf("contract invocation stats: %w", err)
 	}
-	return stats, err
+	if err := s.addFailuresByCategory(ctx, contractID, &stats); err != nil {
+		return ContractInvocationStats{}, err
+	}
+	return stats, nil
+}
+
+// addFailuresByCategory fills each window's per-category failure counts
+// (issue #806) over the same 30-day range GetContractInvocationStats scans.
+// Only classified rows carry a failure_category, so no status filter is
+// needed.
+func (s *postgresStore) addFailuresByCategory(ctx context.Context, contractID string, stats *ContractInvocationStats) error {
+	stats.Last24Hours.FailuresByCategory = NewFailureCounts()
+	stats.Last7Days.FailuresByCategory = NewFailureCounts()
+	stats.Last30Days.FailuresByCategory = NewFailureCounts()
+
+	rows, err := s.readDB(ctx).Query(ctx, `
+		SELECT failure_category,
+		       COUNT(*) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '24 hours'),
+		       COUNT(*) FILTER (WHERE ledger_closed_at >= NOW() - INTERVAL '7 days'),
+		       COUNT(*)
+		FROM invocations
+		WHERE contract_id = $1
+		  AND failure_category IS NOT NULL
+		  AND ledger_closed_at >= NOW() - INTERVAL '30 days'
+		  AND ledger_closed_at <= NOW()
+		GROUP BY failure_category`, contractID)
+	if err != nil {
+		return fmt.Errorf("contract failure categories: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cat string
+		var day, week, month int64
+		if err := rows.Scan(&cat, &day, &week, &month); err != nil {
+			return fmt.Errorf("scan contract failure categories: %w", err)
+		}
+		AddFailureCount(stats.Last24Hours.FailuresByCategory, cat, day)
+		AddFailureCount(stats.Last7Days.FailuresByCategory, cat, week)
+		AddFailureCount(stats.Last30Days.FailuresByCategory, cat, month)
+	}
+	return rows.Err()
+}
+
+// NewFailureCounts returns a per-category count map with every category set
+// to zero, so responses always list the full set.
+func NewFailureCounts() map[string]int64 {
+	m := make(map[string]int64, len(failurecategory.All()))
+	for _, c := range failurecategory.All() {
+		m[string(c)] = 0
+	}
+	return m
+}
+
+// AddFailureCount adds n to category in m. A stored value outside the known
+// set (for example one written by a newer indexer) is counted as "other" so
+// it is never dropped from the totals.
+func AddFailureCount(m map[string]int64, category string, n int64) {
+	if _, ok := failurecategory.Parse(category); !ok {
+		category = string(failurecategory.Other)
+	}
+	m[category] += n
 }
 
 // DailyAggregates queries the last `days` calendar days (oldest first),
@@ -924,7 +1166,7 @@ func (s *postgresStore) DailyAggregates(ctx context.Context, contractID string, 
 	if days > 3650 {
 		days = 3650
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		WITH buckets AS (
 			SELECT date_trunc('day', d)::date AS day
 			FROM generate_series(now() - ($2::int || ' days')::interval, now(), '1 day') AS d
@@ -975,7 +1217,7 @@ func (s *postgresStore) DailyAggregates(ctx context.Context, contractID string, 
 // ---- ContractFirstLedger ----------------------------------------------------
 
 func (s *postgresStore) ContractFirstLedger(ctx context.Context, contractID string) (uint32, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT COALESCE(MIN(ledger), 0) FROM (
 			SELECT ledger FROM events      WHERE contract_id = $1
 			UNION ALL
@@ -1000,7 +1242,7 @@ func (s *postgresStore) RecentHourlyActivity(ctx context.Context, contractID str
 	if hours > 24*31 {
 		hours = 24 * 31
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		WITH buckets AS (
 			SELECT date_trunc('hour', d) AS hour
 			FROM generate_series(now() - ($2::int || ' hours')::interval, now(), '1 hour') AS d
@@ -1054,7 +1296,7 @@ func (s *postgresStore) RecentHourlyActivity(ctx context.Context, contractID str
 // ---- GetStorageSnapshot -----------------------------------------------------
 
 func (s *postgresStore) GetStorageSnapshot(ctx context.Context, contractID string, ledger uint32) ([]StorageEntry, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.readDB(ctx).Query(ctx, `
 		SELECT DISTINCT ON (key_xdr)
 		       contract_id, key_xdr, key_decoded, value_xdr, value_decoded,
 		       durability, live_until_ledger, last_modified_ledger, status, recorded_at
@@ -1090,7 +1332,7 @@ func (s *postgresStore) GetStorageSnapshot(ctx context.Context, contractID strin
 // ---- LastEventAtOrBefore ----------------------------------------------------
 
 func (s *postgresStore) LastEventAtOrBefore(ctx context.Context, contractID string, ledger uint32) (Event, error) {
-	row := s.pool.QueryRow(ctx, `
+	row := s.readDB(ctx).QueryRow(ctx, `
 		SELECT id, contract_id, network, ledger, ledger_closed_at, tx_hash, type,
 		       topic_xdr, value_xdr, topic_decoded, value_decoded,
 		       in_successful_call, inserted_at

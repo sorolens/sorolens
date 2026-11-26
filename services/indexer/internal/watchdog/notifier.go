@@ -468,6 +468,19 @@ func DispatchAlerts(ctx context.Context, alert Alert, subStore AlertSubscription
 		return
 	}
 
+	// Issue #789: Skip notifications for acknowledged, currently snoozed, or resolved alerts.
+	if alert.State == "acknowledged" || alert.State == "resolved" {
+		return
+	}
+	if alert.State == "snoozed" && alert.SnoozedUntil != nil && time.Now().UTC().Before(*alert.SnoozedUntil) {
+		return
+	}
+
+	// Issue #790: Skip notifications if suppressed by maintenance window.
+	if alert.MaintenanceWindowID != nil {
+		return
+	}
+
 	subs, err := subStore.ListByContract(ctx, alert.ContractID)
 	if err != nil {
 		logger.Error("dispatch alerts: list subscriptions", "err", err, "contract_id", alert.ContractID)

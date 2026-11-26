@@ -63,6 +63,25 @@ go run ./services/indexer --mode once
 
 The dashboard is at `http://localhost:3000` after `pnpm dev` in `apps/web`.
 
+### Authenticating the CLI
+
+Commands that write to the API (`track`, `label`, `tui`, ...) authenticate
+with an API key. Provide it one of these ways, in precedence order:
+
+1. `--api-key` flag, accepted before or after the subcommand:
+   `sorolens --api-key <key> track <contract-id>`
+2. `SOROLENS_API_KEY` environment variable.
+3. `api_key` entry in `~/.sorolens.yml` — stored in plaintext, so prefer
+   one of the options above or a profile key.
+4. The active profile's stored key (`sorolens config profile add <name>
+   --api-key-stdin`), which lives in the OS keyring.
+
+`sorolens config show` reports whether a key is configured (masked, never
+printed). See [`docs/authentication.md`](docs/authentication.md) for scopes
+and key management, and [`docs/configuration.md`](docs/configuration.md) for
+every CLI option. The [CLI command reference](docs/cli/README.md) documents
+every command and flag.
+
 ### 4. Optional: local metrics stack
 
 ```bash
@@ -185,6 +204,41 @@ Admin: `GAZ3HN2QNDKWLOI2OQEG65KBJEAUP4PROR3FJNXNDY34UH547MN4CJUI`
 > ⏳ **Coming soon.** Mainnet is on the roadmap. The row above is a placeholder: the mainnet contract ID and explorer link will be published here once the deployment is live.
 
 ---
+
+## Run the full stack with Docker Compose
+
+From the repository root, run:
+
+```sh
+docker compose --profile full up --build
+# Or run in the background and include Git build metadata:
+make full
+```
+
+The dashboard listens on http://localhost:3000 and the API on
+http://localhost:8080. Compose applies the database schema before starting
+the API and indexer. The stack runs against Stellar testnet by default. Copy
+`.env.example` to `.env` to change the network, ports, or push settings.
+When changing the API or web port, update `NEXT_PUBLIC_API_URL` or
+`CORS_ALLOWED_ORIGINS` respectively and rebuild the web image if its API URL
+changed. Build and start the optional MinIO archive service with
+`docker compose --profile archive up --build -d minio`. Its Dockerfile builds
+the server and client from pinned upstream source revisions. MinIO publishes
+the [October 2025 security release](https://github.com/minio/minio/releases/tag/RELEASE.2025-10-15T17-29-55Z)
+as source and documents building a container locally.
+
+Build and report the local image sizes with:
+
+```sh
+docker compose --profile full build api indexer web
+docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' 'sorolens/*:local'
+docker compose --profile full down
+```
+
+The API and indexer run as non-root and have image health checks. The API
+checks `/readyz`, and the continuously running indexer checks `/metrics`.
+Their image definitions are shared by the integration suite and release
+workflow.
 
 ## Deploying the API as a standalone Docker service
 

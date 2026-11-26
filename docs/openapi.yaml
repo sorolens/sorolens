@@ -25,6 +25,18 @@ info:
     `X-Identity-Timestamp` and `X-Identity-Signature` (an HMAC over the
     request). Bare `X-User-ID`, `X-GitHub-Login`, `X-User-Sub` and
     `X-GitHub-ID` headers are ignored (issue #518).
+
+    Browser requests: `CORS_ALLOWED_ORIGINS` accepts comma-separated origins.
+    Unset or `*` permits all origins. The API echoes an exact allowed origin
+    and sends `Vary: Origin`. OPTIONS returns 204. Allowed preflights advertise
+    GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS, and can be cached for 600
+    seconds. Allowed request headers are Content-Type, X-Request-ID,
+    Authorization, X-API-Key, If-None-Match and the three trusted proxy headers.
+
+    Responses include `X-Content-Type-Options: nosniff`,
+    `Strict-Transport-Security: max-age=31536000`, and
+    `Referrer-Policy: strict-origin-when-cross-origin`. API key and admin
+    routes also return `Cache-Control: no-store`, including errors.
   contact:
     name: Sorolens
 
@@ -371,12 +383,30 @@ paths:
       security:
         - RoleAuth: [admin]
       parameters:
-        - name: since
+        - name: from
           in: query
+          required: false
           schema:
             type: string
             format: date-time
-          description: Only events at or after this RFC 3339 timestamp.
+          description: Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).
+          example: '2026-09-02T00:00:00Z'
+        - name: since
+          in: query
+          deprecated: true
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.
         - $ref: "#/components/parameters/Limit"
         - name: cursor
           in: query
@@ -419,12 +449,30 @@ paths:
       security:
         - RoleAuth: [admin]
       parameters:
-        - name: since
+        - name: from
           in: query
+          required: false
           schema:
             type: string
             format: date-time
-          description: Only events at or after this RFC 3339 timestamp.
+          description: Inclusive lower bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on audit event timestamp (RFC 3339 timestamp with timezone offset, normalized to UTC).
+          example: '2026-09-02T00:00:00Z'
+        - name: since
+          in: query
+          deprecated: true
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Deprecated alias for `from`. Only events at or after this RFC 3339 timestamp.
         - $ref: "#/components/parameters/Limit"
         - name: cursor
           in: query
@@ -466,6 +514,9 @@ paths:
       responses:
         "200":
           description: Global counts across all tracked contracts
+          headers:
+            X-Cache:
+              $ref: "#/components/headers/XCache"
           content:
             application/json:
               schema:
@@ -484,6 +535,9 @@ paths:
                   total_storage_entries:
                     type: integer
                     format: int64
+                  approximate:
+                    type: boolean
+                    description: True when large table counts are estimated rather than exact.
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -721,6 +775,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Contract"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Contracts]
+      summary: Untrack one contract
+      description: |
+        Stops tracking a contract. Untracking is a soft delete: the contract
+        status flips to "paused" while the row and all indexed history are
+        retained, and the indexer stops polling it. Re-registering the
+        contract resumes tracking. Deleting a contract that is already paused
+        is a no-op; deleting one that was never registered returns 404. This
+        differs from the batch "untrack" action, which permanently deletes
+        the contracts and their indexed data.
+      operationId: deleteContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -1166,6 +1248,7 @@ paths:
             format: int32
             minimum: 1
           description: Upper ledger bound (inclusive).
+        - $ref: "#/components/parameters/FailureCategoryParam"
       responses:
         "200":
           description: Page of invocations
@@ -1232,16 +1315,74 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/contracts/{id}/resource-trend:
+    get:
+      tags: [Invocations]
+      summary: Daily resource usage trend for a contract
+      description: >
+        Aggregates invocations into one bucket per UTC day and returns the
+        average CPU instructions, memory bytes, and fee per invocation for
+        the trailing `days` days. Days without invocations are returned as
+        zero buckets, so the dashboard chart loads this series in a single
+        request instead of paging through raw invocations (issue #600).
+      operationId: getContractResourceTrend
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+          description: Number of trailing UTC days to bucket, including today.
+      responses:
+        "200":
+          description: Daily resource trend buckets, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [days, points]
+                properties:
+                  days:
+                    type: integer
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      required: [date, avg_cpu_insn, avg_mem_byte, avg_fee, count]
+                      properties:
+                        date:
+                          type: string
+                          description: UTC day, formatted YYYY-MM-DD.
+                        avg_cpu_insn:
+                          type: number
+                          format: double
+                        avg_mem_byte:
+                          type: number
+                          format: double
+                        avg_fee:
+                          type: number
+                          format: double
+                        count:
+                          type: integer
+                          format: int64
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/contracts/{id}/storage/diff:
     get:
       tags: [Storage]
       summary: Storage entry diff between two ledgers
       description: Render a diff of every storage entry that was created, changed, removed, or expired between two ledgers.
       operationId: getContractStorageDiff
-      security:
-        - ApiKeyAuth: [read:contracts]
       parameters:
-        - $ref: "#/components/parameters/ContractID"
+        - $ref: "#/components/parameters/ContractId"
         - name: from
           in: query
           required: true
@@ -1304,6 +1445,13 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/StorageDiffEntry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
         "422":
           $ref: "#/components/responses/InvalidInput"
         "500":
@@ -1620,6 +1768,22 @@ paths:
                     type: string
                     enum: [read:contracts, write:contracts, read:watchdog]
                   description: Defaults to read:contracts when omitted.
+                allowed_cidrs:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    Optional source networks for this key. Each entry is a CIDR
+                    range or a bare IP address. Empty or omitted means any
+                    address.
+                allowed_origins:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    Optional browser Origins for this key, scheme and host only
+                    (`https://app.example.com`). Empty or omitted means any
+                    origin.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -1729,6 +1893,25 @@ paths:
                   type: string
                   format: date-time
                   description: Optional expiry timestamp. Expired keys are rejected by authentication.
+                allowed_cidrs:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    Source networks allowed to use this key. Each entry is a
+                    CIDR range (`203.0.113.0/24`, `2001:db8::/32`) or a bare IP
+                    address, which is stored as a single-host range. Invalid
+                    entries are rejected with `422`. Omit or send an empty list
+                    for an unrestricted key.
+                allowed_origins:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    Browser Origins allowed to use this key, for example
+                    `https://app.example.com`. Scheme and host only: paths,
+                    queries and wildcards are rejected with `422`. Omit or send
+                    an empty list to allow any origin.
       responses:
         "201":
           description: Key created; the plaintext key is returned once.
@@ -1845,6 +2028,57 @@ paths:
           $ref: "#/components/responses/ForbiddenScope"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/usage:
+    get:
+      tags: [API Keys]
+      summary: Get API key usage metrics and quota status
+      description: |
+        Returns aggregated request counts, endpoint group breakdowns, daily timeline,
+        and monthly quota usage for the caller's API key, or for any key if requested
+        by an admin (issue #792).
+      operationId: getApiKeyUsage
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: key_id
+          in: query
+          required: false
+          description: API key ID to query. Required when calling with user/session auth; optional when authenticating with an API key (defaults to calling key). Querying another key requires admin:* scope.
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          description: Start of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to 30 days ago.
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          description: End of date range (RFC3339 timestamp or YYYY-MM-DD). Defaults to now.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Aggregated usage statistics and quota tracking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyUsageSummary"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -2708,6 +2942,9 @@ paths:
       responses:
         "200":
           description: Global statistics
+          headers:
+            X-Cache:
+              $ref: "#/components/headers/XCache"
           content:
             application/json:
               schema:
@@ -2953,6 +3190,32 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [API v2]
+      summary: Untrack one contract
+      description: |
+        Stops tracking a contract. Same semantics as DELETE /api/v1/contracts/{id}:
+        the contract status flips to "paused" while the row and all indexed history
+        are retained, and the indexer stops polling it.
+      operationId: v2DeleteContract
+      security:
+        - ApiKeyAuth: [write:contracts]
+        - RoleAuth: [contributor]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "204":
+          description: Contract untracked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v2/contracts/{id}/events:
     get:
@@ -3076,6 +3339,63 @@ paths:
                 $ref: "#/components/schemas/V2StorageList"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/contracts/{id}/resource-trend:
+    get:
+      tags: [Invocations]
+      summary: Daily resource usage trend for a contract (v2)
+      description: >
+        v2 alias of `GET /api/v1/contracts/{id}/resource-trend`. Aggregates
+        invocations into UTC-day buckets in one request.
+      operationId: getContractResourceTrendV2
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+          description: Number of trailing UTC days to bucket, including today.
+      responses:
+        "200":
+          description: Daily resource trend buckets, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [days, points]
+                properties:
+                  days:
+                    type: integer
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      required: [date, avg_cpu_insn, avg_mem_byte, avg_fee, count]
+                      properties:
+                        date:
+                          type: string
+                        avg_cpu_insn:
+                          type: number
+                          format: double
+                        avg_mem_byte:
+                          type: number
+                          format: double
+                        avg_fee:
+                          type: number
+                          format: double
+                        count:
+                          type: integer
+                          format: int64
+        "422":
+          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -3256,6 +3576,34 @@ paths:
                 type: object
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/contracts/{id}/event-schemas:
+    get:
+      tags: [API v2]
+      summary: Inferred and declared event schemas for a contract (v2)
+      operationId: v2ContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -3748,6 +4096,50 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v2/usage:
+    get:
+      tags: [API v2]
+      summary: Get API key usage metrics and quota status (v2 passthrough)
+      operationId: v2GetApiKeyUsage
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: key_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Aggregated usage statistics and quota tracking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyUsageSummary"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v2/admin/keys:
     get:
       tags: [API v2]
@@ -4166,20 +4558,38 @@ paths:
             type: string
             enum: [contract, system, diagnostic]
         - $ref: "#/components/parameters/NetworkParam"
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `since` if both are sent.
+          example: '2026-09-01T00:00:00Z'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound on ledger_closed_at (RFC 3339 timestamp with timezone offset, normalized to UTC). Precedes `until` if both are sent.
+          example: '2026-09-02T00:00:00Z'
         - name: since
           in: query
+          deprecated: true
           required: false
           schema:
             type: string
             format: date-time
-          description: Inclusive lower bound on ledger_closed_at (RFC 3339).
+          description: Deprecated alias for `from`. Inclusive lower bound on ledger_closed_at (RFC 3339).
         - name: until
           in: query
+          deprecated: true
           required: false
           schema:
             type: string
             format: date-time
-          description: Inclusive upper bound on ledger_closed_at (RFC 3339).
+          description: Deprecated alias for `to`. Inclusive upper bound on ledger_closed_at (RFC 3339).
       responses:
         "200":
           description: Page of events
@@ -4196,6 +4606,58 @@ paths:
                   next_cursor:
                     type: string
                     description: Opaque cursor for the next (older) page; empty when no more pages.
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/events/search:
+    get:
+      tags: [Events]
+      summary: Full-text search over decoded event values
+      operationId: searchEventValues
+      description: |
+        Returns events whose decoded topic or value JSONB matches the query
+        using the event_tsv full-text index (issue #798). Results are newest-
+        first and cursor-paginated.
+      security:
+        - ApiKeyAuth: [read:contracts]
+        - {}
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Full-text search query (simple dictionary, prefix matching).
+        - $ref: "#/components/parameters/Cursor"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Page of matching events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next_cursor, query]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor for the next page; empty when exhausted.
+                  query:
+                    type: string
+                    description: The query as interpreted by the server.
         "422":
           $ref: "#/components/responses/InvalidInput"
         "500":
@@ -4269,6 +4731,7 @@ paths:
             type: string
             format: date-time
           description: Inclusive upper bound on ledger_closed_at (RFC 3339).
+        - $ref: "#/components/parameters/FailureCategoryParam"
       responses:
         "200":
           description: Page of invocations
@@ -4285,6 +4748,385 @@ paths:
                   next_cursor:
                     type: string
                     description: Opaque cursor for the next (older) page; empty when no more pages.
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/transactions/{hash}:
+    get:
+      tags: [Transactions]
+      summary: Get transaction details
+      operationId: getTransaction
+      description: >
+        Returns the invocation, all events, and cross-contract call trace for a
+        transaction in a single response. Any component not yet indexed is omitted;
+        a 404 is returned only when no data at all exists for the hash.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{64}$"
+          description: 64-character lowercase hex transaction hash.
+      responses:
+        "200":
+          description: Transaction detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tx_hash, ledger, events]
+                properties:
+                  tx_hash:
+                    type: string
+                  ledger:
+                    type: integer
+                    format: int32
+                  status:
+                    type: string
+                  network:
+                    type: string
+                  invocation:
+                    $ref: "#/components/schemas/Invocation"
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+                  trace:
+                    type: object
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/transactions/{hash}:
+    get:
+      tags: [Transactions]
+      summary: Get transaction details (v2)
+      operationId: getTransactionV2
+      description: v2 passthrough — identical shape to v1.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{64}$"
+      responses:
+        "200":
+          description: Transaction detail
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/ledgers/{sequence}:
+    get:
+      tags: [Ledgers]
+      summary: Get ledger summary
+      operationId: getLedger
+      description: >
+        Returns aggregated statistics for a single ledger: close time, transaction
+        count, invocation count, failed invocations, event count, and the top
+        contracts by event volume.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - name: sequence
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Ledger sequence number.
+        - $ref: "#/components/parameters/NetworkParam"
+      responses:
+        "200":
+          description: Ledger summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sequence, tx_count, invocation_count, failed_count, event_count, top_contracts]
+                properties:
+                  sequence:
+                    type: integer
+                    format: int32
+                  closed_at:
+                    type: string
+                    format: date-time
+                  tx_count:
+                    type: integer
+                    format: int64
+                  invocation_count:
+                    type: integer
+                    format: int64
+                  failed_count:
+                    type: integer
+                    format: int64
+                  event_count:
+                    type: integer
+                    format: int64
+                  top_contracts:
+                    type: array
+                    items:
+                      type: object
+                      required: [contract_id, event_count, invocation_count]
+                      properties:
+                        contract_id:
+                          type: string
+                        event_count:
+                          type: integer
+                          format: int64
+                        invocation_count:
+                          type: integer
+                          format: int64
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/ledgers/{sequence}:
+    get:
+      tags: [Ledgers]
+      summary: Get ledger summary (v2)
+      operationId: getLedgerV2
+      description: v2 passthrough — identical shape to v1.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - name: sequence
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+        - $ref: "#/components/parameters/NetworkParam"
+      responses:
+        "200":
+          description: Ledger summary
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/transfers:
+    get:
+      tags: [Tokens]
+      summary: List SEP-41 token transfers
+      operationId: listTokenTransfers
+      description: >
+        Returns paginated SEP-41 token transfer events for a contract (transfer,
+        mint, burn, clawback, approve), newest first.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/NetworkParam"
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [transfer, mint, burn, clawback, approve]
+          description: Filter by transfer type.
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Lower ledger bound (inclusive).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          description: Upper ledger bound (inclusive).
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Page of token transfers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [transfers, next_cursor]
+                properties:
+                  transfers:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, contract_id, network, tx_hash, ledger, ledger_closed_at, event_id, transfer_type, amount]
+                      properties:
+                        id:
+                          type: integer
+                          format: int64
+                        contract_id:
+                          type: string
+                        network:
+                          type: string
+                        tx_hash:
+                          type: string
+                        ledger:
+                          type: integer
+                          format: int32
+                        ledger_closed_at:
+                          type: string
+                          format: date-time
+                        event_id:
+                          type: string
+                        transfer_type:
+                          type: string
+                          enum: [transfer, mint, burn, clawback, approve]
+                        from:
+                          type: string
+                        to:
+                          type: string
+                        amount:
+                          type: string
+                  next_cursor:
+                    type: string
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/contracts/{id}/transfers:
+    get:
+      tags: [Tokens]
+      summary: List SEP-41 token transfers (v2)
+      operationId: listTokenTransfersV2
+      description: v2 passthrough — identical shape to v1.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - $ref: "#/components/parameters/NetworkParam"
+      responses:
+        "200":
+          description: Page of token transfers
+          content:
+            application/json:
+              schema:
+                type: object
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/holders:
+    get:
+      tags: [Tokens]
+      summary: List SEP-41 token holders
+      operationId: listTokenHolders
+      description: >
+        Returns token holders for a contract sorted by balance descending.
+        Balances are aggregated from indexed transfer, mint and burn events.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - $ref: "#/components/parameters/NetworkParam"
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Holder address of the last entry on the previous page.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Page of token holders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [holders, next_cursor]
+                properties:
+                  holders:
+                    type: array
+                    items:
+                      type: object
+                      required: [holder, balance, updated_at]
+                      properties:
+                        holder:
+                          type: string
+                        balance:
+                          type: string
+                          description: Token balance as a decimal string (numeric(39,0)).
+                        updated_at:
+                          type: string
+                          format: date-time
+                  next_cursor:
+                    type: string
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v2/contracts/{id}/holders:
+    get:
+      tags: [Tokens]
+      summary: List SEP-41 token holders (v2)
+      operationId: listTokenHoldersV2
+      description: v2 passthrough — identical shape to v1.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+        - $ref: "#/components/parameters/NetworkParam"
+      responses:
+        "200":
+          description: Page of token holders
+          content:
+            application/json:
+              schema:
+                type: object
         "422":
           $ref: "#/components/responses/InvalidInput"
         "500":
@@ -4408,6 +5250,7 @@ paths:
             type: integer
             minimum: 1
             default: 50
+          description: Page size (default 50, clamped to 200).
       responses:
         "200":
           description: Upgrades, newest first
@@ -4510,6 +5353,86 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/contracts/{id}/changelog:
+    get:
+      tags: [Contracts]
+      summary: Get a contract's Wasm hash changelog
+      operationId: getContractChangelog
+      description: |
+        Every Wasm hash the contract has run, oldest first (issue #276). A
+        tracked contract with no recorded versions returns an empty array.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: Wasm hash history, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContractVersion"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/changelog/feed:
+    get:
+      tags: [Contracts]
+      summary: Atom feed of a contract's Wasm hash changes
+      operationId: getContractChangelogFeed
+      description: |
+        Atom 1.0 feed with one entry per recorded Wasm hash, for feed readers.
+        The feed's self link and entry links point back at this API. A tracked
+        contract with no recorded versions returns a feed with no entries.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: Atom 1.0 XML document
+          content:
+            application/atom+xml:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/changelog/badge:
+    get:
+      tags: [Contracts]
+      summary: Get a Wasm hash badge SVG for a contract
+      operationId: getContractChangelogBadge
+      description: |
+        Shields.io-style SVG badge showing the first 8 characters of the
+        contract's latest Wasm hash, suitable for embedding in a README. A
+        contract with no recorded versions, including one that is not
+        tracked, gets an "unknown" badge rather than an error.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: SVG badge
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Always `no-cache, max-age=0`, so embeds show the current hash.
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/contracts/{id}/spec:
     get:
       tags: [Contracts]
@@ -4533,6 +5456,34 @@ paths:
                 $ref: "#/components/schemas/ContractSpec"
         "404":
           description: Contract not found, or its interface spec has not been parsed yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/contracts/{id}/event-schemas:
+    get:
+      tags: [Contracts]
+      summary: Get inferred and declared event schemas for a contract
+      operationId: getContractEventSchemas
+      description: >
+        Returns inferred event schemas observed from indexed events emitted by
+        the contract, complemented by any declared SEP-48 interface specs.
+      security:
+        - ApiKeyAuth: [read:contracts]
+      parameters:
+        - $ref: "#/components/parameters/ContractID"
+      responses:
+        "200":
+          description: The contract event schemas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractEventSchemasResponse"
+        "404":
+          description: Contract not found
           content:
             application/json:
               schema:
@@ -4748,6 +5699,137 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/watchdog/subscriptions/{id}/deliveries:
+    get:
+      tags: [Notifications]
+      summary: List webhook deliveries for a subscription
+      operationId: listWebhookDeliveries
+      description: |
+        Returns webhook delivery attempts for the subscription, newest first,
+        cursor-paginated. The signed payload is omitted; use
+        GET .../deliveries/{deliveryID} for the full record (issue #828).
+      security:
+        - ApiKeyAuth: [read:watchdog]
+          RoleAuth: [contributor]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Subscription ID
+        - $ref: "#/components/parameters/Cursor"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Page of delivery records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deliveries, next_cursor]
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookDelivery"
+                  next_cursor:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}:
+    get:
+      tags: [Notifications]
+      summary: Get a single webhook delivery record
+      operationId: getWebhookDelivery
+      description: |
+        Returns the full delivery record including the signed payload and
+        the response code and body received from the destination (issue #828).
+      security:
+        - ApiKeyAuth: [read:watchdog]
+          RoleAuth: [contributor]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Subscription ID
+        - name: deliveryID
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Delivery ID
+      responses:
+        "200":
+          description: Delivery record with full payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDelivery"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/watchdog/subscriptions/{id}/deliveries/{deliveryID}/retry:
+    post:
+      tags: [Notifications]
+      summary: Manually retry a failed webhook delivery
+      operationId: retryWebhookDelivery
+      description: |
+        Marks a failed delivery for immediate retry by resetting its
+        next_retry_at to now and incrementing the attempt counter.
+        Only contributor+ callers may trigger a retry (issue #828).
+      security:
+        - ApiKeyAuth: [write:contracts]
+          RoleAuth: [contributor]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Subscription ID
+        - name: deliveryID
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Delivery ID
+      responses:
+        "202":
+          description: Delivery scheduled for immediate retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDelivery"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/integrations:
     get:
       tags: [Integrations]
@@ -4897,6 +5979,337 @@ paths:
                     description: Present when flat=true.
                   next_cursor:
                     type: string
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/alerts/counts:
+    get:
+      tags: [Alerts]
+      summary: Get alert counts broken down by state
+      description: Returns counts of open, acknowledged, snoozed, and resolved alerts.
+      operationId: getAlertCounts
+      parameters:
+        - name: contract_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional contract ID filter.
+        - $ref: "#/components/parameters/NetworkParam"
+      responses:
+        "200":
+          description: Counts of alerts by state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [counts]
+                properties:
+                  counts:
+                    type: object
+                    properties:
+                      open:
+                        type: integer
+                      acknowledged:
+                        type: integer
+                      snoozed:
+                        type: integer
+                      resolved:
+                        type: integer
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/alerts/{id}/ack:
+    post:
+      tags: [Alerts]
+      summary: Acknowledge an alert
+      description: Transitions an alert from open or snoozed to acknowledged.
+      operationId: acknowledgeAlert
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Alert ID
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractAlert"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/alerts/{id}/snooze:
+    post:
+      tags: [Alerts]
+      summary: Snooze an alert
+      description: Snoozes an alert for a specified duration, suppressing notifications until the snooze expires.
+      operationId: snoozeAlert
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Alert ID
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                duration:
+                  type: string
+                  example: "2h"
+                duration_seconds:
+                  type: integer
+                  example: 7200
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractAlert"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/alerts/{id}/resolve:
+    post:
+      tags: [Alerts]
+      summary: Resolve an alert
+      description: Marks an alert as resolved.
+      operationId: resolveAlert
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Alert ID
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractAlert"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/maintenance-windows:
+    get:
+      tags: [Maintenance]
+      summary: List maintenance windows
+      description: Returns scheduled maintenance windows, optionally filtered by scope or target ID.
+      operationId: listMaintenanceWindows
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [global, contract, group]
+          description: Scope filter
+        - name: target_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Target ID filter
+      responses:
+        "200":
+          description: List of maintenance windows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [maintenance_windows]
+                properties:
+                  maintenance_windows:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MaintenanceWindow"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Maintenance]
+      summary: Create a maintenance window
+      description: Creates a new maintenance window during which alert notifications are suppressed.
+      operationId: createMaintenanceWindow
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMaintenanceWindowRequest"
+      responses:
+        "201":
+          description: Maintenance window created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceWindow"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/maintenance-windows/{id}:
+    get:
+      tags: [Maintenance]
+      summary: Get a maintenance window by ID
+      operationId: getMaintenanceWindow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Maintenance window ID
+      responses:
+        "200":
+          description: Maintenance window details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceWindow"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags: [Maintenance]
+      summary: Update a maintenance window
+      operationId: updateMaintenanceWindow
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Maintenance window ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMaintenanceWindowRequest"
+      responses:
+        "200":
+          description: Updated maintenance window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceWindow"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Maintenance]
+      summary: Delete a maintenance window
+      operationId: deleteMaintenanceWindow
+      security:
+        - ApiKeyAuth: []
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Maintenance window ID
+      responses:
+        "204":
+          description: Maintenance window deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ForbiddenRole"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/InvalidInput"
         "500":
@@ -5452,7 +6865,18 @@ components:
     ApiKeyAuth:
       type: http
       scheme: bearer
-      description: "Scoped API key. Send as `Authorization: Bearer <token>` (or `X-API-Key`)."
+      description: |
+        Scoped API key. Send as `Authorization: Bearer <token>` (or `X-API-Key`).
+
+        A key may carry two optional allowlists (issue #793). `allowed_cidrs`
+        restricts the source network; the client address is the direct peer,
+        or the `X-Forwarded-For` entry when the peer is listed in the server's
+        `TRUSTED_PROXIES`. `allowed_origins` restricts browser use: when the
+        request carries an `Origin` header it must match one of the listed
+        origins exactly. A request without an `Origin` header is not a browser
+        cross-origin request and is unaffected. Use outside either list is
+        rejected with `403` and error code `API_KEY_RESTRICTED`; an empty list
+        means unrestricted.
     SessionAuth:
       type: http
       scheme: bearer
@@ -5510,6 +6934,16 @@ components:
         type: string
         enum: [testnet, mainnet, futurenet, standalone]
       description: Network filter; empty means all networks.
+    FailureCategoryParam:
+      name: failure_category
+      in: query
+      required: false
+      schema:
+        $ref: "#/components/schemas/FailureCategory"
+      description: >-
+        Show only failed invocations of this category (case-insensitive).
+        Invocations indexed before failure classification existed have no
+        category and never match. An unknown value returns 422.
     TagParam:
       name: tag
       in: query
@@ -5849,6 +7283,30 @@ components:
           description: User-defined tags, sorted ascending. Always present; empty when the contract has no tags.
         backfill:
           $ref: "#/components/schemas/ContractBackfill"
+        token:
+          $ref: "#/components/schemas/TokenMetadata"
+
+    TokenMetadata:
+      type: object
+      description: Enriched metadata for Stellar Asset Contracts (SAC) or tokens.
+      required: [asset_code, issuer, decimals, symbol, name]
+      properties:
+        asset_code:
+          type: string
+          description: Stellar asset code (e.g. USDC or native).
+        issuer:
+          type: string
+          description: Stellar asset issuer account ID (or empty for native).
+        decimals:
+          type: integer
+          format: int32
+          description: Number of decimal places (SAC deterministically uses 7).
+        symbol:
+          type: string
+          description: Token symbol.
+        name:
+          type: string
+          description: Token name or asset identifier.
 
     ContractBackfill:
       type: object
@@ -6058,6 +7516,60 @@ components:
           format: int64
         application_order:
           type: integer
+        failure_category:
+          $ref: "#/components/schemas/FailureCategory"
+        failure_code:
+          type: string
+          description: >-
+            Raw error behind failure_category, kept for every failed
+            invocation: the host error as "Error(<Type>, <Code>)" (for example
+            "Error(Contract, #4)" or "Error(Budget, ExceededLimit)"), else the
+            operation result code ("INVOKE_HOST_FUNCTION_TRAPPED") or
+            transaction result code ("txSOROBAN_INVALID"), or "UNKNOWN" when
+            nothing could be decoded. Unknown enum values are kept as numbers,
+            for example "Error(#12, #3)". Omitted with failure_category.
+          example: "Error(Contract, #4)"
+
+    FailureCategory:
+      type: string
+      description: >-
+        Why a failed invocation failed, derived from the Soroban host error
+        and the InvokeHostFunction result code (see docs/failure-categories.md).
+        Set only on FAILED invocations; omitted for every other status and
+        for invocations indexed before classification existed.
+        budget_exceeded: the invocation ran out of declared resources (host
+        error type Budget, or result RESOURCE_LIMIT_EXCEEDED /
+        INSUFFICIENT_REFUNDABLE_FEE). contract_error: the contract returned
+        its own error code (type Contract). auth_failure: authorization
+        failed (type Auth). storage: a ledger entry was missing or archived
+        (type Storage, or result ENTRY_ARCHIVED). wasm_trap: the contract's
+        Wasm trapped (type WasmVm). other: anything else, including unknown
+        or undecodable errors; failure_code keeps the raw value.
+      enum: [budget_exceeded, contract_error, auth_failure, storage, wasm_trap, other]
+
+    FailureCountsByCategory:
+      type: object
+      description: Classified failures per FailureCategory. Every category is present, with 0 when it has none.
+      required: [budget_exceeded, contract_error, auth_failure, storage, wasm_trap, other]
+      properties:
+        budget_exceeded:
+          type: integer
+          format: int64
+        contract_error:
+          type: integer
+          format: int64
+        auth_failure:
+          type: integer
+          format: int64
+        storage:
+          type: integer
+          format: int64
+        wasm_trap:
+          type: integer
+          format: int64
+        other:
+          type: integer
+          format: int64
 
     InvocationDetail:
       allOf:
@@ -6178,8 +7690,12 @@ components:
 
     InvocationWindowStats:
       type: object
-      description: Fees are measured in stroops, CPU in instructions, and failure_rate is a ratio from 0 to 1.
-      required: [invocation_count, failed_invocations, failure_rate, avg_fee, p95_fee, avg_cpu, p95_cpu]
+      description: >-
+        Fees are measured in stroops, CPU in instructions, and failure_rate is
+        a ratio from 0 to 1. failures_by_category counts classified failures;
+        failed invocations indexed before classification existed count toward
+        failed_invocations only, so the categories can sum to less.
+      required: [invocation_count, failed_invocations, failure_rate, avg_fee, p95_fee, avg_cpu, p95_cpu, failures_by_category]
       properties:
         invocation_count:
           type: integer
@@ -6204,6 +7720,8 @@ components:
         p95_cpu:
           type: number
           format: double
+        failures_by_category:
+          $ref: "#/components/schemas/FailureCountsByCategory"
 
     ForecastPoint:
       type: object
@@ -6316,6 +7834,84 @@ components:
           format: date-time
           nullable: true
           description: When the key expires, or null if it does not expire.
+        monthly_quota:
+          type: integer
+          nullable: true
+          description: Monthly request quota, or null if unmetered.
+        allowed_cidrs:
+          type: array
+          items:
+            type: string
+          description: |
+            Source networks allowed to use this key, as normalized CIDR ranges
+            (a bare IP is stored as `/32` or `/128`). Empty means any address.
+            Requests from outside the list are rejected with `403` and error
+            code `API_KEY_RESTRICTED`.
+        allowed_origins:
+          type: array
+          items:
+            type: string
+          description: |
+            Browser Origins allowed to use this key. Empty means any origin. A
+            request whose `Origin` header is not listed is rejected with `403`
+            and error code `API_KEY_RESTRICTED`.
+
+    UsageTimelinePoint:
+      type: object
+      required: [date, total_requests, by_group]
+      properties:
+        date:
+          type: string
+          example: "2026-11-20"
+        total_requests:
+          type: integer
+          format: int64
+          example: 125
+        by_group:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+
+    KeyUsageSummary:
+      type: object
+      required: [key_id, from, to, total_requests, by_group, timeline, month_used]
+      properties:
+        key_id:
+          type: string
+          example: "key_01h7..."
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        total_requests:
+          type: integer
+          format: int64
+          example: 1540
+        by_group:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/UsageTimelinePoint"
+        monthly_quota:
+          type: integer
+          nullable: true
+          example: 50000
+        month_used:
+          type: integer
+          format: int64
+          example: 1540
+        month_remaining:
+          type: integer
+          format: int64
+          nullable: true
+          example: 48460
 
     ReportSubscription:
       type: object
@@ -6437,6 +8033,9 @@ components:
       type: object
       required: [contract_id, severity, message, ledger, tx_hash, timestamp]
       properties:
+        id:
+          type: integer
+          format: int64
         contract_id:
           type: string
         severity:
@@ -6452,6 +8051,123 @@ components:
         timestamp:
           type: string
           format: date-time
+        state:
+          type: string
+          enum: [open, acknowledged, snoozed, resolved]
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
+        acknowledged_by:
+          type: string
+        snoozed_until:
+          type: string
+          format: date-time
+          nullable: true
+        snoozed_at:
+          type: string
+          format: date-time
+          nullable: true
+        snoozed_by:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolved_by:
+          type: string
+        maintenance_window_id:
+          type: integer
+          format: int64
+          nullable: true
+
+    MaintenanceWindow:
+      type: object
+      required: [id, name, scope, start_time, end_time, timezone, recurrence, suppress_notifications]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [global, contract, group]
+        target_id:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        recurrence:
+          type: string
+          enum: [none, daily, weekly]
+        suppress_notifications:
+          type: boolean
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateMaintenanceWindowRequest:
+      type: object
+      required: [name, start_time, end_time]
+      properties:
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [global, contract, group]
+          default: global
+        target_id:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+          default: UTC
+        recurrence:
+          type: string
+          enum: [none, daily, weekly]
+          default: none
+        suppress_notifications:
+          type: boolean
+          default: true
+
+    UpdateMaintenanceWindowRequest:
+      type: object
+      required: [name, start_time, end_time]
+      properties:
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+          default: UTC
+        recurrence:
+          type: string
+          enum: [none, daily, weekly]
+          default: none
+        suppress_notifications:
+          type: boolean
+          default: true
 
     MonitoredContract:
       type: object
@@ -6589,6 +8305,8 @@ components:
           format: date-time
         backfill:
           $ref: "#/components/schemas/ContractBackfill"
+        token:
+          $ref: "#/components/schemas/TokenMetadata"
 
     V2Event:
       type: object
@@ -6741,6 +8459,9 @@ components:
         total_storage_entries:
           type: integer
           format: int64
+        approximate:
+          type: boolean
+          description: True when large table counts are estimated rather than exact.
 
     V2ContractRate:
       type: object
@@ -7414,6 +9135,33 @@ components:
           type: string
           format: date-time
 
+    ContractVersion:
+      type: object
+      description: One Wasm hash a contract has run (issue #276).
+      required: [id, contract_id, wasm_hash, first_seen_ledger, recorded_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        contract_id:
+          type: string
+        wasm_hash:
+          type: string
+          description: Wasm hash (hex).
+        first_seen_ledger:
+          type: integer
+          format: int64
+          description: Ledger at which this hash was first observed.
+        tx_hash:
+          type: string
+          description: Transaction that installed the hash, when known.
+        verified_source_ref:
+          type: string
+          description: Verified source reference, when the hash has been verified.
+        recorded_at:
+          type: string
+          format: date-time
+
     HealthScore:
       type: object
       required: [contract_id, score, components, computed_at]
@@ -7515,6 +9263,63 @@ components:
                 type: string
               count:
                 type: integer
+
+    ContractEventSchemasResponse:
+      type: object
+      required: [contract_id, event_schemas]
+      properties:
+        contract_id:
+          type: string
+        event_schemas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractEventSchema"
+        declared_spec:
+          type: object
+          description: Declared SEP-48 interface spec if available.
+
+    ContractEventSchema:
+      type: object
+      required: [contract_id, event_name, topic_arity, topic_types, value_shape, observed_shapes, first_seen_ledger, last_seen_ledger, updated_at]
+      properties:
+        contract_id:
+          type: string
+        event_name:
+          type: string
+        topic_arity:
+          type: integer
+        topic_types:
+          type: array
+          items:
+            type: string
+        value_shape:
+          type: string
+        observed_shapes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObservedShape"
+        first_seen_ledger:
+          type: integer
+        last_seen_ledger:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+
+    ObservedShape:
+      type: object
+      required: [topic_arity, topic_types, value_type, count]
+      properties:
+        topic_arity:
+          type: integer
+        topic_types:
+          type: array
+          items:
+            type: string
+        value_type:
+          type: string
+        count:
+          type: integer
 
     ContractSpec:
       type: object
@@ -7691,6 +9496,48 @@ components:
         severity_filter:
           type: string
           enum: [Info, Warning, Critical]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WebhookDelivery:
+      type: object
+      description: One webhook delivery attempt for an alert subscription (issue #828).
+      required: [id, subscription_id, attempt_number, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        subscription_id:
+          type: string
+        attempt_number:
+          type: integer
+        status:
+          type: string
+          enum: [pending, delivered, failed]
+        signed_payload:
+          type: object
+          description: The JSONB body sent (or to be sent) to the webhook URL.
+          nullable: true
+        response_status:
+          type: integer
+          nullable: true
+          description: HTTP status code returned by the destination.
+        response_body:
+          type: string
+          nullable: true
+          description: Response body from the destination (truncated at 4 KiB).
+        last_error:
+          type: string
+          nullable: true
+          description: Last transport-level error (network timeout, DNS failure, etc.).
+        next_retry_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the delivery will next be retried; null if no retry scheduled.
         created_at:
           type: string
           format: date-time

@@ -1,0 +1,80 @@
+.nh
+.TH "SOROLENS" "1" "Nov 2026" "" ""
+
+.SH NAME
+sorolens-inspect - Show detailed information about a tracked contract or a transaction
+
+
+.SH SYNOPSIS
+\fBsorolens inspect  | inspect --tx  [contract-id] [flags]\fP
+
+
+.SH DESCRIPTION
+Show detailed information about a tracked contract, or with --tx about a
+single transaction: its function, status, resource usage and emitted events.
+
+.PP
+With --tx the contract is looked up from the transaction hash. Pass a contract
+ID as well to skip that lookup.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for inspect
+
+.PP
+\fB--tx\fP=""
+	Inspect a transaction by its hash instead of a contract
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--api-key\fP=""
+	API key for authenticating with the Sorolens API
+
+.PP
+\fB--api-url\fP=""
+	Sorolens API base URL
+
+.PP
+\fB--json\fP[=false]
+	Output machine-readable JSON
+
+.PP
+\fB--network\fP=""
+	Stellar network (testnet, mainnet, futurenet, standalone)
+
+.PP
+\fB--no-color\fP[=false]
+	Disable color output
+
+.PP
+\fB--output\fP=""
+	Output format (table, json, yaml or jsonl)
+
+.PP
+\fB--plugin-api-key\fP[=false]
+	When dispatching to a plugin, pass the active profile's API key as SOROLENS_API_KEY (off by default)
+
+.PP
+\fB--profile\fP=""
+	Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)
+
+.PP
+\fB--query\fP=""
+	jq-style path filter applied to structured output (e.g. '.items[].name')
+
+.PP
+\fB--timeout\fP=10s
+	Request timeout
+
+
+.SH EXAMPLE
+.EX
+  sorolens inspect CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  sorolens inspect --tx <64-hex-hash>
+  sorolens inspect --tx <64-hex-hash> <contract-id> --json
+.EE
+
+
+.SH SEE ALSO
+\fBsorolens(1)\fP

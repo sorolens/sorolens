@@ -24,12 +24,16 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LocalePreferences } from "@/components/LocalePreferences";
 import { LocaleProvider, useLocale } from "@/lib/i18n";
 import { useOfflineAlertQueue } from "@/hooks/useOfflineAlertQueue";
+import { AppShortcuts } from "@/components/AppShortcuts";
 
 const NAV_HREFS = [
   "/dashboard",
   "/live",
   "/contracts",
   "/events",
+  "/invocations",
+  "/compare",
+  "/watchlist",
   "/watchdog",
   "/watchdog/reports",
   "/integrations",
@@ -114,6 +118,27 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 {t("nav.events")}
               </Link>
               <Link
+                href="/invocations"
+                aria-current={active === "/invocations" ? "page" : undefined}
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                {t("nav.invocations")}
+              </Link>
+              <Link
+                href="/compare"
+                aria-current={active === "/compare" ? "page" : undefined}
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                {t("nav.compare")}
+              </Link>
+              <Link
+                href="/watchlist"
+                aria-current={active === "/watchlist" ? "page" : undefined}
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                {t("nav.watchlist")}
+              </Link>
+              <Link
                 href="/watchdog"
                 aria-current={active === "/watchdog" ? "page" : undefined}
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
@@ -158,6 +183,18 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 {t("nav.playground")}
               </Link>
               <Link
+                href="/docs"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                Docs
+              </Link>
+              <Link
+                href="/about"
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                About
+              </Link>
+              <Link
                 href="/settings"
                 aria-current={active === "/settings" ? "page" : undefined}
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
@@ -176,8 +213,21 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
         <main id="main" tabIndex={-1}>
           {children}
         </main>
+        <AppShortcuts />
         <footer className="mt-12 border-t border-[var(--color-border)] pt-6 text-sm text-[var(--color-text-secondary)]">
           {t("shell.community")}
+          <Link
+            href="/docs"
+            className="ml-3 hover:text-[var(--color-text-primary)]"
+          >
+            Docs
+          </Link>
+          <Link
+            href="/about"
+            className="ml-3 hover:text-[var(--color-text-primary)]"
+          >
+            About
+          </Link>
           <Link
             href="/status"
             className="ml-3 hover:text-[var(--color-text-primary)]"

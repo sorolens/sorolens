@@ -11,6 +11,7 @@
           "v2AdminListKeys",
           "v2AdminRevokeKey",
           "v2AdminRotateKey",
+          "v2ContractEventSchemas",
           "v2ContractForecast",
           "v2ContractGraph",
           "v2ContractSnapshot",
@@ -35,6 +36,7 @@
           "v2LiveActivity",
           "v2RecentEvents",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2RemoveFromWatchlist",
           "v2RevokeAPIKey",
           "v2RotateAPIKey",
@@ -71,6 +73,7 @@
       {
         "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
         "operations": [
+          "getContractEventSchemas",
           "getContractGraph",
           "getContractHealthScore",
           "getContractSpec",
@@ -183,6 +186,7 @@
         "reason": "Not part of this SDK's implemented surface yet.",
         "operations": [
           "batchContracts",
+          "deleteContract",
           "compareContracts",
           "listRuleLibrary"
         ]
@@ -214,6 +218,64 @@
           "getExportJob",
           "getExportJobV2"
         ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
+        ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
+        ]
+      },
+      {
+        "reason": "Webhook delivery history and retry (issue #805) and event value search (issue #828) are control-plane/search operations not yet exposed by the SDK.",
+        "operations": [
+          "getWebhookDelivery",
+          "listWebhookDeliveries",
+          "retryWebhookDelivery",
+          "searchEventValues"
+        ]
       }
     ],
     "python": [
@@ -226,6 +288,7 @@
           "v2AdminListKeys",
           "v2AdminRevokeKey",
           "v2AdminRotateKey",
+          "v2ContractEventSchemas",
           "v2ContractForecast",
           "v2ContractGraph",
           "v2ContractSnapshot",
@@ -250,6 +313,7 @@
           "v2LiveActivity",
           "v2RecentEvents",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2RemoveFromWatchlist",
           "v2RevokeAPIKey",
           "v2RotateAPIKey",
@@ -272,32 +336,19 @@
         "reason": "Alert rules and alert subscriptions are surfaced through the webhooks/notifications product, not this SDK yet.",
         "operations": [
           "createAlertRule",
-          "createAlertSubscription",
           "deleteAlertRule",
-          "deleteAlertSubscription",
           "listAlertRules",
-          "listAlertSubscriptions",
-          "listAlerts",
           "previewAlertRule",
           "setAlertRuleEnabled",
           "validateAlertRule"
         ]
       },
       {
-        "reason": "SOL/SLA reports, uptime, summary, spec and contract-graph endpoints are report/analytics features not yet implemented in this SDK.",
+        "reason": "Event schema, contract spec, and uptime endpoints are not yet exposed by this SDK.",
         "operations": [
-          "createReportSubscription",
-          "deleteReportSubscription",
-          "getContractGraph",
-          "getContractHealthScore",
-          "getContractReport",
-          "getContractReportHistory",
-          "getContractSLABadge",
+          "getContractEventSchemas",
           "getContractSpec",
-          "getContractSummary",
-          "getContractUptime",
-          "listReportSubscriptions",
-          "unsubscribeReport"
+          "getContractUptime"
         ]
       },
       {
@@ -371,9 +422,7 @@
           "listAllEvents",
           "listAuditEvents",
           "listAuditEventsRoot",
-          "listFailedEvents",
           "recentEvents",
-          "requeueFailedEvent",
           "streamAllEvents",
           "subscribeEventsWS"
         ]
@@ -392,7 +441,6 @@
         "operations": [
           "getContractVerification",
           "getContractWasm",
-          "listContractUpgrades",
           "validateContract",
           "verifyContractSource"
         ]
@@ -401,7 +449,7 @@
         "reason": "Not part of this SDK's implemented surface yet.",
         "operations": [
           "batchContracts",
-          "compareContracts",
+          "deleteContract",
           "listRuleLibrary"
         ]
       },
@@ -432,6 +480,64 @@
           "getExportJob",
           "getExportJobV2"
         ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
+        ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
+        ]
+      },
+      {
+        "reason": "Webhook delivery history and retry (issue #805) and event value search (issue #828) are control-plane/search operations not yet exposed by the SDK.",
+        "operations": [
+          "getWebhookDelivery",
+          "listWebhookDeliveries",
+          "retryWebhookDelivery",
+          "searchEventValues"
+        ]
       }
     ],
     "go": [
@@ -459,6 +565,7 @@
           "listAuditEventsRoot",
           "registerContract",
           "batchContracts",
+          "deleteContract",
           "addContractTag",
           "removeContractTag",
           "listContractNotes",
@@ -511,6 +618,7 @@
           "v2RecentEvents",
           "v2ListContracts",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2ValidateContract",
           "v2GetContract",
           "v2ListEvents",
@@ -581,7 +689,9 @@
           "listRuleMetrics",
           "listRuleLibrary",
           "setAlertRuleEnabled",
-          "deleteAlertRule"
+          "deleteAlertRule",
+          "getContractEventSchemas",
+          "v2ContractEventSchemas"
         ]
       },
       {
@@ -610,6 +720,64 @@
           "downloadExportV2",
           "getExportJob",
           "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
+        ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
+        ]
+      },
+      {
+        "reason": "Webhook delivery history and retry (issue #805) and event value search (issue #828) are control-plane/search operations not yet exposed by the SDK.",
+        "operations": [
+          "getWebhookDelivery",
+          "listWebhookDeliveries",
+          "retryWebhookDelivery",
+          "searchEventValues"
         ]
       }
     ],
@@ -630,6 +798,7 @@
           "listAuditEventsRoot",
           "registerContract",
           "batchContracts",
+          "deleteContract",
           "addContractTag",
           "removeContractTag",
           "listContractNotes",
@@ -682,6 +851,7 @@
           "v2RecentEvents",
           "v2ListContracts",
           "v2RegisterContract",
+          "v2DeleteContract",
           "v2ValidateContract",
           "v2GetContract",
           "v2ListEvents",
@@ -752,7 +922,9 @@
           "listRuleMetrics",
           "listRuleLibrary",
           "setAlertRuleEnabled",
-          "deleteAlertRule"
+          "deleteAlertRule",
+          "getContractEventSchemas",
+          "v2ContractEventSchemas"
         ]
       },
       {
@@ -781,6 +953,64 @@
           "downloadExportV2",
           "getExportJob",
           "getExportJobV2"
+        ]
+      },
+      {
+        "reason": "Alert lifecycle and maintenance window operations (issues #789, #790) are control-plane operations not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "acknowledgeAlert",
+          "createMaintenanceWindow",
+          "deleteMaintenanceWindow",
+          "getAlertCounts",
+          "getMaintenanceWindow",
+          "listMaintenanceWindows",
+          "resolveAlert",
+          "snoozeAlert",
+          "updateMaintenanceWindow"
+        ]
+      },
+      {
+        "reason": "API key usage and quota tracking (issue #792) is a control-plane feature not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getApiKeyUsage",
+          "v2GetApiKeyUsage"
+        ]
+      },
+      {
+        "reason": "Resource trend aggregation (issue #600) is currently exposed by the Go client and the web app; the hand-written Rust, Python, JVM and TypeScript SDK surfaces have not added it yet.",
+        "operations": [
+          "getContractResourceTrend",
+          "getContractResourceTrendV2"
+        ]
+      },
+      {
+        "reason": "The contract Wasm changelog (issue #767) is a JSON history, an Atom feed and an embeddable SVG badge served for browsers, feed readers and READMEs; it is not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getContractChangelog",
+          "getContractChangelogBadge",
+          "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
+        "operations": [
+          "getLedger",
+          "getLedgerV2",
+          "getTransaction",
+          "getTransactionV2",
+          "listTokenHolders",
+          "listTokenHoldersV2",
+          "listTokenTransfers",
+          "listTokenTransfersV2"
+        ]
+      },
+      {
+        "reason": "Webhook delivery history and retry (issue #805) and event value search (issue #828) are control-plane/search operations not yet exposed by the SDK.",
+        "operations": [
+          "getWebhookDelivery",
+          "listWebhookDeliveries",
+          "retryWebhookDelivery",
+          "searchEventValues"
         ]
       }
     ]

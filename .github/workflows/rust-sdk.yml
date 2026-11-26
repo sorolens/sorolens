@@ -5,6 +5,9 @@ on:
     branches: [main]
     tags: ["rust-sdk-v*"]
 
+permissions:
+  contents: read
+
 jobs:
   # ------------------------------------------------------------
   # Rust: packages/rust-sdk (async + blocking transports)
@@ -12,6 +15,7 @@ jobs:
   rust-sdk:
     name: Rust SDK (packages/rust-sdk)
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,7 +32,7 @@ jobs:
             ~/.cargo/git/db/
             packages/rust-sdk/target/
           key: cargo-rust-sdk-${{ hashFiles('packages/rust-sdk/Cargo.lock') }}
-          restore-keys: |
+          restore-keys:
             cargo-rust-sdk-
       - name: cargo fmt --check
         working-directory: packages/rust-sdk
@@ -57,8 +61,7 @@ jobs:
   publish:
     name: Publish sorolens-sdk to crates.io
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/rust-sdk-v')
-    needs: rust-sdk
+    if: startsWith(github.ref, 'refs/tags/rust-sdk-v*')
     steps:
       - name: Checkout
         uses: actions/checkout@v4

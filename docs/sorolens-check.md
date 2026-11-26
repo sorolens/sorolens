@@ -33,4 +33,4 @@ jobs:
 
 ## Action Inputs and Outputs
 
-See [.github/actions/sorolens-check/README.md](../.github/actions/sorolens-check/README.md) for full configuration options.
+See [.github/actions/sorolens-check/README.md](https://github.com/sorolens/sorolens/blob/main/.github/actions/sorolens-check/README.md) for full configuration options.

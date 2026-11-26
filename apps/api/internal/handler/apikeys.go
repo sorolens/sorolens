@@ -12,22 +12,28 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sorolens/sorolens/apps/api/internal/allowlist"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
 // ---- response types ---------------------------------------------------------
 
 type apiKeyResponse struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	KeyPrefix  string     `json:"key_prefix"`
-	Scopes     []string   `json:"scopes"`
-	UserID     *string    `json:"user_id"`
-	CreatedAt  time.Time  `json:"created_at"`
-	LastUsedAt *time.Time `json:"last_used_at"`
-	RevokedAt  *time.Time `json:"revoked_at"`
-	RotatedAt  *time.Time `json:"rotated_at"`
-	ExpiresAt  *time.Time `json:"expires_at"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	KeyPrefix    string     `json:"key_prefix"`
+	Scopes       []string   `json:"scopes"`
+	UserID       *string    `json:"user_id"`
+	CreatedAt    time.Time  `json:"created_at"`
+	LastUsedAt   *time.Time `json:"last_used_at"`
+	RevokedAt    *time.Time `json:"revoked_at"`
+	RotatedAt    *time.Time `json:"rotated_at"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	MonthlyQuota *int       `json:"monthly_quota,omitempty"`
+	// AllowedCIDRs and AllowedOrigins are always present; an empty array means
+	// the key is unrestricted (issue #793).
+	AllowedCIDRs   []string `json:"allowed_cidrs"`
+	AllowedOrigins []string `json:"allowed_origins"`
 }
 
 // createAPIKeyResponse includes the plaintext token exactly once, at creation.
@@ -45,6 +51,15 @@ type createAPIKeyRequest struct {
 	UserID *string `json:"user_id,omitempty"`
 	// ExpiresAt sets an optional expiration time for the key.
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// MonthlyQuota sets an optional monthly request quota for this key.
+	MonthlyQuota *int `json:"monthly_quota,omitempty"`
+	// AllowedCIDRs restricts the key to these source networks. Each entry is a
+	// CIDR range or a bare IP address; an empty list leaves it unrestricted.
+	AllowedCIDRs []string `json:"allowed_cidrs,omitempty"`
+	// AllowedOrigins restricts browser use to these Origins. Each entry is a
+	// scheme and host such as https://app.example.com; an empty list allows
+	// any origin.
+	AllowedOrigins []string `json:"allowed_origins,omitempty"`
 }
 
 func apiKeyFromStore(k store.APIKey) apiKeyResponse {
@@ -52,18 +67,44 @@ func apiKeyFromStore(k store.APIKey) apiKeyResponse {
 	if scopes == nil {
 		scopes = []string{}
 	}
-	return apiKeyResponse{
-		ID:         k.ID,
-		Name:       k.Name,
-		KeyPrefix:  k.KeyPrefix,
-		Scopes:     scopes,
-		UserID:     k.UserID,
-		CreatedAt:  k.CreatedAt,
-		LastUsedAt: k.LastUsedAt,
-		RevokedAt:  k.RevokedAt,
-		RotatedAt:  k.RotatedAt,
-		ExpiresAt:  k.ExpiresAt,
+	allowedCIDRs := k.AllowedCIDRs
+	if allowedCIDRs == nil {
+		allowedCIDRs = []string{}
 	}
+	allowedOrigins := k.AllowedOrigins
+	if allowedOrigins == nil {
+		allowedOrigins = []string{}
+	}
+	return apiKeyResponse{
+		ID:             k.ID,
+		Name:           k.Name,
+		KeyPrefix:      k.KeyPrefix,
+		Scopes:         scopes,
+		UserID:         k.UserID,
+		CreatedAt:      k.CreatedAt,
+		LastUsedAt:     k.LastUsedAt,
+		RevokedAt:      k.RevokedAt,
+		RotatedAt:      k.RotatedAt,
+		ExpiresAt:      k.ExpiresAt,
+		MonthlyQuota:   k.MonthlyQuota,
+		AllowedCIDRs:   allowedCIDRs,
+		AllowedOrigins: allowedOrigins,
+	}
+}
+
+// normalizeRestrictions validates and canonicalizes a key's allowlists. The
+// error message is safe to return to the client: it names the offending entry
+// and the expected shape, never another key's data.
+func normalizeRestrictions(cidrs, origins []string) ([]string, []string, error) {
+	allowedCIDRs, err := allowlist.ParseCIDRs(cidrs)
+	if err != nil {
+		return nil, nil, err
+	}
+	allowedOrigins, err := allowlist.ParseOrigins(origins)
+	if err != nil {
+		return nil, nil, err
+	}
+	return allowedCIDRs, allowedOrigins, nil
 }
 
 // ---- handlers ---------------------------------------------------------------
@@ -109,6 +150,17 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.MonthlyQuota != nil && *req.MonthlyQuota < 0 {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "monthly_quota must be non-negative")
+		return
+	}
+
+	allowedCIDRs, allowedOrigins, err := normalizeRestrictions(req.AllowedCIDRs, req.AllowedOrigins)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
+		return
+	}
+
 	token, err := newAPIToken()
 	if err != nil {
 		h.Logger.Error("generate api key", "err", err)
@@ -116,18 +168,27 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key := store.APIKey{
-		ID:        newID(),
-		Name:      req.Name,
-		KeyPrefix: token[:11], // "sl_" + 8 chars
-		KeyHash:   store.HashKey(token),
-		Scopes:    req.Scopes,
-		CreatedAt: time.Now().UTC(),
-		UserID:    boundUser,
-		ExpiresAt: req.ExpiresAt,
+		ID:           newID(),
+		Name:         req.Name,
+		KeyPrefix:    token[:11], // "sl_" + 8 chars
+		KeyHash:      store.HashKey(token),
+		Scopes:       req.Scopes,
+		CreatedAt:    time.Now().UTC(),
+		UserID:       boundUser,
+		ExpiresAt:    req.ExpiresAt,
+		MonthlyQuota: req.MonthlyQuota,
+		// Store the canonical form so the response matches what enforcement
+		// compares against.
+		AllowedCIDRs:   allowedCIDRs,
+		AllowedOrigins: allowedOrigins,
 	}
 	if err := h.Store.CreateAPIKey(r.Context(), key); err != nil {
 		if errors.Is(err, store.ErrInvalidScope) {
 			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid scope")
+			return
+		}
+		if errors.Is(err, store.ErrInvalidCIDR) || errors.Is(err, store.ErrInvalidOrigin) {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, err.Error())
 			return
 		}
 		h.Logger.Error("create api key", "err", err)

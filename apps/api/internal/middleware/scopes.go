@@ -90,6 +90,18 @@ var routeScopes = map[string]string{
 	"GET /api/v1/integrations":            ScopeReadContracts,
 	"POST /api/v1/integrations/{id}/test": ScopeWriteContracts,
 
+	// Alerts lifecycle and maintenance windows (issues #789, #790).
+	"GET /api/v1/alerts":                      ScopeReadWatchdog,
+	"GET /api/v1/alerts/counts":               ScopeReadWatchdog,
+	"POST /api/v1/alerts/{id}/ack":            ScopeWriteContracts,
+	"POST /api/v1/alerts/{id}/snooze":         ScopeWriteContracts,
+	"POST /api/v1/alerts/{id}/resolve":        ScopeWriteContracts,
+	"GET /api/v1/maintenance-windows":         ScopeReadWatchdog,
+	"GET /api/v1/maintenance-windows/{id}":    ScopeReadWatchdog,
+	"POST /api/v1/maintenance-windows":        ScopeWriteContracts,
+	"PUT /api/v1/maintenance-windows/{id}":    ScopeWriteContracts,
+	"DELETE /api/v1/maintenance-windows/{id}": ScopeWriteContracts,
+
 	"GET /api/v1/watchdog/stats":                 ScopeReadWatchdog,
 	"GET /api/v1/watchdog/alerts":                ScopeReadWatchdog,
 	"GET /api/v1/watchdog/contracts":             ScopeReadWatchdog,

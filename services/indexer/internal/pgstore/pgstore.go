@@ -254,12 +254,14 @@ func queueInvocation(batch *pgx.Batch, inv poller.Invocation, now time.Time) {
 		INSERT INTO invocations
 			(tx_hash, contract_id, network, ledger, ledger_closed_at, status,
 			 result_xdr, application_order, inserted_at,
-			 function_name, cpu_insn, mem_byte, ledger_read_byte, ledger_write_byte)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			 function_name, cpu_insn, mem_byte, ledger_read_byte, ledger_write_byte,
+			 failure_category, failure_code)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 		ON CONFLICT (tx_hash) DO NOTHING`,
 		inv.TxHash, inv.ContractID, networkOrDefault(inv.Network), int64(inv.Ledger), inv.LedgerClosedAt, inv.Status,
 		inv.ResultXDR, inv.ApplicationOrder, now,
 		nullableString(inv.FunctionName), inv.CPUInsn, inv.MemByte, inv.LedgerReadByte, inv.LedgerWriteByte,
+		nullableString(inv.FailureCategory), nullableString(inv.FailureCode),
 	)
 }
 
@@ -421,6 +423,18 @@ type execer interface {
 // earlier failure of the same event.
 func (s *Store) InsertFailedEvent(ctx context.Context, fe poller.FailedEvent) error {
 	return insertFailedEvent(ctx, s.pool, fe)
+}
+
+// CountFailedEvents returns the number of events parked in the DLQ for a
+// network.
+func (s *Store) CountFailedEvents(ctx context.Context, network string) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM failed_events WHERE network = $1`,
+		networkOrDefault(network)).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count failed events: %w", err)
+	}
+	return n, nil
 }
 
 func insertFailedEvent(ctx context.Context, q execer, fe poller.FailedEvent) error {
@@ -821,6 +835,86 @@ func (s *Store) InsertContractUpgrade(ctx context.Context, u poller.ContractUpgr
 		return fmt.Errorf("insert contract upgrade: %w", err)
 	}
 	return nil
+}
+
+// ---- storage snapshots (issue #503) ----------------------------------------
+
+// UpsertStorageEntries upserts storage entry snapshots for a contract.
+func (s *Store) UpsertStorageEntries(ctx context.Context, entries []poller.StorageEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, e := range entries {
+		batch.Queue(`
+			INSERT INTO storage_entries
+				(contract_id, network, key_xdr, value_xdr, durability,
+				 live_until_ledger, last_modified_ledger, status, last_seen_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,'live',NOW())
+			ON CONFLICT (contract_id, key_xdr) DO UPDATE
+			  SET value_xdr            = EXCLUDED.value_xdr,
+			      network              = EXCLUDED.network,
+			      durability           = EXCLUDED.durability,
+			      live_until_ledger    = EXCLUDED.live_until_ledger,
+			      last_modified_ledger = EXCLUDED.last_modified_ledger,
+			      status               = 'live',
+			      last_seen_at         = NOW()`,
+			e.ContractID, networkOrDefault(e.Network), e.KeyXDR, e.ValueXDR, e.Durability,
+			nullableInt64(e.LiveUntilLedger), nullableInt64(e.LastModifiedLedger),
+		)
+	}
+	return execBatch(ctx, s.pool, batch, "upsert storage entries")
+}
+
+// ListStorageKeys returns key_xdr values of all live storage entries for contractID.
+func (s *Store) ListStorageKeys(ctx context.Context, contractID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT key_xdr FROM storage_entries WHERE contract_id = $1 AND status = 'live'`,
+		contractID)
+	if err != nil {
+		return nil, fmt.Errorf("list storage keys: %w", err)
+	}
+	defer rows.Close()
+	var keys []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, fmt.Errorf("scan storage key: %w", err)
+		}
+		keys = append(keys, k)
+	}
+	return keys, rows.Err()
+}
+
+// MarkStorageEntriesArchived sets status = 'archived' for entries of contractID
+// that are not in activeKeys (i.e. they were absent from the latest snapshot).
+func (s *Store) MarkStorageEntriesArchived(ctx context.Context, contractID string, activeKeys []string) error {
+	if len(activeKeys) == 0 {
+		_, err := s.pool.Exec(ctx,
+			`UPDATE storage_entries SET status = 'archived' WHERE contract_id = $1 AND status = 'live'`,
+			contractID)
+		if err != nil {
+			return fmt.Errorf("archive all storage entries: %w", err)
+		}
+		return nil
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE storage_entries SET status = 'archived'
+		 WHERE contract_id = $1 AND status = 'live' AND key_xdr != ALL($2)`,
+		contractID, activeKeys)
+	if err != nil {
+		return fmt.Errorf("archive stale storage entries: %w", err)
+	}
+	return nil
+}
+
+// nullableInt64 maps 0 to nil (SQL NULL) so a missing ledger sequence is not
+// stored as 0. pgx accepts an interface{} with nil as NULL.
+func nullableInt64(v int64) interface{} {
+	if v == 0 {
+		return nil
+	}
+	return v
 }
 
 // HasContractWasm reports whether the Wasm for wasmHash is cached.

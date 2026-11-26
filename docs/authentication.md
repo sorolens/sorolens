@@ -304,6 +304,67 @@ HTTP/1.1 204 No Content
 
 ---
 
+### 4.6 Restrict a Key to Networks and Origins
+
+A key can be limited to a set of source networks and, for browser use, a set
+of Origins (issue #793). The restrictions are set when the key is created and
+are stored in two nullable columns on `api_keys`; an empty list means
+unrestricted, so existing keys keep working unchanged.
+
+```http
+POST /api/v1/api-keys
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "name": "dashboard-key",
+  "scopes": ["read:contracts"],
+  "allowed_cidrs": ["203.0.113.0/24", "2001:db8::/32"],
+  "allowed_origins": ["https://app.example.com"]
+}
+```
+
+The same two fields are accepted by `POST /api/v1/me/api-keys` and returned on
+every key response.
+
+- **`allowed_cidrs`** — CIDR ranges, IPv4 or IPv6. A bare IP address is
+  accepted and stored as a single-host range (`/32` or `/128`). Host bits are
+  cleared and duplicates dropped, so the response shows the canonical form.
+- **`allowed_origins`** — browser Origins as scheme and host only
+  (`https://app.example.com`, `http://localhost:3000`). Paths, queries,
+  credentials and wildcards are rejected; list each origin explicitly.
+
+Enforcement happens in the authentication middleware once a key has been
+verified, so it applies to every key-authenticated route and never affects
+session tokens or anonymous requests. The client address is resolved like the
+rate limiter's: the direct peer, or the `X-Forwarded-For` entry when that peer
+is listed in `TRUSTED_PROXIES`. A request carrying an `Origin` header must
+match one of `allowed_origins`; a request without one is not a browser
+cross-origin request and is unaffected. CORS preflights are not rejected.
+
+A rejected request returns `403` with the standard error envelope and the
+distinct code `API_KEY_RESTRICTED`:
+
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "error": {
+    "code": "API_KEY_RESTRICTED",
+    "message": "API key is not allowed from this IP address",
+    "request_id": "..."
+  }
+}
+```
+
+Invalid entries are rejected at creation with `422 INVALID_INPUT` and a message
+naming the offending entry. Keys are immutable apart from rotation, so change a
+restriction by creating a replacement key and revoking the old one; rotating a
+key keeps its restrictions.
+
+---
+
 ## 5. Workspace Session Tokens
 
 The web dashboard uses self-service workspace sessions to provide interactive features (managing watchlists, contract portfolios, contract notes, and custom tags) without forcing user login or OAuth setup.
@@ -400,7 +461,26 @@ Content-Type: application/json
 }
 ```
 
-#### Scenario C: Unbound key on a user-gated endpoint
+#### Scenario C: Key used outside its allowlists
+A key restricted with `allowed_cidrs` or `allowed_origins` used from another
+address or from an Origin not in the list (issue #793):
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "error": {
+    "code": "API_KEY_RESTRICTED",
+    "message": "API key is not allowed from this origin",
+    "request_id": "..."
+  }
+}
+```
+
+The code is distinct from the scope and role 403s so a client can tell a
+restriction rejection from a permission problem.
+
+#### Scenario D: Unbound key on a user-gated endpoint
 An API key with `write:contracts` that is not bound to a `user_id` attempting to author a personal contract note:
 ```http
 HTTP/1.1 403 Forbidden

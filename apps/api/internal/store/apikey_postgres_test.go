@@ -16,7 +16,7 @@ import (
 func TestAPIKeyStorePostgres(t *testing.T) {
 	pool := pgPool(t)
 	ctx := context.Background()
-	if _, err := pool.Exec(ctx, "TRUNCATE TABLE api_keys"); err != nil {
+	if _, err := pool.Exec(ctx, "TRUNCATE TABLE api_keys CASCADE"); err != nil {
 		t.Fatalf("truncate api_keys: %v", err)
 	}
 	s := store.NewFullStore(pool)

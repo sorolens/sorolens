@@ -56,8 +56,7 @@ services:
       - integration_net
 
   # Applies the same schema CI applies: every *.up.sql in sorted order via
-  # psql (golang-migrate cannot read this directory until the duplicate
-  # migration versions are renumbered).
+  # psql.
   migrate:
     image: postgres:16-alpine
     depends_on:
@@ -74,7 +73,7 @@ services:
         set -e
         for f in $$(ls /migrations/*.up.sql | sort); do
           echo "applying $$f"
-          psql -q -h postgres -U postgres -d sorolens_test -f "$$f"
+          psql -q -v ON_ERROR_STOP=1 -h postgres -U postgres -d sorolens_test -f "$$f"
         done
         echo "migrations applied"
     restart: "no"
@@ -118,8 +117,13 @@ services:
       SOROBAN_RPC_URL: http://mock-rpc:8000
       SOROBAN_RPC_URL_TESTNET: http://mock-rpc:8000
       INDEXER_METRICS_ADDR: ""
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      disable: true
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       mock-rpc:
         condition: service_healthy

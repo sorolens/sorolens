@@ -31,6 +31,8 @@ type Recorder struct {
 	lastIndexedLedger *prometheus.GaugeVec
 
 	eventsProcessed *prometheus.CounterVec
+	rpcErrors       *prometheus.CounterVec
+	dlqSize         *prometheus.GaugeVec
 	runDuration     *prometheus.HistogramVec
 	parkedTransactions *prometheus.CounterVec
 }
@@ -68,6 +70,20 @@ func New() *Recorder {
 			Name:      "events_processed_total",
 			Help:      "Total number of contract events processed and persisted, by network.",
 		}, []string{"network"}),
+		// RpcErrors counts Soroban RPC call failures, by network.
+		rpcErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "indexer",
+			Name:      "rpc_errors_total",
+			Help:      "Total number of Soroban RPC call failures, by network.",
+		}, []string{"network"}),
+		// DlqSize reports the number of events parked in the dead-letter queue.
+		dlqSize: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: "indexer",
+			Name:      "dlq_size",
+			Help:      "Number of events currently parked in the dead-letter queue.",
+		}, []string{"network"}),
 		// RunDuration observes the wall-clock duration of a complete indexer
 		// pass. Buckets extend to 300s to cover the INDEXER_MAX_DURATION
 		// default of 270s.
@@ -93,6 +109,8 @@ func New() *Recorder {
 		r.headLedger,
 		r.lastIndexedLedger,
 		r.eventsProcessed,
+		r.rpcErrors,
+		r.dlqSize,
 		r.runDuration,
 		r.parkedTransactions,
 	)
@@ -124,6 +142,22 @@ func (r *Recorder) AddEventsProcessed(network string, n int) {
 		return
 	}
 	r.eventsProcessed.WithLabelValues(network).Add(float64(n))
+}
+
+// RecordRpcError increments the RPC error counter for a network.
+func (r *Recorder) RecordRpcError(network string) {
+	if r == nil {
+		return
+	}
+	r.rpcErrors.WithLabelValues(network).Add(1)
+}
+
+// SetDlqSize sets the DLQ size gauge for a network.
+func (r *Recorder) SetDlqSize(network string, size float64) {
+	if r == nil {
+		return
+	}
+	r.dlqSize.WithLabelValues(network).Set(size)
 }
 
 // ObserveRunDuration records the duration of a completed pass.

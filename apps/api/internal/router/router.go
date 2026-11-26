@@ -5,81 +5,18 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sorolens/sorolens/apps/api/internal/changelog"
 	"github.com/sorolens/sorolens/apps/api/internal/graph"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/metrics"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 )
-
-// corsMiddleware returns an http.Handler middleware that sets CORS headers.
-//
-// When CORS_ALLOWED_ORIGINS is unset or contains "*" all origins are allowed
-// (Access-Control-Allow-Origin: *). When it is a comma-separated list of
-// origins, only requests whose Origin header is in the list receive an echoed
-// origin back; all others receive the first entry in the list (the browser
-// will still block the mismatch). This lets a self-hosted API restrict
-// cross-origin access to the Vercel dashboard domain without any code change.
-func corsMiddleware() func(http.Handler) http.Handler {
-	raw := os.Getenv("CORS_ALLOWED_ORIGINS")
-
-	// Build the allow-set. nil means wildcard (*).
-	var allowed map[string]struct{}
-	if raw != "" {
-		allowed = make(map[string]struct{})
-		for _, o := range strings.Split(raw, ",") {
-			o = strings.TrimSpace(o)
-			if o == "" {
-				continue
-			}
-			if o == "*" {
-				allowed = nil // wildcard overrides any explicit list
-				break
-			}
-			allowed[o] = struct{}{}
-		}
-		if len(allowed) == 0 {
-			allowed = nil
-		}
-	}
-
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			var allowOrigin string
-			if allowed == nil {
-				allowOrigin = "*"
-			} else if _, ok := allowed[origin]; ok {
-				allowOrigin = origin
-			} else {
-				// Fall back to the first configured origin; the browser will
-				// reject the mismatch, but the response header is always set.
-				for o := range allowed {
-					allowOrigin = o
-					break
-				}
-			}
-
-			w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, Authorization, X-API-Key")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-			if allowOrigin != "*" {
-				w.Header().Set("Vary", "Origin")
-			}
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}
 
 // New builds and returns the HTTP router with all middleware and routes wired.
 // maxBodyBytes caps the request body size in bytes; values of zero or less
@@ -91,7 +28,8 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	r.Use(OTelMiddleware)
 
 	r.Use(middleware.RequestID)
-	r.Use(corsMiddleware())
+	r.Use(middleware.SecurityHeaders)
+	r.Use(middleware.CORS(os.Getenv("CORS_ALLOWED_ORIGINS")))
 	// Sentry must run before Recoverer: it reports a panic and re-panics so
 	// Recoverer still produces the standard 500 response.
 	r.Use(middleware.Sentry)
@@ -106,12 +44,26 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		Sessions:    h.SessionSigner,
 		ProxySecret: h.TrustedProxySecret,
 	}, h.Logger))
+	// Enforce per-key network and origin allowlists (issue #793). It runs after
+	// Identity because it only inspects a key that already authenticated, and
+	// before rate limiting so a rejected request never consumes a key's budget.
+	// The client address is resolved through TrustedProxies, the same source the
+	// rate limiter uses.
+	r.Use(middleware.APIKeyRestrictions(h.TrustedProxies))
 	r.Use(middleware.RequireAuthMode(h.RequireAuth, h.Logger))
 	// Audit trail for every mutating /api/ and /admin request (issue #122). It sits
 	// outside rate limiting, content-type and auth checks so their
 	// rejections are audited too, and inside Recoverer so a panic is
 	// recorded as 500 before being recovered.
 	r.Use(middleware.Audit(h.Store, h.Logger, "/api/", "/admin"))
+	// Rate limiting is keyed by the verified API key when present and by the
+	// trusted-proxy client IP otherwise. It runs after Identity so the key
+	// is available, and before the route handlers so it can short-circuit.
+	r.Use(middleware.RateLimit(h.RedisClient, h.Store, middleware.RateLimitConfig{
+		TrustedProxies: h.TrustedProxies,
+		AnonymousLimit: h.RateLimitPerMinute,
+		Window:         h.RateLimitWindow,
+	}))
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(middleware.Metrics)
 
@@ -126,8 +78,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// compression decision, so limiter headers written later are unaffected).
 	r.Use(middleware.Compression)
 
-	r.Use(middleware.RateLimit(h.RedisClient, h.Store))
-
+	r.Use(middleware.UsageMeter(h.RedisClient, h.UsageFlusher))
 	// Health (not rate-limited)
 	r.Get("/health", h.Health)
 	r.Get("/readyz", h.Readyz)
@@ -136,7 +87,6 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	// rather than under /api/v1 so it stays reachable without a versioned client
 	// and without the v1 scope/role middleware.
 	r.Get("/api/version", h.Version)
-
 	// Prometheus metrics. It sits outside /api/v1 so it needs no API key, and
 	// the rate limiter skips it explicitly (see middleware.RateLimit) so a
 	// scrape is never throttled. A registry per router keeps tests that build
@@ -149,6 +99,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	reg.MustRegister(middleware.CacheCollectors()...)
 	reg.MustRegister(middleware.RateLimitCollectors()...)
+	reg.MustRegister(middleware.UsageMeterCollectors()...)
 	reg.MustRegister(metrics.HTTPRequestsInFlight, metrics.HTTPRequestsTotal, metrics.HTTPRequestDuration)
 	reg.MustRegister(metrics.PoolCollector())
 	r.Get("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP)
@@ -186,6 +137,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.Get("/audit", h.ListAuditEvents)
 	})
 
+	// Response cache for stats (issue #776)
+	cacheStats := middleware.Cache(h.Cache, middleware.CacheNamespaceStats, h.CacheTTL, h.Logger)
+
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.ContentTypeJSON)
@@ -213,6 +167,8 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// that lacks the minimum role regardless of API key scopes.
 		contributor := middleware.RequireRole(h.Logger, middleware.RoleContributor)
 		admin := middleware.RequireRole(h.Logger, middleware.RoleAdmin)
+		// Idempotency-Key replay for mutating endpoints (issue #784).
+		idempotency := middleware.Idempotency(h.Store, h.Logger)
 
 		// Request timeouts (issue #154). The SSE stream is registered first
 		// with its own long deadline; r is then rebound so every route
@@ -230,7 +186,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
 
 		// Stats
-		get("/stats/global", h.GlobalStats)
+		r.With(scope, cacheStats).Get("/stats/global", h.GlobalStats)
 
 		// Live dashboard feeds (#139): the newest events across all tracked
 		// contracts, and per-contract events-per-minute buckets for the
@@ -240,11 +196,24 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 
 		// Cross-contract events explorer feed (issue #97).
 		get("/events", h.ListAllEvents)
+		// Full-text search over decoded event topics and values (issue #798).
+		get("/events/search", h.SearchEventValues)
 
-		// Alert deduplication and grouping engine (issue #269).
+		// Alert deduplication, grouping and lifecycle (issues #269, #789).
 		// GET /api/v1/alerts          — grouped view (default)
 		// GET /api/v1/alerts?flat=true — raw ContractAlert feed
 		get("/alerts", h.ListAlerts)
+		get("/alerts/counts", h.AlertCounts)
+		r.With(scope, contributor).Post("/alerts/{id}/ack", h.AcknowledgeAlert)
+		r.With(scope, contributor).Post("/alerts/{id}/snooze", h.SnoozeAlert)
+		r.With(scope, contributor).Post("/alerts/{id}/resolve", h.ResolveAlert)
+
+		// Maintenance windows (issue #790).
+		get("/maintenance-windows", h.ListMaintenanceWindows)
+		get("/maintenance-windows/{id}", h.GetMaintenanceWindow)
+		r.With(scope, contributor).Post("/maintenance-windows", h.CreateMaintenanceWindow)
+		r.With(scope, contributor).Put("/maintenance-windows/{id}", h.UpdateMaintenanceWindow)
+		r.With(scope, contributor).Delete("/maintenance-windows/{id}", h.DeleteMaintenanceWindow)
 
 		// Integrations catalog and test-send (issue #612). Reads are public
 		// like the rest of the v0.1 surface; the test send triggers an
@@ -286,11 +255,15 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// check (issue #140). It is a POST purely to keep the path
 		// unambiguous against /contracts/{id}; it never writes.
 		r.With(scope).Post("/contracts/validate", h.ValidateContract)
-		r.With(scope, contributor, purgeContracts).Post("/contracts", h.RegisterContract)
+		r.With(scope, contributor, purgeContracts, idempotency).Post("/contracts", h.RegisterContract)
 		// Bulk untrack/tag over a selection (#176). Like registration it mutates
 		// shared state, so it needs the same contributor role, and it purges both
 		// caches since it can untrack contracts and retag them.
 		r.With(scope, contributor, purgeContracts, purgeLabels).Post("/contracts/batch", h.BatchContracts)
+		// Single-contract untrack (#532). Same gate as registration and the
+		// batch untrack, and the same cache purge as the batch route since
+		// it changes the contract's status.
+		r.With(scope, contributor, purgeContracts, purgeLabels).Delete("/contracts/{id}", h.DeleteContract)
 		r.With(scope, contributor, purgeLabels).Post("/labels", h.CreateLabel)
 		r.With(scope, cacheLabels).Get("/labels", h.ListLabels)
 		r.With(scope, cacheLabels).Get("/resolve", h.ResolveLabel)
@@ -298,6 +271,9 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, cacheContracts).Get("/contracts/{id}", h.GetContract)
 		get("/contracts/{id}/events", h.ListEvents)
 		get("/contracts/{id}/events.csv", h.ExportEventsCSV)
+		// SEP-41 token transfer tracking and holder balances (issue #801).
+		get("/contracts/{id}/transfers", h.ListTokenTransfers)
+		get("/contracts/{id}/holders", h.ListTokenHolders)
 		get("/contracts/{id}/invocations/stats", h.ContractInvocationStats)
 		get("/contracts/{id}/invocations", h.ListInvocations)
 		get("/contracts/{id}/invocations/{tx_hash}", h.GetInvocation)
@@ -307,7 +283,14 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Cross-contract call graph. Rooted at the invocations row for the
 		// transaction, so a trace is reachable straight from an invocation.
 		get("/invocations/{tx_hash}/trace", h.GetInvocationTrace)
+
+		// Transaction and ledger aggregate endpoints (issue #786): one round-trip
+		// that joins invocations, events, and the call trace for a transaction;
+		// and a ledger-level summary with tx/invocation/event counts.
+		get("/transactions/{hash}", h.GetTransaction)
+		get("/ledgers/{sequence}", h.GetLedger)
 		get("/contracts/{id}/storage", h.ListStorageEntries)
+		get("/contracts/{id}/resource-trend", h.ContractResourceTrend)
 		get("/contracts/{id}/stats", h.ContractStats)
 		get("/contracts/{id}/forecast", h.ContractForecast)
 		get("/contracts/{id}/snapshot", h.ContractSnapshot)
@@ -318,6 +301,15 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/stream", h.StreamEvents)
 		get("/contracts/{id}/graph", h.ContractGraph)
 
+		// Wasm hash changelog (issue #276): the history as JSON, an Atom feed
+		// and an embeddable SVG badge. Public reads like the rest of the
+		// per-contract surface; the badge sets its own no-cache header so a
+		// README always shows the current hash.
+		cl := changelog.New(h.Store)
+		get("/contracts/{id}/changelog", cl.GetChangelog)
+		get("/contracts/{id}/changelog/feed", cl.GetFeed)
+		get("/contracts/{id}/changelog/badge", cl.GetBadge)
+
 		// Source verification (issue #263). Submitting source mutates the
 		// verification record, so it requires at least contributor role;
 		// reading the cached verdict stays open.
@@ -325,6 +317,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/contracts/{id}/verification", h.GetContractVerification)
 		get("/contracts/{id}/wasm", h.GetContractWasm)
 		get("/contracts/{id}/spec", h.GetContractSpec)
+		get("/contracts/{id}/event-schemas", h.GetContractEventSchemas)
 
 		// User-defined contract tags (issue #459). Wrapped by the contributor
 		// role so an anonymous caller cannot label a contract even though the
@@ -349,14 +342,17 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// only the keys it owns; the handlers bind creation to the verified
 		// user and hide keys owned by anyone else.
 		r.With(scope, contributor).Get("/me/api-keys", h.ListMyAPIKeys)
-		r.With(scope, contributor).Post("/me/api-keys", h.CreateMyAPIKey)
+		r.With(scope, contributor, idempotency).Post("/me/api-keys", h.CreateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
 
 		// Asynchronous export jobs (issue #785)
-		r.With(scope).Post("/exports", h.CreateExport)
+		r.With(scope, idempotency).Post("/exports", h.CreateExport)
 		get("/exports/{id}", h.GetExport)
 		r.With(scope).Delete("/exports/{id}", h.DeleteExport)
 		r.Get("/exports/{id}/download", h.DownloadExport)
+
+		// API key request usage and quota tracking (issue #792).
+		get("/usage", h.GetUsage)
 
 		// API keys (admin scope + admin role).
 		r.With(scope, admin).Get("/api-keys", h.ListAPIKeys)
@@ -429,20 +425,25 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		// Email digest subscriptions (issue #330). Self-service by email with
 		// no login: the one-click unsubscribe link must work straight from an
 		// inbox, so these are public like the rest of the read/write surface.
-		r.With(scope).Post("/reports/subscriptions", h.CreateReportSubscription)
+		r.With(scope, idempotency).Post("/reports/subscriptions", h.CreateReportSubscription)
 		get("/reports/subscriptions", h.ListReportSubscriptions)
 		r.With(scope).Delete("/reports/subscriptions/{id}", h.DeleteReportSubscription)
 		get("/reports/unsubscribe", h.UnsubscribeReport)
 
 		// Alert notification subscriptions (issue #127). They hold
 		// integration secrets, so reading them also needs contributor.
-		r.With(scope, contributor).Post("/watchdog/subscriptions", h.CreateSubscription)
+		r.With(scope, contributor, idempotency).Post("/watchdog/subscriptions", h.CreateSubscription)
 		r.With(scope, contributor).Get("/watchdog/subscriptions", h.ListSubscriptions)
 		r.With(scope, contributor).Delete("/watchdog/subscriptions/{id}", h.DeleteSubscription)
 		// Signing-secret reveal/rotate touch signing key material, so they are
 		// admin-gated on top of the scope check.
 		r.With(scope, admin).Get("/watchdog/subscriptions/{id}/signing-secret", h.GetSubscriptionSigningSecret)
 		r.With(scope, admin).Post("/watchdog/subscriptions/{id}/rotate", h.RotateSubscriptionSigningSecret)
+
+		// Webhook delivery log and manual retry (issue #828).
+		r.With(scope, contributor).Get("/watchdog/subscriptions/{id}/deliveries", h.ListDeliveries)
+		r.With(scope, contributor).Get("/watchdog/subscriptions/{id}/deliveries/{deliveryID}", h.GetDelivery)
+		r.With(scope, contributor).Post("/watchdog/subscriptions/{id}/deliveries/{deliveryID}/retry", h.RetryDelivery)
 	})
 
 	// API v2 (issue #144). A parallel namespace carrying the same resources
@@ -458,6 +459,7 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		scope := middleware.RequireScopes(h.Logger)
 		contributor := middleware.RequireRole(h.Logger, middleware.RoleContributor)
 		admin := middleware.RequireRole(h.Logger, middleware.RoleAdmin)
+		idempotency := middleware.Idempotency(h.Store, h.Logger)
 
 		get := func(pattern string, fn http.HandlerFunc) { r.With(scope).Get(pattern, fn) }
 
@@ -470,33 +472,50 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		get("/integrations", h.ListIntegrations)
 		r.With(scope, contributor).Post("/integrations/{id}/test", h.TestIntegration)
 		r.With(scope, contributor).Get("/me/api-keys", h.ListMyAPIKeys)
-		r.With(scope, contributor).Post("/me/api-keys", h.CreateMyAPIKey)
+		r.With(scope, contributor, idempotency).Post("/me/api-keys", h.CreateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
 
 		// Asynchronous export jobs (issue #785)
-		r.With(scope).Post("/exports", h.CreateExport)
+		r.With(scope, idempotency).Post("/exports", h.CreateExport)
 		get("/exports/{id}", h.GetExport)
 		r.With(scope).Delete("/exports/{id}", h.DeleteExport)
 		r.Get("/exports/{id}/download", h.DownloadExport)
 
 		// Stats
-		get("/stats/global", h.V2GlobalStats)
+		r.With(scope, cacheStats).Get("/stats/global", h.V2GlobalStats)
 
 		// Contracts
 		r.With(scope).Post("/contracts/validate", h.V2ValidateContract)
 		r.With(scope, contributor).Post("/contracts", h.V2RegisterContract)
 		get("/contracts", h.V2ListContracts)
 		get("/contracts/{id}", h.V2GetContract)
+		// Single-contract untrack (#532). A 204 carries no body to reshape,
+		// so the v1 handler is reused directly. The purge keeps the v1
+		// contract/label caches coherent with the write.
+		purgeContracts := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceContracts)
+		purgeLabels := middleware.InvalidateOnWrite(h.Cache, h.Logger, middleware.CacheNamespaceLabels)
+		r.With(scope, contributor, purgeContracts, purgeLabels).Delete("/contracts/{id}", h.DeleteContract)
 		get("/contracts/{id}/events", h.V2ListEvents)
 		get("/contracts/{id}/invocations", h.V2ListInvocations)
 		get("/contracts/{id}/storage", h.V2ListStorageEntries)
+		get("/contracts/{id}/resource-trend", h.V2ContractResourceTrend)
 		get("/contracts/{id}/stats", h.V2ContractStats)
 		get("/contracts/{id}/forecast", h.V2ContractForecast)
 		get("/contracts/{id}/snapshot", h.V2ContractSnapshot)
 		get("/contracts/{id}/upgrades", h.V2ListContractUpgrades)
 		get("/contracts/{id}/health-score", h.V2GetContractHealthScore)
+		get("/contracts/{id}/event-schemas", h.GetContractEventSchemas)
 		get("/contracts/{id}/stream", h.V2StreamEvents)
 		get("/contracts/{id}/graph", h.V2ContractGraph)
+		// SEP-41 token tracking (issue #801): same handlers as v1.
+		get("/contracts/{id}/transfers", h.ListTokenTransfers)
+		get("/contracts/{id}/holders", h.ListTokenHolders)
+		// Transaction and ledger aggregate endpoints (issue #786): same handlers as v1.
+		get("/transactions/{hash}", h.GetTransaction)
+		get("/ledgers/{sequence}", h.GetLedger)
+
+		// API key request usage and quota tracking (issue #792).
+		get("/usage", h.GetUsage)
 
 		// API keys (admin scope + admin role). These reuse the v1 handlers and
 		// are declared passthrough in docs/api-v2.md.

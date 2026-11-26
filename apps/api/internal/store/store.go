@@ -33,6 +33,13 @@ type Store interface {
 	// GetContract returns the contract with the given ID, or ErrNotFound.
 	GetContract(ctx context.Context, contractID string) (Contract, error)
 
+	// UntrackContract stops indexing a contract by flipping its status to
+	// "paused". The row and all indexed history are retained; re-registering
+	// the contract flips the status back to "pending" and resumes tracking.
+	// Returns ErrNotFound when the contract does not exist. Untracking an
+	// already-paused contract is a no-op success.
+	UntrackContract(ctx context.Context, contractID string) error
+
 	// ListContracts returns a cursor-paginated list of tracked contracts
 	// matching the optional filters. cursor is opaque; pass "" for the first
 	// page. Returns the next cursor (empty string when there are no more
@@ -47,6 +54,12 @@ type Store interface {
 	// emitted many events contributes only one row. Part of the global
 	// search endpoint (issue #159).
 	SearchEvents(ctx context.Context, query string, limit int) ([]Event, error)
+
+	// SearchEventValues returns up to limit events whose decoded topic or
+	// value text matches query using the event_tsv full-text index (issue
+	// #798). Results are newest-first. cursor is opaque; pass "" for the
+	// first page.
+	SearchEventValues(ctx context.Context, query, cursor string, limit int) ([]Event, string, error)
 
 	// SearchFunctions returns up to limit distinct contract function names
 	// containing query (case-insensitive prefix/substring match), each
@@ -119,6 +132,14 @@ type Store interface {
 	// GetLatestContractVersion returns the most recently seen ContractVersion for
 	// the given contract. Returns ErrNotFound when no version has been recorded yet.
 	GetLatestContractVersion(ctx context.Context, contractID string) (ContractVersion, error)
+
+	// IncrementRollups increments the hourly and daily rollup buckets for a
+	// contract's indexing window (issue #788). events, invocations, and failures
+	// are the counts for the window that just committed; closedAt is the latest
+	// ledger_closed_at in the window, used to derive the hour/day bucket.
+	// A network-wide aggregate row (contract_id = '') is updated alongside the
+	// per-contract row. Best-effort: callers log and continue on error.
+	IncrementRollups(ctx context.Context, network, contractID string, closedAt time.Time, events, invocations, failures int) error
 }
 
 // AlertSubscriptionStore is the read/write surface for alert webhook subscriptions.
@@ -208,6 +229,14 @@ type LabelStore interface {
 	ResolveLabel(ctx context.Context, workspaceID, query string) (Label, error)
 }
 
+// ContractTokenStore is the read/write surface for SAC token metadata.
+type ContractTokenStore interface {
+	// UpsertContractToken inserts or updates token metadata for a contract.
+	UpsertContractToken(ctx context.Context, contractID string, m TokenMetadata) error
+	// GetContractToken returns token metadata for a contract, or ErrNotFound.
+	GetContractToken(ctx context.Context, contractID string) (TokenMetadata, error)
+}
+
 // ContractBulkStore is the write surface for bulk contract actions used by the
 // /api/v1/contracts/batch endpoint.
 type ContractBulkStore interface {
@@ -256,6 +285,50 @@ var contractSortColumns = map[string]string{
 // ValidContractSort reports whether col is a sortable contracts column.
 func ValidContractSort(col string) bool {
 	return contractSortColumns[col] != ""
+}
+
+// DeliveryStore is the read/write surface for webhook delivery records
+// (issue #828).
+type DeliveryStore interface {
+	// ListDeliveries returns deliveries for a subscription, newest first.
+	// cursor is opaque; pass "" for the first page.
+	ListDeliveries(ctx context.Context, subscriptionID, cursor string, limit int) ([]WebhookDelivery, string, error)
+
+	// GetDelivery returns one delivery by id, or ErrNotFound.
+	GetDelivery(ctx context.Context, id string) (WebhookDelivery, error)
+
+	// UpsertDelivery inserts or updates a delivery row.
+	UpsertDelivery(ctx context.Context, d WebhookDelivery) error
+
+	// RetryDelivery marks a delivery for immediate retry and increments the
+	// attempt counter, but only if the delivery belongs to subscriptionID.
+	// Returns ErrNotFound if id is unknown or belongs to another subscription;
+	// in that case nothing is written.
+	RetryDelivery(ctx context.Context, subscriptionID, id string) (WebhookDelivery, error)
+}
+
+// IdempotencyStore is the read/write surface for idempotency keys (issue #784).
+type IdempotencyStore interface {
+	// ClaimIdempotencyKey atomically inserts a new in-flight record or returns
+	// the existing one. It returns (record, true, nil) on a fresh claim and
+	// (existing, false, nil) when the key already exists. The caller must call
+	// CompleteIdempotencyKey once the response is ready.
+	ClaimIdempotencyKey(ctx context.Context, apiKeyID, key, bodyFingerprint string) (IdempotencyRecord, bool, error)
+
+	// GetIdempotencyRecord returns the saved record, or ErrNotFound.
+	GetIdempotencyRecord(ctx context.Context, apiKeyID, key string) (IdempotencyRecord, error)
+
+	// CompleteIdempotencyKey saves the response and marks the record no longer
+	// in-flight.
+	CompleteIdempotencyKey(ctx context.Context, apiKeyID, key string, status int, headers map[string]string, body string) error
+
+	// ReleaseIdempotencyKey deletes an in-flight claim that will never be
+	// completed (for example because the handler panicked) so the key can be
+	// used again. Completed records are left untouched.
+	ReleaseIdempotencyKey(ctx context.Context, apiKeyID, key string) error
+
+	// DeleteExpiredIdempotencyKeys removes records past their expiry.
+	DeleteExpiredIdempotencyKeys(ctx context.Context) (int64, error)
 }
 
 // NewStore returns a Store backed by the given pgxpool.Pool.

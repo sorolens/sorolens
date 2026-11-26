@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "./ThemeProvider";
 import { useNetwork, networkFilter } from "@/lib/network";
 import { ApiError, searchContracts } from "@/lib/api";
+import { OPEN_SEARCH_EVENT } from "@/lib/keyboard-shortcuts";
 import type { SearchContract } from "@/lib/types";
 
 const searchItemClassName =
@@ -56,6 +57,12 @@ export function CmdkSearch() {
 
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
+  }, []);
+
+  React.useEffect(() => {
+    const openSearch = () => setOpen(true);
+    window.addEventListener(OPEN_SEARCH_EVENT, openSearch);
+    return () => window.removeEventListener(OPEN_SEARCH_EVENT, openSearch);
   }, []);
 
   React.useEffect(() => {
@@ -145,12 +152,21 @@ export function CmdkSearch() {
           />
 
           <Command.List className="max-h-[60vh] overflow-y-auto p-2">
+            {error && (
+              <div
+                role="alert"
+                className="p-6 text-center text-sm text-[var(--color-danger-text)]"
+              >
+                {error}
+              </div>
+            )}
+
             <Command.Empty
               role={loading ? "status" : undefined}
               aria-busy={loading || undefined}
               className="p-6 text-center text-sm text-[var(--color-text-secondary)]"
             >
-              {loading ? "Searching..." : error ? error : "No results found."}
+              {loading ? "Searching..." : "No results found."}
             </Command.Empty>
 
             <Command.Group

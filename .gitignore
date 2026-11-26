@@ -29,9 +29,15 @@ sorolens-bin
 # Misc
 .DS_Store
 .env
+*.bak
+modify_*.py
 
 # Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+
+# Docs site (mkdocs.yml)
+/site/
+/.venv-docs/

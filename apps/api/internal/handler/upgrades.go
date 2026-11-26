@@ -48,7 +48,7 @@ func (h *Handler) ListContractUpgrades(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	upgrades, err := h.Store.ListContractUpgrades(r.Context(), contractID, intQuery(r, "limit", 50))
+	upgrades, err := h.Store.ListContractUpgrades(r.Context(), contractID, pageLimit(r, DefaultPageSize))
 	if err != nil {
 		h.Logger.Error("list contract upgrades", "err", err, "contract_id", contractID)
 		writeError(w, r, http.StatusInternalServerError, CodeInternal, "failed to list contract upgrades")

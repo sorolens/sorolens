@@ -11,6 +11,7 @@ import (
 // Config holds global CLI configuration derived from persistent flags and env vars.
 type Config struct {
 	APIURL  string
+	APIKey  string
 	Network string
 	Output  string
 	Query   string
@@ -34,12 +35,22 @@ on the Stellar network.`,
 	PersistentPreRunE: applyConfig,
 }
 
+// RootCommand returns the root command for documentation generation.
+func RootCommand() *cobra.Command {
+	return rootCmd
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVar(
 		&globalConfig.APIURL, "api-url",
 		"",
 		"Sorolens API base URL",
 	)
+	// --api-key is a persistent flag so every command that talks to the API
+	// (track, label, tui, ...) can authenticate. It takes precedence over
+	// SOROLENS_API_KEY, the api_key config-file entry, and the active
+	// profile's stored key (see applyConfig and resolvedAPIKey).
+	rootCmd.PersistentFlags().StringVar(&globalConfig.APIKey, "api-key", "", "API key for authenticating with the Sorolens API")
 	rootCmd.PersistentFlags().StringVar(&globalConfig.Profile, "profile", "", "Configuration profile name (default: $SOROLENS_PROFILE, then the default profile)")
 	rootCmd.PersistentFlags().StringVar(&globalConfig.Network, "network", "", "Stellar network (testnet, mainnet, futurenet, standalone)")
 	rootCmd.PersistentFlags().StringVar(&globalConfig.Output, "output", "", "Output format (table, json, yaml or jsonl)")
@@ -61,11 +72,4 @@ func Execute() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
-}
-
-func envOrDefault(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }

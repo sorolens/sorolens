@@ -390,7 +390,7 @@ export default function NotificationsPage() {
           </button>
 
           {formError && (
-            <p role="alert" className="text-sm text-red-400">
+            <p role="alert" className="text-sm text-[var(--color-danger-text)]">
               {formError}
             </p>
           )}
@@ -401,8 +401,8 @@ export default function NotificationsPage() {
               data-testid="test-feedback"
               className={`text-sm ${
                 testFeedback.type === "success"
-                  ? "text-emerald-400"
-                  : "text-red-400"
+                  ? "text-[var(--color-safe)]"
+                  : "text-[var(--color-danger-text)]"
               }`}
             >
               {testFeedback.message}
@@ -416,7 +416,7 @@ export default function NotificationsPage() {
         {loadError ? (
           <p
             role="alert"
-            className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-300"
+            className="rounded-lg border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-4 text-sm text-[var(--color-danger-text)]"
           >
             {loadError}
           </p>
@@ -472,10 +472,10 @@ export default function NotificationsPage() {
                       <span
                         className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${
                           s.severity_filter === "Critical"
-                            ? "border border-red-500/20 bg-red-500/10 text-red-400"
+                            ? "border border-[var(--color-danger-border)] bg-[var(--color-danger)]/10 text-[var(--color-danger-text)]"
                             : s.severity_filter === "Warning"
-                              ? "border border-amber-500/20 bg-amber-500/10 text-amber-400"
-                              : "border border-blue-500/20 bg-blue-500/10 text-blue-400"
+                              ? "border border-[var(--color-warning)]/20 bg-[var(--color-warning)]/10 text-[var(--color-warning-text)]"
+                              : "border border-[var(--color-info-border)] bg-[var(--color-info-bg)] text-[var(--color-info-text)]"
                         }`}
                       >
                         {s.severity_filter || "Critical"}
@@ -514,11 +514,17 @@ export default function NotificationsPage() {
                         >
                           Configure
                         </button>
+                        <Link
+                          href={`/watchdog/notifications/${s.id}/deliveries`}
+                          className="text-xs text-[var(--color-text-secondary)] hover:underline"
+                        >
+                          Deliveries
+                        </Link>
                         <button
                           type="button"
                           onClick={() => setPendingDeleteId(s.id)}
                           disabled={deleting === s.id}
-                          className="text-xs text-red-400 hover:underline disabled:opacity-50"
+                          className="text-xs text-[var(--color-danger-text)] hover:underline disabled:opacity-50"
                         >
                           {deleting === s.id ? "Removing…" : "Remove"}
                         </button>
@@ -557,7 +563,7 @@ export default function NotificationsPage() {
           secret as <code>SLACK_SIGNING_SECRET</code> on the API so requests are
           verified.
         </p>
-        <code className="mt-3 block overflow-x-auto rounded bg-black/30 p-3 font-mono text-xs">
+        <code className="mt-3 block overflow-x-auto rounded bg-[var(--color-bg)] p-3 font-mono text-xs">
           {API_URL}/integrations/slack/commands
         </code>
       </section>

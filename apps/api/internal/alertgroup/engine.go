@@ -47,16 +47,20 @@ type Group struct {
 	LastSeen         time.Time
 	LastMessage      string
 	BackfillEligible bool
+	State            string // open | acknowledged | snoozed | resolved
+	SnoozedUntil     *time.Time
 }
 
 // IncomingAlert is the minimal representation of an alert that the engine
 // needs to decide whether to open a new group or merge into an existing one.
 type IncomingAlert struct {
-	ContractID string
-	Severity   string
-	Rule       string // may be empty
-	Message    string
-	Timestamp  time.Time
+	ContractID   string
+	Severity     string
+	Rule         string // may be empty
+	Message      string
+	Timestamp    time.Time
+	State        string
+	SnoozedUntil *time.Time
 }
 
 // BuildGroupKey returns the canonical group key for an alert.
@@ -92,8 +96,18 @@ func Merge(existing *Group, alert IncomingAlert, dedupeWindowSecs int64) (*Group
 			existing.Count++
 			existing.LastSeen = alert.Timestamp
 			existing.LastMessage = alert.Message
+			// If the group was snoozed and the snooze window has elapsed, resume (open)
+			if existing.State == "snoozed" && existing.SnoozedUntil != nil && !alert.Timestamp.Before(*existing.SnoozedUntil) {
+				existing.State = "open"
+				existing.SnoozedUntil = nil
+			}
 			return existing, MergeResultMerged
 		}
+	}
+
+	state := alert.State
+	if state == "" {
+		state = "open"
 	}
 
 	// Outside window or no existing group — open a new one.
@@ -107,6 +121,25 @@ func Merge(existing *Group, alert IncomingAlert, dedupeWindowSecs int64) (*Group
 		FirstSeen:        alert.Timestamp,
 		LastSeen:         alert.Timestamp,
 		LastMessage:      alert.Message,
+		State:            state,
+		SnoozedUntil:     alert.SnoozedUntil,
 	}
 	return g, MergeResultNew
+}
+
+// ShouldNotify returns whether notifications should be sent for a given state and snooze expiry at time `now`.
+// It returns false for acknowledged alerts, resolved alerts, and snoozed alerts before SnoozedUntil.
+// Once SnoozedUntil has passed, notifications resume.
+func ShouldNotify(state string, snoozedUntil *time.Time, now time.Time) bool {
+	switch state {
+	case "acknowledged", "resolved":
+		return false
+	case "snoozed":
+		if snoozedUntil != nil && now.Before(*snoozedUntil) {
+			return false
+		}
+		return true
+	default:
+		return true
+	}
 }

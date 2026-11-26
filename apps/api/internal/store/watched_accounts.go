@@ -27,6 +27,8 @@ type DiscoveredContract struct {
 	Network    string
 	AccountID  string
 	Ledger     int64
+	IsSAC      bool
+	SAC        *TokenMetadata
 }
 
 // DiscoveredByLabel is the label given to an auto-tracked contract so users
@@ -123,16 +125,36 @@ func (s *postgresStore) RecordDiscoveredContract(ctx context.Context, d Discover
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	label := DiscoveredByLabel(d.AccountID)
+	if d.IsSAC && d.SAC != nil && d.SAC.AssetCode != "" {
+		label = d.SAC.AssetCode
+	}
+
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO contracts
 			(id, network, label, wasm_hash, created_at_ledger, status, added_at)
 		VALUES ($1, $2, $3, '', $4, 'active', NOW())
 		ON CONFLICT (id) DO NOTHING`,
-		d.ContractID, networkOrDefault(d.Network), DiscoveredByLabel(d.AccountID), d.Ledger)
+		d.ContractID, networkOrDefault(d.Network), label, d.Ledger)
 	if err != nil {
 		return false, fmt.Errorf("insert discovered contract: %w", err)
 	}
+
+	if d.IsSAC && d.SAC != nil {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO contract_tokens
+				(contract_id, asset_code, issuer, decimals, symbol, name, source, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, 'sac_discovery', NOW())
+			ON CONFLICT (contract_id) DO NOTHING`,
+			d.ContractID, d.SAC.AssetCode, d.SAC.Issuer, d.SAC.Decimals, d.SAC.Symbol, d.SAC.Name); err != nil {
+			return false, fmt.Errorf("insert discovered contract token: %w", err)
+		}
+	}
+
 	if tag.RowsAffected() == 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit: %w", err)
+		}
 		return false, nil
 	}
 	// Start indexing at the deploy ledger rather than the network cursor so

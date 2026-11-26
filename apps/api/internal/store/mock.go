@@ -43,19 +43,29 @@ type MockStore struct {
 	contractTags          map[string]map[string]bool
 	wasmBinaries          map[string]ContractWasm
 	contractSpecs         map[string]ContractSpec
+	contractEventSchemas  map[string]map[string]ContractEventSchema
 	contractVerifications map[string]ContractVerification
 	alertRules            []AlertRule
 	contractNotes         map[string][]ContractNote
 	watchedAccounts       map[string]WatchedAccount
+	maintenanceWindows    map[int64]MaintenanceWindow
+	maintenanceWindowSeq  int64
+	contractTokens        map[string]TokenMetadata
+	deliveries            []WebhookDelivery
+	idempotencyKeys       map[string]IdempotencyRecord
+	tokenTransfers        []TokenTransfer
+	tokenHolderBalances   map[string]*TokenHolder
 	*MockExportJobStore
 
 	// auditMu guards auditEvents: the audit middleware writes asynchronously.
-	auditMu     sync.Mutex
-	auditEvents []AuditEvent
+	auditMu      sync.Mutex
+	auditEvents  []AuditEvent
+	usageRecords []APIKeyUsageRecord
 
 	// Error injection
 	UpsertContractErr                 error
 	GetContractErr                    error
+	UntrackContractErr                error
 	ListContractsErr                  error
 	DeleteContractsErr                error
 	SetContractLabelErr               error
@@ -168,6 +178,9 @@ func NewMockStore() *MockStore {
 		failedEvents:          make(map[int64]FailedEvent),
 		labels:                make([]Label, 0),
 		watchedAccounts:       make(map[string]WatchedAccount),
+		contractTokens:        make(map[string]TokenMetadata),
+		deliveries:            make([]WebhookDelivery, 0),
+		idempotencyKeys:       make(map[string]IdempotencyRecord),
 		MockExportJobStore:    NewMockExportJobStore(),
 	}
 }
@@ -182,6 +195,9 @@ func (m *MockStore) UpsertContract(_ context.Context, c Contract) error {
 		c.AddedAt = time.Now()
 	}
 	m.contracts[c.ID] = c
+	if c.Token != nil {
+		m.contractTokens[c.ID] = *c.Token
+	}
 	return nil
 }
 
@@ -194,7 +210,23 @@ func (m *MockStore) GetContract(_ context.Context, contractID string) (Contract,
 		return Contract{}, ErrNotFound
 	}
 	c.Tags = m.tagsFor(contractID)
+	if t, ok := m.contractTokens[contractID]; ok {
+		c.Token = &t
+	}
 	return c, nil
+}
+
+func (m *MockStore) UntrackContract(_ context.Context, contractID string) error {
+	if m.UntrackContractErr != nil {
+		return m.UntrackContractErr
+	}
+	c, ok := m.contracts[contractID]
+	if !ok {
+		return ErrNotFound
+	}
+	c.Status = "paused"
+	m.contracts[contractID] = c
+	return nil
 }
 
 func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f ContractFilters) ([]Contract, string, error) {
@@ -203,6 +235,8 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []Contract
 	for _, c := range m.contracts {
@@ -219,6 +253,9 @@ func (m *MockStore) ListContracts(_ context.Context, cursor string, limit int, f
 			continue
 		}
 		c.Tags = m.tagsFor(c.ID)
+		if t, ok := m.contractTokens[c.ID]; ok {
+			c.Token = &t
+		}
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -452,6 +489,8 @@ func (m *MockStore) ListEvents(_ context.Context, contractID, cursor string, lim
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []Event
 	for _, e := range m.events {
@@ -544,6 +583,8 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []Invocation
 	for _, inv := range m.invocations {
@@ -559,6 +600,9 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 		if f.FunctionName != "" && inv.FunctionName != f.FunctionName {
 			continue
 		}
+		if f.FailureCategory != "" && inv.FailureCategory != f.FailureCategory {
+			continue
+		}
 		out = append(out, inv)
 		if len(out) > limit {
 			break
@@ -570,6 +614,56 @@ func (m *MockStore) ListInvocations(_ context.Context, contractID, cursor string
 		out = out[:limit]
 	}
 	return out, nextCursor, nil
+}
+
+// GetResourceTrend aggregates seeded invocations by UTC day for the trailing
+// `days` days, including zero buckets.
+func (m *MockStore) GetResourceTrend(_ context.Context, contractID string, days int) ([]ResourceTrendBucket, error) {
+	if m.ListInvocationsErr != nil {
+		return nil, m.ListInvocationsErr
+	}
+	if days <= 0 {
+		days = 30
+	}
+	if days > 365 {
+		days = 365
+	}
+
+	type acc struct {
+		cpu, mem, fee float64
+		count         int64
+	}
+	byDay := map[string]*acc{}
+	for _, inv := range m.invocations {
+		if inv.ContractID != contractID {
+			continue
+		}
+		key := inv.LedgerClosedAt.UTC().Format("2006-01-02")
+		a := byDay[key]
+		if a == nil {
+			a = &acc{}
+			byDay[key] = a
+		}
+		a.cpu += float64(inv.CPUInsn)
+		a.mem += float64(inv.MemByte)
+		a.fee += float64(inv.ResourceFeeCharged)
+		a.count++
+	}
+
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	out := make([]ResourceTrendBucket, 0, days)
+	for offset := days - 1; offset >= 0; offset-- {
+		day := today.AddDate(0, 0, -offset)
+		bucket := ResourceTrendBucket{Day: day}
+		if a := byDay[day.Format("2006-01-02")]; a != nil && a.count > 0 {
+			bucket.AvgCPUInsn = a.cpu / float64(a.count)
+			bucket.AvgMemByte = a.mem / float64(a.count)
+			bucket.AvgFee = a.fee / float64(a.count)
+			bucket.Count = a.count
+		}
+		out = append(out, bucket)
+	}
+	return out, nil
 }
 
 // GetInvocation returns the invocation row for a transaction hash.
@@ -637,12 +731,89 @@ func (m *MockStore) AddCallEdge(e CallEdge) {
 	m.callEdges = append(m.callEdges, e)
 }
 
+func (m *MockStore) GetEventsByTxHash(_ context.Context, txHash string) ([]Event, error) {
+	if m.ListEventsErr != nil {
+		return nil, m.ListEventsErr
+	}
+	var out []Event
+	for _, e := range m.events {
+		if strings.EqualFold(e.TxHash, txHash) {
+			out = append(out, e)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Ledger != out[j].Ledger {
+			return out[i].Ledger < out[j].Ledger
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func (m *MockStore) GetLedgerSummary(_ context.Context, sequence uint32, network string) (LedgerSummary, error) {
+	var invCount, failedCount int64
+	var closedAt time.Time
+	txHashes := map[string]struct{}{}
+	for _, inv := range m.invocations {
+		if inv.Ledger != sequence {
+			continue
+		}
+		if network != "" && inv.Network != network {
+			continue
+		}
+		txHashes[inv.TxHash] = struct{}{}
+		invCount++
+		if inv.Status == "FAILED" {
+			failedCount++
+		}
+		if inv.LedgerClosedAt.After(closedAt) {
+			closedAt = inv.LedgerClosedAt
+		}
+	}
+	var eventCount int64
+	contractEventCounts := map[string]int64{}
+	for _, e := range m.events {
+		if e.Ledger != sequence {
+			continue
+		}
+		if network != "" && e.Network != network {
+			continue
+		}
+		eventCount++
+		contractEventCounts[e.ContractID]++
+	}
+	if int64(len(txHashes)) == 0 && eventCount == 0 {
+		return LedgerSummary{}, ErrNotFound
+	}
+	sum := LedgerSummary{
+		Sequence:        sequence,
+		ClosedAt:        closedAt,
+		TxCount:         int64(len(txHashes)),
+		InvocationCount: invCount,
+		FailedCount:     failedCount,
+		EventCount:      eventCount,
+		TopContracts:    []ContractActivitySummary{},
+	}
+	for cid, ec := range contractEventCounts {
+		sum.TopContracts = append(sum.TopContracts, ContractActivitySummary{ContractID: cid, EventCount: ec})
+	}
+	sort.Slice(sum.TopContracts, func(i, j int) bool {
+		return sum.TopContracts[i].EventCount > sum.TopContracts[j].EventCount
+	})
+	if len(sum.TopContracts) > 10 {
+		sum.TopContracts = sum.TopContracts[:10]
+	}
+	return sum, nil
+}
+
 func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, cursorTxHash string, limit int, f InvocationFilters) ([]Invocation, uint32, string, error) {
 	if m.ListInvocationsErr != nil {
 		return nil, 0, "", m.ListInvocationsErr
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	out := make([]Invocation, 0, len(m.invocations))
 	for _, inv := range m.invocations {
@@ -668,6 +839,9 @@ func (m *MockStore) ListAllInvocations(_ context.Context, cursorLedger uint32, c
 			continue
 		}
 		if f.Until != nil && inv.LedgerClosedAt.After(*f.Until) {
+			continue
+		}
+		if f.FailureCategory != "" && inv.FailureCategory != f.FailureCategory {
 			continue
 		}
 		out = append(out, inv)
@@ -708,6 +882,8 @@ func (m *MockStore) ListStorageEntries(_ context.Context, contractID, cursor str
 	}
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	var out []StorageEntry
 	for _, se := range m.storageEntries {
@@ -759,17 +935,36 @@ func (m *MockStore) GetContractInvocationStats(_ context.Context, contractID str
 }
 
 func invocationWindowStats(invocations []Invocation) InvocationWindowStats {
-	stats := InvocationWindowStats{InvocationCount: int64(len(invocations))}
+	stats := InvocationWindowStats{
+		InvocationCount:    int64(len(invocations)),
+		FailuresByCategory: NewFailureCounts(),
+	}
 	fees := make([]float64, 0, len(invocations))
 	cpus := make([]float64, 0, len(invocations))
+	inclFees := make([]float64, 0, len(invocations))
+	resFees := make([]float64, 0, len(invocations))
 	for _, inv := range invocations {
 		if inv.Status != "SUCCESS" {
 			stats.FailedInvocations++
+		}
+		if inv.FailureCategory != "" {
+			AddFailureCount(stats.FailuresByCategory, inv.FailureCategory, 1)
 		}
 		fees = append(fees, float64(inv.ResourceFeeCharged))
 		cpus = append(cpus, float64(inv.CPUInsn))
 		stats.AvgFee += float64(inv.ResourceFeeCharged)
 		stats.AvgCPU += float64(inv.CPUInsn)
+		if inv.InclusionFee != nil {
+			inclFees = append(inclFees, float64(*inv.InclusionFee))
+			stats.AvgInclusionFee += float64(*inv.InclusionFee)
+		}
+		if inv.ResourceFee != nil {
+			resFees = append(resFees, float64(*inv.ResourceFee))
+			stats.AvgResourceFee += float64(*inv.ResourceFee)
+		}
+		if inv.FeeRefund != nil {
+			stats.TotalFeeRefund += float64(*inv.FeeRefund)
+		}
 	}
 	if stats.InvocationCount > 0 {
 		stats.FailureRate = float64(stats.FailedInvocations) / float64(stats.InvocationCount)
@@ -777,6 +972,14 @@ func invocationWindowStats(invocations []Invocation) InvocationWindowStats {
 		stats.AvgCPU /= float64(stats.InvocationCount)
 		stats.P95Fee = percentile95(fees)
 		stats.P95CPU = percentile95(cpus)
+	}
+	if len(inclFees) > 0 {
+		stats.AvgInclusionFee /= float64(len(inclFees))
+		stats.P95InclusionFee = percentile95(inclFees)
+	}
+	if len(resFees) > 0 {
+		stats.AvgResourceFee /= float64(len(resFees))
+		stats.P95ResourceFee = percentile95(resFees)
 	}
 	return stats
 }
@@ -1444,7 +1647,15 @@ func (m *MockStore) SearchContracts(_ context.Context, query string, limit int) 
 	searchPattern := strings.ToLower(query)
 
 	for _, c := range m.contracts {
-		if strings.Contains(strings.ToLower(c.ID), searchPattern) || strings.Contains(strings.ToLower(c.Label), searchPattern) {
+		c.Tags = m.tagsFor(c.ID)
+		if t, ok := m.contractTokens[c.ID]; ok {
+			c.Token = &t
+		}
+		match := strings.Contains(strings.ToLower(c.ID), searchPattern) || strings.Contains(strings.ToLower(c.Label), searchPattern)
+		if !match && c.Token != nil {
+			match = strings.Contains(strings.ToLower(c.Token.AssetCode), searchPattern) || strings.Contains(strings.ToLower(c.Token.Symbol), searchPattern)
+		}
+		if match {
 			results = append(results, c)
 		}
 	}
@@ -1491,6 +1702,49 @@ func (m *MockStore) SearchEvents(_ context.Context, query string, limit int) ([]
 	return matched, nil
 }
 
+// SearchEventValues implements store.Store.SearchEventValues (issue #798).
+// In-memory mock: searches decoded topic and value text (JSON representation)
+// for the query string, newest-first with simple cursor pagination.
+func (m *MockStore) SearchEventValues(_ context.Context, query, cursor string, limit int) ([]Event, string, error) {
+	if query == "" {
+		return []Event{}, "", nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	pattern := strings.ToLower(query)
+
+	var matched []Event
+	pastCursor := cursor == ""
+	for _, e := range m.events {
+		if cursor != "" && !pastCursor {
+			if e.ID == cursor {
+				pastCursor = true
+			}
+			continue
+		}
+		topicJSON, _ := json.Marshal(e.TopicDecoded)
+		valueJSON, _ := json.Marshal(e.ValueDecoded)
+		combined := strings.ToLower(string(topicJSON) + " " + string(valueJSON))
+		if strings.Contains(combined, pattern) {
+			matched = append(matched, e)
+		}
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		if !matched[i].LedgerClosedAt.Equal(matched[j].LedgerClosedAt) {
+			return matched[i].LedgerClosedAt.After(matched[j].LedgerClosedAt)
+		}
+		return matched[i].ID > matched[j].ID
+	})
+
+	var nextCursor string
+	if len(matched) > limit {
+		nextCursor = matched[limit-1].ID
+		matched = matched[:limit]
+	}
+	return matched, nextCursor, nil
+}
+
 // SearchFunctions implements store.Store.SearchFunctions (issue #159),
 // mirroring the postgresStore semantics: matches are deduplicated to the
 // most recent invocation per function name, then sorted newest-first
@@ -1529,3 +1783,157 @@ func (m *MockStore) SearchFunctions(_ context.Context, query string, limit int) 
 	}
 	return matched, nil
 }
+
+// IncrementRollups is a no-op stub for the mock store (issue #788).
+func (m *MockStore) IncrementRollups(_ context.Context, _, _ string, _ time.Time, _, _, _ int) error {
+	return nil
+}
+// ---- ContractTokenStore -----------------------------------------------------
+
+func (m *MockStore) UpsertContractToken(_ context.Context, contractID string, tok TokenMetadata) error {
+	if contractID == "" {
+		return errors.New("contract_id is required")
+	}
+	m.contractTokens[contractID] = tok
+	if c, ok := m.contracts[contractID]; ok {
+		c.Token = &tok
+		m.contracts[contractID] = c
+	}
+	return nil
+}
+
+func (m *MockStore) GetContractToken(_ context.Context, contractID string) (TokenMetadata, error) {
+	tok, ok := m.contractTokens[contractID]
+	if !ok {
+		return TokenMetadata{}, ErrNotFound
+	}
+	return tok, nil
+}
+
+// ---- DeliveryStore ----------------------------------------------------------
+
+func (m *MockStore) ListDeliveries(_ context.Context, subscriptionID, cursor string, limit int) ([]WebhookDelivery, string, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	var out []WebhookDelivery
+	for _, d := range m.deliveries {
+		if d.SubscriptionID != subscriptionID {
+			continue
+		}
+		if cursor != "" && d.ID >= cursor {
+			continue
+		}
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
+		}
+		return out[i].ID > out[j].ID
+	})
+	var nextCursor string
+	if len(out) > limit {
+		nextCursor = out[limit-1].ID
+		out = out[:limit]
+	}
+	return out, nextCursor, nil
+}
+
+func (m *MockStore) GetDelivery(_ context.Context, id string) (WebhookDelivery, error) {
+	for _, d := range m.deliveries {
+		if d.ID == id {
+			return d, nil
+		}
+	}
+	return WebhookDelivery{}, ErrNotFound
+}
+
+func (m *MockStore) UpsertDelivery(_ context.Context, d WebhookDelivery) error {
+	for i, existing := range m.deliveries {
+		if existing.ID == d.ID {
+			m.deliveries[i] = d
+			return nil
+		}
+	}
+	m.deliveries = append(m.deliveries, d)
+	return nil
+}
+
+func (m *MockStore) RetryDelivery(_ context.Context, subscriptionID, id string) (WebhookDelivery, error) {
+	for i, d := range m.deliveries {
+		if d.ID == id && d.SubscriptionID == subscriptionID {
+			m.deliveries[i].Status = "pending"
+			m.deliveries[i].AttemptNumber++
+			m.deliveries[i].NextRetryAt = nil
+			m.deliveries[i].LastError = nil
+			return m.deliveries[i], nil
+		}
+	}
+	return WebhookDelivery{}, ErrNotFound
+}
+
+// ---- IdempotencyStore -------------------------------------------------------
+
+func (m *MockStore) ClaimIdempotencyKey(_ context.Context, apiKeyID, key, bodyFingerprint string) (IdempotencyRecord, bool, error) {
+	k := apiKeyID + ":" + key
+	if rec, ok := m.idempotencyKeys[k]; ok {
+		return rec, false, nil
+	}
+	rec := IdempotencyRecord{
+		APIKeyID:        apiKeyID,
+		IdempotencyKey:  key,
+		BodyFingerprint: bodyFingerprint,
+		ResponseHeaders: map[string]string{},
+		InFlight:        true,
+		CreatedAt:       time.Now(),
+		ExpiresAt:       time.Now().Add(24 * time.Hour),
+	}
+	m.idempotencyKeys[k] = rec
+	return rec, true, nil
+}
+
+func (m *MockStore) GetIdempotencyRecord(_ context.Context, apiKeyID, key string) (IdempotencyRecord, error) {
+	k := apiKeyID + ":" + key
+	if rec, ok := m.idempotencyKeys[k]; ok {
+		return rec, nil
+	}
+	return IdempotencyRecord{}, ErrNotFound
+}
+
+func (m *MockStore) CompleteIdempotencyKey(_ context.Context, apiKeyID, key string, status int, headers map[string]string, body string) error {
+	k := apiKeyID + ":" + key
+	if rec, ok := m.idempotencyKeys[k]; ok {
+		rec.ResponseStatus = status
+		rec.ResponseHeaders = headers
+		rec.ResponseBody = body
+		rec.InFlight = false
+		m.idempotencyKeys[k] = rec
+		return nil
+	}
+	return ErrNotFound
+}
+
+func (m *MockStore) ReleaseIdempotencyKey(_ context.Context, apiKeyID, key string) error {
+	k := apiKeyID + ":" + key
+	if rec, ok := m.idempotencyKeys[k]; ok && rec.InFlight {
+		delete(m.idempotencyKeys, k)
+	}
+	return nil
+}
+
+func (m *MockStore) DeleteExpiredIdempotencyKeys(_ context.Context) (int64, error) {
+	now := time.Now()
+	var deleted int64
+	newKeys := make(map[string]IdempotencyRecord)
+	for k, rec := range m.idempotencyKeys {
+		if rec.ExpiresAt.After(now) {
+			newKeys[k] = rec
+		} else {
+			deleted++
+		}
+	}
+	m.idempotencyKeys = newKeys
+	return deleted, nil
+}
+

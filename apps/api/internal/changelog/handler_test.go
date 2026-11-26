@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -37,6 +38,16 @@ func (f *fakeStore) GetContract(_ context.Context, id string) (store.Contract, e
 		}
 	}
 	return store.Contract{}, store.ErrNotFound
+}
+
+func (f *fakeStore) UntrackContract(_ context.Context, id string) error {
+	for i, c := range f.contracts {
+		if c.ID == id {
+			f.contracts[i].Status = "paused"
+			return nil
+		}
+	}
+	return store.ErrNotFound
 }
 
 func (f *fakeStore) ListContracts(_ context.Context, _ string, _ int, _ store.ContractFilters) ([]store.Contract, string, error) {
@@ -124,6 +135,10 @@ func (f *fakeStore) GetLatestContractVersion(_ context.Context, contractID strin
 		return store.ContractVersion{}, store.ErrNotFound
 	}
 	return latest, nil
+}
+
+func (f *fakeStore) SearchEventValues(_ context.Context, _, _ string, _ int) ([]store.Event, string, error) {
+	return nil, "", nil
 }
 
 // ---- helpers ---------------------------------------------------------------
@@ -292,6 +307,184 @@ func TestGetBadge_unknownHashShowsUnknown(t *testing.T) {
 	}
 }
 
+// errorBody decodes the standard {"error": {...}} envelope.
+func errorBody(t *testing.T, w *httptest.ResponseRecorder) (code, message string) {
+	t.Helper()
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("error content-type: want application/json, got %q", ct)
+	}
+	var env struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&env); err != nil {
+		t.Fatalf("decode error envelope: %v", err)
+	}
+	return env.Error.Code, env.Error.Message
+}
+
+// TestGetChangelog_404_errorEnvelope verifies an unknown contract gets the
+// same JSON error envelope as every other handler, not a text/plain body.
+func TestGetChangelog_404_errorEnvelope(t *testing.T) {
+	h := changelog.New(seededStore())
+
+	w := httptest.NewRecorder()
+	h.GetChangelog(w, makeRequest(http.MethodGet, "/contracts/CUNKNOWN/changelog"))
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+	if code, msg := errorBody(t, w); code != "NOT_FOUND" || msg != "contract not found" {
+		t.Fatalf("error: want NOT_FOUND / contract not found, got %s / %s", code, msg)
+	}
+}
+
+// TestGetChangelog_200_emptyHistory verifies a tracked contract with no
+// recorded versions returns an empty JSON array rather than null or an error.
+func TestGetChangelog_200_emptyHistory(t *testing.T) {
+	s := &fakeStore{contracts: []store.Contract{{ID: "CEMPTY", Status: "active"}}}
+	h := changelog.New(s)
+
+	w := httptest.NewRecorder()
+	h.GetChangelog(w, makeRequest(http.MethodGet, "/contracts/CEMPTY/changelog"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if got := strings.TrimSpace(w.Body.String()); got != "[]" {
+		t.Fatalf("expected [], got %s", got)
+	}
+}
+
+// TestGetFeed_404_unknownContract verifies the feed rejects an unknown
+// contract with the JSON error envelope.
+func TestGetFeed_404_unknownContract(t *testing.T) {
+	h := changelog.New(seededStore())
+
+	w := httptest.NewRecorder()
+	h.GetFeed(w, makeRequest(http.MethodGet, "/contracts/CUNKNOWN/changelog/feed"))
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+	if code, _ := errorBody(t, w); code != "NOT_FOUND" {
+		t.Fatalf("error code: want NOT_FOUND, got %s", code)
+	}
+}
+
+// TestGetFeed_200_emptyHistory verifies a contract with no recorded versions
+// gets a well-formed Atom feed with no entries.
+func TestGetFeed_200_emptyHistory(t *testing.T) {
+	s := &fakeStore{contracts: []store.Contract{{ID: "CEMPTY", Status: "active"}}}
+	h := changelog.New(s)
+
+	w := httptest.NewRecorder()
+	h.GetFeed(w, makeRequest(http.MethodGet, "/contracts/CEMPTY/changelog/feed"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var feed struct {
+		XMLName xml.Name   `xml:"http://www.w3.org/2005/Atom feed"`
+		Entries []struct{} `xml:"entry"`
+	}
+	if err := xml.Unmarshal(w.Body.Bytes(), &feed); err != nil {
+		t.Fatalf("parse atom feed: %v\nbody: %s", err, w.Body.String())
+	}
+	if len(feed.Entries) != 0 {
+		t.Fatalf("expected no entries, got %d", len(feed.Entries))
+	}
+}
+
+// TestGetFeed_linksKeepMountPrefix verifies the feed's links include the
+// prefix the handler is mounted under, so they resolve to live routes.
+func TestGetFeed_linksKeepMountPrefix(t *testing.T) {
+	h := changelog.New(seededStore())
+
+	w := httptest.NewRecorder()
+	h.GetFeed(w, makeRequest(http.MethodGet, "/api/v1/contracts/"+testContractID+"/changelog/feed"))
+
+	var feed struct {
+		ID      string `xml:"id"`
+		Entries []struct {
+			Link struct {
+				Href string `xml:"href,attr"`
+			} `xml:"link"`
+		} `xml:"entry"`
+	}
+	if err := xml.Unmarshal(w.Body.Bytes(), &feed); err != nil {
+		t.Fatalf("parse atom feed: %v", err)
+	}
+	base := "http://sorolens.example.com/api/v1/contracts/" + testContractID
+	if feed.ID != base+"/changelog/feed" {
+		t.Errorf("feed id: want %s/changelog/feed, got %s", base, feed.ID)
+	}
+	for _, e := range feed.Entries {
+		if e.Link.Href != base+"/changelog" {
+			t.Errorf("entry link: want %s/changelog, got %s", base, e.Link.Href)
+		}
+	}
+}
+
+// TestGetBadge_unknownContractShowsUnknown verifies an untracked contract
+// still gets an SVG badge (with the badge's caching header) instead of an
+// error, so an embedded README image never breaks.
+func TestGetBadge_unknownContractShowsUnknown(t *testing.T) {
+	h := changelog.New(seededStore())
+
+	w := httptest.NewRecorder()
+	h.GetBadge(w, makeRequest(http.MethodGet, "/contracts/CUNKNOWN/changelog/badge"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "image/svg+xml" {
+		t.Fatalf("content-type: want image/svg+xml, got %q", ct)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-cache, max-age=0" {
+		t.Fatalf("cache-control: want no-cache, max-age=0, got %q", cc)
+	}
+	if !strings.Contains(w.Body.String(), "unknown") {
+		t.Fatalf("expected badge to show 'unknown', got: %s", w.Body.String())
+	}
+}
+
+// failingStore fails the version lookups to exercise the 500 path.
+type failingStore struct{ *fakeStore }
+
+func (failingStore) ListContractVersions(context.Context, string) ([]store.ContractVersion, error) {
+	return nil, errors.New("db down")
+}
+
+func (failingStore) GetLatestContractVersion(context.Context, string) (store.ContractVersion, error) {
+	return store.ContractVersion{}, errors.New("db down")
+}
+
+// TestChangelog_500_errorEnvelope verifies store failures surface as a 500
+// with the JSON error envelope on every endpoint.
+func TestChangelog_500_errorEnvelope(t *testing.T) {
+	h := changelog.New(failingStore{seededStore()})
+
+	for name, serve := range map[string]http.HandlerFunc{
+		"changelog": h.GetChangelog,
+		"feed":      h.GetFeed,
+		"badge":     h.GetBadge,
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			serve(w, makeRequest(http.MethodGet, "/contracts/"+testContractID+"/changelog"))
+			if w.Code != http.StatusInternalServerError {
+				t.Fatalf("expected 500, got %d", w.Code)
+			}
+			if code, _ := errorBody(t, w); code != "INTERNAL" {
+				t.Fatalf("error code: want INTERNAL, got %s", code)
+			}
+		})
+	}
+}
+
 func (f *fakeStore) SearchContracts(_ context.Context, query string, limit int) ([]store.Contract, error) {
 	return nil, nil
 }
@@ -302,4 +495,8 @@ func (f *fakeStore) SearchEvents(_ context.Context, query string, limit int) ([]
 
 func (f *fakeStore) SearchFunctions(_ context.Context, query string, limit int) ([]store.FunctionMatch, error) {
 	return nil, nil
+}
+
+func (f *fakeStore) IncrementRollups(_ context.Context, _, _ string, _ time.Time, _, _, _ int) error {
+	return nil
 }

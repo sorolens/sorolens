@@ -251,6 +251,8 @@ CREATE TABLE invocations (
     ledger_read_byte   BIGINT,                        -- from core_metrics diagnostic event
     ledger_write_byte  BIGINT,                        -- from core_metrics diagnostic event
     application_order  INTEGER,                       -- index of tx within the ledger
+    failure_category   TEXT,                          -- FAILED only: budget_exceeded | contract_error | auth_failure | storage | wasm_trap | other
+    failure_code       TEXT,                          -- FAILED only: raw error, e.g. "Error(Contract, #4)" (docs/failure-categories.md)
     inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -262,6 +264,10 @@ CREATE INDEX idx_invocations_ledger_closed_at ON invocations (ledger_closed_at D
 
 -- Filter by status (e.g. "show only failed invocations").
 CREATE INDEX idx_invocations_status ON invocations (contract_id, status);
+
+-- Filter the global explorer by failure category; failed rows only.
+CREATE INDEX idx_invocations_failure_category ON invocations (failure_category, ledger DESC, tx_hash DESC)
+    WHERE failure_category IS NOT NULL;
 
 -- ============================================================
 -- storage_entries
@@ -314,6 +320,7 @@ CREATE TABLE sync_state (
 | `idx_invocations_contract_ledger`  | Same pattern as events; the invocation list is paginated with newest-first ordering.                                                                                                                             |
 | `idx_invocations_ledger_closed_at` | Time-range filter for resource-usage charts.                                                                                                                                                                     |
 | `idx_invocations_status`           | Supports the "show only failures" filter on the invocations list.                                                                                                                                                |
+| `idx_invocations_failure_category` | Serves `GET /api/v1/invocations?failure_category=...` in its `ledger DESC, tx_hash DESC` order. Partial on `failure_category IS NOT NULL`, so it only holds failed invocations.                                   |
 | `idx_storage_live_until`           | The TTL health view needs to order by `live_until_ledger ASC` for a given contract; partial index on `status = 'live'` avoids scanning archived rows.                                                            |
 | `idx_storage_durability`           | Supports filtering the storage view by entry type.                                                                                                                                                               |
 | `idx_contract_tags_tag`            | Cross-contract lookup for the dashboard's tag filter ("which contracts carry tag X?"). The `(contract_id, tag)` primary key already serves per-contract tag reads, so only the reverse direction needs an index. |
@@ -522,9 +529,19 @@ Get a single contract's metadata and sync state.
 
 #### `DELETE /api/v1/contracts/:id`
 
-Stop tracking a contract. Data is retained but the indexer stops polling.
+Stop tracking a contract. Requires the `write:contracts` scope and at least
+the `contributor` role, like registration. Untracking is a soft delete: the
+contract status flips to `paused` while the row and all indexed history are
+retained, and the indexer stops polling it (it only polls contracts whose
+status is `pending`, `backfilling` or `active`). Re-registering the contract
+flips the status back to `pending` and resumes tracking. Deleting a contract
+that is already paused is a no-op; deleting one that was never registered
+returns `404`. This differs from the batch `untrack` action, which
+permanently deletes the contracts and their indexed data.
 
 **Response:** `204 No Content`.
+
+**Responses:** `204`, `401`, `403`, `404 Not Found`, `500`.
 
 ---
 
@@ -574,6 +591,57 @@ user-defined type is `{"kind":"udt","name":"..."}`.
   `contractspecv0` section — for example one not built with `#[contractimpl]` —
   never gets a row, so it answers `404` indefinitely; the indexer logs a warning
   rather than failing the indexing pass.
+
+---
+
+#### `GET /api/v1/contracts/:id/changelog`
+
+Every Wasm hash the contract has run, oldest first, from the
+`contract_versions` table (issue #276). Public, like the other per-contract
+reads.
+
+**Response `200`:**
+
+```json
+[
+  {
+    "id": 1,
+    "contract_id": "CDLZFC3S...",
+    "wasm_hash": "a1b2c3d4...",
+    "first_seen_ledger": 100000,
+    "tx_hash": "e5f6...",
+    "recorded_at": "2026-07-01T10:05:00Z"
+  }
+]
+```
+
+`tx_hash` and `verified_source_ref` are omitted when unknown. A tracked
+contract with no recorded versions returns `[]`.
+
+**Responses:** `200`, `404 Not Found` (contract not tracked), `500`.
+
+---
+
+#### `GET /api/v1/contracts/:id/changelog/feed`
+
+The same history as an Atom 1.0 feed (`application/atom+xml`), one entry per
+Wasm hash, for feed readers. The feed's self link and entry links point back
+at the `/api/v1` changelog routes. A contract with no recorded versions gets a
+feed with no entries.
+
+**Responses:** `200`, `404 Not Found` (contract not tracked), `500`.
+
+---
+
+#### `GET /api/v1/contracts/:id/changelog/badge`
+
+A shields.io-style SVG badge (`image/svg+xml`) showing the first 8 characters
+of the latest Wasm hash, for embedding in a README. It is sent with
+`Cache-Control: no-cache, max-age=0` so embeds revalidate. A contract with no
+recorded versions, including one that is not tracked, gets an `unknown` badge
+instead of an error so the embedded image never breaks.
+
+**Responses:** `200`, `500`.
 
 ---
 
@@ -705,7 +773,9 @@ first (`ledger DESC, tx_hash DESC`). Backs the dashboard's `/invocations` page.
 **Query params:** `cursor`, `limit` (default 50, max 200), `contract_id`, `fn`
 (function name), `status` (`SUCCESS`/`FAILED`/`NOT_FOUND`), `network`, `from` /
 `to` (ledger bounds), `since` / `until` (inclusive `ledger_closed_at` bounds, as
-`YYYY-MM-DD` or RFC3339).
+`YYYY-MM-DD` or RFC3339), `failure_category` (`budget_exceeded`/`contract_error`/
+`auth_failure`/`storage`/`wasm_trap`/`other`, see
+[docs/failure-categories.md](docs/failure-categories.md)).
 
 Pagination is keyset-based: the cursor encodes the `(ledger, tx_hash)` position,
 which is the sort tuple, so pages stay stable while the indexer appends rows.
@@ -734,8 +804,12 @@ which is the sort tuple, so pages stay stable while the indexer appends rows.
 }
 ```
 
+A classified `FAILED` invocation also carries `failure_category` and
+`failure_code` (the raw host error, e.g. `"Error(Contract, #4)"`); both are
+omitted for every other row.
+
 `next_cursor` is an empty string on the last page. Invalid `cursor`, `since`,
-`until`, or `network` values return `422`.
+`until`, `network`, or `failure_category` values return `422`.
 
 ---
 
@@ -743,7 +817,7 @@ which is the sort tuple, so pages stay stable while the indexer appends rows.
 
 Paginated invocation list.
 
-**Query params:** `cursor`, `limit` (max 500), `status` (`SUCCESS`/`FAILED`), `since`, `until`, `function_name`.
+**Query params:** `cursor`, `limit` (max 500), `status` (`SUCCESS`/`FAILED`), `since`, `until`, `function_name`, `failure_category` (as for `GET /api/v1/invocations`).
 
 **Response `200`:**
 
@@ -776,6 +850,37 @@ Paginated invocation list.
 
 ---
 
+#### `GET /api/v1/contracts/:id/resource-trend`
+
+Server-side daily aggregation for the resource-usage chart (issue #600). It
+replaces the dashboard's client-side paging over raw invocations: one request
+returns one bucket per UTC day for the trailing `days` days (default 30, max
+365), with averages for CPU instructions, memory bytes and fee, plus the
+invocation count. Days without invocations are returned as zero buckets.
+
+**Query params:** `days` (1-365, default 30).
+
+**Response `200`:**
+
+```json
+{
+  "days": 30,
+  "points": [
+    {
+      "date": "2026-07-03",
+      "avg_cpu_insn": 4883530,
+      "avg_mem_byte": 2298162,
+      "avg_fee": 123456,
+      "count": 42
+    }
+  ]
+}
+```
+
+The same aggregation is exposed at `/api/v2/contracts/:id/resource-trend`.
+
+---
+
 #### `GET /api/v1/contracts/:id/invocations/:tx_hash`
 
 Full detail for a single invocation, including all associated events.
@@ -802,6 +907,28 @@ Full detail for a single invocation, including all associated events.
 ```
 
 **Responses:** `200`, `404 Not Found`.
+
+---
+
+#### `GET /api/v1/contracts/:id/invocations/stats`
+
+Invocation outcomes and resource usage over the last 24 hours, 7 days and 30
+days (`windows["24h" | "7d" | "30d"]`). Each window has `invocation_count`,
+`failed_invocations`, `failure_rate`, average and p95 fee and CPU, and
+`failures_by_category`: the classified failures per failure category, with
+every category listed (zero included). Failed invocations indexed before
+classification existed count toward `failed_invocations` only.
+
+```json
+"failures_by_category": {
+  "budget_exceeded": 1,
+  "contract_error": 2,
+  "auth_failure": 0,
+  "storage": 0,
+  "wasm_trap": 0,
+  "other": 1
+}
+```
 
 ---
 
@@ -1189,3 +1316,27 @@ the one-object-per-month layout bounds the work to the months touched.
 - `apps/web/hooks/usePushSubscription.ts` — React hook managing the push subscription lifecycle (idle → subscribing → subscribed → denied).
 - `apps/web/components/OfflineAlert.tsx` — `OfflineBanner` (shown when offline) + `OfflineAlertPanel` (the `/offline-alerts` page body).
 - `apps/web/app/offline-alerts/page.tsx` — dedicated page for the queued-alert view.
+
+### 5.8 Read-Replica Routing and Replication-Lag Guard (issue #794)
+
+**Decision:** Route read-only queries to a secondary PostgreSQL read replica pool (`DATABASE_READ_URL`) with an automated replication-lag guard (`DATABASE_REPLICA_LAG_THRESHOLD`).
+
+**Rationale:** Heavy dashboard reads must not starve indexer writes or compromise read-your-writes guarantees. All writes and read-after-write mutations are directed to the primary pool. If replica replication lag exceeds the configured threshold, read queries fall back to the primary pool automatically. See [docs/read_replica.md](docs/read_replica.md).
+
+---
+
+## 6. Decision Records
+
+Formal Architecture Decision Records (ADRs) capture significant, hard-to-reverse architectural choices across the system:
+
+- [Architecture Decision Records Index](docs/adr/README.md)
+- [ADR 0001: Postgres partitioning for events table](docs/adr/0001-postgres-partitioning.md)
+- [ADR 0002: Keyset cursor pagination for API feeds](docs/adr/0002-cursor-pagination.md)
+- [ADR 0003: Horizontally-scaled indexer with worker sharding](docs/adr/0003-indexer-sharding.md)
+- [ADR 0004: S3-compatible Parquet cold storage for historical events](docs/adr/0004-cold-storage.md)
+- [ADR 0005: API versioning and /api/v1 freeze](docs/adr/0005-api-versioning.md)
+- [ADR 0006: Server-Sent Events (SSE) and WebSocket protocol selection](docs/adr/0006-sse-vs-websocket.md)
+- [ADR 0007: Two-tier authentication: API key scopes and user roles](docs/adr/0007-key-scopes-and-roles.md)
+- [ADR 0008: OpenAPI spec as source of truth and automated SDK generation](docs/adr/0008-sdk-generation.md)
+
+

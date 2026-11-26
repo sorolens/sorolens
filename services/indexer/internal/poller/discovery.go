@@ -176,11 +176,23 @@ func (p *Poller) discoverNetwork(ctx context.Context, ds DiscoveryStore, rpc RPC
 				if account == "" {
 					continue
 				}
+				var sacMeta *TokenMetadata
+				if d.IsSAC && d.SAC != nil {
+					sacMeta = &TokenMetadata{
+						AssetCode: d.SAC.AssetCode,
+						Issuer:    d.SAC.Issuer,
+						Decimals:  d.SAC.Decimals,
+						Symbol:    d.SAC.Symbol,
+						Name:      d.SAC.Name,
+					}
+				}
 				tracked, err := ds.RecordDiscoveredContract(ctx, DiscoveredContract{
 					ContractID: d.ContractID,
 					Network:    network,
 					AccountID:  account,
 					Ledger:     int64(tx.Ledger),
+					IsSAC:      d.IsSAC,
+					SAC:        sacMeta,
 				})
 				if err != nil {
 					// Leave the cursor before this ledger so the deployment is
@@ -194,6 +206,7 @@ func (p *Poller) discoverNetwork(ctx context.Context, ds DiscoveryStore, rpc RPC
 						"contract_id", d.ContractID,
 						"network", network,
 						"discovered_by", account,
+						"is_sac", d.IsSAC,
 						"ledger", tx.Ledger,
 					)
 				}
@@ -226,13 +239,17 @@ func (p *Poller) saveDiscoveryCursor(ctx context.Context, key string, ledger uin
 }
 
 // watchedDeployer attributes a deployment to a watched account: the account
-// that submitted the operation, else the from-address deployer.
+// that submitted the operation, else the from-address deployer, or the asset
+// issuer for SAC instances.
 func watchedDeployer(d discovery.Deployment, watched map[string]bool) string {
 	if watched[d.Source] {
 		return d.Source
 	}
 	if watched[d.Deployer] {
 		return d.Deployer
+	}
+	if d.IsSAC && d.SAC != nil && watched[d.SAC.Issuer] {
+		return d.SAC.Issuer
 	}
 	return ""
 }

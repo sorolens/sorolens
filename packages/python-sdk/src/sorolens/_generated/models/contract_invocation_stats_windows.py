@@ -19,11 +19,14 @@ class ContractInvocationStatsWindows:
     """
     Attributes:
         field_24h (InvocationWindowStats): Fees are measured in stroops, CPU in instructions, and failure_rate is a
-            ratio from 0 to 1.
+            ratio from 0 to 1. failures_by_category counts classified failures; failed invocations indexed before
+            classification existed count toward failed_invocations only, so the categories can sum to less.
         field_7d (InvocationWindowStats): Fees are measured in stroops, CPU in instructions, and failure_rate is a ratio
-            from 0 to 1.
+            from 0 to 1. failures_by_category counts classified failures; failed invocations indexed before classification
+            existed count toward failed_invocations only, so the categories can sum to less.
         field_30d (InvocationWindowStats): Fees are measured in stroops, CPU in instructions, and failure_rate is a
-            ratio from 0 to 1.
+            ratio from 0 to 1. failures_by_category counts classified failures; failed invocations indexed before
+            classification existed count toward failed_invocations only, so the categories can sum to less.
     """
 
     field_24h: InvocationWindowStats

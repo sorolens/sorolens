@@ -59,6 +59,16 @@ var (
 		Help:      "HTTP request latency in seconds, partitioned by method, route and status code.",
 		Buckets:   prometheus.DefBuckets,
 	}, []string{"method", "route", "status"})
+
+	// RateLimitFailOpenTotal counts requests that were allowed through because
+	// the rate limiter could not reach Redis (or had no client configured).
+	// A non-zero rate means limits are not being enforced and should alert.
+	RateLimitFailOpenTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: "ratelimit",
+		Name:      "fail_open_total",
+		Help:      "Total number of requests allowed through because the rate limiter failed open.",
+	}, []string{"reason"})
 )
 
 func init() {
@@ -71,6 +81,7 @@ func init() {
 		HTTPRequestsInFlight,
 		HTTPRequestsTotal,
 		HTTPRequestDuration,
+		RateLimitFailOpenTotal,
 
 		// Postgres pool snapshot (see pool.go); inert until SetPool wires a
 		// live pool.
