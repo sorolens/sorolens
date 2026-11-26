@@ -151,7 +151,7 @@ from .get_transaction_response_200_trace import GetTransactionResponse200Trace
 from .get_transaction_v2_response_200 import GetTransactionV2Response200
 from .get_watchdog_stats_network import GetWatchdogStatsNetwork
 from .graphql_body import GraphqlBody
-# from .graphql_body_variables import GraphqlBodyVariables
+from .graphql_body_variables import GraphqlBodyVariables
 from .graphql_response_200 import GraphqlResponse200
 from .graphql_response_200_data import GraphqlResponse200Data
 from .graphql_response_200_errors_item import GraphqlResponse200ErrorsItem
