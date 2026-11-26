@@ -249,15 +249,6 @@ pub struct AdminTransferCancelled {
     pub pending_admin: Address,
 }
 
-/// A monitoring policy was stored or replaced by the admin.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]\pub struct PolicyUpdated {
-    #[topic]
-    pub contract_id: Address,
-    pub policy: MonitoringPolicy,
-    pub timestamp: u64,
-}
-
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposalCreated {
@@ -267,7 +258,8 @@ pub struct ProposalCreated {
 }
 
 #[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]\pub struct ProposalApproved {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalApproved {
     #[topic]
     pub proposal_id: u64,
     #[topic]
@@ -275,13 +267,15 @@ pub struct ProposalCreated {
 }
 
 #[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]\pub struct ProposalExecuted {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalExecuted {
     #[topic]
     pub proposal_id: u64,
 }
 
 #[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]\pub struct ProposalCancelled {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalCancelled {
     #[topic]
     pub proposal_id: u64,
 }
@@ -1759,7 +1753,7 @@ mod test {
     fn threshold_multi_admin_proposal_flow_and_execution() {
         let env = Env::default();
         set_timestamp(&env, 1_000_000);
-        let (_admin, client) = setup(&env);
+        let (admin, client) = setup(&env);
 
         let a1 = Address::generate(&env);
         let a2 = Address::generate(&env);
@@ -1769,7 +1763,7 @@ mod test {
         admins.push_back(a2.clone());
         admins.push_back(a3.clone());
 
-        let prop_id = client.set_admin_set(&a1, &admins, &2u32);
+        let prop_id = client.set_admin_set(&admin, &admins, &2u32);
         let prop = client.get_proposal(&prop_id);
         assert_eq!(prop.approvals.len(), 1);
         assert_eq!(prop.executed, true);
@@ -1787,11 +1781,11 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "already approved")]
+    #[should_panic(expected = "Error(Contract, #7)")]
     fn threshold_duplicate_approval_panics() {
         let env = Env::default();
         set_timestamp(&env, 1_000_000);
-        let (_admin, client) = setup(&env);
+        let (admin, client) = setup(&env);
 
         let a1 = Address::generate(&env);
         let a2 = Address::generate(&env);
@@ -1799,18 +1793,18 @@ mod test {
         admins.push_back(a1.clone());
         admins.push_back(a2.clone());
 
-        client.set_admin_set(&a1, &admins, &2u32);
+        client.set_admin_set(&admin, &admins, &2u32);
 
         let prop_id = client.propose_pause(&a1);
         client.approve_proposal(&a1, &prop_id);
     }
 
     #[test]
-    #[should_panic(expected = "proposal expired")]
+    #[should_panic(expected = "Error(Contract, #6)")]
     fn threshold_expired_proposal_panics() {
         let env = Env::default();
         set_timestamp(&env, 1_000_000);
-        let (_admin, client) = setup(&env);
+        let (admin, client) = setup(&env);
 
         let a1 = Address::generate(&env);
         let a2 = Address::generate(&env);
@@ -1818,7 +1812,7 @@ mod test {
         admins.push_back(a1.clone());
         admins.push_back(a2.clone());
 
-        client.set_admin_set(&a1, &admins, &2u32);
+        client.set_admin_set(&admin, &admins, &2u32);
 
         let prop_id = client.propose_pause(&a1);
         set_timestamp(&env, 2_000_000);

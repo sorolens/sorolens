@@ -1,7 +1,6 @@
 #![cfg(test)]
 
 use super::*;
-soroban_sdk::contractimpl;
 
 #[test]
 fn test_watchdog_basic_invariants() {
