@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ApiError } from "@/lib/api";
 import {
+  API_KEY_SCOPES,
   createMyApiKey,
+  DEFAULT_KEY_SCOPES,
   listMyApiKeys,
   revokeMyApiKey,
   type APIKey,
@@ -26,13 +29,23 @@ export function ApiKeySection() {
   const [revoking, setRevoking] = useState<string | null>(null);
   const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([
+    ...DEFAULT_KEY_SCOPES,
+  ]);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       setKeys(await listMyApiKeys());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load API keys.");
+      if (err instanceof ApiError && err.status === 403) {
+        setForbidden(true);
+      } else {
+        setError(
+          err instanceof Error ? err.message : "Could not load API keys."
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -47,7 +60,7 @@ export function ApiKeySection() {
     setError(null);
     setCopied(false);
     try {
-      const created = await createMyApiKey();
+      const created = await createMyApiKey(undefined, selectedScopes);
       setKeys((current) => [created, ...current]);
       setPlaintext(created.key);
     } catch (err) {
@@ -73,6 +86,14 @@ export function ApiKeySection() {
     } finally {
       setRevoking(null);
     }
+  }
+
+  function toggleScope(scope: string) {
+    setSelectedScopes((current) =>
+      current.includes(scope)
+        ? current.filter((value) => value !== scope)
+        : [...current, scope]
+    );
   }
 
   async function copy(value: string) {
@@ -102,7 +123,16 @@ export function ApiKeySection() {
       </p>
 
       <div className="mt-4 space-y-3">
-        {loading ? (
+        {forbidden ? (
+          <p
+            data-testid="settings-api-key-forbidden"
+            role="alert"
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-page)] p-3 text-sm text-[var(--color-text-secondary)]"
+          >
+            Your account does not have permission to manage API keys. Ask a
+            workspace admin for access.
+          </p>
+        ) : loading ? (
           <p
             role="status"
             className="text-sm text-[var(--color-text-secondary)]"
@@ -127,6 +157,12 @@ export function ApiKeySection() {
                   </p>
                   <p className="text-xs text-[var(--color-text-secondary)]">
                     Created {new Date(key.created_at).toLocaleDateString()}
+                  </p>
+                  <p
+                    data-testid="settings-api-key-scopes"
+                    className="mt-1 text-xs text-[var(--color-text-secondary)]"
+                  >
+                    Scopes: {key.scopes.join(", ")}
                   </p>
                 </div>
                 <code className="rounded bg-[var(--color-bg-page)] px-2 py-1 font-mono text-xs text-[var(--color-text-primary)]">
@@ -200,16 +236,59 @@ export function ApiKeySection() {
         )}
       </div>
 
-      <div className="mt-5 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={handleCreate}
-          disabled={creating || loading}
-          className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {creating ? "Creating…" : "Generate key"}
-        </button>
-      </div>
+      {!forbidden && (
+        <fieldset className="mt-5" disabled={creating || loading}>
+          <legend className="text-sm font-medium text-[var(--color-text-primary)]">
+            Scopes
+          </legend>
+          <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+            Choose what this key can do. At least one scope is required.
+          </p>
+          <div className="mt-2 space-y-2">
+            {API_KEY_SCOPES.map((scope) => (
+              <label
+                key={scope.value}
+                className="flex items-start gap-2 text-sm text-[var(--color-text-primary)]"
+              >
+                <input
+                  type="checkbox"
+                  name="api-key-scope"
+                  value={scope.value}
+                  checked={selectedScopes.includes(scope.value)}
+                  disabled={
+                    selectedScopes.length === 1 &&
+                    selectedScopes.includes(scope.value)
+                  }
+                  onChange={() => toggleScope(scope.value)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="font-medium">{scope.label}</span>{" "}
+                  <code className="font-mono text-xs text-[var(--color-text-secondary)]">
+                    {scope.value}
+                  </code>
+                  <span className="block text-xs text-[var(--color-text-secondary)]">
+                    {scope.description}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      {!forbidden && (
+        <div className="mt-5 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleCreate}
+            disabled={creating || loading || selectedScopes.length === 0}
+            className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {creating ? "Creating…" : "Generate key"}
+          </button>
+        </div>
+      )}
     </section>
   );
 }

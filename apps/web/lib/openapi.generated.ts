@@ -2316,6 +2316,49 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         ],
       },
     },
+    "/api/v2/push/subscriptions": {
+      get: {
+        operationId: "v2ListPushSubscriptions",
+        summary: "List the caller's push subscriptions (v2 passthrough)",
+        tags: ["Push"],
+        parameters: [],
+      },
+      post: {
+        operationId: "v2CreatePushSubscription",
+        summary: "Register a push subscription (v2 passthrough)",
+        tags: ["Push"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+      delete: {
+        operationId: "v2DeletePushSubscription",
+        summary: "Unsubscribe a push endpoint (v2 passthrough)",
+        tags: ["Push"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v2/push/subscriptions/dispatch": {
+      get: {
+        operationId: "v2ListPushSubscriptionsForDispatch",
+        summary: "List every subscription for the dispatcher (v2 passthrough)",
+        tags: ["Push"],
+        parameters: [],
+      },
+      delete: {
+        operationId: "v2DeletePushSubscriptionForDispatch",
+        summary: "Prune an expired subscription (v2 passthrough)",
+        tags: ["Push"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
     "/api/v2/api-keys": {
       get: {
         operationId: "v2ListAPIKeys",
@@ -2520,6 +2563,49 @@ export const generatedOpenApiDocument: OpenAPIDocument = {
         operationId: "post_/api/v1/labels",
         summary: "Create or update an account label",
         tags: ["Other"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/push/subscriptions": {
+      get: {
+        operationId: "listPushSubscriptions",
+        summary: "List the caller's persistent Web Push subscriptions",
+        tags: ["Push"],
+        parameters: [],
+      },
+      post: {
+        operationId: "createPushSubscription",
+        summary: "Register or update a browser Web Push subscription",
+        tags: ["Push"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+      delete: {
+        operationId: "deletePushSubscription",
+        summary: "Unsubscribe a browser endpoint",
+        tags: ["Push"],
+        parameters: [],
+        requestBody: {
+          example: "{}",
+        },
+      },
+    },
+    "/api/v1/push/subscriptions/dispatch": {
+      get: {
+        operationId: "listPushSubscriptionsForDispatch",
+        summary: "List every subscription for the internal push dispatcher",
+        tags: ["Push"],
+        parameters: [],
+      },
+      delete: {
+        operationId: "deletePushSubscriptionForDispatch",
+        summary: "Prune an expired subscription reported by a push service",
+        tags: ["Push"],
         parameters: [],
         requestBody: {
           example: "{}",

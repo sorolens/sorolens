@@ -50,6 +50,9 @@ import type {
   GroupStats,
   ContractVerification,
   LabelResolution,
+  LabelsResponse,
+  LabelEntry,
+  CreateLabelRequest,
   TraceResponse,
   RulesResponse,
   AlertRule,
@@ -313,6 +316,38 @@ export function resolveLabel(query: string): Promise<LabelResolution> {
   return fetchJson<LabelResolution>(
     `${API_URL}/api/v1/resolve?query=${encodeURIComponent(query)}`
   );
+}
+
+// ---- label registry (issue #590) ------------------------------------------
+
+/**
+ * Searches public labels plus the caller's workspace labels. The session is
+ * sent when there is one so workspace-scoped names are included; an anonymous
+ * caller still sees the public registry.
+ */
+export function listLabels(
+  query = "",
+  userId?: string
+): Promise<LabelsResponse> {
+  const search = new URLSearchParams();
+  if (query.trim()) search.set("query", query.trim());
+  const qs = search.toString();
+  return fetchJson<LabelsResponse>(
+    `${API_URL}/api/v1/labels${qs ? "?" + qs : ""}`,
+    { headers: sessionHeaders(userId) }
+  );
+}
+
+/** Creates or replaces a label. Requires a contributor session. */
+export function createLabel(
+  req: CreateLabelRequest,
+  userId?: string
+): Promise<LabelEntry> {
+  return fetchJson<LabelEntry>(`${API_URL}/api/v1/labels`, {
+    method: "POST",
+    body: JSON.stringify(req),
+    headers: sessionHeaders(userId),
+  });
 }
 
 export function getContractEvents(

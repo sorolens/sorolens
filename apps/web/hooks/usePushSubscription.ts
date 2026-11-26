@@ -8,6 +8,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ensureSession } from "@/lib/user";
 
 export type PushState =
   | "unsupported" // push API not in this browser
@@ -64,10 +65,15 @@ export function usePushSubscription() {
         ) as unknown as BufferSource,
       });
 
-      // Send subscription to our API
+      // The subscription is stored by the Go API under this workspace user,
+      // so the route needs the session token (issue #592).
+      const session = await ensureSession();
       const saveRes = await fetch("/api/push/subscribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.token}`,
+        },
         body: JSON.stringify(subscription.toJSON()),
       });
       if (!saveRes.ok) throw new Error("Failed to save subscription");
@@ -87,9 +93,13 @@ export function usePushSubscription() {
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) {
         await subscription.unsubscribe();
+        const session = await ensureSession();
         await fetch("/api/push/subscribe", {
           method: "DELETE",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.token}`,
+          },
           body: JSON.stringify({ endpoint: subscription.endpoint }),
         });
       }

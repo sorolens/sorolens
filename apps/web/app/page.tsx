@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { CopySnippet } from "@/components/CopySnippet";
 import { ExtensionCallout } from "@/components/ExtensionCallout";
 import { LiveStats } from "@/components/LiveStats";
 
@@ -27,11 +28,39 @@ const features = [
 
 // Pages that exist in the dashboard but have no card of their own below.
 const explore = [
+  { href: "/playground", label: "API playground" },
   { href: "/invocations", label: "Invocations" },
   { href: "/compare", label: "Compare contracts" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/watchdog/reports", label: "Reports" },
+  { href: "/docs", label: "Documentation" },
 ];
+
+const screenshots = [
+  {
+    src: "/screenshots/contracts.png",
+    alt: "Contract list with network, health and latest activity columns",
+    title: "Contract overview",
+    body: "Every tracked contract with its health score and recent activity.",
+  },
+  {
+    src: "/screenshots/contract-detail.png",
+    alt: "Contract detail page with overview, events and invocations tabs",
+    title: "Contract detail",
+    body: "Events, invocations, storage TTLs and resource usage in one view.",
+  },
+  {
+    src: "/screenshots/watchdog.png",
+    alt: "Watchdog monitoring page with contract health and alert timeline",
+    title: "Watchdog monitoring",
+    body: "On-chain health checks and alerts for proactive monitoring.",
+  },
+];
+
+const cliQuickstart = `# install the CLI, then track a contract
+sorolens track <contract-id> --network testnet`;
+
+const apiQuickstart = `curl -s "$SOROLENS_API_URL/api/v1/contracts?network=testnet" \\\n  -H "Authorization: Bearer $SOROLENS_API_KEY" | jq .`;
 
 const steps = [
   {
@@ -181,6 +210,102 @@ export default function HomePage() {
                     {f.body}
                   </p>
                 </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Quickstart */}
+        <section
+          aria-labelledby="quickstart-heading"
+          className="border-t border-[var(--color-border)]"
+        >
+          <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+            <h2
+              id="quickstart-heading"
+              className="text-center text-3xl font-bold tracking-tight"
+            >
+              Start in one command
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-center text-sm leading-relaxed text-[var(--color-text-secondary)]">
+              Track a contract from the CLI or call the REST API directly. Both
+              snippets talk to the same API that powers this dashboard.
+            </p>
+            <div className="mt-10 grid gap-6 text-left lg:grid-cols-2">
+              <div>
+                <h3 className="mb-2 text-lg font-semibold">CLI quickstart</h3>
+                <CopySnippet
+                  code={cliQuickstart}
+                  label="CLI quickstart"
+                  language="bash"
+                />
+                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                  <Link
+                    href="/docs/getting-started"
+                    className="text-[var(--color-accent)] underline underline-offset-2"
+                  >
+                    Getting started guide
+                  </Link>{" "}
+                  — install, configure and run the whole stack.
+                </p>
+              </div>
+              <div>
+                <h3 className="mb-2 text-lg font-semibold">REST API</h3>
+                <CopySnippet
+                  code={apiQuickstart}
+                  label="API request"
+                  language="bash"
+                />
+                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                  <Link
+                    href="/playground"
+                    className="text-[var(--color-accent)] underline underline-offset-2"
+                  >
+                    Open the API playground
+                  </Link>{" "}
+                  to try any endpoint without writing code.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Product screenshots */}
+        <section
+          aria-labelledby="screenshots-heading"
+          className="border-t border-[var(--color-border)]"
+        >
+          <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+            <h2
+              id="screenshots-heading"
+              className="text-center text-3xl font-bold tracking-tight"
+            >
+              Inside the dashboard
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-center text-sm leading-relaxed text-[var(--color-text-secondary)]">
+              Real screens from the running dashboard: contracts, a single
+              contract&apos;s full history, and watchdog health.
+            </p>
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {screenshots.map((shot) => (
+                <figure key={shot.src} data-testid="landing-screenshot">
+                  <Image
+                    src={shot.src}
+                    alt={shot.alt}
+                    width={800}
+                    height={1000}
+                    sizes="(min-width: 1024px) 30vw, (min-width: 640px) 45vw, 100vw"
+                    className="h-64 w-full rounded-lg border border-[var(--color-border)] object-cover object-top"
+                  />
+                  <figcaption className="mt-3">
+                    <span className="block text-sm font-semibold">
+                      {shot.title}
+                    </span>
+                    <span className="mt-1 block text-sm text-[var(--color-text-secondary)]">
+                      {shot.body}
+                    </span>
+                  </figcaption>
+                </figure>
               ))}
             </div>
           </div>
