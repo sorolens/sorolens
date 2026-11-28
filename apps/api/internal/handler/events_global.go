@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sorolens/sorolens/apps/api/internal/cursor"
+	"github.com/sorolens/sorolens/apps/api/internal/evfilter"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 	"github.com/sorolens/sorolens/apps/api/internal/timerange"
 )
@@ -86,6 +87,22 @@ func (h *Handler) ListAllEvents(w http.ResponseWriter, r *http.Request) {
 	if f.Type != "" && !validEventTypes[f.Type] {
 		writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "type must be one of: contract, system, diagnostic")
 		return
+	}
+	if filterExpr := strings.TrimSpace(q.Get("filter")); filterExpr != "" {
+		expr, err := evfilter.Parse(filterExpr)
+		if err != nil {
+			writeError(w, r, http.StatusUnprocessableEntity, CodeInvalidInput, "invalid filter expression: "+err.Error())
+			return
+		}
+		if !expr.Empty() {
+			// The base query uses $1–$6 for fixed predicates; filter args start
+			// at $7. We pass a 6-element slice so AppendSQL generates $7, $8, …
+			baseArgs := make([]any, 6)
+			var sb strings.Builder
+			expr.AppendSQL(&sb, &baseArgs)
+			f.FilterSQL = sb.String()
+			f.FilterArgs = baseArgs[6:] // only the newly appended args
+		}
 	}
 
 	events, nextRaw, err := h.Store.ListAllEvents(r.Context(), rawCursor, pageLimit(r, DefaultPageSize), f)

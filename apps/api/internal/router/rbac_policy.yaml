@@ -1,0 +1,375 @@
+# RBAC authorization matrix for every API v1 route.
+#
+# Each entry describes one route and the expected HTTP status code for each
+# caller role.  "anonymous" means no identity in context.  Codes follow the
+# pattern used by RequireRole: 401 when unauthenticated on a role-gated route,
+# 403 when authenticated but below the minimum role.
+#
+# "open" means the route has no role gate; any caller (even anonymous) can
+# reach the handler.  The handler itself may still return 404 or 422 based on
+# its logic — the matrix only tests the authorization layer.
+#
+# Fields:
+#   method      HTTP method
+#   pattern     chi route pattern (without /api/v1 prefix)
+#   anonymous   expected status for requests with no identity
+#   viewer      expected status for a user with the "viewer" role
+#   contributor expected status for a user with the "contributor" role
+#   admin       expected status for a user with the "admin" role
+#
+# Note: pattern values containing '{' and '}' are quoted to prevent YAML from
+# interpreting chi parameter placeholders as inline flow maps.
+
+routes:
+  # ---- read-only, no role gate (open reads) --------------------------------
+  - method: GET
+    pattern: /events
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /events/recent
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /stats/global
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /stats/activity
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /contracts
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: "/contracts/{id}"
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: "/contracts/{id}/events"
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: "/contracts/{id}/invocations"
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: "/contracts/{id}/storage"
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: "/contracts/{id}/stats"
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: "/contracts/{id}/summary"
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: "/contracts/{id}/ttl-history"
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /escalation-policies
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: "/escalation-policies/{id}"
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /maintenance-windows
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: "/maintenance-windows/{id}"
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /alerts
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /alerts/counts
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /rules
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /rules/metrics
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /rules/library
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /dlq
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /watched-accounts
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /integrations
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /watchdog/stats
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /watchdog/alerts
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  - method: GET
+    pattern: /watchdog/contracts
+    anonymous: 200
+    viewer: 200
+    contributor: 200
+    admin: 200
+
+  # ---- contributor-gated mutations -----------------------------------------
+  - method: POST
+    pattern: /contracts
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: POST
+    pattern: /contracts/batch
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: POST
+    pattern: /maintenance-windows
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: PUT
+    pattern: "/maintenance-windows/{id}"
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: DELETE
+    pattern: "/maintenance-windows/{id}"
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: POST
+    pattern: /escalation-policies
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: PUT
+    pattern: "/escalation-policies/{id}"
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: DELETE
+    pattern: "/escalation-policies/{id}"
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: POST
+    pattern: "/alerts/{id}/ack"
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: POST
+    pattern: "/alerts/{id}/snooze"
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: POST
+    pattern: "/alerts/{id}/resolve"
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: POST
+    pattern: /rules
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: DELETE
+    pattern: "/rules/{id}"
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: POST
+    pattern: /watched-accounts
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: DELETE
+    pattern: "/watched-accounts/{id}"
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  - method: POST
+    pattern: "/dlq/{id}/requeue"
+    anonymous: 401
+    viewer: 403
+    contributor: 200
+    admin: 200
+
+  # ---- admin-only ----------------------------------------------------------
+  - method: GET
+    pattern: /api-keys
+    anonymous: 401
+    viewer: 403
+    contributor: 403
+    admin: 200
+
+  - method: POST
+    pattern: /api-keys
+    anonymous: 401
+    viewer: 403
+    contributor: 403
+    admin: 200
+
+  - method: GET
+    pattern: "/api-keys/{id}"
+    anonymous: 401
+    viewer: 403
+    contributor: 403
+    admin: 200
+
+  - method: DELETE
+    pattern: "/api-keys/{id}"
+    anonymous: 401
+    viewer: 403
+    contributor: 403
+    admin: 200
+
+  - method: POST
+    pattern: "/api-keys/{id}/rotate"
+    anonymous: 401
+    viewer: 403
+    contributor: 403
+    admin: 200
+
+  - method: GET
+    pattern: "/watchdog/subscriptions/{id}/signing-secret"
+    anonymous: 401
+    viewer: 403
+    contributor: 403
+    admin: 200
+
+  - method: POST
+    pattern: "/watchdog/subscriptions/{id}/rotate"
+    anonymous: 401
+    viewer: 403
+    contributor: 403
+    admin: 200

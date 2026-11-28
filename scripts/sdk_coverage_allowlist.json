@@ -271,6 +271,17 @@
         ]
       },
       {
+        "reason": "Escalation policies (issue #791) and TTL history (issue #804) are new operational surfaces not yet exposed by the hand-written Rust SDK surface.",
+        "operations": [
+          "createEscalationPolicy",
+          "deleteEscalationPolicy",
+          "getEscalationPolicy",
+          "listContractTTLHistory",
+          "listEscalationPolicies",
+          "updateEscalationPolicy"
+        ]
+      },
+      {
         "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
         "operations": [
           "getLedger",
@@ -548,6 +559,17 @@
         ]
       },
       {
+        "reason": "Escalation policies (issue #791) and TTL history (issue #804) are new operational surfaces not yet exposed by the hand-written Python SDK surface.",
+        "operations": [
+          "createEscalationPolicy",
+          "deleteEscalationPolicy",
+          "getEscalationPolicy",
+          "listContractTTLHistory",
+          "listEscalationPolicies",
+          "updateEscalationPolicy"
+        ]
+      },
+      {
         "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
         "operations": [
           "getLedger",
@@ -804,6 +826,17 @@
         ]
       },
       {
+        "reason": "Escalation policies (issue #791) and TTL history (issue #804) are new operational surfaces not yet exposed by the hand-written JVM SDK surface.",
+        "operations": [
+          "createEscalationPolicy",
+          "deleteEscalationPolicy",
+          "getEscalationPolicy",
+          "listContractTTLHistory",
+          "listEscalationPolicies",
+          "updateEscalationPolicy"
+        ]
+      },
+      {
         "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
         "operations": [
           "getLedger",
@@ -1049,6 +1082,17 @@
           "v2DeletePushSubscriptionForDispatch",
           "v2ListPushSubscriptions",
           "v2ListPushSubscriptionsForDispatch"
+        ]
+      },
+      {
+        "reason": "Escalation policies (issue #791) and TTL history (issue #804) are new operational surfaces not yet exposed by the hand-written JVM and TypeScript SDK surfaces.",
+        "operations": [
+          "createEscalationPolicy",
+          "deleteEscalationPolicy",
+          "getEscalationPolicy",
+          "listContractTTLHistory",
+          "listEscalationPolicies",
+          "updateEscalationPolicy"
         ]
       },
       {

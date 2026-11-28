@@ -354,6 +354,8 @@ func (f *fakeStore) UpsertContractHealthScore(_ context.Context, s ContractHealt
 	return nil
 }
 
+func (f *fakeStore) RecordTTLOperation(_ context.Context, _ TTLOperation) error { return nil }
+
 func (f *fakeStore) UpsertStorageEntries(_ context.Context, entries []StorageEntry) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
