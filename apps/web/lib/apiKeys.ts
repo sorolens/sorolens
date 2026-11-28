@@ -29,6 +29,34 @@ export interface CreatedAPIKey extends APIKey {
   key: string;
 }
 
+export interface APIKeyScopeOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+/**
+ * Scopes a workspace session may grant itself. admin:* is deliberately absent:
+ * only operators can mint admin keys, through the admin-only API.
+ */
+export const API_KEY_SCOPES: APIKeyScopeOption[] = [
+  {
+    value: "read:contracts",
+    label: "Read contracts",
+    description: "List contracts, events, invocations and storage.",
+  },
+  {
+    value: "read:watchdog",
+    label: "Read watchdog",
+    description: "Read watchdog health checks, alerts and reports.",
+  },
+  {
+    value: "write:contracts",
+    label: "Write contracts",
+    description: "Track, untrack and tag contracts.",
+  },
+];
+
 export const DEFAULT_KEY_SCOPES = ["read:contracts", "read:watchdog"];
 
 async function authHeaders(): Promise<Record<string, string>> {

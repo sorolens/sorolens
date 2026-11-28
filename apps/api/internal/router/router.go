@@ -353,6 +353,15 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor, idempotency).Post("/me/api-keys", h.CreateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
 
+		// Persistent Web Push subscriptions (issue #592). The dispatch routes
+		// are for the internal alerting pipeline and authenticate with the
+		// shared PUSH_INTERNAL_SECRET, not a user session.
+		r.With(scope, contributor).Get("/push/subscriptions", h.ListPushSubscriptions)
+		r.With(scope, contributor).Post("/push/subscriptions", h.CreatePushSubscription)
+		r.With(scope, contributor).Delete("/push/subscriptions", h.DeletePushSubscription)
+		r.With(scope).Get("/push/subscriptions/dispatch", h.ListPushSubscriptionsForDispatch)
+		r.With(scope).Delete("/push/subscriptions/dispatch", h.DeletePushSubscriptionForDispatch)
+
 		// Asynchronous export jobs (issue #785)
 		r.With(scope, idempotency).Post("/exports", h.CreateExport)
 		get("/exports/{id}", h.GetExport)
@@ -482,6 +491,14 @@ func New(h *handler.Handler, maxBodyBytes int64) http.Handler {
 		r.With(scope, contributor).Get("/me/api-keys", h.ListMyAPIKeys)
 		r.With(scope, contributor, idempotency).Post("/me/api-keys", h.CreateMyAPIKey)
 		r.With(scope, contributor).Delete("/me/api-keys/{id}", h.RevokeMyAPIKey)
+
+		// Persistent Web Push subscriptions (issue #592). v2 is a passthrough
+		// like the self-service key routes above.
+		r.With(scope, contributor).Get("/push/subscriptions", h.ListPushSubscriptions)
+		r.With(scope, contributor).Post("/push/subscriptions", h.CreatePushSubscription)
+		r.With(scope, contributor).Delete("/push/subscriptions", h.DeletePushSubscription)
+		r.With(scope).Get("/push/subscriptions/dispatch", h.ListPushSubscriptionsForDispatch)
+		r.With(scope).Delete("/push/subscriptions/dispatch", h.DeletePushSubscriptionForDispatch)
 
 		// Asynchronous export jobs (issue #785)
 		r.With(scope, idempotency).Post("/exports", h.CreateExport)

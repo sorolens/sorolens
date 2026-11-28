@@ -48,6 +48,7 @@ type FullStore interface {
 	ExportJobStore
 	UsageStore
 	MaintenanceStore
+	PushSubscriptionStore
 	DeliveryStore
 	IdempotencyStore
 	TokenTransferStore

@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { API_URL } from "@/lib/config";
 import {
   sendPushNotification,
   type PushPayload,
@@ -8,13 +9,28 @@ import {
 
 export const runtime = "nodejs";
 
-// Subscriptions and their limits are per process and reset on restart.
-const subscriptions = new Map<string, PushSubscriptionJSON>();
-const subscriptionLimit = 1000;
+/**
+ * Web Push routes.
+ *
+ * Subscriptions live in the Go API's `push_subscriptions` table (issue #592),
+ * so a cold start no longer forgets every device. This route validates the
+ * browser payload, then proxies registration and removal to the API using the
+ * caller's workspace session. Dispatch (PUT) reads the persisted subscriptions
+ * through the internal dispatch endpoint, guarded by PUSH_INTERNAL_SECRET.
+ */
+
 const maxBodyBytes = 8192;
 const subscribeRate = rateLimit(60);
 const sendRate = rateLimit(6);
 let sending = false;
+
+type DispatchSubscription = PushSubscriptionJSON & {
+  filters?: {
+    severity?: string;
+    contract_id?: string;
+    network?: string;
+  };
+};
 
 function rateLimit(maxRequests: number) {
   let remaining = maxRequests;
@@ -103,12 +119,20 @@ function validKey(value: unknown, bytes: number): value is string {
   );
 }
 
+function authorization(request: Request): string {
+  return request.headers.get("authorization") ?? "";
+}
+
 /** Register a browser subscription. */
 export async function POST(request: Request) {
   const retryAfter = subscribeRate();
   if (retryAfter) return limited(retryAfter);
+  const auth = authorization(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
-    const { endpoint, keys } = await readPayload(request);
+    const { endpoint, keys, filters } = await readPayload(request);
     if (
       !validEndpoint(endpoint) ||
       !isObject(keys) ||
@@ -117,19 +141,22 @@ export async function POST(request: Request) {
     ) {
       throw new Error("Invalid subscription");
     }
-    if (
-      !subscriptions.has(endpoint) &&
-      subscriptions.size >= subscriptionLimit
-    ) {
+
+    const res = await fetch(`${API_URL}/api/v1/push/subscriptions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: auth },
+      body: JSON.stringify({
+        endpoint,
+        keys: { auth: keys.auth, p256dh: keys.p256dh },
+        filters: isObject(filters) ? filters : undefined,
+      }),
+    });
+    if (!res.ok) {
       return NextResponse.json(
-        { error: "Subscription store is full" },
-        { status: 503 }
+        { error: "Could not save subscription" },
+        { status: res.status === 401 ? 401 : 502 }
       );
     }
-    subscriptions.set(endpoint, {
-      endpoint,
-      keys: { auth: keys.auth, p256dh: keys.p256dh },
-    });
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch {
     return NextResponse.json(
@@ -143,10 +170,25 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const retryAfter = subscribeRate();
   if (retryAfter) return limited(retryAfter);
+  const auth = authorization(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const { endpoint } = await readPayload(request);
     if (!validEndpoint(endpoint)) throw new Error("Invalid endpoint");
-    subscriptions.delete(endpoint);
+
+    const res = await fetch(`${API_URL}/api/v1/push/subscriptions`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", Authorization: auth },
+      body: JSON.stringify({ endpoint }),
+    });
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: "Could not remove subscription" },
+        { status: res.status === 401 ? 401 : 502 }
+      );
+    }
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "Invalid endpoint" }, { status: 400 });
@@ -197,15 +239,66 @@ function hashSecret(value: string) {
   return createHash("sha256").update(value).digest();
 }
 
-/** Fan out a notification for the internal alerting pipeline. */
-export async function PUT(request: Request) {
+function authorized(request: Request) {
   const secret = request.headers.get("x-push-secret");
   const expected = process.env.PUSH_INTERNAL_SECRET;
+  return Boolean(
+    expected &&
+    secret &&
+    timingSafeEqual(hashSecret(secret), hashSecret(expected))
+  );
+}
+
+async function loadDispatchSubscriptions(): Promise<DispatchSubscription[]> {
+  const res = await fetch(`${API_URL}/api/v1/push/subscriptions/dispatch`, {
+    headers: { "X-Push-Secret": process.env.PUSH_INTERNAL_SECRET ?? "" },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Subscription store unavailable");
+  const body = (await res.json()) as { subscriptions?: DispatchSubscription[] };
+  return body.subscriptions ?? [];
+}
+
+async function pruneSubscription(endpoint: string) {
+  try {
+    await fetch(`${API_URL}/api/v1/push/subscriptions/dispatch`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Push-Secret": process.env.PUSH_INTERNAL_SECRET ?? "",
+      },
+      body: JSON.stringify({ endpoint }),
+    });
+  } catch {
+    // Best effort: the next dispatch will retry the gone endpoint.
+  }
+}
+
+function matchesFilters(
+  filters: DispatchSubscription["filters"],
+  notification: PushPayload
+) {
+  if (!filters) return true;
   if (
-    !expected ||
-    !secret ||
-    !timingSafeEqual(hashSecret(secret), hashSecret(expected))
+    filters.severity &&
+    notification.severity &&
+    filters.severity !== notification.severity
   ) {
+    return false;
+  }
+  if (
+    filters.contract_id &&
+    notification.contractId &&
+    filters.contract_id !== notification.contractId
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** Fan out a notification for the internal alerting pipeline. */
+export async function PUT(request: Request) {
+  if (!authorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -221,23 +314,32 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
+    let recipients: DispatchSubscription[];
+    try {
+      recipients = await loadDispatchSubscriptions();
+    } catch {
+      return NextResponse.json(
+        { error: "Subscription store unavailable" },
+        { status: 503 }
+      );
+    }
+
     let sent = 0;
     let failed = 0;
-    const recipients = Array.from(subscriptions.values());
-    for (let i = 0; i < recipients.length; i += 20) {
+    const targets = recipients.filter((sub) =>
+      matchesFilters(sub.filters, notification)
+    );
+    for (let i = 0; i < targets.length; i += 20) {
       await Promise.all(
-        recipients.slice(i, i + 20).map(async (sub) => {
+        targets.slice(i, i + 20).map(async (sub) => {
           try {
             await sendPushNotification(sub, notification);
             sent++;
           } catch (err) {
             failed++;
             const status = (err as { statusCode?: number } | null)?.statusCode;
-            if (
-              (status === 404 || status === 410) &&
-              subscriptions.get(sub.endpoint) === sub
-            ) {
-              subscriptions.delete(sub.endpoint);
+            if (status === 404 || status === 410) {
+              await pruneSubscription(sub.endpoint);
             }
           }
         })

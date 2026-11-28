@@ -134,6 +134,11 @@ test.describe("Settings", () => {
   });
 
   test("creates and revokes an API key through the API", async ({ page }) => {
+    await expect(
+      page.getByTestId("settings-api-key").getByRole("checkbox", {
+        name: /Read contracts/,
+      })
+    ).toBeChecked();
     await page
       .getByTestId("settings-api-key")
       .getByRole("button", { name: "Generate key" })
@@ -154,6 +159,9 @@ test.describe("Settings", () => {
     await expect(page.getByTestId("settings-theme")).toBeVisible();
     await expect(page.getByTestId("settings-api-key-row")).toContainText(
       "sl_e2eabc"
+    );
+    await expect(page.getByTestId("settings-api-key-scopes")).toContainText(
+      "Scopes: read:contracts"
     );
     await expect(page.getByTestId("settings-api-key-value")).toHaveCount(0);
 

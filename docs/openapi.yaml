@@ -3801,6 +3801,105 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v2/push/subscriptions:
+    get:
+      tags: [Push]
+      summary: List the caller's push subscriptions (v2 passthrough)
+      operationId: v2ListPushSubscriptions
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: The caller's subscriptions, without key material
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Push]
+      summary: Register a push subscription (v2 passthrough)
+      operationId: v2CreatePushSubscription
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, keys]
+              properties:
+                endpoint: { type: string, format: uri }
+                keys:
+                  type: object
+                  required: [auth, p256dh]
+                  properties:
+                    auth: { type: string }
+                    p256dh: { type: string }
+                filters: { type: object }
+      responses:
+        "201": { description: Subscription saved }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+    delete:
+      tags: [Push]
+      summary: Unsubscribe a push endpoint (v2 passthrough)
+      operationId: v2DeletePushSubscription
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint: { type: string, format: uri }
+      responses:
+        "204": { description: Subscription removed }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v2/push/subscriptions/dispatch:
+    get:
+      tags: [Push]
+      summary: List every subscription for the dispatcher (v2 passthrough)
+      operationId: v2ListPushSubscriptionsForDispatch
+      security: []
+      parameters:
+        - in: header
+          name: X-Push-Secret
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: All subscriptions with their push keys }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Push]
+      summary: Prune an expired subscription (v2 passthrough)
+      operationId: v2DeletePushSubscriptionForDispatch
+      security: []
+      parameters:
+        - in: header
+          name: X-Push-Secret
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint: { type: string, format: uri }
+      responses:
+        "204": { description: Subscription removed }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/v2/api-keys:
     get:
       tags: [API v2]
@@ -4196,6 +4295,119 @@ paths:
                 scope: { type: string, enum: [public, workspace] }
       responses:
         '201': { description: Label saved }
+
+  /api/v1/push/subscriptions:
+    get:
+      tags: [Push]
+      summary: List the caller's persistent Web Push subscriptions
+      operationId: listPushSubscriptions
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: The caller's subscriptions, without key material
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Push]
+      summary: Register or update a browser Web Push subscription
+      operationId: createPushSubscription
+      security:
+        - SessionAuth: []
+      description: |
+        Stores the subscription in Postgres so it survives process restarts.
+        The endpoint is unique; re-subscribing the same browser updates it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, keys]
+              properties:
+                endpoint: { type: string, format: uri }
+                keys:
+                  type: object
+                  required: [auth, p256dh]
+                  properties:
+                    auth: { type: string }
+                    p256dh: { type: string }
+                filters:
+                  type: object
+                  properties:
+                    severity: { type: string, enum: [Info, Warning, Critical] }
+                    contract_id: { type: string }
+                    network: { type: string }
+      responses:
+        '201': { description: Subscription saved }
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '422':
+          $ref: "#/components/responses/InvalidInput"
+    delete:
+      tags: [Push]
+      summary: Unsubscribe a browser endpoint
+      operationId: deletePushSubscription
+      security:
+        - SessionAuth: []
+      description: Idempotent; an already-removed endpoint still returns 204.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint: { type: string, format: uri }
+      responses:
+        '204': { description: Subscription removed }
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/push/subscriptions/dispatch:
+    get:
+      tags: [Push]
+      summary: List every subscription for the internal push dispatcher
+      operationId: listPushSubscriptionsForDispatch
+      security: []
+      description: |
+        Internal route for the alerting pipeline. Requires the
+        `X-Push-Secret` header to match `PUSH_INTERNAL_SECRET`; it is not
+        available to dashboard users.
+      parameters:
+        - in: header
+          name: X-Push-Secret
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: All subscriptions with their push keys }
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Push]
+      summary: Prune an expired subscription reported by a push service
+      operationId: deletePushSubscriptionForDispatch
+      security: []
+      description: Internal route guarded by the `X-Push-Secret` header.
+      parameters:
+        - in: header
+          name: X-Push-Secret
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint: { type: string, format: uri }
+      responses:
+        '204': { description: Subscription removed }
+        '401':
+          $ref: "#/components/responses/Unauthorized"
 
   /api/v1/resolve:
     get:

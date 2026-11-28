@@ -45,6 +45,7 @@ there, not here.
 | `METRICS_PORT` | — | no | MetricsPort, when non-empty, starts a second HTTP listener that serves only GET /metrics. It lets operators scrape metrics on a private interface instead of exposing the endpoint on the public API port. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | no | OTEL_EXPORTER_OTLP_ENDPOINT is the OTLP/gRPC collector (host:port) that receives traces. Empty disables trace export. |
 | `PORT` | `8080` | no | Port is the HTTP port the API listens on. |
+| `PUSH_INTERNAL_SECRET` | — | no | validDispatchSecret compares the request's X-Push-Secret with the configured PUSH_INTERNAL_SECRET in constant time. An unconfigured secret disables the internal routes instead of accepting an empty header. |
 | `RATE_LIMIT_PER_MINUTE` | `60` | no | RateLimitPerMinute is the default anonymous request budget. |
 | `RATE_LIMIT_WINDOW` | `time.Minute` | no | RateLimitWindow is the sliding window used by the rate limiter. |
 | `REDIS_URL` | — | yes | RedisURL is the Redis connection string used for caching and advisory locks. |
@@ -159,7 +160,7 @@ there, not here.
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | no | Public API URL bundled into the dashboard at build time. Use the deployed API origin for staging or production and the localhost default for local development. |
 | `NEXT_PUBLIC_PWA_ENABLED` | `false` | no | Set to "true" to run the service worker in development mode. Always enabled in NODE_ENV=production. |
 | `PORT` | `8080` | no | HTTP port for the API server. |
-| `PUSH_INTERNAL_SECRET` | — | no | Shared secret guarding the internal PUT /api/push/subscribe endpoint. Set a long random value before enabling push delivery. Missing configuration makes dispatch requests return HTTP 401. |
+| `PUSH_INTERNAL_SECRET` | — | no | Shared secret guarding the internal push dispatch routes: PUT /api/push/subscribe in the web app and /api/v1/push/subscriptions/dispatch in the API. Both must see the same value. Missing configuration makes dispatch requests return HTTP 401. Subscriptions themselves are persisted by the API (issue #592), not held in memory. |
 | `REDIS_URL` | `redis://localhost:6379` | no | Redis connection string. Used by the indexer for advisory locks and the API for caching. |
 | `SENTRY_DSN` | — | no | Sentry DSN for the API and indexer. Error reporting is disabled entirely (no-op, no network calls) when this is unset. |
 | `SENTRY_ENVIRONMENT` | `production` | no | Tags reported Sentry events with the deployment environment. |

@@ -38,6 +38,7 @@ const NAV_HREFS = [
   "/watchdog/reports",
   "/integrations",
   "/groups",
+  "/labels",
   "/rules",
   "/playground",
   "/settings",
@@ -167,6 +168,13 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
               >
                 {t("nav.groups")}
+              </Link>
+              <Link
+                href="/labels"
+                aria-current={active === "/labels" ? "page" : undefined}
+                className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+              >
+                {t("nav.labels")}
               </Link>
               <Link
                 href="/rules"

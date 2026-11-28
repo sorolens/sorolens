@@ -256,6 +256,21 @@
         ]
       },
       {
+        "reason": "Web Push subscriptions (issue #592) are registered by the dashboard's service worker and read by the internal alert dispatcher with a shared secret; they are not part of the hand-written SDK surface.",
+        "operations": [
+          "createPushSubscription",
+          "deletePushSubscription",
+          "deletePushSubscriptionForDispatch",
+          "listPushSubscriptions",
+          "listPushSubscriptionsForDispatch",
+          "v2CreatePushSubscription",
+          "v2DeletePushSubscription",
+          "v2DeletePushSubscriptionForDispatch",
+          "v2ListPushSubscriptions",
+          "v2ListPushSubscriptionsForDispatch"
+        ]
+      },
+      {
         "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
         "operations": [
           "getLedger",
@@ -518,6 +533,21 @@
         ]
       },
       {
+        "reason": "Web Push subscriptions (issue #592) are registered by the dashboard's service worker and read by the internal alert dispatcher with a shared secret; they are not part of the hand-written SDK surface.",
+        "operations": [
+          "createPushSubscription",
+          "deletePushSubscription",
+          "deletePushSubscriptionForDispatch",
+          "listPushSubscriptions",
+          "listPushSubscriptionsForDispatch",
+          "v2CreatePushSubscription",
+          "v2DeletePushSubscription",
+          "v2DeletePushSubscriptionForDispatch",
+          "v2ListPushSubscriptions",
+          "v2ListPushSubscriptionsForDispatch"
+        ]
+      },
+      {
         "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
         "operations": [
           "getLedger",
@@ -759,6 +789,21 @@
         ]
       },
       {
+        "reason": "Web Push subscriptions (issue #592) are registered by the dashboard's service worker and read by the internal alert dispatcher with a shared secret; they are not part of the hand-written SDK surface.",
+        "operations": [
+          "createPushSubscription",
+          "deletePushSubscription",
+          "deletePushSubscriptionForDispatch",
+          "listPushSubscriptions",
+          "listPushSubscriptionsForDispatch",
+          "v2CreatePushSubscription",
+          "v2DeletePushSubscription",
+          "v2DeletePushSubscriptionForDispatch",
+          "v2ListPushSubscriptions",
+          "v2ListPushSubscriptionsForDispatch"
+        ]
+      },
+      {
         "reason": "SEP-41 token transfers and holders (issue #801) and the transaction and ledger aggregate endpoints (issue #786) are not yet exposed by the hand-written SDK surface.",
         "operations": [
           "getLedger",
@@ -989,6 +1034,21 @@
           "getContractChangelog",
           "getContractChangelogBadge",
           "getContractChangelogFeed"
+        ]
+      },
+      {
+        "reason": "Web Push subscriptions (issue #592) are registered by the dashboard's service worker and read by the internal alert dispatcher with a shared secret; they are not part of the hand-written SDK surface.",
+        "operations": [
+          "createPushSubscription",
+          "deletePushSubscription",
+          "deletePushSubscriptionForDispatch",
+          "listPushSubscriptions",
+          "listPushSubscriptionsForDispatch",
+          "v2CreatePushSubscription",
+          "v2DeletePushSubscription",
+          "v2DeletePushSubscriptionForDispatch",
+          "v2ListPushSubscriptions",
+          "v2ListPushSubscriptionsForDispatch"
         ]
       },
       {

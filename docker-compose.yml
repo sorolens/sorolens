@@ -260,6 +260,9 @@ services:
       SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
       STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
       IDENTITY_SIGNING_KEY: ${IDENTITY_SIGNING_KEY:-}
+      # Shared with the web dispatcher; gates the internal push-subscription
+      # dispatch routes (issue #592).
+      PUSH_INTERNAL_SECRET: ${PUSH_INTERNAL_SECRET:-}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     depends_on:
       migrate:

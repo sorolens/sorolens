@@ -99,9 +99,19 @@ from .create_maintenance_window_request_scope import CreateMaintenanceWindowRequ
 from .create_my_api_key_body import CreateMyApiKeyBody
 from .create_my_api_key_body_scopes_item import CreateMyApiKeyBodyScopesItem
 from .create_my_api_key_response_201 import CreateMyApiKeyResponse201
+from .create_push_subscription_body import CreatePushSubscriptionBody
+from .create_push_subscription_body_filters import CreatePushSubscriptionBodyFilters
+from .create_push_subscription_body_filters_severity import (
+    CreatePushSubscriptionBodyFiltersSeverity,
+)
+from .create_push_subscription_body_keys import CreatePushSubscriptionBodyKeys
 from .create_report_subscription_body import CreateReportSubscriptionBody
 from .create_report_subscription_body_frequency import (
     CreateReportSubscriptionBodyFrequency,
+)
+from .delete_push_subscription_body import DeletePushSubscriptionBody
+from .delete_push_subscription_for_dispatch_body import (
+    DeletePushSubscriptionForDispatchBody,
 )
 from .error import Error
 from .error_error_type_0 import ErrorErrorType0
@@ -330,6 +340,15 @@ from .v2_contract_stats_window import V2ContractStatsWindow
 from .v2_create_api_key_body import V2CreateApiKeyBody
 from .v2_create_api_key_response_201 import V2CreateApiKeyResponse201
 from .v2_create_my_api_key_body import V2CreateMyApiKeyBody
+from .v2_create_push_subscription_body import V2CreatePushSubscriptionBody
+from .v2_create_push_subscription_body_filters import (
+    V2CreatePushSubscriptionBodyFilters,
+)
+from .v2_create_push_subscription_body_keys import V2CreatePushSubscriptionBodyKeys
+from .v2_delete_push_subscription_body import V2DeletePushSubscriptionBody
+from .v2_delete_push_subscription_for_dispatch_body import (
+    V2DeletePushSubscriptionForDispatchBody,
+)
 from .v2_event import V2Event
 from .v2_event_list import V2EventList
 from .v2_global_stats import V2GlobalStats
@@ -481,8 +500,14 @@ __all__ = (
     "CreateMyApiKeyBody",
     "CreateMyApiKeyBodyScopesItem",
     "CreateMyApiKeyResponse201",
+    "CreatePushSubscriptionBody",
+    "CreatePushSubscriptionBodyFilters",
+    "CreatePushSubscriptionBodyFiltersSeverity",
+    "CreatePushSubscriptionBodyKeys",
     "CreateReportSubscriptionBody",
     "CreateReportSubscriptionBodyFrequency",
+    "DeletePushSubscriptionBody",
+    "DeletePushSubscriptionForDispatchBody",
     "Error",
     "ErrorErrorType0",
     "ErrorErrorType0Code",
@@ -682,6 +707,11 @@ __all__ = (
     "V2CreateApiKeyBody",
     "V2CreateApiKeyResponse201",
     "V2CreateMyApiKeyBody",
+    "V2CreatePushSubscriptionBody",
+    "V2CreatePushSubscriptionBodyFilters",
+    "V2CreatePushSubscriptionBodyKeys",
+    "V2DeletePushSubscriptionBody",
+    "V2DeletePushSubscriptionForDispatchBody",
     "V2Event",
     "V2EventList",
     "V2GlobalStats",

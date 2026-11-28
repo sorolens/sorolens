@@ -29,7 +29,27 @@ export function defaultHandlers(): Record<string, Handler> {
   // Self-service API keys (#613) are stateful within one test: create adds a
   // key, delete removes it, and list returns what is left.
   const myKeys: Record<string, unknown>[] = [];
+  // Label registry (issue #590) is stateful within one test as well.
+  const labels: Record<string, unknown>[] = [
+    {
+      label: "Stellar DEX",
+      value: CONTRACT_ID,
+      scope: "public",
+    },
+  ];
   return {
+    "api/v1/labels": (route) => {
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON() as {
+          label: string;
+          value: string;
+          scope: string;
+        };
+        labels.unshift(body);
+        return { status: 201, body };
+      }
+      return { status: 200, body: { labels } };
+    },
     "me/api-keys": (route) => {
       const method = route.request().method();
       const path = new URL(route.request().url()).pathname;
