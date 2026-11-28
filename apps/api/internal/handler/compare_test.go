@@ -13,6 +13,19 @@ import (
 	"github.com/sorolens/sorolens/apps/api/internal/store"
 )
 
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/sorolens/sorolens/apps/api/internal/store"
+)
+
 // compareID builds a valid 56-character Soroban contract ID ('C' + 55 chars)
 // whose tail keeps fixtures distinguishable.
 func compareID(tail string) string {

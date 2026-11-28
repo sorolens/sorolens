@@ -964,15 +964,23 @@ func (p *Poller) fetchWindow(ctx context.Context, rpc RPCClient, contractID, net
 		}
 	}
 
-	// Fetch one transaction record per unique tx hash.
+	// Fetch one transaction record per unique tx hash with retry and parking support.
 	var invocations []Invocation
 	for txHash := range seenTx {
-		tx, err := rpc.GetTransaction(ctx, txHash)
+		tx, err := p.fetchTransactionWithRetry(ctx, rpc, txHash)
 		if err != nil {
-			p.log.Warn("failed to fetch transaction, skipping",
+			p.log.Error("transaction fetch failed after retries, parking",
 				"tx_hash", txHash,
+				"contract_id", contractID,
 				"err", err,
 			)
+			if p.metrics != nil {
+				p.metrics.AddParkedTransaction(network)
+			}
+			_ = p.store.InsertParkedTransaction(ctx, network, contractID, txHash, err.Error())
+			continue
+		}
+		if tx == nil {
 			continue
 		}
 		inv := Invocation{
@@ -1063,4 +1071,63 @@ func min32(a, b uint32) uint32 {
 		return a
 	}
 	return b
+}
+
+// isPermanentError classifies RPC errors. 404 Not Found or malformed requests are permanent.
+func isPermanentError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return contains(s, "404") || contains(s, "not found") || contains(s, "invalid") || contains(s, "malformed")
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || searchString(s, substr))
+}
+
+func searchString(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
+// fetchTransactionWithRetry fetches a transaction with bounded exponential backoff, jitter, and error classification.
+func (p *Poller) fetchTransactionWithRetry(ctx context.Context, rpc RPCClient, txHash string) (*TransactionResult, error) {
+	maxRetries := 5
+	baseDelay := 100 * time.Millisecond
+	maxDelay := 5 * time.Second
+
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		tx, err := rpc.GetTransaction(ctx, txHash)
+		if err == nil {
+			return tx, nil
+		}
+		lastErr = err
+		if isPermanentError(err) {
+			return nil, fmt.Errorf("permanent error fetching transaction %s: %w", txHash, err)
+		}
+		if attempt == maxRetries {
+			break
+		}
+
+		delay := baseDelay * time.Duration(1<<(attempt-1))
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+		// Add simple pseudo-random jitter based on nano time
+		jitter := time.Duration(time.Now().UnixNano() % int64(delay/2+1))
+		sleepTime := delay/2 + jitter
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(sleepTime):
+		}
+	}
+	return nil, fmt.Errorf("exhausted retries for transaction %s: %w", txHash, lastErr)
 }

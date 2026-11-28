@@ -50,17 +50,20 @@ func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
 	redisErr := h.Redis.Ping(ctx)
 
 	if dbErr != nil || redisErr != nil {
-		details := map[string]string{}
+		checks := map[string]string{}
 		if dbErr != nil {
-			details["postgres"] = dbErr.Error()
+			checks["postgres"] = "unreachable"
+			if h.Logger != nil {
+				h.Logger.Error("readyz check failed", "dependency", "postgres", "error", dbErr, "request_id", middleware.GetRequestID(ctx))
+		}
 		}
 		if redisErr != nil {
-			details["redis"] = redisErr.Error()
+			checks["redis"] = "unreachable"
+			if h.Logger != nil {
+				h.Logger.Error("readyz check failed", "dependency", "redis", "error", redisErr, "request_id", middleware.GetRequestID(ctx))
 		}
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"status": "unavailable",
-			"checks": details,
-		})
+		}
+		writeError(w, r, http.StatusServiceUnavailable, "", "service unavailable")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

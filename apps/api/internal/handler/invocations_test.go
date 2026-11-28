@@ -2,16 +2,19 @@ package handler_test
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
+"github.com/go-chi/chi/v5"
 	"github.com/sorolens/sorolens/apps/api/internal/handler"
 	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 	"github.com/sorolens/sorolens/apps/api/internal/store"
+	"errors"
+	"time"
+	"github.com/sorolens/sorolens/apps/api/internal/middleware"
 )
+
 
 const invocationContractID = "C_INVOCATION_FILTER"
 
@@ -379,6 +382,16 @@ func TestGetInvocation_Scope(t *testing.T) {
 	}
 	if scope != middleware.ScopeReadContracts {
 		t.Errorf("want %q, got %q", middleware.ScopeReadContracts, scope)
+	}
+}
+
+func TestSimulateInvocation_Scope(t *testing.T) {
+	scope, ok := middleware.RequiredScope(http.MethodPost, "/api/v1/contracts/{id}/invocations/simulate")
+	if !ok {
+		t.Fatal("missing required scope mapping for POST /api/v1/contracts/{id}/invocations/simulate")
+	}
+	if scope != middleware.ScopeWriteContracts {
+		t.Errorf("want %q, got %q", middleware.ScopeWriteContracts, scope)
 	}
 }
 
