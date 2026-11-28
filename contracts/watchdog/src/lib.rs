@@ -16,7 +16,6 @@ use soroban_sdk::{
 // Types
 // ---------------------------------------------------------------------------
 
-
 /// A monitoring policy was stored or replaced by the admin.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -840,7 +839,11 @@ impl WatchdogContract {
         Self::require_admin_or_member(&env, &caller);
 
         let key = DataKey::Proposal(proposal_id);
-        let mut proposal: Proposal = env.storage().persistent().get(&key).unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
+        let mut proposal: Proposal = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
         if proposal.executed || proposal.cancelled {
             panic_with_error!(&env, Error::ProposalNotFound);
         }
@@ -875,7 +878,11 @@ impl WatchdogContract {
         Self::require_admin_or_member(&env, &caller);
 
         let key = DataKey::Proposal(proposal_id);
-        let mut proposal: Proposal = env.storage().persistent().get(&key).unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
+        let mut proposal: Proposal = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
         if proposal.executed || proposal.cancelled {
             panic_with_error!(&env, Error::ProposalNotFound);
         }
@@ -895,7 +902,11 @@ impl WatchdogContract {
         Self::require_admin_or_member(&env, &caller);
 
         let key = DataKey::Proposal(proposal_id);
-        let mut proposal: Proposal = env.storage().persistent().get(&key).unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
+        let mut proposal: Proposal = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
         if proposal.executed || proposal.cancelled {
             panic_with_error!(&env, Error::ProposalNotFound);
         }
@@ -913,7 +924,11 @@ impl WatchdogContract {
     pub fn get_proposal(env: Env, proposal_id: u64) -> Proposal {
         Self::bump_instance_ttl(&env);
         let key = DataKey::Proposal(proposal_id);
-        let proposal: Proposal = env.storage().persistent().get(&key).unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
+        let proposal: Proposal = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::ProposalNotFound));
         Self::bump_persistent_ttl(&env, &key);
         proposal
     }
@@ -1042,7 +1057,11 @@ impl WatchdogContract {
     }
 
     fn require_admin_only(env: &Env, caller: &Address) {
-        if let Some(admin_set) = env.storage().instance().get::<_, AdminSet>(&DataKey::AdminSetKey) {
+        if let Some(admin_set) = env
+            .storage()
+            .instance()
+            .get::<_, AdminSet>(&DataKey::AdminSetKey)
+        {
             let mut found = false;
             for a in admin_set.admins.iter() {
                 if a == *caller {
@@ -1054,19 +1073,23 @@ impl WatchdogContract {
                 panic!("only admin or owner may perform this action");
             }
         } else {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .unwrap_or_else(|| panic!("not initialized"));
-        if caller != &admin {
-            panic!("only admin or owner may perform this action");
+            let admin: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::Admin)
+                .unwrap_or_else(|| panic!("not initialized"));
+            if caller != &admin {
+                panic!("only admin or owner may perform this action");
+            }
         }
     }
-}
 
     fn require_admin_or_member(env: &Env, caller: &Address) {
-        if let Some(admin_set) = env.storage().instance().get::<_, AdminSet>(&DataKey::AdminSetKey) {
+        if let Some(admin_set) = env
+            .storage()
+            .instance()
+            .get::<_, AdminSet>(&DataKey::AdminSetKey)
+        {
             let mut found = false;
             for a in admin_set.admins.iter() {
                 if a == *caller {
@@ -1090,7 +1113,11 @@ impl WatchdogContract {
     }
 
     fn current_threshold(env: &Env) -> u32 {
-        if let Some(admin_set) = env.storage().instance().get::<_, AdminSet>(&DataKey::AdminSetKey) {
+        if let Some(admin_set) = env
+            .storage()
+            .instance()
+            .get::<_, AdminSet>(&DataKey::AdminSetKey)
+        {
             admin_set.threshold
         } else {
             1
@@ -1098,9 +1125,15 @@ impl WatchdogContract {
     }
 
     fn create_proposal_internal(env: Env, proposer: Address, proposal_type: ProposalType) -> u64 {
-        let proposal_count: u64 = env.storage().instance().get(&DataKey::ProposalCount).unwrap_or(0);
+        let proposal_count: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::ProposalCount)
+            .unwrap_or(0);
         let proposal_id = proposal_count + 1;
-        env.storage().instance().set(&DataKey::ProposalCount, &proposal_id);
+        env.storage()
+            .instance()
+            .set(&DataKey::ProposalCount, &proposal_id);
 
         let now = env.ledger().timestamp();
         let expiry = now + 604800; // 7 days expiry
@@ -1153,13 +1186,18 @@ impl WatchdogContract {
                 env.storage().instance().remove(&DataKey::Paused);
             }
             ProposalType::SetAdmin(admin_set) => {
-                env.storage().instance().set(&DataKey::AdminSetKey, admin_set);
+                env.storage()
+                    .instance()
+                    .set(&DataKey::AdminSetKey, admin_set);
                 if !admin_set.admins.is_empty() {
-                    env.storage().instance().set(&DataKey::Admin, &admin_set.admins.get(0).unwrap());
+                    env.storage()
+                        .instance()
+                        .set(&DataKey::Admin, &admin_set.admins.get(0).unwrap());
                 }
             }
             ProposalType::Upgrade(wasm_hash) => {
-                env.deployer().update_current_contract_wasm(wasm_hash.clone());
+                env.deployer()
+                    .update_current_contract_wasm(wasm_hash.clone());
             }
         }
 
